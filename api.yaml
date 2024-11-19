@@ -1,0 +1,145 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Directoryish API
+paths:
+  /entries:
+    get:
+      summary: Returns all entries
+      description: Returns all entries from the system that the user has access to.
+      operationId: getEntries
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Entry list response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entry'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Creates a new entry
+      description: Creates a new entry
+      operationId: addEntry
+      requestBody:
+        description: Entry to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewEntry'
+      responses:
+        '200':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /entries/{id}:
+    get:
+      summary: Returns a directory entry by ID
+      operationId: getEntryByID
+      parameters:
+        - name: id
+          in: path
+          description: ID of entry to fetch
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete directory entry by ID
+      operationId: deleteEntry
+      parameters:
+        - name: id
+          in: path
+          description: ID of entry to delete
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: entry deleted
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Entry:
+      allOf:
+        - $ref: '#/components/schemas/NewEntry'
+        - required:
+            - id
+          properties:
+            id:
+              type: integer
+              format: int64
+              description: Unique id of the pet
+
+    NewEntry:
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the institution or branch this directory entry describes
+        description:
+          type: string
+          description: Detailed description of the entity described by this entry
+
+    Error:
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: Error code
+        message:
+          type: string
+          description: Error message
