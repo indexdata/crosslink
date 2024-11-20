@@ -1,19 +1,36 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+
+	"indexdata/directoryish/db"
 )
 
-type Server struct{}
-
-func NewServer() Server {
-	return Server{}
+type Server struct {
+	ctx     context.Context
+	queries *db.Queries
 }
 
-func (Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams) {
-	resp := Entry{
-		Name: "yay",
+func NewServer(queries *db.Queries, ctx context.Context) Server {
+	return Server{queries: queries, ctx: ctx}
+}
+
+func (s Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams) {
+	var resp []Entry
+
+	dbentries, err := s.queries.ListEntries(s.ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(dbentries)
+
+	for _, dbentry := range dbentries {
+		resp = append(resp, Entry{
+			Name: dbentry.Name,
+		})
 	}
 
 	w.WriteHeader(http.StatusOK)

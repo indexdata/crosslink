@@ -5,64 +5,62 @@
 package db
 
 import (
-	"database/sql"
-
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Authority struct {
-	ID     uuid.UUID
-	Symbol uuid.UUID
+	ID     pgtype.UUID
+	Symbol string
 }
 
 type Consortium struct {
-	ID             uuid.UUID
-	DirectoryEntry uuid.NullUUID
-	Name           sql.NullString
+	ID             pgtype.UUID
+	DirectoryEntry pgtype.UUID
+	Name           pgtype.Text
 }
 
 type DirectoryEntry struct {
-	ID              uuid.UUID
-	Parent          uuid.NullUUID
+	ID              pgtype.UUID
+	Parent          pgtype.UUID
 	Name            string
-	Description     sql.NullString
-	LmsLocationCode sql.NullString
-	ContactName     sql.NullString
-	EmailAddress    sql.NullString
-	PhoneNumber     sql.NullString
+	Description     pgtype.Text
+	LmsLocationCode pgtype.Text
+	ContactName     pgtype.Text
+	EmailAddress    pgtype.Text
+	PhoneNumber     pgtype.Text
 }
 
 type Membership struct {
-	ID          uuid.UUID
-	Institution uuid.UUID
-	Consortium  uuid.UUID
+	ID          pgtype.UUID
+	Institution pgtype.UUID
+	Consortium  pgtype.UUID
 }
 
 type MembershipNetwork struct {
-	ID         uuid.UUID
-	Membership uuid.UUID
-	Network    uuid.UUID
+	ID         pgtype.UUID
+	Membership pgtype.UUID
+	Network    pgtype.UUID
 }
 
 type MembershipTier struct {
-	ID         uuid.UUID
-	Membership uuid.UUID
-	Tier       uuid.UUID
+	ID         pgtype.UUID
+	Membership pgtype.UUID
+	Tier       pgtype.UUID
 }
 
 type Network struct {
-	ID   uuid.UUID
-	Name sql.NullString
+	ID   pgtype.UUID
+	Name pgtype.Text
 }
 
 type Symbol struct {
-	ID        uuid.UUID
-	Owner     uuid.NullUUID
-	Authority uuid.NullUUID
+	ID        pgtype.UUID
+	Owner     pgtype.UUID
+	Authority pgtype.UUID
 	Symbol    string
 }
 
 type Tier struct {
-	ID   uuid.UUID
-	Name sql.NullString
+	ID   pgtype.UUID
+	Name pgtype.Text
 }

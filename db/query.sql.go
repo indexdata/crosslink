@@ -8,16 +8,16 @@ package db
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getDirectoryEntry = `-- name: GetDirectoryEntry :one
+const getEntry = `-- name: GetEntry :one
 SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM directory_entries
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetDirectoryEntry(ctx context.Context, id uuid.UUID) (DirectoryEntry, error) {
-	row := q.db.QueryRowContext(ctx, getDirectoryEntry, id)
+func (q *Queries) GetEntry(ctx context.Context, id pgtype.UUID) (DirectoryEntry, error) {
+	row := q.db.QueryRow(ctx, getEntry, id)
 	var i DirectoryEntry
 	err := row.Scan(
 		&i.ID,
@@ -32,13 +32,13 @@ func (q *Queries) GetDirectoryEntry(ctx context.Context, id uuid.UUID) (Director
 	return i, err
 }
 
-const listDirectoryEntries = `-- name: ListDirectoryEntries :many
+const listEntries = `-- name: ListEntries :many
 SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM directory_entries
 ORDER BY name
 `
 
-func (q *Queries) ListDirectoryEntries(ctx context.Context) ([]DirectoryEntry, error) {
-	rows, err := q.db.QueryContext(ctx, listDirectoryEntries)
+func (q *Queries) ListEntries(ctx context.Context) ([]DirectoryEntry, error) {
+	rows, err := q.db.Query(ctx, listEntries)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +59,6 @@ func (q *Queries) ListDirectoryEntries(ctx context.Context) ([]DirectoryEntry, e
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
