@@ -1,0 +1,10 @@
+apiVersion: v2
+name: crosslink-broker
+description: Crosslink broker
+type: application
+
+# Use semver, note that this is replaced by the publish action
+version: 0.1.0
+
+# appVersion is used as the Docker image tag by the chart
+appVersion: "main"
