@@ -3,7 +3,7 @@ FROM golang:1.22
 # Builds from the workspace root dir
 WORKDIR /app
 COPY go.work go.work.sum ./
-# COPY module/go.mod ./module/go.mod
+COPY common/go.mod ./common/go.mod
 
 # Set destination for COPY
 WORKDIR /app/broker
