@@ -1,4 +1,7 @@
 github.com/indexdata/go-utils v0.0.0-20240626111027-28caddc0fd2b h1:e8i1JTCncmNhjYE8I3ml71QZLEdXCD9lRrbvbPiovoU=
 github.com/indexdata/go-utils v0.0.0-20240626111027-28caddc0fd2b/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
+github.com/indexdata/go-utils v0.0.0-20241205160758-6eb91e66be34 h1:p2tRLUnA3eMkRt6naWPjMhXXmJ5knGF5NPKtjQp0m7w=
+github.com/indexdata/go-utils v0.0.0-20241205160758-6eb91e66be34/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.0.0 h1:1Jp+rqhxR9vQLtoL7U2G0tGi7G7/+ZbjJtAFJT+k/9g=
 github.com/indexdata/xsd2goxsl v1.0.0/go.mod h1:8sXNGyaUfpRCgSCamB5p9GQNLyPHF5N2MYBrhWSss8Y=
+github.com/indexdata/xsd2goxsl v1.1.0/go.mod h1:8sXNGyaUfpRCgSCamB5p9GQNLyPHF5N2MYBrhWSss8Y=

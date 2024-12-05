@@ -32,11 +32,12 @@ $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
+	$(GO) run github.com/indexdata/xsd2goxsl@v1.1.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 	qAttrType=utils.PrefixAttr \
 	dateTimeType=utils.XSDDateTime \
-	decimalType=utils.XSDDecimal
+	decimalType=utils.XSDDecimal \
+	json=yes
 	$(GO) fmt $(GEN_SCHEMA_OUT)
 
 $(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(GOFILES)
