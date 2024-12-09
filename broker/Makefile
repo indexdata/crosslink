@@ -15,6 +15,13 @@ GEN_SCHEMA_OUT=iso18626/schema.go
 COMMIT_ID=cmd/broker/commit.txt
 COVERAGE=coverage.out
 
+# Directories
+SQLC ?= sqlc
+SQLC_CONFIG = db/sqlc.yaml
+SQL_DIR = db/generated
+BUILD_DIR = bin
+SCHEMA = db/schema.sql
+
 .PHONY: all docker generate generate-schema generate-commit-id check run fmt fmt-check vet clean
 
 all: $(BINARY)
@@ -22,11 +29,14 @@ all: $(BINARY)
 docker: generate
 	cd .. && $(DOCKER) build -f ./$(MODULE)/Dockerfile .
 
-generate: generate-schema generate-commit-id
+generate: generate-schema generate-commit-id generate-sqlc
 
 generate-schema: $(GEN_SCHEMA_OUT)
 
 generate-commit-id: $(COMMIT_ID)
+
+generate-sqlc:
+	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
@@ -63,3 +73,4 @@ clean:
 	rm -f $(GEN_SCHEMA_OUT)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
+	rm -fr $(SQL_DIR)
