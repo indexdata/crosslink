@@ -8,16 +8,87 @@ package db
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getEntry = `-- name: GetEntry :one
+const authorityBySymbol = `-- name: AuthorityBySymbol :one
+SELECT id, symbol FROM authorities
+WHERE symbol = $1 LIMIT 1
+`
+
+func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authority, error) {
+	row := q.db.QueryRow(ctx, authorityBySymbol, symbol)
+	var i Authority
+	err := row.Scan(&i.ID, &i.Symbol)
+	return i, err
+}
+
+const createEntry = `-- name: CreateEntry :one
+INSERT INTO directory_entries (
+  name, contact_name, email_address
+) VALUES (
+  $1, $2, $3
+)
+RETURNING id, parent, name, description, lms_location_code, contact_name, email_address, phone_number
+`
+
+type CreateEntryParams struct {
+	Name         string
+	ContactName  pgtype.Text
+	EmailAddress pgtype.Text
+}
+
+func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (DirectoryEntry, error) {
+	row := q.db.QueryRow(ctx, createEntry, arg.Name, arg.ContactName, arg.EmailAddress)
+	var i DirectoryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Parent,
+		&i.Name,
+		&i.Description,
+		&i.LmsLocationCode,
+		&i.ContactName,
+		&i.EmailAddress,
+		&i.PhoneNumber,
+	)
+	return i, err
+}
+
+const createSymbol = `-- name: CreateSymbol :one
+INSERT INTO symbols (
+  owner, symbol, authority
+) VALUES (
+  $1, $2, $3
+)
+RETURNING id, owner, authority, symbol
+`
+
+type CreateSymbolParams struct {
+	Owner     uuid.UUID
+	Symbol    string
+	Authority uuid.UUID
+}
+
+func (q *Queries) CreateSymbol(ctx context.Context, arg CreateSymbolParams) (Symbol, error) {
+	row := q.db.QueryRow(ctx, createSymbol, arg.Owner, arg.Symbol, arg.Authority)
+	var i Symbol
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.Authority,
+		&i.Symbol,
+	)
+	return i, err
+}
+
+const entryById = `-- name: EntryById :one
 SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM directory_entries
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetEntry(ctx context.Context, id pgtype.UUID) (DirectoryEntry, error) {
-	row := q.db.QueryRow(ctx, getEntry, id)
+func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (DirectoryEntry, error) {
+	row := q.db.QueryRow(ctx, entryById, id)
 	var i DirectoryEntry
 	err := row.Scan(
 		&i.ID,
@@ -33,28 +104,39 @@ func (q *Queries) GetEntry(ctx context.Context, id pgtype.UUID) (DirectoryEntry,
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM directory_entries
-ORDER BY name
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email_address, e.phone_number, s.id, s.owner, s.authority, s.symbol
+FROM directory_entries e
+LEFT JOIN symbols s ON e.id = s.owner
+ORDER BY e.name, e.id
 `
 
-func (q *Queries) ListEntries(ctx context.Context) ([]DirectoryEntry, error) {
+type ListEntriesRow struct {
+	DirectoryEntry DirectoryEntry
+	Symbol         Symbol
+}
+
+func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listEntries)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []DirectoryEntry
+	var items []ListEntriesRow
 	for rows.Next() {
-		var i DirectoryEntry
+		var i ListEntriesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Parent,
-			&i.Name,
-			&i.Description,
-			&i.LmsLocationCode,
-			&i.ContactName,
-			&i.EmailAddress,
-			&i.PhoneNumber,
+			&i.DirectoryEntry.ID,
+			&i.DirectoryEntry.Parent,
+			&i.DirectoryEntry.Name,
+			&i.DirectoryEntry.Description,
+			&i.DirectoryEntry.LmsLocationCode,
+			&i.DirectoryEntry.ContactName,
+			&i.DirectoryEntry.EmailAddress,
+			&i.DirectoryEntry.PhoneNumber,
+			&i.Symbol.ID,
+			&i.Symbol.Owner,
+			&i.Symbol.Authority,
+			&i.Symbol.Symbol,
 		); err != nil {
 			return nil, err
 		}

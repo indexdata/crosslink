@@ -13,18 +13,19 @@ CREATE TABLE directory_entries (
 
 CREATE TABLE authorities (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol))
+	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
+	UNIQUE (symbol)
 );
 
 CREATE TABLE symbols (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	owner uuid REFERENCES directory_entries (id),
+	owner uuid NOT NULL REFERENCES directory_entries (id),
 	authority uuid NOT NULL REFERENCES authorities (id),
 	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	UNIQUE (authority, symbol)
 );
 
-CREATE INDEX symbols_authority_symbol_idx ON symbols (authority, symbol);
+CREATE INDEX symbols_authority_symbol_idx ON symbols (symbol, authority);
 
 CREATE TABLE consortia (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

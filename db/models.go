@@ -5,22 +5,23 @@
 package db
 
 import (
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Authority struct {
-	ID     pgtype.UUID
+	ID     uuid.UUID
 	Symbol string
 }
 
 type Consortium struct {
-	ID             pgtype.UUID
+	ID             uuid.UUID
 	DirectoryEntry pgtype.UUID
 	Name           pgtype.Text
 }
 
 type DirectoryEntry struct {
-	ID              pgtype.UUID
+	ID              uuid.UUID
 	Parent          pgtype.UUID
 	Name            string
 	Description     pgtype.Text
@@ -31,36 +32,36 @@ type DirectoryEntry struct {
 }
 
 type Membership struct {
-	ID          pgtype.UUID
-	Institution pgtype.UUID
-	Consortium  pgtype.UUID
+	ID          uuid.UUID
+	Institution uuid.UUID
+	Consortium  uuid.UUID
 }
 
 type MembershipNetwork struct {
-	ID         pgtype.UUID
-	Membership pgtype.UUID
-	Network    pgtype.UUID
+	ID         uuid.UUID
+	Membership uuid.UUID
+	Network    uuid.UUID
 }
 
 type MembershipTier struct {
-	ID         pgtype.UUID
-	Membership pgtype.UUID
-	Tier       pgtype.UUID
+	ID         uuid.UUID
+	Membership uuid.UUID
+	Tier       uuid.UUID
 }
 
 type Network struct {
-	ID   pgtype.UUID
+	ID   uuid.UUID
 	Name pgtype.Text
 }
 
 type Symbol struct {
-	ID        pgtype.UUID
-	Owner     pgtype.UUID
-	Authority pgtype.UUID
+	ID        uuid.UUID
+	Owner     uuid.UUID
+	Authority uuid.UUID
 	Symbol    string
 }
 
 type Tier struct {
-	ID   pgtype.UUID
+	ID   uuid.UUID
 	Name pgtype.Text
 }

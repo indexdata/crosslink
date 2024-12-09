@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
 
 	"indexdata/directoryish/api"
 	"indexdata/directoryish/db"
@@ -16,7 +18,17 @@ import (
 func main() {
 	ctx := context.Background()
 
-	dbpool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	pgxConfig, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		panic(err)
+	}
+
+	pgxConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		pgxUUID.Register(conn.TypeMap())
+		return nil
+	}
+
+	dbpool, err := pgxpool.NewWithConfig(ctx, pgxConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to create connection pool: %v\n", err)
 		os.Exit(1)
@@ -25,7 +37,7 @@ func main() {
 
 	queries := db.New(dbpool)
 
-	server := api.NewServer(queries, ctx)
+	server := api.NewServer(dbpool, queries, ctx)
 
 	r := http.NewServeMux()
 

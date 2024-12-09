@@ -10,18 +10,28 @@ import (
 	"net/http"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Entry defines model for Entry.
 type Entry struct {
+	// ContactName Name of contact person
+	ContactName *string `json:"contact_name,omitempty"`
+
 	// Description Detailed description of the entity described by this entry
 	Description *string `json:"description,omitempty"`
 
-	// Id Unique id of the pet
-	Id int64 `json:"id"`
+	// Email Main contact email
+	Email *string `json:"email,omitempty"`
+
+	// Id Unique id of the entry
+	Id openapi_types.UUID `json:"id"`
 
 	// Name Name of the institution or branch this directory entry describes
 	Name string `json:"name"`
+
+	// Symbols Symbols associated with this entry
+	Symbols *[]Symbol `json:"symbols,omitempty"`
 }
 
 // Error defines model for Error.
@@ -35,11 +45,41 @@ type Error struct {
 
 // NewEntry defines model for NewEntry.
 type NewEntry struct {
+	// ContactName Name of contact person
+	ContactName *string `json:"contact_name,omitempty"`
+
 	// Description Detailed description of the entity described by this entry
 	Description *string `json:"description,omitempty"`
 
+	// Email Main contact email
+	Email *string `json:"email,omitempty"`
+
 	// Name Name of the institution or branch this directory entry describes
 	Name string `json:"name"`
+
+	// Symbols Symbols associated with this entry
+	Symbols *[]Symbol `json:"symbols,omitempty"`
+}
+
+// NewSymbol defines model for NewSymbol.
+type NewSymbol struct {
+	// Authority Uppercase string
+	Authority *string `json:"authority,omitempty"`
+
+	// Symbol Uppercase string
+	Symbol *string `json:"symbol,omitempty"`
+}
+
+// Symbol defines model for Symbol.
+type Symbol struct {
+	// Authority Uppercase string
+	Authority *string `json:"authority,omitempty"`
+
+	// Id Unique id
+	Id openapi_types.UUID `json:"id"`
+
+	// Symbol Uppercase string
+	Symbol *string `json:"symbol,omitempty"`
 }
 
 // GetEntriesParams defines parameters for GetEntries.
@@ -64,10 +104,10 @@ type ServerInterface interface {
 	AddEntry(w http.ResponseWriter, r *http.Request)
 	// Delete directory entry by ID
 	// (DELETE /entries/{id})
-	DeleteEntry(w http.ResponseWriter, r *http.Request, id int64)
+	DeleteEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Returns a directory entry by ID
 	// (GET /entries/{id})
-	GetEntryByID(w http.ResponseWriter, r *http.Request, id int64)
+	GetEntryByID(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -134,7 +174,7 @@ func (siw *ServerInterfaceWrapper) DeleteEntry(w http.ResponseWriter, r *http.Re
 	var err error
 
 	// ------------- Path parameter "id" -------------
-	var id int64
+	var id openapi_types.UUID
 
 	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
@@ -159,7 +199,7 @@ func (siw *ServerInterfaceWrapper) GetEntryByID(w http.ResponseWriter, r *http.R
 	var err error
 
 	// ------------- Path parameter "id" -------------
-	var id int64
+	var id openapi_types.UUID
 
 	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
