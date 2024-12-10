@@ -38,23 +38,27 @@ func (s Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEnt
 	for _, row := range rows {
 		last := len(resp) - 1
 
-		if last < 0 || resp[last].Id != row.DirectoryEntry.ID {
+		if last < 0 || resp[last].Id != row.Entry.ID {
 			resp = append(resp, Entry{
-				Id:   row.DirectoryEntry.ID,
-				Name: row.DirectoryEntry.Name,
+				Id:   row.Entry.ID,
+				Name: row.Entry.Name,
 			})
 			last++
 		}
 
-		if resp[last].Symbols == nil {
-			s := []Symbol{}
-			resp[last].Symbols = &s
-		}
+		if row.Entrysymbol.ID.Valid {
+			if resp[last].Symbols == nil {
+				s := []Symbol{}
+				resp[last].Symbols = &s
+			}
 
-		*resp[last].Symbols = append(*resp[last].Symbols, Symbol{
-			Id:     row.Symbol.ID,
-			Symbol: &row.Symbol.Symbol,
-		})
+			symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
+
+			*resp[last].Symbols = append(*resp[last].Symbols, Symbol{
+				Id:     symid,
+				Symbol: &row.Entrysymbol.Symbol.String,
+			})
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -88,28 +92,30 @@ func (s Server) AddEntry(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	for _, symbol := range *newEntry.Symbols {
-		auth, err := qtx.AuthorityBySymbol(s.ctx, strings.ToUpper(*symbol.Authority))
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				log.Println("Unrecognized authority")
-			}
-			log.Fatal(err)
-		}
-
-		_, err = qtx.CreateSymbol(s.ctx, db.CreateSymbolParams{
-			Owner:     insertedEntry.ID,
-			Symbol:    strings.ToUpper(*symbol.Symbol),
-			Authority: auth.ID,
-		})
-		if err != nil {
-			var pge *pgconn.PgError
-			if errors.As(err, &pge) {
-				if pge.SQLState() == "23505" {
-					log.Println("Duplicate symbol")
+	if newEntry.Symbols != nil {
+		for _, symbol := range *newEntry.Symbols {
+			auth, err := qtx.AuthorityBySymbol(s.ctx, strings.ToUpper(*symbol.Authority))
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					log.Println("Unrecognized authority")
 				}
+				log.Fatal(err)
 			}
-			log.Fatal(err)
+
+			_, err = qtx.CreateSymbol(s.ctx, db.CreateSymbolParams{
+				Owner:     insertedEntry.ID,
+				Symbol:    strings.ToUpper(*symbol.Symbol),
+				Authority: auth.ID,
+			})
+			if err != nil {
+				var pge *pgconn.PgError
+				if errors.As(err, &pge) {
+					if pge.SQLState() == "23505" {
+						log.Println("Duplicate symbol")
+					}
+				}
+				log.Fatal(err)
+			}
 		}
 	}
 

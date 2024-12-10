@@ -1,15 +1,15 @@
 -- name: EntryById :one
-SELECT * FROM directory_entries
+SELECT * FROM entries
 WHERE id = $1 LIMIT 1;
 
 -- name: ListEntries :many
 SELECT sqlc.embed(e), sqlc.embed(s)
-FROM directory_entries e
-LEFT JOIN symbols s ON e.id = s.owner
+FROM entries e
+LEFT JOIN entrysymbols s ON e.id = s.owner
 ORDER BY e.name, e.id;
 
 -- name: CreateEntry :one
-INSERT INTO directory_entries (
+INSERT INTO entries (
   name, contact_name, email_address
 ) VALUES (
   $1, $2, $3

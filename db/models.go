@@ -20,7 +20,7 @@ type Consortium struct {
 	Name           pgtype.Text
 }
 
-type DirectoryEntry struct {
+type Entry struct {
 	ID              uuid.UUID
 	Parent          pgtype.UUID
 	Name            string
@@ -29,6 +29,13 @@ type DirectoryEntry struct {
 	ContactName     pgtype.Text
 	EmailAddress    pgtype.Text
 	PhoneNumber     pgtype.Text
+}
+
+type Entrysymbol struct {
+	ID        pgtype.UUID
+	Owner     pgtype.UUID
+	Authority pgtype.UUID
+	Symbol    pgtype.Text
 }
 
 type Membership struct {

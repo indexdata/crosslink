@@ -1,8 +1,8 @@
 BEGIN;
 
-CREATE TABLE directory_entries (
+CREATE TABLE entries (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	parent uuid REFERENCES directory_entries (id),
+	parent uuid REFERENCES entries (id),
 	name varchar(255) NOT NULL,
 	description varchar(255),
 	lms_location_code varchar(255),
@@ -19,17 +19,22 @@ CREATE TABLE authorities (
 
 CREATE TABLE symbols (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	owner uuid NOT NULL REFERENCES directory_entries (id),
+	owner uuid NOT NULL REFERENCES entries (id),
 	authority uuid NOT NULL REFERENCES authorities (id),
 	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	UNIQUE (authority, symbol)
+);
+
+-- Workaround for sqlc's poor left join handling https://github.com/sqlc-dev/sqlc/issues/2997
+CREATE VIEW entrysymbols AS (
+  SELECT symbols.* FROM entries LEFT JOIN symbols ON entries.id = symbols.owner
 );
 
 CREATE INDEX symbols_authority_symbol_idx ON symbols (symbol, authority);
 
 CREATE TABLE consortia (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	directory_entry uuid REFERENCES directory_entries (id),
+	directory_entry uuid REFERENCES entries (id),
 	name varchar(255)
 );
 
@@ -45,7 +50,7 @@ CREATE TABLE networks (
 
 CREATE TABLE memberships (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	institution uuid NOT NULL REFERENCES directory_entries (id),
+	institution uuid NOT NULL REFERENCES entries (id),
 	consortium uuid NOT NULL REFERENCES consortia (id)
 );
 

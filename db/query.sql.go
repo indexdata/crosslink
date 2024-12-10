@@ -25,7 +25,7 @@ func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authori
 }
 
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO directory_entries (
+INSERT INTO entries (
   name, contact_name, email_address
 ) VALUES (
   $1, $2, $3
@@ -39,9 +39,9 @@ type CreateEntryParams struct {
 	EmailAddress pgtype.Text
 }
 
-func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (DirectoryEntry, error) {
+func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
 	row := q.db.QueryRow(ctx, createEntry, arg.Name, arg.ContactName, arg.EmailAddress)
-	var i DirectoryEntry
+	var i Entry
 	err := row.Scan(
 		&i.ID,
 		&i.Parent,
@@ -83,13 +83,13 @@ func (q *Queries) CreateSymbol(ctx context.Context, arg CreateSymbolParams) (Sym
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM directory_entries
+SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM entries
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (DirectoryEntry, error) {
+func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 	row := q.db.QueryRow(ctx, entryById, id)
-	var i DirectoryEntry
+	var i Entry
 	err := row.Scan(
 		&i.ID,
 		&i.Parent,
@@ -105,14 +105,14 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (DirectoryEntry, 
 
 const listEntries = `-- name: ListEntries :many
 SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email_address, e.phone_number, s.id, s.owner, s.authority, s.symbol
-FROM directory_entries e
-LEFT JOIN symbols s ON e.id = s.owner
+FROM entries e
+LEFT JOIN entrysymbols s ON e.id = s.owner
 ORDER BY e.name, e.id
 `
 
 type ListEntriesRow struct {
-	DirectoryEntry DirectoryEntry
-	Symbol         Symbol
+	Entry       Entry
+	Entrysymbol Entrysymbol
 }
 
 func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
@@ -125,18 +125,18 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 	for rows.Next() {
 		var i ListEntriesRow
 		if err := rows.Scan(
-			&i.DirectoryEntry.ID,
-			&i.DirectoryEntry.Parent,
-			&i.DirectoryEntry.Name,
-			&i.DirectoryEntry.Description,
-			&i.DirectoryEntry.LmsLocationCode,
-			&i.DirectoryEntry.ContactName,
-			&i.DirectoryEntry.EmailAddress,
-			&i.DirectoryEntry.PhoneNumber,
-			&i.Symbol.ID,
-			&i.Symbol.Owner,
-			&i.Symbol.Authority,
-			&i.Symbol.Symbol,
+			&i.Entry.ID,
+			&i.Entry.Parent,
+			&i.Entry.Name,
+			&i.Entry.Description,
+			&i.Entry.LmsLocationCode,
+			&i.Entry.ContactName,
+			&i.Entry.EmailAddress,
+			&i.Entry.PhoneNumber,
+			&i.Entrysymbol.ID,
+			&i.Entrysymbol.Owner,
+			&i.Entrysymbol.Authority,
+			&i.Entrysymbol.Symbol,
 		); err != nil {
 			return nil, err
 		}
