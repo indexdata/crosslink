@@ -18,9 +18,9 @@ COVERAGE=coverage.out
 # Directories
 SQLC ?= sqlc
 SQLC_CONFIG = db/sqlc.yaml
-SQL_DIR = db/generated
-BUILD_DIR = bin
-SCHEMA = db/schema.sql
+SQL_GEN_OUT_DIR = db/generated
+SQL_GEN_OUT = $(SQL_GEN_OUT_DIR)/*.go
+SQL_GEN_IN = db/*.sql
 
 .PHONY: all docker generate generate-schema generate-commit-id check run fmt fmt-check vet clean
 
@@ -35,7 +35,9 @@ generate-schema: $(GEN_SCHEMA_OUT)
 
 generate-commit-id: $(COMMIT_ID)
 
-generate-sqlc:
+generate-sqlc: $(SQL_GEN_OUT)
+
+$(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID):
@@ -50,7 +52,7 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 	json=yes
 	$(GO) fmt $(GEN_SCHEMA_OUT)
 
-$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(GOFILES)
+$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
 check: generate
@@ -73,4 +75,4 @@ clean:
 	rm -f $(GEN_SCHEMA_OUT)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
-	rm -fr $(SQL_DIR)
+	rm -fr $(SQL_GEN_OUT_DIR)
