@@ -19,43 +19,46 @@ import (
 	"time"
 )
 
-func Iso18626PostHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		log.Printf("[iso18626-handler] error: method not allowed: %s %s\n", r.Method, r.URL)
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	contentType := r.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
-		log.Printf("[iso18626-handler] error: content-type unsupported: %s %s\n", contentType, r.URL)
-		http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
-		return
-	}
-	byteReq, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Println("[iso18626-server] error: failure reading request: ", err)
-		return
-	}
-	var illMessage iso18626.ISO18626Message
-	err = xml.Unmarshal(byteReq, &illMessage)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			log.Printf("[iso18626-handler] error: method not allowed: %s %s\n", r.Method, r.URL)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		contentType := r.Header.Get("Content-Type")
+		if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
+			log.Printf("[iso18626-handler] error: content-type unsupported: %s %s\n", contentType, r.URL)
+			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
+			return
+		}
+		byteReq, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Println("[iso18626-server] error: failure reading request: ", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var illMessage iso18626.ISO18626Message
+		err = xml.Unmarshal(byteReq, &illMessage)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	if illMessage.Request != nil {
-		HandleIso18626Request(illMessage, w)
-	} else if illMessage.RequestingAgencyMessage != nil {
-		HandleIso18626RequestingAgencyMessage(illMessage, w)
-	} else if illMessage.SupplyingAgencyMessage != nil {
-		HandleIso18626SupplyingAgencyMessage(illMessage, w)
-	} else {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		if illMessage.Request != nil {
+			HandleIso18626Request(illMessage, w, repo)
+		} else if illMessage.RequestingAgencyMessage != nil {
+			HandleIso18626RequestingAgencyMessage(illMessage, w)
+		} else if illMessage.SupplyingAgencyMessage != nil {
+			HandleIso18626SupplyingAgencyMessage(illMessage, w)
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 }
 
-func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseWriter) {
+func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
 	requesterSymbol := CreatePgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
 	supplierSymbol := CreatePgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	requestAction := CreatePgText("Request")
@@ -81,9 +84,7 @@ func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseW
 	}
 
 	ctx := context.Background()
-
-	dbQueries := dbContext.GetDbQueries()
-	_, err = dbQueries.CreateTransaction(ctx, queries.CreateTransactionParams{
+	_, err = repo.CreateTransaction(ctx, queries.CreateTransactionParams{
 		ID: uuid.New().String(),
 		Timestamp: pgtype.Timestamp{
 			Time:  illMessage.Request.Header.Timestamp.Time,

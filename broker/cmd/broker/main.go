@@ -13,22 +13,27 @@ import (
 )
 
 var HTTP_PORT = utils.GetEnvInt("HTTP_PORT", 8081)
+var DB_TYPE = utils.GetEnv("DB_TYPE", "postgres")
+var DB_USER = utils.GetEnv("DB_USER", "folio_admin")
+var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "folio_admin")
+var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
+var DB_PORT = utils.GetEnv("DB_PORT", "5432")
+var DB_DATABASE = utils.GetEnv("DB_DATABASE", "okapi_modules")
 
-func init() {
-	dbPool, err := pgxpool.New(context.Background(), "postgres://folio_admin:folio_admin@localhost:5432/okapi_modules")
+func main() {
+	dbPool, err := pgxpool.New(context.Background(), DB_TYPE+"://"+DB_USER+":"+DB_PASSWORD+"@"+DB_HOST+":"+DB_PORT+"/"+DB_DATABASE)
 	if err != nil {
 		log.Fatalf("Unable to create pool to database: %v\n", err)
 	}
-	dbContext.SetDbPool(dbPool)
-}
+	repo := new(dbContext.PostgresRepository)
+	repo.DbPool = dbPool
 
-func main() {
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
-	mux.HandleFunc("/externalapi/iso18626", handler.Iso18626PostHandler)
+	mux.HandleFunc("/externalapi/iso18626", handler.Iso18626PostHandler(repo))
 
 	log.Println("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
