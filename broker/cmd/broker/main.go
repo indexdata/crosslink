@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	dbContext "github.com/indexdata/crosslink/broker/db"
+	"fmt"
+	"github.com/indexdata/crosslink/broker/db"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
@@ -19,13 +20,14 @@ var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "folio_admin")
 var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "5432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "okapi_modules")
+var connectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 
 func main() {
-	dbPool, err := pgxpool.New(context.Background(), DB_TYPE+"://"+DB_USER+":"+DB_PASSWORD+"@"+DB_HOST+":"+DB_PORT+"/"+DB_DATABASE)
+	dbPool, err := pgxpool.New(context.Background(), connectionString)
 	if err != nil {
 		log.Fatalf("Unable to create pool to database: %v\n", err)
 	}
-	repo := new(dbContext.PostgresRepository)
+	repo := new(repository.PostgresRepository)
 	repo.DbPool = dbPool
 
 	mux := http.NewServeMux()
