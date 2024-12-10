@@ -22,24 +22,24 @@ RETURNING *;
 DELETE FROM peer
 WHERE id = $1;
 
--- name: GetTransaction :one
-SELECT * FROM transaction
+-- name: GetIllTransaction :one
+SELECT * FROM ill_transaction
 WHERE id = $1 LIMIT 1;
 
--- name: ListTransaction :many
-SELECT * FROM transaction
+-- name: ListIllTransaction :many
+SELECT * FROM ill_transaction
 ORDER BY timestamp;
 
--- name: CreateTransaction :one
-INSERT INTO transaction (
+-- name: CreateIllTransaction :one
+INSERT INTO ill_transaction (
     id, timestamp, requester_symbol, requester_id, requester_action, supplier_symbol, state, requester_request_id, supplier_request_id, data
 ) VALUES (
              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          )
 RETURNING *;
 
--- name: DeleteTransaction :exec
-DELETE FROM transaction
+-- name: DeleteIllTransaction :exec
+DELETE FROM ill_transaction
 WHERE id = $1;
 
 -- name: GetEventType :one

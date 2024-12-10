@@ -6,7 +6,7 @@ CREATE TABLE peer
     address VARCHAR
 );
 
-CREATE TABLE transaction
+CREATE TABLE ill_transaction
 (
     id                   VARCHAR PRIMARY KEY,
     timestamp            TIMESTAMP NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE event
     event_data     jsonb,
     result_data    jsonb,
     created_at     TIMESTAMP NOT NULL DEFAULT now(),
-    FOREIGN KEY (transaction_id) REFERENCES transaction (id),
+    FOREIGN KEY (transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (event_type) REFERENCES event_type (type)
 )
 

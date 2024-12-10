@@ -80,11 +80,12 @@ func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseW
 	jsonBytes, err := json.Marshal(illTransactionData)
 	if err != nil {
 		fmt.Println("Error converting map to JSON:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	ctx := context.Background()
-	_, err = repo.CreateTransaction(ctx, queries.CreateTransactionParams{
+	_, err = repo.CreateIllTransaction(ctx, queries.CreateIllTransactionParams{
 		ID: uuid.New().String(),
 		Timestamp: pgtype.Timestamp{
 			Time:  illMessage.Request.Header.Timestamp.Time,
@@ -98,6 +99,10 @@ func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseW
 		SupplierRequestID:  supplierRequestId,
 		Data:               jsonBytes,
 	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	var resmsg = CreateRequestResponse(illMessage)
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")

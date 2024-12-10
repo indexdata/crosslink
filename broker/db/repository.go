@@ -8,15 +8,15 @@ import (
 )
 
 type Repository interface {
-	CreateTransaction(ctx context.Context, params queries.CreateTransactionParams) (queries.Transaction, error)
+	CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error)
 }
 
 type PostgresRepository struct {
 	DbPool *pgxpool.Pool
 }
 
-func (r *PostgresRepository) CreateTransaction(ctx context.Context, params queries.CreateTransactionParams) (queries.Transaction, error) {
-	return GetDbQueries(r.DbPool).CreateTransaction(ctx, params)
+func (r *PostgresRepository) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
+	return GetDbQueries(r.DbPool).CreateIllTransaction(ctx, params)
 }
 
 func GetDbQueries(dbPool *pgxpool.Pool) *queries.Queries {

@@ -2,10 +2,8 @@ package handler
 
 import (
 	"bytes"
-	"context"
-	queries "github.com/indexdata/crosslink/broker/db/generated"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/stretchr/testify/mock"
+	"github.com/indexdata/crosslink/broker/test"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,26 +11,8 @@ import (
 	"testing"
 )
 
-type MockRepository struct {
-	mock.Mock
-}
-
-func (m *MockRepository) CreateTransaction(ctx context.Context, params queries.CreateTransactionParams) (queries.Transaction, error) {
-	return queries.Transaction{
-		params.ID,
-		params.Timestamp,
-		params.RequesterSymbol,
-		params.RequesterID,
-		params.RequesterAction,
-		params.SupplierSymbol,
-		params.State,
-		params.RequesterRequestID,
-		params.SupplierRequestID,
-		params.Data,
-	}, nil
-}
-
-var mockRepo = new(MockRepository)
+var mockRepoSuccess = new(test.MockRepositorySuccess)
+var mockRepoError = new(test.MockRepositoryError)
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
 	data, _ := os.ReadFile("testdata/request.xml")
@@ -40,7 +20,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepo)(rr, req)
+	handler.Iso18626PostHandler(mockRepoSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -61,7 +41,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepo)(rr, req)
+	handler.Iso18626PostHandler(mockRepoSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusMethodNotAllowed {
@@ -76,7 +56,7 @@ func TestIso18626PostHandlerWrongContentType(t *testing.T) {
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepo)(rr, req)
+	handler.Iso18626PostHandler(mockRepoSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusUnsupportedMediaType {
@@ -90,11 +70,26 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepo)(rr, req)
+	handler.Iso18626PostHandler(mockRepoSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusBadRequest {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusBadRequest)
+	}
+}
+
+func TestIso18626PostHandlerFailToSave(t *testing.T) {
+	data, _ := os.ReadFile("testdata/request.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+
+	handler.Iso18626PostHandler(mockRepoError)(rr, req)
+
+	// Check the response
+	if status := rr.Code; status != http.StatusInternalServerError {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusInternalServerError)
 	}
 }
