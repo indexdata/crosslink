@@ -5,18 +5,19 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/db"
-	queries "github.com/indexdata/crosslink/broker/db/generated"
-	"github.com/indexdata/crosslink/broker/db/model"
-	"github.com/indexdata/crosslink/broker/iso18626"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/jackc/pgx/v5/pgtype"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
+	repository "github.com/indexdata/crosslink/broker/db"
+	queries "github.com/indexdata/crosslink/broker/db/generated"
+	"github.com/indexdata/crosslink/broker/db/model"
+	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
@@ -38,19 +39,19 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var illMessage *iso18626.ISO18626Message
-		err = xml.Unmarshal(byteReq, illMessage)
+		var illMessage iso18626.ISO18626Message
+		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		if illMessage.Request != nil {
-			handleIso18626Request(illMessage, w, repo)
+			handleIso18626Request(&illMessage, w, repo)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			handleIso18626RequestingAgencyMessage(illMessage, w)
+			handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			handleIso18626SupplyingAgencyMessage(illMessage, w)
+			handleIso18626SupplyingAgencyMessage(&illMessage, w)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
