@@ -12,6 +12,7 @@ on:
       - '**.html'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates chnage to force republish
+      - '.github/**' #trigger when pipeline changes
   pull_request:
     branches: [ "main" ]
     paths:
@@ -20,6 +21,7 @@ on:
       - '**.html'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates change to force republish
+      - '.github/**' #trigger when pipeline changes
   release:
     types: [published]
 
