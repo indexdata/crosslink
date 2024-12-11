@@ -29,14 +29,14 @@ CREATE TABLE event_type
 
 CREATE TABLE event
 (
-    id             VARCHAR PRIMARY KEY,
-    transaction_id VARCHAR NOT NULL,
-    event_type     VARCHAR NOT NULL,
-    event_status   VARCHAR NOT NULL,
-    event_data     jsonb,
-    result_data    jsonb,
-    created_at     TIMESTAMP NOT NULL DEFAULT now(),
-    FOREIGN KEY (transaction_id) REFERENCES ill_transaction (id),
+    id                 VARCHAR PRIMARY KEY,
+    ill_transaction_id VARCHAR   NOT NULL,
+    event_type         VARCHAR   NOT NULL,
+    event_status       VARCHAR   NOT NULL,
+    event_data         jsonb,
+    result_data        jsonb,
+    created_at         TIMESTAMP NOT NULL DEFAULT now(),
+    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (event_type) REFERENCES event_type (type)
 )
 

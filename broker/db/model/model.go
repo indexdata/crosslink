@@ -18,7 +18,7 @@ type IllTransactionData struct {
 	ReturnInfo            *iso18626.ReturnInfo             `json:"returnInfo,omitempty"`
 }
 
-type IllEvent struct {
+type Event struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
 }

@@ -73,7 +73,7 @@ ORDER BY created_at;
 
 -- name: CreateEvent :one
 INSERT INTO event (
-    id, transaction_id, event_type, event_status, event_data, result_data
+    id, ill_transaction_id, event_type, event_status, event_data, result_data
 ) VALUES (
              $1, $2, $3, $4, $5, $6
          )

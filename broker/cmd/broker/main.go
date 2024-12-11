@@ -35,7 +35,7 @@ func main() {
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
-	mux.HandleFunc("/externalapi/iso18626", handler.Iso18626PostHandler(repo))
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(repo))
 
 	log.Println("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)

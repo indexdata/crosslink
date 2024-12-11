@@ -59,12 +59,12 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 }
 
 func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
-	requesterSymbol := CreatePgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
-	supplierSymbol := CreatePgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
-	requestAction := CreatePgText("Request")
-	state := CreatePgText("NEW")
-	requesterRequestId := CreatePgText(illMessage.Request.Header.RequestingAgencyRequestId)
-	supplierRequestId := CreatePgText(illMessage.Request.Header.SupplyingAgencyRequestId)
+	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
+	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
+	requestAction := createPgText("Request")
+	state := createPgText("NEW")
+	requesterRequestId := createPgText(illMessage.Request.Header.RequestingAgencyRequestId)
+	supplierRequestId := createPgText(illMessage.Request.Header.SupplyingAgencyRequestId)
 
 	illTransactionData := model.IllTransactionData{
 		BibliographicInfo:     illMessage.Request.BibliographicInfo,
@@ -104,7 +104,7 @@ func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseW
 		return
 	}
 
-	var resmsg = CreateRequestResponse(illMessage)
+	var resmsg = createRequestResponse(illMessage)
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -115,13 +115,13 @@ func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseW
 	w.Write(output)
 }
 
-func CreatePgText(value string) pgtype.Text {
+func createPgText(value string) pgtype.Text {
 	textValue := pgtype.Text{}
 	textValue.Scan(value)
 	return textValue
 }
 
-func CreateRequestResponse(illMessage iso18626.ISO18626Message) *iso18626.ISO18626Message {
+func createRequestResponse(illMessage iso18626.ISO18626Message) *iso18626.ISO18626Message {
 	var resmsg = &iso18626.ISO18626Message{}
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{}
 
