@@ -1,0 +1,3 @@
+net/http.ListenAndServe
+(net.Listener).Close
+(net/http.ResponseWriter).Write

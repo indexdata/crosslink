@@ -1,0 +1,12 @@
+linters:
+  enable:
+    - gofmt
+    - whitespace
+    - gosec
+  disable:
+    - errcheck
+    - staticcheck
+linters-settings:
+  gosec:
+    excludes:
+      - G114
