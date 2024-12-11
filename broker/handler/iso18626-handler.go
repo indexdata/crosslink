@@ -38,7 +38,7 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var illMessage iso18626.ISO18626Message
+		var illMessage *iso18626.ISO18626Message
 		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -46,11 +46,11 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 		}
 
 		if illMessage.Request != nil {
-			HandleIso18626Request(illMessage, w, repo)
+			handleIso18626Request(illMessage, w, repo)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			HandleIso18626RequestingAgencyMessage(illMessage, w)
+			handleIso18626RequestingAgencyMessage(illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			HandleIso18626SupplyingAgencyMessage(illMessage, w)
+			handleIso18626SupplyingAgencyMessage(illMessage, w)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -58,7 +58,7 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 	}
 }
 
-func HandleIso18626Request(illMessage iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
+func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
 	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
 	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	requestAction := createPgText("Request")
@@ -121,7 +121,7 @@ func createPgText(value string) pgtype.Text {
 	return textValue
 }
 
-func createRequestResponse(illMessage iso18626.ISO18626Message) *iso18626.ISO18626Message {
+func createRequestResponse(illMessage *iso18626.ISO18626Message) *iso18626.ISO18626Message {
 	var resmsg = &iso18626.ISO18626Message{}
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{}
 
@@ -142,10 +142,10 @@ func createRequestResponse(illMessage iso18626.ISO18626Message) *iso18626.ISO186
 	return resmsg
 }
 
-func HandleIso18626RequestingAgencyMessage(illMessage iso18626.ISO18626Message, w http.ResponseWriter) {
+func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 
 }
 
-func HandleIso18626SupplyingAgencyMessage(illMessage iso18626.ISO18626Message, w http.ResponseWriter) {
+func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 
 }
