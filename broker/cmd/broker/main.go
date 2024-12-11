@@ -23,10 +23,11 @@ var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "crosslink")
 var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
-var connectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var MigrationsFolder = "file://migrations"
 
 func main() {
-	m, err := migrate.New("file://migrations", connectionString)
+	m, err := migrate.New(MigrationsFolder, ConnectionString)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -39,7 +40,7 @@ func main() {
 		return
 	}
 
-	dbPool, err := pgxpool.New(context.Background(), connectionString)
+	dbPool, err := pgxpool.New(context.Background(), ConnectionString)
 	if err != nil {
 		log.Fatalf("Unable to create pool to database: %v\n", err)
 	}
