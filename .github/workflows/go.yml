@@ -45,7 +45,6 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ matrix.modules }}
-          args: --config=./${{ matrix.modules }}/.golangci.yaml
 
   build:
     runs-on: ubuntu-latest
