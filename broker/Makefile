@@ -55,19 +55,8 @@ fmt:
 fmt-check:
 	$(GOFMT) -d $(GOFILES)
 
-install-lint:
-	go install github.com/kisielk/errcheck@latest
-	go install honnef.co/go/tools/cmd/staticcheck@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
 lint:
-	$(GO) vet $(PACKAGES)
-	staticcheck $(PACKAGES)
-	govulncheck $(PACKAGES)
-	errcheck -exclude .errcheck-exclude $(PACKAGES)
-	golangci-lint run
-
+	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
 
 clean:
 	rm -f $(BINARY)
