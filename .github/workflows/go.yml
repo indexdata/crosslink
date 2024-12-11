@@ -24,6 +24,12 @@ on:
     types: [published]
 
 jobs:
+  go-lint:
+    uses: folio-org/.github/.github/workflows/go-lint.yml@v1
+    with:
+      errcheck-excludes-file: '.errcheck-exclude'
+      golangci-config-file: '.golangci.yml'
+
   build:
     runs-on: ubuntu-latest
     steps:
