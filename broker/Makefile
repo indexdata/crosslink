@@ -17,10 +17,10 @@ COVERAGE=coverage.out
 
 # Directories
 SQLC ?= sqlc
-SQLC_CONFIG = db/sqlc.yaml
+SQLC_CONFIG = sqlc/sqlc.yaml
 SQL_GEN_OUT_DIR = db/generated
 SQL_GEN_OUT = $(SQL_GEN_OUT_DIR)/*.go
-SQL_GEN_IN = db/*.sql
+SQL_GEN_IN = sqlc/*.sql
 
 .PHONY: all docker generate generate-schema generate-commit-id check run fmt fmt-check vet clean
 
