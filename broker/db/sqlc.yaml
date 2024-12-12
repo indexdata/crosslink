@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "query.sql"
+    schema: "schema.sql"
+    gen:
+      go:
+        package: "queries"
+        out: "/generated"
+        sql_package: "pgx/v5"
+        overrides:
+          - column: "ill_transaction.ill_transaction_data"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/db/model"
+              type: "IllTransactionData"
+          - column: "event.event_data"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/db/model"
+              type: "Event"
+          - column: "event.result_data"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/db/model"
+              type: "Event"

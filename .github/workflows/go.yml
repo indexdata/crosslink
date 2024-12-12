@@ -47,6 +47,11 @@ jobs:
     - name: Install xsltproc
       run: sudo apt-get install -y xsltproc
 
+    - name : Ensure sqlc is installed
+      uses: sqlc-dev/setup-sqlc@v4
+      with:
+        sqlc-version: '1.25.0'
+
     - name: Generate sources
       run: make generate
 
