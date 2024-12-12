@@ -1,0 +1,15 @@
+linters:
+  # additional linter, see https://golangci-lint.run/usage/linters/
+  enable:
+    - gofmt
+    - whitespace
+    - gosec
+linters-settings:
+  gosec:
+    excludes:
+      - G114
+  errcheck:
+    exclude-functions:
+      - net/http.ListenAndServe
+      - (net.Listener).Close
+      - (net/http.ResponseWriter).Write
