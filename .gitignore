@@ -3,6 +3,7 @@
 /scratch/
 */chart/*.tgz
 broker/iso18626/schema.go
+broker/db/generated
 broker/broker
 broker/coverage.out
 broker/cmd/broker/commit.txt
