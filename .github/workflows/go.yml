@@ -74,3 +74,17 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
+
+  build-all:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: Check all builds succeeded
+    needs: [build]
+    steps:
+      - run: |
+          result="${{ needs.build.result }}"
+          if [[ $result == "success" || $result == "skipped" ]]; then
+            exit 0
+          else
+            exit 1
+          fi
