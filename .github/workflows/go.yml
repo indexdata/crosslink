@@ -10,6 +10,8 @@ on:
       - '**.go'
       - '**.xsd'
       - '**.html'
+      - '**.sql'
+      - '**/sqlc.yaml'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates chnage to force republish
       - '.github/**' #trigger when pipeline changes
@@ -19,6 +21,8 @@ on:
       - '**.go'
       - '**.xsd'
       - '**.html'
+      - '**.sql'
+      - '**/sqlc.yaml'
       - '**/Dockerfile' #run this workflow first to ensure tests are passing
       - '**/chart/**' #trigger also when chart templates change to force republish
       - '.github/**' #trigger when pipeline changes
