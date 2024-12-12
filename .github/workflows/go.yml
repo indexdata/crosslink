@@ -30,30 +30,11 @@ env:
   GOLANGCI_LINT_VERSION: v1.60
 
 jobs:
-  golangci-lint:
+  build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         modules: [broker]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: golangci-lint ${{ matrix.modules }}
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          working-directory: ${{ matrix.modules }}
-      - name: govulncheck
-        uses: golang/govulncheck-action@v1
-        with:
-          go-version-input: ${{ env.GO_VERSION }}
-          go-package: ./...
-          work-dir: ${{ matrix.modules }}
-
-  build:
-    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -71,11 +52,24 @@ jobs:
       with:
         sqlc-version: '1.25.0'
 
-    - name: Print sqlc version
-      run: sqlc version
+    - name: Generate sources
+      run: make generate
+
+    - name: Lint module '${{ matrix.modules }}'
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: ${{ env.GOLANGCI_LINT_VERSION }}
+        working-directory: ${{ matrix.modules }}
 
     - name: Build
       run: make all
 
     - name: Test
       run: make check
+
+    - name: Check vulnerabilities in '${{ matrix.modules }}'
+      uses: golang/govulncheck-action@v1
+      with:
+        go-version-input: ${{ env.GO_VERSION }}
+        go-package: ./...
+        work-dir: ${{ matrix.modules }}
