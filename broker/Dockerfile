@@ -18,6 +18,8 @@ RUN go mod download
 # Copy sources
 COPY broker/cmd ./cmd
 COPY broker/iso18626 ./iso18626
+COPY broker/db ./db
+COPY broker/handler ./handler
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /broker ./cmd/broker
