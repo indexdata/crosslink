@@ -117,8 +117,7 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 }
 
 func createPgText(value string) pgtype.Text {
-	textValue := pgtype.Text{}
-	textValue.Scan(value)
+	textValue := pgtype.Text{String: value}
 	return textValue
 }
 
