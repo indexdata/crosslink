@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -78,15 +76,8 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		BillingInfo:           illMessage.Request.BillingInfo,
 	}
 
-	jsonBytes, err := json.Marshal(illTransactionData)
-	if err != nil {
-		fmt.Println("Error converting map to JSON:", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	ctx := context.Background()
-	_, err = repo.CreateIllTransaction(ctx, queries.CreateIllTransactionParams{
+	_, err := repo.CreateIllTransaction(ctx, queries.CreateIllTransactionParams{
 		ID: uuid.New().String(),
 		Timestamp: pgtype.Timestamp{
 			Time:  illMessage.Request.Header.Timestamp.Time,
@@ -98,7 +89,7 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		State:              state,
 		RequesterRequestID: requesterRequestId,
 		SupplierRequestID:  supplierRequestId,
-		Data:               jsonBytes,
+		IllTransactionData: illTransactionData,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

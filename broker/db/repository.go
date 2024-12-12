@@ -8,14 +8,14 @@ import (
 )
 
 type Repository interface {
-	CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error)
+	CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error)
 }
 
 type PostgresRepository struct {
 	DbPool *pgxpool.Pool
 }
 
-func (r *PostgresRepository) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
+func (r *PostgresRepository) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
 	return GetDbQueries(r.DbPool).CreateIllTransaction(ctx, params)
 }
 

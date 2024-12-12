@@ -11,18 +11,10 @@ type MockRepositorySuccess struct {
 	mock.Mock
 }
 
-func (m *MockRepositorySuccess) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
-	return queries.IllTransaction{
-		params.ID,
-		params.Timestamp,
-		params.RequesterSymbol,
-		params.RequesterID,
-		params.RequesterAction,
-		params.SupplierSymbol,
-		params.State,
-		params.RequesterRequestID,
-		params.SupplierRequestID,
-		params.Data,
+func (m *MockRepositorySuccess) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
+	var illTransaction = (queries.IllTransaction)(params)
+	return queries.CreateIllTransactionRow{
+		IllTransaction: illTransaction,
 	}, nil
 }
 
@@ -30,6 +22,6 @@ type MockRepositoryError struct {
 	mock.Mock
 }
 
-func (m *MockRepositoryError) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
-	return queries.IllTransaction{}, errors.New("DB error")
+func (m *MockRepositoryError) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
+	return queries.CreateIllTransactionRow{}, errors.New("DB error")
 }
