@@ -67,7 +67,7 @@ fmt:
 fmt-check:
 	$(GOFMT) -d $(GOFILES)
 
-lint:
+lint: generate
 	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
 
 clean:
