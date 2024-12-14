@@ -7,8 +7,8 @@ CREATE TABLE entries (
 	description varchar(255),
 	lms_location_code varchar(255),
 	contact_name varchar(255),
-	email_address varchar(255),
-	phone_number varchar(255)
+	email varchar(255),
+	phone varchar(255)
 );
 
 CREATE TABLE authorities (

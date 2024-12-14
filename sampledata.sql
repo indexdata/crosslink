@@ -7,7 +7,7 @@ WITH auth_isil AS (
   VALUES ('RESHARE')
   RETURNING id
 ), new_entry AS (
-  INSERT INTO entries (name, description, contact_name, email_address)
+  INSERT INTO entries (name, description, contact_name, email)
   VALUES ('Some Institution', 'Some library sort of place', 'Bob', 'bob@someinst.edu')
   RETURNING id
 )

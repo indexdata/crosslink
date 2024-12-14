@@ -6,23 +6,34 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"strings"
 
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime"
+	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Entry defines model for Entry.
 type Entry struct {
 	// ContactName Name of contact person
-	ContactName *string `json:"contact_name,omitempty"`
+	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
-	Description *string `json:"description,omitempty"`
+	Description nullable.Nullable[string] `json:"description,omitempty"`
 
 	// Email Main contact email
-	Email *string `json:"email,omitempty"`
+	Email nullable.Nullable[string] `json:"email,omitempty"`
 
 	// Id Unique id of the entry
 	Id openapi_types.UUID `json:"id"`
@@ -46,13 +57,13 @@ type Error struct {
 // NewEntry defines model for NewEntry.
 type NewEntry struct {
 	// ContactName Name of contact person
-	ContactName *string `json:"contact_name,omitempty"`
+	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
-	Description *string `json:"description,omitempty"`
+	Description nullable.Nullable[string] `json:"description,omitempty"`
 
 	// Email Main contact email
-	Email *string `json:"email,omitempty"`
+	Email nullable.Nullable[string] `json:"email,omitempty"`
 
 	// Name Name of the institution or branch this directory entry describes
 	Name string `json:"name"`
@@ -344,4 +355,406 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/entries/{id}", wrapper.GetEntryByID)
 
 	return m
+}
+
+type GetEntriesRequestObject struct {
+	Params GetEntriesParams
+}
+
+type GetEntriesResponseObject interface {
+	VisitGetEntriesResponse(w http.ResponseWriter) error
+}
+
+type GetEntries200JSONResponse []Entry
+
+func (response GetEntries200JSONResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetEntries400TextResponse string
+
+func (response GetEntries400TextResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetEntriesdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetEntriesdefaultJSONResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type AddEntryRequestObject struct {
+	Body *AddEntryJSONRequestBody
+}
+
+type AddEntryResponseObject interface {
+	VisitAddEntryResponse(w http.ResponseWriter) error
+}
+
+type AddEntry200JSONResponse Entry
+
+func (response AddEntry200JSONResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddEntry400TextResponse string
+
+func (response AddEntry400TextResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddEntrydefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response AddEntrydefaultJSONResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type DeleteEntryRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteEntryResponseObject interface {
+	VisitDeleteEntryResponse(w http.ResponseWriter) error
+}
+
+type DeleteEntry204Response struct {
+}
+
+func (response DeleteEntry204Response) VisitDeleteEntryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteEntry400TextResponse string
+
+func (response DeleteEntry400TextResponse) VisitDeleteEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteEntrydefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response DeleteEntrydefaultJSONResponse) VisitDeleteEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type GetEntryByIDRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetEntryByIDResponseObject interface {
+	VisitGetEntryByIDResponse(w http.ResponseWriter) error
+}
+
+type GetEntryByID200JSONResponse Entry
+
+func (response GetEntryByID200JSONResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetEntryByID400TextResponse string
+
+func (response GetEntryByID400TextResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetEntryByIDdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetEntryByIDdefaultJSONResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+// StrictServerInterface represents all server handlers.
+type StrictServerInterface interface {
+	// Returns all entries
+	// (GET /entries)
+	GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error)
+	// Creates a new entry
+	// (POST /entries)
+	AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error)
+	// Delete directory entry by ID
+	// (DELETE /entries/{id})
+	DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error)
+	// Returns a directory entry by ID
+	// (GET /entries/{id})
+	GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error)
+}
+
+type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
+type StrictMiddlewareFunc = strictnethttp.StrictHTTPMiddlewareFunc
+
+type StrictHTTPServerOptions struct {
+	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
+	ResponseErrorHandlerFunc func(w http.ResponseWriter, r *http.Request, err error)
+}
+
+func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
+	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		},
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		},
+	}}
+}
+
+func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
+}
+
+type strictHandler struct {
+	ssi         StrictServerInterface
+	middlewares []StrictMiddlewareFunc
+	options     StrictHTTPServerOptions
+}
+
+// GetEntries operation middleware
+func (sh *strictHandler) GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams) {
+	var request GetEntriesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEntries(ctx, request.(GetEntriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEntries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEntriesResponseObject); ok {
+		if err := validResponse.VisitGetEntriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddEntry operation middleware
+func (sh *strictHandler) AddEntry(w http.ResponseWriter, r *http.Request) {
+	var request AddEntryRequestObject
+
+	var body AddEntryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddEntry(ctx, request.(AddEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddEntryResponseObject); ok {
+		if err := validResponse.VisitAddEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteEntry operation middleware
+func (sh *strictHandler) DeleteEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteEntryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteEntry(ctx, request.(DeleteEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteEntryResponseObject); ok {
+		if err := validResponse.VisitDeleteEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetEntryByID operation middleware
+func (sh *strictHandler) GetEntryByID(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetEntryByIDRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEntryByID(ctx, request.(GetEntryByIDRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEntryByID")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEntryByIDResponseObject); ok {
+		if err := validResponse.VisitGetEntryByIDResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// Base64 encoded, gzipped, json marshaled Swagger object
+var swaggerSpec = []string{
+
+	"H4sIAAAAAAAC/+xWT4/bthP9KsT8fkdhvU1y0i2pF4UPTYsUPQWLghbHq2kpUh4OsysY+u4FKcleW/b+",
+	"SYtc0oshi+S8NzOPb7SDyjetd+gkQLmDUNXY6Px444S79KCt/WUD5ecd/J9xAyX8b3E4tBhPLD7i/XCi",
+	"L3bQsm+RhTBHIpN+DYaKqRXyDkr43dE2oiKj/EZJjQrz4QI2nhstUEKMZKAA6VqEEoIwuTvo+wIYt5EY",
+	"DZSfU+jb/rYv4IbZc4I5hq68wTl43qzy2iNAcvL2zQGRnOAdMvQFNBiCvrsYaFp+juwIOG1PtPdVO8Pc",
+	"ia7kD6ebM8AfdYOpcuMu1SIH76AAF63Va4tQCkecMSqO45yGXaJosmjUo9ePGkTSjStrNGrdKakp7Dv3",
+	"LDQ2muwc9GdNbp/IsOcFwZ6uSyJMLghJHHJgtWbtqnqgbIixEs/dQH6fVIAzSKFr1t6GOdhvw4LSIfiK",
+	"tKBR9yT1cVVIsMlnn7o8Q6QENqJrZt3NBJRzHmUzHpnpRkepPZN0Z+5c2yJXOqAak7uY7NecvcT1QPTF",
+	"RrIvx6uc5GvNI70mt/EptJAkzcFyEgiFWr3/dQUFfEEOA+IPV9dX16lYvkWnW4IS3uZXBbRa6sx0kfo/",
+	"sr5DmdP+hBLZBaWtVeNetWHfZOmGLgimRy35fwzIqtZB6arCEJT4K8jwrFO4lYESfkK5GTETD9YNCnLI",
+	"9T6G/gu7e88mhVEbsoKs1lmqaXEbcbjN+X7BFopxKOTyzOQiXa5XKnzu1zFSox+oiY1ysVkjp4vJGKKV",
+	"DM25AhdwLTUkR9jP+nR/m9obWu/CUPc319eTk6LLLdBta6nKNVv8GQYHPCC86KpOQ+70pp5a6zA/laUg",
+	"amKVjr2bkRJ8kEVrNZ3QORXvDOETbiMGUV+0JZOTUpjHYN650dHKq/J/Mu0h8JxEdPjQYpXMbwRPsohN",
+	"o9NUOyfzRK/14cyd+JFRCwallcP7vYMey/y9MTfjAg/5f/Cm+9fyPHzGXOqoeKWNgcdWkkZU/w/F9wLN",
+	"XWL0HcvrnGLSjsl+Fzsy/SA0i5I/GI7ltMzvJ0U9aZurZTIwnEQwRhztKxn/wb1oro+zVnZhTM2N7N38",
+	"skxfLomF+Q5bP3Ru9im37tRqmXiOU/fskOw+dKvlK/u9Qanqb9Tu/6zjG06mSxLq+/7vAAAA///REEay",
+	"Hw8AAA==",
+}
+
+// GetSwagger returns the content of the embedded swagger specification file
+// or error if failed to decode
+func decodeSpec() ([]byte, error) {
+	zipped, err := base64.StdEncoding.DecodeString(strings.Join(swaggerSpec, ""))
+	if err != nil {
+		return nil, fmt.Errorf("error base64 decoding spec: %w", err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(zipped))
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %w", err)
+	}
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(zr)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+var rawSpec = decodeSpecCached()
+
+// a naive cached of a decoded swagger spec
+func decodeSpecCached() func() ([]byte, error) {
+	data, err := decodeSpec()
+	return func() ([]byte, error) {
+		return data, err
+	}
+}
+
+// Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
+func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
+	res := make(map[string]func() ([]byte, error))
+	if len(pathToFile) > 0 {
+		res[pathToFile] = rawSpec
+	}
+
+	return res
+}
+
+// GetSwagger returns the Swagger specification corresponding to the generated code
+// in this file. The external references of Swagger specification are resolved.
+// The logic of resolving external references is tightly connected to "import-mapping" feature.
+// Externally referenced files must be embedded in the corresponding golang packages.
+// Urls can be supported but this task was out of the scope.
+func GetSwagger() (swagger *openapi3.T, err error) {
+	resolvePath := PathToRawSpec("")
+
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
+		pathToFile := url.String()
+		pathToFile = path.Clean(pathToFile)
+		getSpec, ok := resolvePath[pathToFile]
+		if !ok {
+			err1 := fmt.Errorf("path not found: %s", pathToFile)
+			return nil, err1
+		}
+		return getSpec()
+	}
+	var specData []byte
+	specData, err = rawSpec()
+	if err != nil {
+		return
+	}
+	swagger, err = loader.LoadFromData(specData)
+	if err != nil {
+		return
+	}
+	return
 }

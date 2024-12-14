@@ -26,21 +26,21 @@ func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authori
 
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
-  name, contact_name, email_address
+  name, contact_name, email
 ) VALUES (
   $1, $2, $3
 )
-RETURNING id, parent, name, description, lms_location_code, contact_name, email_address, phone_number
+RETURNING id, parent, name, description, lms_location_code, contact_name, email, phone
 `
 
 type CreateEntryParams struct {
-	Name         string
-	ContactName  pgtype.Text
-	EmailAddress pgtype.Text
+	Name        string
+	ContactName pgtype.Text
+	Email       pgtype.Text
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
-	row := q.db.QueryRow(ctx, createEntry, arg.Name, arg.ContactName, arg.EmailAddress)
+	row := q.db.QueryRow(ctx, createEntry, arg.Name, arg.ContactName, arg.Email)
 	var i Entry
 	err := row.Scan(
 		&i.ID,
@@ -49,8 +49,8 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.Description,
 		&i.LmsLocationCode,
 		&i.ContactName,
-		&i.EmailAddress,
-		&i.PhoneNumber,
+		&i.Email,
+		&i.Phone,
 	)
 	return i, err
 }
@@ -83,7 +83,7 @@ func (q *Queries) CreateSymbol(ctx context.Context, arg CreateSymbolParams) (Sym
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, description, lms_location_code, contact_name, email_address, phone_number FROM entries
+SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries
 WHERE id = $1 LIMIT 1
 `
 
@@ -97,14 +97,14 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 		&i.Description,
 		&i.LmsLocationCode,
 		&i.ContactName,
-		&i.EmailAddress,
-		&i.PhoneNumber,
+		&i.Email,
+		&i.Phone,
 	)
 	return i, err
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email_address, e.phone_number, s.id, s.owner, s.authority, s.symbol
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 ORDER BY e.name, e.id
@@ -131,8 +131,8 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 			&i.Entry.Description,
 			&i.Entry.LmsLocationCode,
 			&i.Entry.ContactName,
-			&i.Entry.EmailAddress,
-			&i.Entry.PhoneNumber,
+			&i.Entry.Email,
+			&i.Entry.Phone,
 			&i.Entrysymbol.ID,
 			&i.Entrysymbol.Owner,
 			&i.Entrysymbol.Authority,

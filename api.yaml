@@ -32,6 +32,12 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Entry'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
         default:
           description: unexpected error
           content:
@@ -56,6 +62,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Entry'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
         default:
           description: unexpected error
           content:
@@ -81,6 +93,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Entry'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
         default:
           description: unexpected error
           content:
@@ -107,6 +125,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
 components:
   schemas:
     Entry:
@@ -128,12 +152,15 @@ components:
           description: Name of the institution or branch this directory entry describes
         description:
           type: string
+          nullable: true
           description: Detailed description of the entity described by this entry
         contact_name:
           type: string
+          nullable: true
           description: Name of contact person
         email:
           type: string
+          nullable: true
           description: Main contact email
         symbols:
           type: array

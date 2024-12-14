@@ -2,10 +2,8 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log"
-	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,24 +11,43 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/oapi-codegen/nullable"
 
 	"indexdata/directoryish/db"
 )
 
-type Server struct {
+func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
+	if nlbl.IsNull() || !nlbl.IsSpecified() {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
+}
+
+func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
+	if !pgtxt.Valid {
+		nlbl := nullable.NewNullNullable[string]()
+		nlbl.SetUnspecified() // We don't store explicitly null strings
+		return nlbl
+	}
+	return nullable.NewNullableWithValue(pgtxt.String)
+}
+
+type ApiImpl struct {
 	pool    *pgxpool.Pool
-	ctx     context.Context
 	queries *db.Queries
 }
 
-func NewServer(pool *pgxpool.Pool, queries *db.Queries, ctx context.Context) Server {
-	return Server{pool: pool, queries: queries, ctx: ctx}
+// Make sure we conform to StrictServerInterface
+var _ StrictServerInterface = (*ApiImpl)(nil)
+
+func NewApiImpl(pool *pgxpool.Pool, queries *db.Queries) ApiImpl {
+	return ApiImpl{pool: pool, queries: queries}
 }
 
-func (s Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams) {
+func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
 	var resp []Entry
 
-	rows, err := s.queries.ListEntries(s.ctx)
+	rows, err := a.queries.ListEntries(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -40,8 +57,9 @@ func (s Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEnt
 
 		if last < 0 || resp[last].Id != row.Entry.ID {
 			resp = append(resp, Entry{
-				Id:   row.Entry.ID,
-				Name: row.Entry.Name,
+				Id:    row.Entry.ID,
+				Name:  row.Entry.Name,
+				Email: PGTxtToNlbl(row.Entry.Email),
 			})
 			last++
 		}
@@ -61,40 +79,35 @@ func (s Server) GetEntries(w http.ResponseWriter, r *http.Request, params GetEnt
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	return GetEntries200JSONResponse(resp), nil
 }
 
-func (Server) GetEntryByID(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+func (ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
+	var resp GetEntryByIDResponseObject
+	return resp, nil
 }
 
-func (s Server) AddEntry(w http.ResponseWriter, r *http.Request) {
-	var newEntry NewEntry
-	if err := json.NewDecoder(r.Body).Decode(&newEntry); err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	tx, err := s.pool.Begin(s.ctx)
+func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
+	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer tx.Rollback(s.ctx)
-	qtx := s.queries.WithTx(tx)
+	defer tx.Rollback(ctx)
+	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
-		Name:         newEntry.Name,
-		ContactName:  pgtype.Text{String: *newEntry.ContactName, Valid: true},
-		EmailAddress: pgtype.Text{String: *newEntry.Email, Valid: true},
+		Name:        request.Body.Name,
+		ContactName: NlblToPGTxt(request.Body.ContactName),
+		Email:       NlblToPGTxt(request.Body.Email),
 	}
-	insertedEntry, err := qtx.CreateEntry(s.ctx, toInsert)
+	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if newEntry.Symbols != nil {
-		for _, symbol := range *newEntry.Symbols {
-			auth, err := qtx.AuthorityBySymbol(s.ctx, strings.ToUpper(*symbol.Authority))
+	if request.Body.Symbols != nil {
+		for _, symbol := range *request.Body.Symbols {
+			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(*symbol.Authority))
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					log.Println("Unrecognized authority")
@@ -102,7 +115,7 @@ func (s Server) AddEntry(w http.ResponseWriter, r *http.Request) {
 				log.Fatal(err)
 			}
 
-			_, err = qtx.CreateSymbol(s.ctx, db.CreateSymbolParams{
+			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
 				Owner:     insertedEntry.ID,
 				Symbol:    strings.ToUpper(*symbol.Symbol),
 				Authority: auth.ID,
@@ -121,14 +134,16 @@ func (s Server) AddEntry(w http.ResponseWriter, r *http.Request) {
 
 	var resp Entry
 	resp.Id = insertedEntry.ID
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
 
-	tx.Commit(s.ctx)
+	tx.Commit(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	return AddEntry200JSONResponse(resp), nil
 }
 
-func (Server) DeleteEntry(w http.ResponseWriter, r *http.Request, id uuid.UUID) {
+func (ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
+	var resp DeleteEntryResponseObject
+	return resp, nil
 }

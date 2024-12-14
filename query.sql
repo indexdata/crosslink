@@ -10,7 +10,7 @@ ORDER BY e.name, e.id;
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, contact_name, email_address
+  name, contact_name, email
 ) VALUES (
   $1, $2, $3
 )

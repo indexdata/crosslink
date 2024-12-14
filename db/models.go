@@ -27,8 +27,8 @@ type Entry struct {
 	Description     pgtype.Text
 	LmsLocationCode pgtype.Text
 	ContactName     pgtype.Text
-	EmailAddress    pgtype.Text
-	PhoneNumber     pgtype.Text
+	Email           pgtype.Text
+	Phone           pgtype.Text
 }
 
 type Entrysymbol struct {
