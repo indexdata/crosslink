@@ -22,7 +22,7 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			log.Printf("[iso18626-handler] error: method not allowed: %s %s\n", r.Method, r.URL)
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		contentType := r.Header.Get("Content-Type")
@@ -51,7 +51,7 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 		} else if illMessage.SupplyingAgencyMessage != nil {
 			handleIso18626SupplyingAgencyMessage(&illMessage, w, repo)
 		} else {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
 			return
 		}
 	}
