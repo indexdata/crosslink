@@ -5,28 +5,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type EventStateEnum string
+type EventState string
 
 const (
-	EventStateNew        EventStateEnum = "NEW"
-	EventStateProcessing EventStateEnum = "PROCESSING"
-	EventStateSuccess    EventStateEnum = "SUCCESS"
-	EventStateProblem    EventStateEnum = "PROBLEM"
-	EventStateError      EventStateEnum = "ERROR"
+	EventStateNew        EventState = "NEW"
+	EventStateProcessing EventState = "PROCESSING"
+	EventStateSuccess    EventState = "SUCCESS"
+	EventStateProblem    EventState = "PROBLEM"
+	EventStateError      EventState = "ERROR"
 )
 
-type EventTypeEnum string
+type EventType string
 
 const (
-	EventTypeRequestTerminated    EventTypeEnum = "request-terminated"
-	EventTypeFindSupplier         EventTypeEnum = "find-supplier"
-	EventTypeSupplierFound        EventTypeEnum = "supplier-found"
-	EventTypeFindSuppliersFailed  EventTypeEnum = "find-suppliers-failed"
-	EventTypeSuppliersExhausted   EventTypeEnum = "suppliers-exhausted"
-	EventTypeSupplierMsgReceived  EventTypeEnum = "supplier-msg-received"
-	EventTypeNotifyRequester      EventTypeEnum = "notify-requester"
-	EventTypeRequesterMsgReceived EventTypeEnum = "requester-msg-received"
-	EventTypeNotifySupplier       EventTypeEnum = "notify-supplier"
+	EventTypeRequestTerminated    EventType = "request-terminated"
+	EventTypeFindSupplier         EventType = "find-supplier"
+	EventTypeSupplierFound        EventType = "supplier-found"
+	EventTypeFindSuppliersFailed  EventType = "find-suppliers-failed"
+	EventTypeSuppliersExhausted   EventType = "suppliers-exhausted"
+	EventTypeSupplierMsgReceived  EventType = "supplier-msg-received"
+	EventTypeNotifyRequester      EventType = "notify-requester"
+	EventTypeRequesterMsgReceived EventType = "requester-msg-received"
+	EventTypeNotifySupplier       EventType = "notify-supplier"
 )
 
 type IllTransactionData struct {
@@ -42,7 +42,7 @@ type IllTransactionData struct {
 	ReturnInfo            *iso18626.ReturnInfo             `json:"returnInfo,omitempty"`
 }
 
-type Event struct {
+type EventData struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
 }

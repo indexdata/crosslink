@@ -16,16 +16,16 @@ sql:
           - column: "event.event_data"
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
-              type: "Event"
+              type: "EventData"
           - column: "event.result_data"
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
-              type: "Event"
+              type: "EventData"
           - column: "event.event_type"
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
-              type: "EventTypeEnum"
+              type: "EventType"
           - column: "event.event_status"
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
-              type: "EventStateEnum"
+              type: "EventState"

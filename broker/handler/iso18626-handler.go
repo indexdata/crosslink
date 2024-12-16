@@ -189,7 +189,7 @@ func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message,
 		IllTransactionID: illTrans.IllTransaction.ID,
 		EventType:        model.EventTypeRequesterMsgReceived,
 		EventStatus:      model.EventStateNew,
-		EventData: model.Event{
+		EventData: model.EventData{
 			Timestamp: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
@@ -241,7 +241,7 @@ func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, 
 		IllTransactionID: illTrans.IllTransaction.ID,
 		EventType:        model.EventTypeSupplierMsgReceived,
 		EventStatus:      model.EventStateNew,
-		EventData: model.Event{
+		EventData: model.EventData{
 			Timestamp: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
