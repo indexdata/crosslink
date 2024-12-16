@@ -5,6 +5,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var EventStateNew = "NEW"
+var EventStateProcessing = "PROCESSING"
+var EventStateSuccess = "SUCCESS"
+var EventStateProblem = "PROBLEM"
+var EventStateError = "ERROR"
+
+var EventTypeRequestReceived = "request-received"
+var EventTypeRequestTerminated = "request-terminated"
+var EventTypeFindSupplier = "find-supplier"
+var EventTypeSupplierFound = "supplier-found"
+var EventTypeFindSuppliersFailed = "find-suppliers-failed"
+var EventTypeSuppliersExhausted = "suppliers-exhausted"
+var EventTypeSupplierMsgReceived = "supplier-msg-received"
+var EventTypeNotifyRequester = "notify-requester"
+var EventTypeRequesterMsgReceived = "requester-msg-received"
+var EventTypeNotifySupplier = "notify-supplier"
+
 type IllTransactionData struct {
 	BibliographicInfo     iso18626.BibliographicInfo       `json:"bibliographicInfo"`
 	PublicationInfo       *iso18626.PublicationInfo        `json:"publicationInfo,omitempty"`

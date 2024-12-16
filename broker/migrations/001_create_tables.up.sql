@@ -18,7 +18,9 @@ CREATE TABLE ill_transaction
     requester_request_id VARCHAR,
     supplier_request_id  VARCHAR,
     ill_transaction_data jsonb     NOT NULL,
-    FOREIGN KEY (requester_id) REFERENCES peer (id)
+    FOREIGN KEY (requester_id) REFERENCES peer (id),
+    UNIQUE (requester_request_id),
+    UNIQUE (supplier_request_id)
 );
 
 CREATE TABLE event_type
@@ -26,6 +28,17 @@ CREATE TABLE event_type
     type        VARCHAR PRIMARY KEY,
     retry_count INT NOT NULL DEFAULT 0
 );
+
+INSERT INTO event_type (type, retry_count) VALUES ('request-received', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('request-terminated', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('find-supplier', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('supplier-found', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('find-suppliers-failed', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('suppliers-exhausted', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('supplier-msg-received', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('notify-requester', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('requester-msg-received', 1);
+INSERT INTO event_type (type, retry_count) VALUES ('notify-supplier', 1);
 
 CREATE TABLE event
 (

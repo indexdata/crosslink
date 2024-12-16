@@ -1,0 +1,53 @@
+<tag0:ISO18626Message xmlns:tag0="http://illtransactions.org/2013/iso18626" xmlns:tag1="http://www.w3.org/2001/XMLSchema-instance" tag0:version="1.2" tag1:schemaLocation="http://illtransactions.org/2013/iso18626 http://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <tag0:request>
+        <tag0:header>
+            <tag0:supplyingAgencyId>
+                <tag0:agencyIdType></tag0:agencyIdType>
+                <tag0:agencyIdValue></tag0:agencyIdValue>
+            </tag0:supplyingAgencyId>
+            <tag0:requestingAgencyId>
+                <tag0:agencyIdType>ISIL</tag0:agencyIdType>
+                <tag0:agencyIdValue>SLNP_ONE</tag0:agencyIdValue>
+            </tag0:requestingAgencyId>
+            <tag0:multipleItemRequestId></tag0:multipleItemRequestId>
+            <tag0:timestamp>2024-11-28T10:25:11.136Z</tag0:timestamp>
+            <tag0:requestingAgencyRequestId></tag0:requestingAgencyRequestId>
+        </tag0:header>
+        <tag0:bibliographicInfo>
+            <tag0:supplierUniqueRecordId>in00000000004</tag0:supplierUniqueRecordId>
+            <tag0:title>Lord of the Rings</tag0:title>
+            <tag0:author>JRR Tolkien</tag0:author>
+            <tag0:bibliographicItemId>
+                <tag0:bibliographicItemIdentifier>1983</tag0:bibliographicItemIdentifier>
+                <tag0:bibliographicItemIdentifierCode>ISBN</tag0:bibliographicItemIdentifierCode>
+            </tag0:bibliographicItemId>
+            <tag0:bibliographicRecordId>
+                <tag0:bibliographicRecordIdentifierCode tag0:scheme="ZFL">TitelId</tag0:bibliographicRecordIdentifierCode>
+                <tag0:bibliographicRecordIdentifier>in00000000004</tag0:bibliographicRecordIdentifier>
+            </tag0:bibliographicRecordId>
+            <tag0:bibliographicRecordId>
+                <tag0:bibliographicRecordIdentifierCode tag0:scheme="ZFL">BsTyp2</tag0:bibliographicRecordIdentifierCode>
+                <tag0:bibliographicRecordIdentifier>L</tag0:bibliographicRecordIdentifier>
+            </tag0:bibliographicRecordId>
+        </tag0:bibliographicInfo>
+        <tag0:publicationInfo>
+            <tag0:publicationDate>1954</tag0:publicationDate>
+        </tag0:publicationInfo>
+        <tag0:serviceInfo>
+            <tag0:requestType>New</tag0:requestType>
+            <tag0:requestSubType>PatronRequest</tag0:requestSubType>
+            <tag0:serviceType>Loan</tag0:serviceType>
+        </tag0:serviceInfo>
+        <tag0:supplierInfo></tag0:supplierInfo>
+        <tag0:requestedDeliveryInfo>
+            <tag0:address>
+                <tag0:physicalAddress>
+                    <tag0:line1>SLNP ONE A</tag0:line1>
+                </tag0:physicalAddress>
+            </tag0:address>
+        </tag0:requestedDeliveryInfo>
+        <tag0:patronInfo>
+            <tag0:patronId>123</tag0:patronId>
+        </tag0:patronInfo>
+    </tag0:request>
+</tag0:ISO18626Message>

@@ -47,9 +47,9 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 		if illMessage.Request != nil {
 			handleIso18626Request(&illMessage, w, repo)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			handleIso18626RequestingAgencyMessage(&illMessage, w)
+			handleIso18626RequestingAgencyMessage(&illMessage, w, repo)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			handleIso18626SupplyingAgencyMessage(&illMessage, w)
+			handleIso18626SupplyingAgencyMessage(&illMessage, w, repo)
 		} else {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -58,6 +58,11 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 }
 
 func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
+	if illMessage.Request.Header.RequestingAgencyRequestId == "" {
+		handleRequestError(illMessage, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
 	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
 	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	requestAction := createPgText("Request")
@@ -92,11 +97,15 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		IllTransactionData: illTransactionData,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		handleRequestError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
 		return
 	}
 
-	var resmsg = createRequestResponse(illMessage)
+	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
+}
+
+func writeResponse(resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -107,36 +116,159 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 	w.Write(output)
 }
 
+func handleRequestError(illMessage *iso18626.ISO18626Message, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	writeResponse(resmsg, w)
+}
+
 func createPgText(value string) pgtype.Text {
-	textValue := pgtype.Text{String: value}
+	textValue := pgtype.Text{
+		String: value,
+		Valid:  true,
+	}
 	return textValue
 }
 
-func createRequestResponse(illMessage *iso18626.ISO18626Message) *iso18626.ISO18626Message {
+func createRequestResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
 	var resmsg = &iso18626.ISO18626Message{}
-	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{}
-
-	resmsg.RequestConfirmation.ConfirmationHeader.RequestingAgencyId = &iso18626.TypeAgencyId{}
-	resmsg.RequestConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdType = illMessage.Request.Header.RequestingAgencyId.AgencyIdType
-	resmsg.RequestConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue = illMessage.Request.Header.RequestingAgencyId.AgencyIdValue
-	resmsg.RequestConfirmation.ConfirmationHeader.TimestampReceived = illMessage.Request.Header.Timestamp
-	resmsg.RequestConfirmation.ConfirmationHeader.RequestingAgencyRequestId = illMessage.Request.Header.RequestingAgencyRequestId
-
-	if len(illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue) != 0 {
-		resmsg.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId = &iso18626.TypeAgencyId{}
-		resmsg.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdType = illMessage.Request.Header.SupplyingAgencyId.AgencyIdType
-		resmsg.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue = illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue
+	header := createConfirmationHeader(&illMessage.Request.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
 	}
-
-	resmsg.RequestConfirmation.ConfirmationHeader.Timestamp = utils.XSDDateTime{Time: time.Now()}
-	resmsg.RequestConfirmation.ConfirmationHeader.MessageStatus = iso18626.TypeMessageStatusOK
 	return resmsg
 }
 
-func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
-
+func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ErrorData {
+	if errorMessage != nil {
+		var errorData = iso18626.ErrorData{
+			ErrorType:  *errorType,
+			ErrorValue: *errorMessage,
+		}
+		return &errorData
+	}
+	return nil
 }
 
-func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus) *iso18626.ConfirmationHeader {
+	var header = &iso18626.ConfirmationHeader{}
+	header.RequestingAgencyId = &iso18626.TypeAgencyId{}
+	header.RequestingAgencyId.AgencyIdType = inHeader.RequestingAgencyId.AgencyIdType
+	header.RequestingAgencyId.AgencyIdValue = inHeader.RequestingAgencyId.AgencyIdValue
+	header.TimestampReceived = inHeader.Timestamp
+	header.RequestingAgencyRequestId = inHeader.RequestingAgencyRequestId
 
+	if len(inHeader.SupplyingAgencyId.AgencyIdValue) != 0 {
+		header.SupplyingAgencyId = &iso18626.TypeAgencyId{}
+		header.SupplyingAgencyId.AgencyIdType = inHeader.SupplyingAgencyId.AgencyIdType
+		header.SupplyingAgencyId.AgencyIdValue = inHeader.SupplyingAgencyId.AgencyIdValue
+	}
+
+	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+	header.MessageStatus = messageStatus
+	return header
+}
+
+func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
+	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
+	if requestingRequestId == "" {
+		handleRequestingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
+	ctx := context.Background()
+	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
+	if illTrans.IllTransaction.ID == "" {
+		handleRequestingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
+	_, err = repo.CreateEvent(ctx, queries.CreateEventParams{
+		ID:               uuid.New().String(),
+		IllTransactionID: illTrans.IllTransaction.ID,
+		EventType:        model.EventTypeRequesterMsgReceived,
+		EventStatus:      model.EventStateNew,
+		EventData: model.Event{
+			Timestamp: pgtype.Timestamp{
+				Time:  time.Now(),
+				Valid: true,
+			},
+			ISO18626Message: illMessage,
+		},
+	})
+	if err != nil {
+		handleRequestingAgencyError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
+	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
+}
+
+func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = &iso18626.ISO18626Message{}
+	header := createConfirmationHeader(&illMessage.RequestingAgencyMessage.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
+	}
+	return resmsg
+}
+
+func handleRequestingAgencyError(illMessage *iso18626.ISO18626Message, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	writeResponse(resmsg, w)
+}
+
+func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
+	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
+	if requestingRequestId == "" {
+		handleSupplyingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
+	ctx := context.Background()
+	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
+	if illTrans.IllTransaction.ID == "" || err != nil {
+		handleSupplyingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+
+	_, err = repo.CreateEvent(ctx, queries.CreateEventParams{
+		ID:               uuid.New().String(),
+		IllTransactionID: illTrans.IllTransaction.ID,
+		EventType:        model.EventTypeSupplierMsgReceived,
+		EventStatus:      model.EventStateNew,
+		EventData: model.Event{
+			Timestamp: pgtype.Timestamp{
+				Time:  time.Now(),
+				Valid: true,
+			},
+			ISO18626Message: illMessage,
+		},
+	})
+	if err != nil {
+		handleSupplyingAgencyError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		return
+	}
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
+}
+
+func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = &iso18626.ISO18626Message{}
+	header := createConfirmationHeader(&illMessage.SupplyingAgencyMessage.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
+	}
+	return resmsg
+}
+
+func handleSupplyingAgencyError(illMessage *iso18626.ISO18626Message, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	writeResponse(resmsg, w)
 }

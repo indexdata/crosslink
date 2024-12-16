@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ill:ISO18626Message xmlns:ill="http://illtransactions.org/2013/iso18626" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ill:version="1.2" xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <ill:requestingAgencyMessage>
+        <ill:header>
+            <ill:supplyingAgencyId>
+                <ill:agencyIdType>ISIL</ill:agencyIdType>
+                <ill:agencyIdValue>SLNP_TWO_A</ill:agencyIdValue>
+            </ill:supplyingAgencyId>
+            <ill:requestingAgencyId>
+                <ill:agencyIdType>ISIL</ill:agencyIdType>
+                <ill:agencyIdValue>SLNP_ONE</ill:agencyIdValue>
+            </ill:requestingAgencyId>
+            <ill:multipleItemRequestId></ill:multipleItemRequestId>
+            <ill:timestamp>2024-12-12T20:12:00.62959771Z</ill:timestamp>
+            <ill:requestingAgencyRequestId>slnp-0009997</ill:requestingAgencyRequestId>
+            <ill:supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</ill:supplyingAgencyRequestId>
+        </ill:header>
+        <ill:action>Cancel</ill:action>
+        <ill:note>Note 1</ill:note>
+    </ill:requestingAgencyMessage>
+</ill:ISO18626Message>
