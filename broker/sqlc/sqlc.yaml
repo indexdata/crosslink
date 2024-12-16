@@ -21,3 +21,11 @@ sql:
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
               type: "Event"
+          - column: "event.event_type"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/db/model"
+              type: "EventTypeEnum"
+          - column: "event.event_status"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/db/model"
+              type: "EventStateEnum"

@@ -59,7 +59,7 @@ func Iso18626PostHandler(repo repository.Repository) http.HandlerFunc {
 
 func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
 	if illMessage.Request.Header.RequestingAgencyRequestId == "" {
-		handleRequestError(illMessage, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleRequestError(illMessage, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
@@ -97,7 +97,7 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		IllTransactionData: illTransactionData,
 	})
 	if err != nil {
-		handleRequestError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleRequestError(illMessage, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
@@ -173,14 +173,14 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo repository.Repository) {
 	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
-		handleRequestingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleRequestingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
 	ctx := context.Background()
 	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 	if illTrans.IllTransaction.ID == "" {
-		handleRequestingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleRequestingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
