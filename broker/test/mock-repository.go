@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"errors"
+	repository "github.com/indexdata/crosslink/broker/db"
 	queries "github.com/indexdata/crosslink/broker/db/generated"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
@@ -11,6 +12,7 @@ import (
 
 type MockRepositorySuccess struct {
 	mock.Mock
+	repository.Repository
 }
 
 func (m *MockRepositorySuccess) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
@@ -49,6 +51,7 @@ func (r *MockRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx contex
 
 type MockRepositoryError struct {
 	mock.Mock
+	repository.Repository
 }
 
 func (m *MockRepositoryError) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {

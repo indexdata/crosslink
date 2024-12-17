@@ -97,7 +97,7 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		IllTransactionData: illTransactionData,
 	})
 	if err != nil {
-		handleRequestError(illMessage, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -179,6 +179,10 @@ func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message,
 
 	ctx := context.Background()
 	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if illTrans.IllTransaction.ID == "" {
 		handleRequestingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -198,7 +202,7 @@ func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message,
 		},
 	})
 	if err != nil {
-		handleRequestingAgencyError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -231,7 +235,11 @@ func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, 
 
 	ctx := context.Background()
 	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
-	if illTrans.IllTransaction.ID == "" || err != nil {
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if illTrans.IllTransaction.ID == "" {
 		handleSupplyingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
 		return
 	}
@@ -250,7 +258,7 @@ func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, 
 		},
 	})
 	if err != nil {
-		handleSupplyingAgencyError(illMessage, err.Error(), iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
