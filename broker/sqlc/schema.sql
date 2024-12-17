@@ -35,7 +35,7 @@ CREATE TABLE event
     event_status       VARCHAR   NOT NULL,
     event_data         jsonb,
     result_data        jsonb,
-    created_at         TIMESTAMP NOT NULL DEFAULT now(),
+    created_at         TIMESTAMP NOT NULL,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (event_type) REFERENCES event_type (type)
 )

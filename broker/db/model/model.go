@@ -5,6 +5,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type EventState string
+
+const (
+	EventStateNew        EventState = "NEW"
+	EventStateProcessing EventState = "PROCESSING"
+	EventStateSuccess    EventState = "SUCCESS"
+	EventStateProblem    EventState = "PROBLEM"
+	EventStateError      EventState = "ERROR"
+)
+
+type EventType string
+
+const (
+	EventTypeRequestTerminated    EventType = "request-terminated"
+	EventTypeFindSupplier         EventType = "find-supplier"
+	EventTypeSupplierFound        EventType = "supplier-found"
+	EventTypeFindSuppliersFailed  EventType = "find-suppliers-failed"
+	EventTypeSuppliersExhausted   EventType = "suppliers-exhausted"
+	EventTypeSupplierMsgReceived  EventType = "supplier-msg-received"
+	EventTypeNotifyRequester      EventType = "notify-requester"
+	EventTypeRequesterMsgReceived EventType = "requester-msg-received"
+	EventTypeNotifySupplier       EventType = "notify-supplier"
+)
+
 type IllTransactionData struct {
 	BibliographicInfo     iso18626.BibliographicInfo       `json:"bibliographicInfo"`
 	PublicationInfo       *iso18626.PublicationInfo        `json:"publicationInfo,omitempty"`
@@ -18,7 +42,7 @@ type IllTransactionData struct {
 	ReturnInfo            *iso18626.ReturnInfo             `json:"returnInfo,omitempty"`
 }
 
-type Event struct {
+type EventData struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
 }

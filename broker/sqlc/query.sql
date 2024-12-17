@@ -22,9 +22,13 @@ RETURNING sqlc.embed(peer);
 DELETE FROM peer
 WHERE id = $1;
 
--- name: GetIllTransaction :one
+-- name: GetIllTransactionById :one
 SELECT sqlc.embed(ill_transaction) FROM ill_transaction
 WHERE id = $1 LIMIT 1;
+
+-- name: GetIllTransactionByRequesterRequestId :one
+SELECT sqlc.embed(ill_transaction) FROM ill_transaction
+WHERE requester_request_id = $1 LIMIT 1;
 
 -- name: ListIllTransaction :many
 SELECT sqlc.embed(ill_transaction) FROM ill_transaction
