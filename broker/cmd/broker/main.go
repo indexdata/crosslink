@@ -7,6 +7,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/indexdata/crosslink/broker/db"
+	"github.com/indexdata/crosslink/broker/event"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
@@ -46,13 +47,18 @@ func main() {
 	}
 	repo := new(repository.PostgresRepository)
 	repo.DbPool = dbPool
+	eventBus := event.NewPostgresEventBus(repo, ConnectionString)
+	err = eventBus.Start()
+	if err != nil {
+		log.Fatalf("Unable to listen to database notify: %v\n", err)
+	}
 
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(repo))
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(repo, eventBus))
 
 	log.Println("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)

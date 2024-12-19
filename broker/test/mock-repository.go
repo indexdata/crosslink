@@ -1,10 +1,11 @@
 package test
 
 import (
-	"context"
 	"errors"
+	"github.com/google/uuid"
 	repository "github.com/indexdata/crosslink/broker/db"
 	queries "github.com/indexdata/crosslink/broker/db/generated"
+	"github.com/indexdata/crosslink/broker/db/model"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"time"
@@ -15,39 +16,60 @@ type MockRepositorySuccess struct {
 	repository.Repository
 }
 
-func (m *MockRepositorySuccess) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
+func (m *MockRepositorySuccess) CreateIllTransaction(params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
 	var illTransaction = (queries.IllTransaction)(params)
-	return queries.CreateIllTransactionRow{
-		IllTransaction: illTransaction,
+	return illTransaction, nil
+}
+
+func (r *MockRepositorySuccess) SaveEvent(params queries.SaveEventParams) (queries.Event, error) {
+	var event = (queries.Event)(params)
+	return event, nil
+}
+
+func (r *MockRepositorySuccess) UpdateEventStatus(params queries.UpdateEventStatusParams) error {
+	return nil
+}
+
+func (r *MockRepositorySuccess) GetEvent(id string) (queries.Event, error) {
+	if id == "t-1-n" {
+		return queries.Event{
+			ID:               id,
+			IllTransactionID: uuid.New().String(),
+			Timestamp:        getNow(),
+			EventType:        model.EventTypeTask,
+			EventName:        model.EventNameRequestReceived,
+			EventStatus:      model.EventStatusNew,
+		}, nil
+	} else if id == "t-1-p" {
+		return queries.Event{
+			ID:               id,
+			IllTransactionID: uuid.New().String(),
+			Timestamp:        getNow(),
+			EventType:        model.EventTypeTask,
+			EventName:        model.EventNameRequestReceived,
+			EventStatus:      model.EventStatusProcessing,
+		}, nil
+	} else {
+		return queries.Event{
+			ID:               id,
+			IllTransactionID: uuid.New().String(),
+			Timestamp:        getNow(),
+			EventType:        model.EventTypeNotice,
+			EventName:        model.EventNameRequesterMsgReceived,
+			EventStatus:      model.EventStatusSuccess,
+		}, nil
+	}
+}
+
+func (r *MockRepositorySuccess) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (queries.IllTransaction, error) {
+	return queries.IllTransaction{
+		ID:                 "id",
+		RequesterRequestID: requesterRequestID,
 	}, nil
 }
 
-func (r *MockRepositorySuccess) CreateEvent(ctx context.Context, params queries.CreateEventParams) (queries.CreateEventRow, error) {
-	var event = queries.Event{
-		ID:               params.ID,
-		IllTransactionID: params.IllTransactionID,
-		EventType:        params.EventType,
-		EventName:        params.EventName,
-		EventStatus:      params.EventStatus,
-		EventData:        params.EventData,
-		ResultData:       params.ResultData,
-		Timestamp: pgtype.Timestamp{
-			Time: time.Now(),
-		},
-	}
-	return queries.CreateEventRow{
-		Event: event,
-	}, nil
-}
-
-func (r *MockRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx context.Context, requesterRequestID pgtype.Text) (queries.GetIllTransactionByRequesterRequestIdRow, error) {
-	var trans = queries.GetIllTransactionByRequesterRequestIdRow{
-		IllTransaction: queries.IllTransaction{
-			ID:                 "id",
-			RequesterRequestID: requesterRequestID,
-		},
-	}
-	return trans, nil
+func (r *MockRepositorySuccess) Notify(eventId string, signal model.Signal) error {
+	return nil
 }
 
 type MockRepositoryError struct {
@@ -55,14 +77,29 @@ type MockRepositoryError struct {
 	repository.Repository
 }
 
-func (m *MockRepositoryError) CreateIllTransaction(ctx context.Context, params queries.CreateIllTransactionParams) (queries.CreateIllTransactionRow, error) {
-	return queries.CreateIllTransactionRow{}, errors.New("DB error")
+func (m *MockRepositoryError) CreateIllTransaction(params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
+	return queries.IllTransaction{}, errors.New("DB error")
 }
 
-func (r *MockRepositoryError) CreateEvent(ctx context.Context, params queries.CreateEventParams) (queries.CreateEventRow, error) {
-	return queries.CreateEventRow{}, errors.New("DB error")
+func (r *MockRepositoryError) SaveEvent(params queries.SaveEventParams) (queries.Event, error) {
+	return queries.Event{}, errors.New("DB error")
 }
 
-func (r *MockRepositoryError) GetIllTransactionByRequesterRequestId(ctx context.Context, requesterRequestID pgtype.Text) (queries.GetIllTransactionByRequesterRequestIdRow, error) {
-	return queries.GetIllTransactionByRequesterRequestIdRow{}, errors.New("DB error")
+func (r *MockRepositoryError) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (queries.IllTransaction, error) {
+	return queries.IllTransaction{}, errors.New("DB error")
+}
+
+func (r *MockRepositoryError) GetEvent(id string) (queries.Event, error) {
+	return queries.Event{}, errors.New("DB error")
+}
+
+func (r *MockRepositoryError) Notify(eventId string, signal model.Signal) error {
+	return errors.New("DB error")
+}
+
+func getNow() pgtype.Timestamp {
+	return pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
+	}
 }

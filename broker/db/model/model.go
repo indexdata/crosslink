@@ -35,6 +35,15 @@ const (
 	EventNameMessageSupplier      EventName = "message-supplier"
 )
 
+type Signal string
+
+const (
+	SignalTaskBegin     Signal = "task_begin"
+	SignalTaskComplete  Signal = "task_complete"
+	SignalTaskCreated   Signal = "task_created"
+	SignalNoticeCreated Signal = "notice_created"
+)
+
 type IllTransactionData struct {
 	BibliographicInfo     iso18626.BibliographicInfo       `json:"bibliographicInfo"`
 	PublicationInfo       *iso18626.PublicationInfo        `json:"publicationInfo,omitempty"`
@@ -55,4 +64,9 @@ type EventData struct {
 
 type EventResult struct {
 	Data map[string]any
+}
+
+type NotifyData struct {
+	Event  string `json:"event"`
+	Signal Signal `json:"signal"`
 }
