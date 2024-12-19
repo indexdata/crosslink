@@ -46,25 +46,25 @@ RETURNING sqlc.embed(ill_transaction);
 DELETE FROM ill_transaction
 WHERE id = $1;
 
--- name: GetEventType :one
-SELECT sqlc.embed(event_type) FROM event_type
-WHERE type = $1 LIMIT 1;
+-- name: GetEventConfig :one
+SELECT sqlc.embed(event_config) FROM event_config
+WHERE event_name = $1 LIMIT 1;
 
--- name: ListEventType :many
-SELECT sqlc.embed(event_type) FROM event_type
-ORDER BY type;
+-- name: ListEventConfig :many
+SELECT sqlc.embed(event_config) FROM event_config
+ORDER BY event_name;
 
--- name: CreateEventType :one
-INSERT INTO event_type (
-    type, retry_count
+-- name: CreateEventConfig :one
+INSERT INTO event_config (
+    event_name, retry_count
 ) VALUES (
              $1, $2
          )
-RETURNING sqlc.embed(event_type);
+RETURNING sqlc.embed(event_config);
 
--- name: DeleteEventType :exec
-DELETE FROM event_type
-WHERE type = $1;
+-- name: DeleteEventConfig :exec
+DELETE FROM event_config
+WHERE event_name = $1;
 
 
 -- name: GetEvent :one
@@ -73,17 +73,38 @@ WHERE id = $1 LIMIT 1;
 
 -- name: ListEvent :many
 SELECT sqlc.embed(event) FROM event
-ORDER BY created_at;
+ORDER BY timestamp;
 
 -- name: CreateEvent :one
 INSERT INTO event (
-    id, ill_transaction_id, event_type, event_status, event_data, result_data
+    id, ill_transaction_id, timestamp, event_name, event_type, event_status, event_data, result_data
 ) VALUES (
-             $1, $2, $3, $4, $5, $6
+             $1, $2, $3, $4, $5, $6, $7, $8
          )
 RETURNING sqlc.embed(event);
 
 -- name: DeleteEvent :exec
 DELETE FROM event
+WHERE id = $1;
+
+-- name: GetLocatedSupplier :one
+SELECT sqlc.embed(located_supplier) FROM located_supplier
+WHERE id = $1 LIMIT 1;
+
+-- name: GetLocatedSupplierByIllTransition :many
+SELECT sqlc.embed(located_supplier) FROM located_supplier
+WHERE ill_transaction_id = $1
+ORDER BY ordinal;
+
+-- name: CreateLocatedSupplier :one
+INSERT INTO located_supplier (
+    id, ill_transaction_id, supplier_id, ordinal, supplier_status
+) VALUES (
+             $1, $2, $3, $4, $5
+         )
+RETURNING sqlc.embed(located_supplier);
+
+-- name: DeleteLocatedSupplier :exec
+DELETE FROM located_supplier
 WHERE id = $1;
 

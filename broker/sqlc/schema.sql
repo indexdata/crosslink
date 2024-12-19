@@ -21,22 +21,34 @@ CREATE TABLE ill_transaction
     FOREIGN KEY (requester_id) REFERENCES peer (id)
 );
 
-CREATE TABLE event_type
+CREATE TABLE event_config
 (
-    type        VARCHAR PRIMARY KEY,
+    event_name  VARCHAR PRIMARY KEY,
     retry_count INT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE event
 (
     id                 VARCHAR PRIMARY KEY,
+    timestamp          TIMESTAMP NOT NULL,
     ill_transaction_id VARCHAR   NOT NULL,
     event_type         VARCHAR   NOT NULL,
+    event_name         VARCHAR   NOT NULL,
     event_status       VARCHAR   NOT NULL,
     event_data         jsonb,
     result_data        jsonb,
-    created_at         TIMESTAMP NOT NULL,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
-    FOREIGN KEY (event_type) REFERENCES event_type (type)
-)
+    FOREIGN KEY (event_name) REFERENCES event_config (event_name)
+);
+
+CREATE TABLE located_supplier
+(
+    id                 VARCHAR PRIMARY KEY,
+    ill_transaction_id VARCHAR NOT NULL,
+    supplier_id        VARCHAR NOT NULL,
+    ordinal            INT     NOT NULL DEFAULT 0,
+    supplier_status    VARCHAR,
+    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
+    FOREIGN KEY (supplier_id) REFERENCES peer (id)
+);
 

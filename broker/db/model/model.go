@@ -18,15 +18,22 @@ const (
 type EventType string
 
 const (
-	EventTypeRequestTerminated    EventType = "request-terminated"
-	EventTypeFindSupplier         EventType = "find-supplier"
-	EventTypeSupplierFound        EventType = "supplier-found"
-	EventTypeFindSuppliersFailed  EventType = "find-suppliers-failed"
-	EventTypeSuppliersExhausted   EventType = "suppliers-exhausted"
-	EventTypeSupplierMsgReceived  EventType = "supplier-msg-received"
-	EventTypeNotifyRequester      EventType = "notify-requester"
-	EventTypeRequesterMsgReceived EventType = "requester-msg-received"
-	EventTypeNotifySupplier       EventType = "notify-supplier"
+	EventTypeTask   EventType = "TASK"
+	EventTypeNotice EventType = "NOTICE"
+)
+
+type EventName string
+
+const (
+	EventNameRequestTerminated    EventName = "request-terminated"
+	EventNameFindSupplier         EventName = "find-supplier"
+	EventNameSupplierFound        EventName = "supplier-found"
+	EventNameFindSuppliersFailed  EventName = "find-suppliers-failed"
+	EventNameSuppliersExhausted   EventName = "suppliers-exhausted"
+	EventNameSupplierMsgReceived  EventName = "supplier-msg-received"
+	EventNameNotifyRequester      EventName = "notify-requester"
+	EventNameRequesterMsgReceived EventName = "requester-msg-received"
+	EventNameNotifySupplier       EventName = "notify-supplier"
 )
 
 type IllTransactionData struct {
@@ -45,4 +52,8 @@ type IllTransactionData struct {
 type EventData struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
+}
+
+type EventResult struct {
+	Data map[string]any
 }

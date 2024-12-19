@@ -27,10 +27,11 @@ func (r *MockRepositorySuccess) CreateEvent(ctx context.Context, params queries.
 		ID:               params.ID,
 		IllTransactionID: params.IllTransactionID,
 		EventType:        params.EventType,
+		EventName:        params.EventName,
 		EventStatus:      params.EventStatus,
 		EventData:        params.EventData,
 		ResultData:       params.ResultData,
-		CreatedAt: pgtype.Timestamp{
+		Timestamp: pgtype.Timestamp{
 			Time: time.Now(),
 		},
 	}
