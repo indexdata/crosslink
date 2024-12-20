@@ -23,33 +23,52 @@ CREATE TABLE ill_transaction
     UNIQUE (supplier_request_id)
 );
 
-CREATE TABLE event_type
+CREATE TABLE event_config
 (
-    type        VARCHAR PRIMARY KEY,
+    event_name  VARCHAR PRIMARY KEY,
+    event_type  VARCHAR NOT NULL,
     retry_count INT NOT NULL DEFAULT 0
 );
 
-INSERT INTO event_type (type, retry_count) VALUES ('request-received', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('request-terminated', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('find-supplier', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('supplier-found', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('find-suppliers-failed', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('suppliers-exhausted', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('supplier-msg-received', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('notify-requester', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('requester-msg-received', 1);
-INSERT INTO event_type (type, retry_count) VALUES ('notify-supplier', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('request-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('request-terminated', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('locate-suppliers', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('select-supplier', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('supplier-msg-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('message-requester', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('requester-msg-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('message-supplier', 'TASK', 1);
 
 CREATE TABLE event
 (
     id                 VARCHAR PRIMARY KEY,
+    timestamp          TIMESTAMP NOT NULL DEFAULT now(),
     ill_transaction_id VARCHAR   NOT NULL,
     event_type         VARCHAR   NOT NULL,
+    event_name         VARCHAR   NOT NULL,
     event_status       VARCHAR   NOT NULL,
     event_data         jsonb,
     result_data        jsonb,
-    created_at         TIMESTAMP NOT NULL DEFAULT now(),
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
-    FOREIGN KEY (event_type) REFERENCES event_type (type)
-)
+    FOREIGN KEY (event_name) REFERENCES event_config (event_name)
+);
+
+CREATE TABLE located_supplier
+(
+    id                 VARCHAR PRIMARY KEY,
+    ill_transaction_id VARCHAR NOT NULL,
+    supplier_id        VARCHAR NOT NULL,
+    ordinal            INT     NOT NULL DEFAULT 0,
+    supplier_status    VARCHAR,
+    FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
+    FOREIGN KEY (supplier_id) REFERENCES peer (id)
+);
 

@@ -5,28 +5,34 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type EventState string
+type EventStatus string
 
 const (
-	EventStateNew        EventState = "NEW"
-	EventStateProcessing EventState = "PROCESSING"
-	EventStateSuccess    EventState = "SUCCESS"
-	EventStateProblem    EventState = "PROBLEM"
-	EventStateError      EventState = "ERROR"
+	EventStatusNew        EventStatus = "NEW"
+	EventStatusProcessing EventStatus = "PROCESSING"
+	EventStatusSuccess    EventStatus = "SUCCESS"
+	EventStatusProblem    EventStatus = "PROBLEM"
+	EventStatusError      EventStatus = "ERROR"
 )
 
 type EventType string
 
 const (
-	EventTypeRequestTerminated    EventType = "request-terminated"
-	EventTypeFindSupplier         EventType = "find-supplier"
-	EventTypeSupplierFound        EventType = "supplier-found"
-	EventTypeFindSuppliersFailed  EventType = "find-suppliers-failed"
-	EventTypeSuppliersExhausted   EventType = "suppliers-exhausted"
-	EventTypeSupplierMsgReceived  EventType = "supplier-msg-received"
-	EventTypeNotifyRequester      EventType = "notify-requester"
-	EventTypeRequesterMsgReceived EventType = "requester-msg-received"
-	EventTypeNotifySupplier       EventType = "notify-supplier"
+	EventTypeTask   EventType = "TASK"
+	EventTypeNotice EventType = "NOTICE"
+)
+
+type EventName string
+
+const (
+	EventNameRequestTerminated    EventName = "request-terminated"
+	EventNameRequestReceived      EventName = "request-received"
+	EventNameLocateSuppliers      EventName = "locate-suppliers"
+	EventNameSelectSupplier       EventName = "select-supplier"
+	EventNameSupplierMsgReceived  EventName = "supplier-msg-received"
+	EventNameMessageRequester     EventName = "message-requester"
+	EventNameRequesterMsgReceived EventName = "requester-msg-received"
+	EventNameMessageSupplier      EventName = "message-supplier"
 )
 
 type IllTransactionData struct {
@@ -45,4 +51,8 @@ type IllTransactionData struct {
 type EventData struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
+}
+
+type EventResult struct {
+	Data map[string]any
 }
