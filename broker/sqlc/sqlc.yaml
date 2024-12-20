@@ -36,4 +36,4 @@ sql:
           - column: "event.event_status"
             go_type:
               import: "github.com/indexdata/crosslink/broker/db/model"
-              type: "EventState"
+              type: "EventStatus"

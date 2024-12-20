@@ -26,29 +26,26 @@ CREATE TABLE ill_transaction
 CREATE TABLE event_config
 (
     event_name  VARCHAR PRIMARY KEY,
+    event_type  VARCHAR NOT NULL,
     retry_count INT NOT NULL DEFAULT 0
 );
 
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('request-received', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('request-terminated', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('find-supplier', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('supplier-found', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('find-suppliers-failed', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('suppliers-exhausted', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('supplier-msg-received', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('notify-requester', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('requester-msg-received', 1);
-INSERT INTO event_config (event_name, retry_count)
-VALUES ('notify-supplier', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('request-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('request-terminated', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('locate-suppliers', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('select-supplier', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('supplier-msg-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('message-requester', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('requester-msg-received', 'NOTICE', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('message-supplier', 'TASK', 1);
 
 CREATE TABLE event
 (

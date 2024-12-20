@@ -24,7 +24,8 @@ CREATE TABLE ill_transaction
 CREATE TABLE event_config
 (
     event_name  VARCHAR PRIMARY KEY,
-    retry_count INT NOT NULL DEFAULT 0
+    event_type  VARCHAR NOT NULL,
+    retry_count INT     NOT NULL DEFAULT 0
 );
 
 CREATE TABLE event

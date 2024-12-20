@@ -197,7 +197,7 @@ func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message,
 		},
 		EventType:   model.EventTypeNotice,
 		EventName:   model.EventNameRequesterMsgReceived,
-		EventStatus: model.EventStateNew,
+		EventStatus: model.EventStatusSuccess,
 		EventData: model.EventData{
 			Timestamp: pgtype.Timestamp{
 				Time:  time.Now(),
@@ -258,7 +258,7 @@ func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, 
 		},
 		EventType:   model.EventTypeNotice,
 		EventName:   model.EventNameSupplierMsgReceived,
-		EventStatus: model.EventStateNew,
+		EventStatus: model.EventStatusSuccess,
 		EventData: model.EventData{
 			Timestamp: pgtype.Timestamp{
 				Time:  time.Now(),

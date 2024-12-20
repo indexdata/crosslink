@@ -5,14 +5,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type EventState string
+type EventStatus string
 
 const (
-	EventStateNew        EventState = "NEW"
-	EventStateProcessing EventState = "PROCESSING"
-	EventStateSuccess    EventState = "SUCCESS"
-	EventStateProblem    EventState = "PROBLEM"
-	EventStateError      EventState = "ERROR"
+	EventStatusNew        EventStatus = "NEW"
+	EventStatusProcessing EventStatus = "PROCESSING"
+	EventStatusSuccess    EventStatus = "SUCCESS"
+	EventStatusProblem    EventStatus = "PROBLEM"
+	EventStatusError      EventStatus = "ERROR"
 )
 
 type EventType string
@@ -26,14 +26,13 @@ type EventName string
 
 const (
 	EventNameRequestTerminated    EventName = "request-terminated"
-	EventNameFindSupplier         EventName = "find-supplier"
-	EventNameSupplierFound        EventName = "supplier-found"
-	EventNameFindSuppliersFailed  EventName = "find-suppliers-failed"
-	EventNameSuppliersExhausted   EventName = "suppliers-exhausted"
+	EventNameRequestReceived      EventName = "request-received"
+	EventNameLocateSuppliers      EventName = "locate-suppliers"
+	EventNameSelectSupplier       EventName = "select-supplier"
 	EventNameSupplierMsgReceived  EventName = "supplier-msg-received"
-	EventNameNotifyRequester      EventName = "notify-requester"
+	EventNameMessageRequester     EventName = "message-requester"
 	EventNameRequesterMsgReceived EventName = "requester-msg-received"
-	EventNameNotifySupplier       EventName = "notify-supplier"
+	EventNameMessageSupplier      EventName = "message-supplier"
 )
 
 type IllTransactionData struct {
