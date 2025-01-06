@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"github.com/google/uuid"
 	repository "github.com/indexdata/crosslink/broker/db"
@@ -72,6 +73,10 @@ func (r *MockRepositorySuccess) Notify(eventId string, signal model.Signal) erro
 	return nil
 }
 
+func (r *MockRepositorySuccess) WithTx(ctx context.Context, fn func(repository.Repository) error) error {
+	return nil
+}
+
 type MockRepositoryError struct {
 	mock.Mock
 	repository.Repository
@@ -94,6 +99,10 @@ func (r *MockRepositoryError) GetEvent(id string) (queries.Event, error) {
 }
 
 func (r *MockRepositoryError) Notify(eventId string, signal model.Signal) error {
+	return errors.New("DB error")
+}
+
+func (r *MockRepositoryError) WithTx(ctx context.Context, fn func(repository.Repository) error) error {
 	return errors.New("DB error")
 }
 

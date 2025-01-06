@@ -68,38 +68,42 @@ func (p *PostgresEventBus) Start() error {
 }
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName model.EventName, data model.EventData) error {
 	id := uuid.New().String()
-	_, err := p.Repository.SaveEvent(queries.SaveEventParams{
-		ID:               id,
-		IllTransactionID: illTransactionID,
-		Timestamp:        getNow(),
-		EventType:        model.EventTypeTask,
-		EventName:        eventName,
-		EventStatus:      model.EventStatusNew,
-		EventData:        data,
-	})
-	if err != nil {
+	return p.Repository.WithTx(context.Background(), func(repo repository.Repository) error {
+		_, err := repo.SaveEvent(queries.SaveEventParams{
+			ID:               id,
+			IllTransactionID: illTransactionID,
+			Timestamp:        getNow(),
+			EventType:        model.EventTypeTask,
+			EventName:        eventName,
+			EventStatus:      model.EventStatusNew,
+			EventData:        data,
+		})
+		if err != nil {
+			return err
+		}
+		err = repo.Notify(id, model.SignalTaskCreated)
 		return err
-	}
-	err = p.Repository.Notify(id, model.SignalTaskCreated)
-	return err
+	})
 }
 
 func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName model.EventName, data model.EventData, status model.EventStatus) error {
 	id := uuid.New().String()
-	_, err := p.Repository.SaveEvent(queries.SaveEventParams{
-		ID:               id,
-		IllTransactionID: illTransactionID,
-		Timestamp:        getNow(),
-		EventType:        model.EventTypeNotice,
-		EventName:        eventName,
-		EventStatus:      status,
-		EventData:        data,
-	})
-	if err != nil {
+	return p.Repository.WithTx(context.Background(), func(repo repository.Repository) error {
+		_, err := repo.SaveEvent(queries.SaveEventParams{
+			ID:               id,
+			IllTransactionID: illTransactionID,
+			Timestamp:        getNow(),
+			EventType:        model.EventTypeNotice,
+			EventName:        eventName,
+			EventStatus:      status,
+			EventData:        data,
+		})
+		if err != nil {
+			return err
+		}
+		err = repo.Notify(id, model.SignalNoticeCreated)
 		return err
-	}
-	err = p.Repository.Notify(id, model.SignalNoticeCreated)
-	return err
+	})
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string) error {
@@ -113,15 +117,17 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 	if event.EventStatus != model.EventStatusNew {
 		return errors.New("event is not in state NEW")
 	}
-	err = p.Repository.UpdateEventStatus(queries.UpdateEventStatusParams{
-		ID:          eventId,
-		EventStatus: model.EventStatusProcessing,
-	})
-	if err != nil {
+	return p.Repository.WithTx(context.Background(), func(repo repository.Repository) error {
+		err = repo.UpdateEventStatus(queries.UpdateEventStatusParams{
+			ID:          eventId,
+			EventStatus: model.EventStatusProcessing,
+		})
+		if err != nil {
+			return err
+		}
+		err = repo.Notify(eventId, model.SignalTaskBegin)
 		return err
-	}
-	err = p.Repository.Notify(eventId, model.SignalTaskBegin)
-	return err
+	})
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *model.EventResult, status model.EventStatus) error {
@@ -135,21 +141,23 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *model.EventResul
 	if event.EventStatus != model.EventStatusProcessing {
 		return errors.New("event is not in state PROCESSING")
 	}
-	_, err = p.Repository.SaveEvent(queries.SaveEventParams{
-		ID:               event.ID,
-		IllTransactionID: event.IllTransactionID,
-		Timestamp:        event.Timestamp,
-		EventType:        event.EventType,
-		EventName:        event.EventName,
-		EventStatus:      status,
-		EventData:        event.EventData,
-		ResultData:       *result,
-	})
-	if err != nil {
+	return p.Repository.WithTx(context.Background(), func(repo repository.Repository) error {
+		_, err = repo.SaveEvent(queries.SaveEventParams{
+			ID:               event.ID,
+			IllTransactionID: event.IllTransactionID,
+			Timestamp:        event.Timestamp,
+			EventType:        event.EventType,
+			EventName:        event.EventName,
+			EventStatus:      status,
+			EventData:        event.EventData,
+			ResultData:       *result,
+		})
+		if err != nil {
+			return err
+		}
+		err = repo.Notify(eventId, model.SignalTaskComplete)
 		return err
-	}
-	err = p.Repository.Notify(eventId, model.SignalTaskComplete)
-	return err
+	})
 }
 
 func getNow() pgtype.Timestamp {
