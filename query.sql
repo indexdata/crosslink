@@ -16,6 +16,14 @@ INSERT INTO entries (
 )
 RETURNING *;
 
+-- name: UpdateEntry :exec
+UPDATE entries
+SET
+  name = coalesce(sqlc.narg(name), CASE WHEN NOT sqlc.arg(del_name)::bool THEN name END),
+  contact_name = coalesce(sqlc.narg(contact_name), CASE WHEN NOT sqlc.arg(del_contact_name)::bool THEN contact_name END),
+  email = coalesce(sqlc.narg(email), CASE WHEN NOT sqlc.arg(del_email)::bool THEN email END)
+WHERE id = @id;
+
 
 -- name: AuthorityBySymbol :one
 SELECT * FROM authorities

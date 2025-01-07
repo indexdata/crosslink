@@ -61,7 +61,16 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Entry'
+                $ref: '#/components/schemas/Id'
+          links:
+            GetEntryByID:
+              operationId: getEntryByID
+              parameters:
+                id: '$response.body#/id'
+            UpdateEntry:
+              operationId: updateEntry
+              parameters:
+                id: '$response.body#/id'
         '400':
           description: Request validation error
           content:
@@ -105,6 +114,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    patch:
+      summary: Update an entry
+      description: Update an entry
+      operationId: updateEntry
+      parameters:
+        - name: id
+          in: path
+          description: ID of entry to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntryPatch'
+      responses:
+        '204':
+          description: entry updated
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: unexpected error
+          content:
+            text/plain:
+              schema:
+                type: string
     delete:
       summary: Delete directory entry by ID
       operationId: deleteEntry
@@ -133,40 +176,62 @@ paths:
                 type: string
 components:
   schemas:
-    Entry:
-      allOf:
-        - $ref: '#/components/schemas/NewEntry'
-        - required:
-            - id
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: Unique id of the entry
-    NewEntry:
+    Id:
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique id
+    EntryRequired:
       required:
         - name
+    EntryProperties:
       properties:
         name:
           type: string
           description: Name of the institution or branch this directory entry describes
+          minLength: 1
         description:
           type: string
           nullable: true
           description: Detailed description of the entity described by this entry
+          minLength: 1
         contact_name:
           type: string
           nullable: true
           description: Name of contact person
+          minLength: 1
         email:
           type: string
           nullable: true
           description: Main contact email
+          minLength: 6
         symbols:
           type: array
           description: Symbols associated with this entry
           items:
             $ref: '#/components/schemas/Symbol'
+    Entry: 
+      allOf: 
+        - $ref: '#/components/schemas/Id'
+        - $ref: '#/components/schemas/EntryProperties'
+        - $ref: '#/components/schemas/EntryRequired'
+    NewEntry: 
+      allOf: 
+        - $ref: '#/components/schemas/EntryProperties'
+        - $ref: '#/components/schemas/EntryRequired'
+    EntryPatch: 
+      allOf: 
+        - $ref: '#/components/schemas/EntryProperties'
+        - type: object
+          properties:
+            name:
+              type: string
+              nullable: true
+              description: Name of the institution or branch this directory entry describes
+              minLength: 1
     Symbol:
       allOf:
         - $ref: '#/components/schemas/NewSymbol'

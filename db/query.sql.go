@@ -147,3 +147,35 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 	}
 	return items, nil
 }
+
+const updateEntry = `-- name: UpdateEntry :exec
+UPDATE entries
+SET
+  name = coalesce($1, CASE WHEN NOT $2::bool THEN name END),
+  contact_name = coalesce($3, CASE WHEN NOT $4::bool THEN contact_name END),
+  email = coalesce($5, CASE WHEN NOT $6::bool THEN email END)
+WHERE id = $7
+`
+
+type UpdateEntryParams struct {
+	Name           pgtype.Text
+	DelName        bool
+	ContactName    pgtype.Text
+	DelContactName bool
+	Email          pgtype.Text
+	DelEmail       bool
+	ID             uuid.UUID
+}
+
+func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
+	_, err := q.db.Exec(ctx, updateEntry,
+		arg.Name,
+		arg.DelName,
+		arg.ContactName,
+		arg.DelContactName,
+		arg.Email,
+		arg.DelEmail,
+		arg.ID,
+	)
+	return err
+}

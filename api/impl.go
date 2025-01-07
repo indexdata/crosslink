@@ -45,12 +45,16 @@ func NewApiImpl(pool *pgxpool.Pool, queries *db.Queries) ApiImpl {
 }
 
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
-	var resp []Entry
-
 	rows, err := a.queries.ListEntries(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Need to initialise resp as explicitly zero length because a simple
+	// var resp []Entry will be JSON-encoded as null rather than [].
+	// See https://github.com/golang/go/issues/27589
+	// ...so may as well allocate an appropriate capacity while we're at it
+	resp := make([]Entry, 0, len(rows))
 
 	for _, row := range rows {
 		last := len(resp) - 1
@@ -82,9 +86,19 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	return GetEntries200JSONResponse(resp), nil
 }
 
-func (ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	var resp GetEntryByIDResponseObject
-	return resp, nil
+func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
+	var resp Entry
+	entry, err := a.queries.EntryById(ctx, request.Id)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp.Id = entry.ID
+	resp.Name = entry.Name
+	resp.ContactName = PGTxtToNlbl(entry.ContactName)
+	resp.Email = PGTxtToNlbl(entry.Email)
+
+	return GetEntryByID200JSONResponse(resp), nil
 }
 
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
@@ -132,7 +146,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
-	var resp Entry
+	var resp Id
 	resp.Id = insertedEntry.ID
 
 	tx.Commit(ctx)
@@ -141,6 +155,35 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 
 	return AddEntry200JSONResponse(resp), nil
+}
+
+func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	qtx := a.queries.WithTx(tx)
+
+	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
+		Name:           NlblToPGTxt(request.Body.Name),
+		DelName:        request.Body.Name.IsNull(),
+		ContactName:    NlblToPGTxt(request.Body.ContactName),
+		DelContactName: request.Body.ContactName.IsNull(),
+		Email:          NlblToPGTxt(request.Body.Email),
+		DelEmail:       request.Body.Email.IsNull(),
+		ID:             request.Id,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	tx.Commit(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return UpdateEntry204Response{}, nil
 }
 
 func (ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
