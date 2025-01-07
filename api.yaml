@@ -225,19 +225,7 @@ components:
     EntryPatch: 
       allOf: 
         - $ref: '#/components/schemas/EntryProperties'
-    Symbol:
-      allOf:
-        - $ref: '#/components/schemas/NewSymbol'
-        - required:
-            - id
-          properties:
-            id:
-              type: string
-              format: uuid
-              description: Unique id
-    NewSymbol:
-      required:
-        - symbol
+    SymbolProperties:
       properties:
         symbol:
           type: string
@@ -245,6 +233,18 @@ components:
         authority:
           type: string
           description: Uppercase string
+    SymbolRequired:
+      required:
+        - symbol
+    Symbol:
+      allOf:
+        - $ref: '#/components/schemas/Id'
+        - $ref: '#/components/schemas/SymbolProperties'
+        - $ref: '#/components/schemas/SymbolRequired'
+    NewSymbol:
+      allOf:
+        - $ref: '#/components/schemas/SymbolProperties'
+        - $ref: '#/components/schemas/SymbolRequired'
 
     Error:
       required:
