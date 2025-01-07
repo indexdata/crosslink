@@ -23,6 +23,13 @@ func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
 	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
 }
 
+func PtrToPGTxt(ptr *string) pgtype.Text {
+	if ptr == nil {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: *ptr, Valid: true}
+}
+
 func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
 	if !pgtxt.Valid {
 		nlbl := nullable.NewNullNullable[string]()
@@ -78,7 +85,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 
 			*resp[last].Symbols = append(*resp[last].Symbols, Symbol{
 				Id:     symid,
-				Symbol: &row.Entrysymbol.Symbol.String,
+				Symbol: row.Entrysymbol.Symbol.String,
 			})
 		}
 	}
@@ -131,7 +138,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
 				Owner:     insertedEntry.ID,
-				Symbol:    strings.ToUpper(*symbol.Symbol),
+				Symbol:    strings.ToUpper(symbol.Symbol),
 				Authority: auth.ID,
 			})
 			if err != nil {
@@ -166,8 +173,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	qtx := a.queries.WithTx(tx)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:           NlblToPGTxt(request.Body.Name),
-		DelName:        request.Body.Name.IsNull(),
+		Name:           PtrToPGTxt(request.Body.Name),
 		ContactName:    NlblToPGTxt(request.Body.ContactName),
 		DelContactName: request.Body.ContactName.IsNull(),
 		Email:          NlblToPGTxt(request.Body.Email),

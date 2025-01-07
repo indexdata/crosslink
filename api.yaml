@@ -162,14 +162,14 @@ paths:
       responses:
         '204':
           description: entry deleted
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '400':
           description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: unexpected error
           content:
             text/plain:
               schema:
@@ -225,13 +225,6 @@ components:
     EntryPatch: 
       allOf: 
         - $ref: '#/components/schemas/EntryProperties'
-        - type: object
-          properties:
-            name:
-              type: string
-              nullable: true
-              description: Name of the institution or branch this directory entry describes
-              minLength: 1
     Symbol:
       allOf:
         - $ref: '#/components/schemas/NewSymbol'
@@ -244,7 +237,7 @@ components:
               description: Unique id
     NewSymbol:
       required:
-        - name
+        - symbol
       properties:
         symbol:
           type: string
