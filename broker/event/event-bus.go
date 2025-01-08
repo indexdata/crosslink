@@ -39,7 +39,6 @@ func NewPostgresEventBus(repo repository.Repository, connString string) *Postgre
 }
 
 func (p *PostgresEventBus) Start(ctx context.Context) error {
-
 	var conn *pgx.Conn
 	var err error
 
