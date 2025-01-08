@@ -1,4 +1,4 @@
-package repository
+package repo
 
 import (
 	"context"
@@ -18,10 +18,14 @@ type DBTX interface {
 type BaseRepo interface {
 	//return underlying pool or active transaction
 	GetPoolOrTx() DBTX
-	//return a new repo instance backed with the pool and, optionally, active transaction
-	WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) Repository
+	//return a new instance backed with the new pool and, optionally, active transaction
+	WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) BaseRepo
 	//execute handler within a transaction, handler receives a new repo instance with the original pool and new active transaction
-	WithTxFunc(ctx context.Context, fn func(Repository) error) error
+	WithTxFunc(ctx context.Context, repo DerivedRepo, fn func(DerivedRepo) error) error
+}
+
+type DerivedRepo interface {
+	SetBaseRepo(repo BaseRepo)
 }
 
 type PgBaseRepo struct {
@@ -29,16 +33,14 @@ type PgBaseRepo struct {
 	Tx   pgx.Tx
 }
 
-func (r *PgBaseRepo) WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) Repository {
-	return &PostgresRepository{
-		PgBaseRepo: PgBaseRepo{
-			Pool: pool,
-			Tx:   tx,
-		},
+func (r *PgBaseRepo) WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) BaseRepo {
+	return &PgBaseRepo{
+		Pool: pool,
+		Tx:   tx,
 	}
 }
 
-func (r *PgBaseRepo) WithTxFunc(ctx context.Context, fn func(Repository) error) error {
+func (r *PgBaseRepo) WithTxFunc(ctx context.Context, repo DerivedRepo, fn func(DerivedRepo) error) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -56,8 +58,9 @@ func (r *PgBaseRepo) WithTxFunc(ctx context.Context, fn func(Repository) error) 
 			err = tx.Commit(ctx)
 		}
 	}()
-	txRepo := r.WithPoolAndTx(r.Pool, tx)
-	err = fn(txRepo)
+	newBase := r.WithPoolAndTx(r.Pool, tx)
+	repo.SetBaseRepo(newBase)
+	err = fn(repo)
 	return err
 }
 

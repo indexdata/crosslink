@@ -2,22 +2,25 @@ package handler
 
 import (
 	"bytes"
-	queries "github.com/indexdata/crosslink/broker/db/generated"
-	"github.com/indexdata/crosslink/broker/event"
-	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/test"
-	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/test"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var mockRepoSuccess = new(test.MockRepositorySuccess)
-var eventBussSuccess = event.NewPostgresEventBus(mockRepoSuccess, "mock")
-var mockRepoError = new(test.MockRepositoryError)
-var eventBussError = event.NewPostgresEventBus(mockRepoError, "mock")
+var mockIllRepoSuccess = new(test.MockIllRepositorySuccess)
+var mockEventRepoSuccess = new(test.MockEventRepositorySuccess)
+var eventBussSuccess = events.NewPostgresEventBus(mockEventRepoSuccess, "mock")
+var mockIllRepoError = new(test.MockIllRepositoryError)
+var mockEventRepoError = new(test.MockEventRepositoryError)
+var eventBussError = events.NewPostgresEventBus(mockEventRepoError, "mock")
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
 	data, _ := os.ReadFile("testdata/request.xml")
@@ -25,7 +28,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -46,7 +49,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusMethodNotAllowed {
@@ -61,7 +64,7 @@ func TestIso18626PostHandlerWrongContentType(t *testing.T) {
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusUnsupportedMediaType {
@@ -75,7 +78,7 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusBadRequest {
@@ -90,7 +93,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -105,7 +108,7 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -126,7 +129,7 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -146,7 +149,7 @@ func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -161,8 +164,9 @@ func TestIso18626PostSupplyingMessageFailedToSave(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	var mockRepo = &MockRepository{}
-	handler.Iso18626PostHandler(mockRepo, eventBussError)(rr, req)
+	//var mockRepo = &MockRepository{}
+	//TODO not sure what is being tested here
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -177,7 +181,7 @@ func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -197,7 +201,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -217,7 +221,7 @@ func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -232,8 +236,9 @@ func TestIso18626PostRequestingMessageFailedToSaveEvent(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	var mockRepo = &MockRepository{}
-	handler.Iso18626PostHandler(mockRepo, eventBussError)(rr, req)
+	//var mockRepo = &MockRepository{}
+	//TODO not sure what is being tested here
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -248,7 +253,7 @@ func TestIso18626PostRequestingMessageMissing(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -263,11 +268,11 @@ func TestIso18626PostRequestingMessageMissing(t *testing.T) {
 }
 
 type MockRepository struct {
-	test.MockRepositoryError
+	test.MockIllRepositoryError
 }
 
-func (r *MockRepository) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (queries.IllTransaction, error) {
-	return queries.IllTransaction{
+func (r *MockRepository) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{
 		ID:                 "id",
 		RequesterRequestID: requesterRequestID,
 	}, nil

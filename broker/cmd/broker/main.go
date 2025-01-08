@@ -10,9 +10,9 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	repository "github.com/indexdata/crosslink/broker/db"
-	"github.com/indexdata/crosslink/broker/event"
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/indexdata/go-utils/utils"
@@ -46,9 +46,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to create pool to database: %v\n", err)
 	}
-	repo := new(repository.PostgresRepository)
-	repo.Pool = dbPool
-	eventBus := event.NewPostgresEventBus(repo, ConnectionString)
+	eventRepo := new(events.PgEventRepo)
+	eventRepo.Pool = dbPool
+	eventBus := events.NewPostgresEventBus(eventRepo, ConnectionString)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	err = eventBus.Start(ctx)
@@ -61,7 +61,9 @@ func main() {
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(repo, eventBus))
+	illRepo := new(ill_db.PgIllRepo)
+	eventRepo.Pool = dbPool
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
 
 	log.Println("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)

@@ -1,40 +1,49 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "query.sql"
-    schema: "schema.sql"
+    queries: "ill_query.sql"
+    schema: "ill_schema.sql"
     gen:
       go:
-        package: "queries"
-        out: "../db/generated"
+        package: "ill_db"
+        out: "../ill_db"
+        output_db_file_name: "ill_db-gen.go"
+        output_models_file_name: "ill_models-gen.go"
+        output_files_suffix: "-gen"
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
         overrides:
           - column: "ill_transaction.ill_transaction_data"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "IllTransactionData"
+  - engine: "postgresql"
+    queries: "event_query.sql"
+    schema: "event_schema.sql"
+    gen:
+      go:
+        package: "events"
+        out: "../events"
+        output_db_file_name: "event_db-gen.go"
+        output_models_file_name: "event_models-gen.go"
+        output_files_suffix: "-gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        overrides:
           - column: "event.event_data"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventData"
           - column: "event.result_data"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventResult"
           - column: "event.event_type"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventType"
           - column: "event.event_name"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventName"
           - column: "event_config.event_name"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventName"
           - column: "event.event_status"
             go_type:
-              import: "github.com/indexdata/crosslink/broker/db/model"
               type: "EventStatus"

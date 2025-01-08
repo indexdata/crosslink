@@ -1,4 +1,4 @@
-package event
+package events
 
 import (
 	"context"
@@ -9,32 +9,30 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	repository "github.com/indexdata/crosslink/broker/db"
-	queries "github.com/indexdata/crosslink/broker/db/generated"
-	"github.com/indexdata/crosslink/broker/db/model"
+	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type EventBus interface {
 	Start(ctx context.Context) error
-	CreateTask(illTransactionID string, eventName model.EventName, data model.EventData) error
-	CreateNotice(illTransactionID string, eventName model.EventName, data model.EventData, status model.EventStatus) error
+	CreateTask(illTransactionID string, eventName EventName, data EventData) error
+	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error
 	BeginTask(eventId string) error
-	CompleteTask(eventId string, result *model.EventResult, status model.EventStatus) error
+	CompleteTask(eventId string, result *EventResult, status EventStatus) error
 	//HandleEventCreated(eventName model.EventName, f func(event queries.Event)) error
 	//HandleTaskStarted(eventName model.EventName, f func(event queries.Event)) error
 	//HandleTaskCompleted(eventName model.EventName, f func(event queries.Event)) error
 }
 
 type PostgresEventBus struct {
-	Repository       repository.Repository
+	repo             EventRepo
 	ConnectionString string
 }
 
-func NewPostgresEventBus(repo repository.Repository, connString string) *PostgresEventBus {
+func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
-		Repository:       repo,
+		repo:             repo,
 		ConnectionString: connString,
 	}
 }
@@ -91,7 +89,7 @@ func (p *PostgresEventBus) Start(ctx context.Context) error {
 			}
 
 			fmt.Printf("Received notification on channel %s: %s\n", notification.Channel, notification.Payload)
-			var notifyData model.NotifyData
+			var notifyData NotifyData
 			var err = json.Unmarshal([]byte(notification.Payload), &notifyData)
 			if err != nil {
 				fmt.Println("Failed to unmarshal notification")
@@ -102,34 +100,36 @@ func (p *PostgresEventBus) Start(ctx context.Context) error {
 	return nil
 }
 
-func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName model.EventName, data model.EventData) error {
+func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData) error {
 	id := uuid.New().String()
-	return p.Repository.WithTxFunc(context.Background(), func(repo repository.Repository) error {
-		_, err := repo.SaveEvent(queries.SaveEventParams{
+	return p.repo.WithTxFunc(context.Background(), p.repo, func(repo repo.DerivedRepo) error {
+		eventRepo := repo.(EventRepo)
+		_, err := eventRepo.SaveEvent(SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getNow(),
-			EventType:        model.EventTypeTask,
+			EventType:        EventTypeTask,
 			EventName:        eventName,
-			EventStatus:      model.EventStatusNew,
+			EventStatus:      EventStatusNew,
 			EventData:        data,
 		})
 		if err != nil {
 			return err
 		}
-		err = repo.Notify(id, model.SignalTaskCreated)
+		err = eventRepo.Notify(id, SignalTaskCreated)
 		return err
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName model.EventName, data model.EventData, status model.EventStatus) error {
+func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error {
 	id := uuid.New().String()
-	return p.Repository.WithTxFunc(context.Background(), func(repo repository.Repository) error {
-		_, err := repo.SaveEvent(queries.SaveEventParams{
+	return p.repo.WithTxFunc(context.Background(), p.repo, func(repo repo.DerivedRepo) error {
+		eventRepo := repo.(EventRepo)
+		_, err := eventRepo.SaveEvent(SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getNow(),
-			EventType:        model.EventTypeNotice,
+			EventType:        EventTypeNotice,
 			EventName:        eventName,
 			EventStatus:      status,
 			EventData:        data,
@@ -137,48 +137,50 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName model
 		if err != nil {
 			return err
 		}
-		err = repo.Notify(id, model.SignalNoticeCreated)
+		err = eventRepo.Notify(id, SignalNoticeCreated)
 		return err
 	})
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string) error {
-	event, err := p.Repository.GetEvent(eventId)
+	event, err := p.repo.GetEvent(eventId)
 	if err != nil {
 		return err
 	}
-	if event.EventType != model.EventTypeTask {
+	if event.EventType != EventTypeTask {
 		return errors.New("event is not a TASK")
 	}
-	if event.EventStatus != model.EventStatusNew {
+	if event.EventStatus != EventStatusNew {
 		return errors.New("event is not in state NEW")
 	}
-	return p.Repository.WithTxFunc(context.Background(), func(repo repository.Repository) error {
-		err = repo.UpdateEventStatus(queries.UpdateEventStatusParams{
+	return p.repo.WithTxFunc(context.Background(), p.repo, func(repo repo.DerivedRepo) error {
+		eventRepo := repo.(EventRepo)
+		err = eventRepo.UpdateEventStatus(UpdateEventStatusParams{
 			ID:          eventId,
-			EventStatus: model.EventStatusProcessing,
+			EventStatus: EventStatusProcessing,
 		})
 		if err != nil {
 			return err
 		}
-		err = repo.Notify(eventId, model.SignalTaskBegin)
+		err = eventRepo.Notify(eventId, SignalTaskBegin)
 		return err
 	})
 }
 
-func (p *PostgresEventBus) CompleteTask(eventId string, result *model.EventResult, status model.EventStatus) error {
-	event, err := p.Repository.GetEvent(eventId)
+func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {
+	event, err := p.repo.GetEvent(eventId)
 	if err != nil {
 		return err
 	}
-	if event.EventType != model.EventTypeTask {
+	if event.EventType != EventTypeTask {
 		return errors.New("event is not a TASK")
 	}
-	if event.EventStatus != model.EventStatusProcessing {
+	if event.EventStatus != EventStatusProcessing {
 		return errors.New("event is not in state PROCESSING")
 	}
-	return p.Repository.WithTxFunc(context.Background(), func(repo repository.Repository) error {
-		_, err = repo.SaveEvent(queries.SaveEventParams{
+	return p.repo.WithTxFunc(context.Background(), p.repo, func(repo repo.DerivedRepo) error {
+		eventRepo := repo.(EventRepo)
+		_, err = eventRepo.SaveEvent(SaveEventParams{
 			ID:               event.ID,
 			IllTransactionID: event.IllTransactionID,
 			Timestamp:        event.Timestamp,
@@ -191,7 +193,7 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *model.EventResul
 		if err != nil {
 			return err
 		}
-		err = repo.Notify(eventId, model.SignalTaskComplete)
+		err = eventRepo.Notify(eventId, SignalTaskComplete)
 		return err
 	})
 }
