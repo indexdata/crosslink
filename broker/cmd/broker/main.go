@@ -48,7 +48,9 @@ func main() {
 	repo := new(repository.PostgresRepository)
 	repo.DbPool = dbPool
 	eventBus := event.NewPostgresEventBus(repo, ConnectionString)
-	err = eventBus.Start()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = eventBus.Start(ctx)
 	if err != nil {
 		log.Fatalf("Unable to listen to database notify: %v\n", err)
 	}

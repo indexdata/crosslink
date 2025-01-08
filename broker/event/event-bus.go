@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 )
 
 type EventBus interface {
-	Start() error
+	Start(ctx context.Context) error
 	CreateTask(illTransactionID string, eventName model.EventName, data model.EventData) error
 	CreateNotice(illTransactionID string, eventName model.EventName, data model.EventData, status model.EventStatus) error
 	BeginTask(eventId string) error
@@ -36,36 +37,71 @@ func NewPostgresEventBus(repo repository.Repository, connString string) *Postgre
 		ConnectionString: connString,
 	}
 }
-func (p *PostgresEventBus) Start() error {
-	conn, err := pgx.Connect(context.Background(), p.ConnectionString)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "event bus unable to connect to database")
+
+func (p *PostgresEventBus) Start(ctx context.Context) error {
+
+	var conn *pgx.Conn
+	var err error
+
+	connectAndListen := func() error {
+		conn, err = pgx.Connect(ctx, p.ConnectionString)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "event bus unable to connect to database: %v\n", err)
+			return err
+		}
+
+		_, err = conn.Exec(ctx, "LISTEN crosslink_channel")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "event bus unable to listen to channel crosslink_channel: %v\n", err)
+			return err
+		}
+
+		fmt.Println("Successfully connected and listening to channel.")
+		return nil
+	}
+
+	if err = connectAndListen(); err != nil {
 		return err
 	}
 
-	_, err = conn.Exec(context.Background(), "LISTEN crosslink_channel")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "event bus unable to listen to channel crosslink_channel")
-		return err
-	}
-
-	// Start a goroutine to receive notifications
 	go func() {
 		for {
-			notification, er := conn.WaitForNotification(context.Background())
+			notification, er := conn.WaitForNotification(ctx)
 			if er != nil {
 				fmt.Fprintf(os.Stderr, "Unable to receive notification: %v\n", er)
+
 				if er.Error() == "conn closed" {
-					break // TODO I think we should reopen connection here
+					fmt.Println("Connection closed, attempting to reconnect...")
+
+					for attempt := 1; ; attempt++ {
+						time.Sleep(time.Duration(attempt) * time.Second)
+						if err = connectAndListen(); err == nil {
+							break
+						}
+
+						fmt.Fprintf(os.Stderr, "Reconnection attempt %d failed: %v\n", attempt, err)
+						if attempt >= 5 {
+							fmt.Println("Max reconnection attempts reached, exiting retry loop.")
+							return
+						}
+					}
 				}
+
 				continue
 			}
 
 			fmt.Printf("Received notification on channel %s: %s\n", notification.Channel, notification.Payload)
+			var notifyData model.NotifyData
+			var err = json.Unmarshal([]byte(notification.Payload), &notifyData)
+			if err != nil {
+				fmt.Println("Failed to unmarshal notification")
+			}
 		}
 	}()
+
 	return nil
 }
+
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName model.EventName, data model.EventData) error {
 	id := uuid.New().String()
 	return p.Repository.WithTx(context.Background(), func(repo repository.Repository) error {
