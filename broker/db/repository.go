@@ -18,6 +18,9 @@ type Repository interface {
 	GetEvent(id string) (queries.Event, error)
 	GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (queries.IllTransaction, error)
 	Notify(eventId string, signal model.Signal) error
+	Clone(txConn *pgxpool.Conn, txQueries *queries.Queries) Repository
+	GetDbConnection() *pgxpool.Conn
+	GetDbQueries() *queries.Queries
 	WithTx(ctx context.Context, fn func(Repository) error) error
 }
 
@@ -28,26 +31,26 @@ type PostgresRepository struct {
 }
 
 func (r *PostgresRepository) CreateIllTransaction(params queries.CreateIllTransactionParams) (queries.IllTransaction, error) {
-	row, err := GetDbQueries(r).CreateIllTransaction(context.Background(), params)
+	row, err := r.GetDbQueries().CreateIllTransaction(context.Background(), params)
 	return row.IllTransaction, err
 }
 
 func (r *PostgresRepository) SaveEvent(params queries.SaveEventParams) (queries.Event, error) {
-	row, err := GetDbQueries(r).SaveEvent(context.Background(), params)
+	row, err := r.GetDbQueries().SaveEvent(context.Background(), params)
 	return row.Event, err
 }
 
 func (r *PostgresRepository) GetEvent(id string) (queries.Event, error) {
-	row, err := GetDbQueries(r).GetEvent(context.Background(), id)
+	row, err := r.GetDbQueries().GetEvent(context.Background(), id)
 	return row.Event, err
 }
 
 func (r *PostgresRepository) UpdateEventStatus(params queries.UpdateEventStatusParams) error {
-	return GetDbQueries(r).UpdateEventStatus(context.Background(), params)
+	return r.GetDbQueries().UpdateEventStatus(context.Background(), params)
 }
 
 func (r *PostgresRepository) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (queries.IllTransaction, error) {
-	row, err := GetDbQueries(r).GetIllTransactionByRequesterRequestId(context.Background(), requesterRequestID)
+	row, err := r.GetDbQueries().GetIllTransactionByRequesterRequestId(context.Background(), requesterRequestID)
 	return row.IllTransaction, err
 }
 
@@ -58,12 +61,20 @@ func (r *PostgresRepository) Notify(eventId string, signal model.Signal) error {
 	}
 	jsonData, _ := json.Marshal(data)
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
-	_, err := getDbConnection(r).Exec(context.Background(), sql)
+	_, err := r.GetDbConnection().Exec(context.Background(), sql)
 	return err
 }
 
+func (r *PostgresRepository) Clone(txConn *pgxpool.Conn, txQueries *queries.Queries) Repository {
+	return &PostgresRepository{
+		DbPool:    r.DbPool,
+		TxConn:    txConn,
+		TxQueries: txQueries,
+	}
+}
+
 func (r *PostgresRepository) WithTx(ctx context.Context, fn func(Repository) error) error {
-	txConn := getDbConnection(r)
+	txConn := r.GetDbConnection()
 	tx, err := txConn.Begin(ctx)
 	if err != nil {
 		return err
@@ -81,23 +92,19 @@ func (r *PostgresRepository) WithTx(ctx context.Context, fn func(Repository) err
 			err = tx.Commit(ctx)
 		}
 	}()
-
-	txRepo := PostgresRepository{
-		DbPool:    r.DbPool,
-		TxConn:    txConn,
-		TxQueries: queries.New(txConn).WithTx(tx),
-	}
-	err = fn(&txRepo)
+	clone := r.Clone(txConn, queries.New(txConn).WithTx(tx))
+	err = fn(clone)
 	return err
 }
 
-func GetDbQueries(r *PostgresRepository) *queries.Queries {
+func (r *PostgresRepository) GetDbQueries() *queries.Queries {
 	if r.TxQueries != nil {
 		return r.TxQueries
 	}
-	return queries.New(getDbConnection(r))
+	return queries.New(r.GetDbConnection())
 }
-func getDbConnection(r *PostgresRepository) *pgxpool.Conn {
+
+func (r *PostgresRepository) GetDbConnection() *pgxpool.Conn {
 	if r.TxConn != nil {
 		return r.TxConn
 	}
