@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/indexdata/crosslink/broker/db"
-	"github.com/indexdata/crosslink/broker/event"
-	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	repository "github.com/indexdata/crosslink/broker/db"
+	"github.com/indexdata/crosslink/broker/event"
+	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/indexdata/go-utils/utils"
 )
@@ -46,7 +47,7 @@ func main() {
 		log.Fatalf("Unable to create pool to database: %v\n", err)
 	}
 	repo := new(repository.PostgresRepository)
-	repo.DbPool = dbPool
+	repo.Pool = dbPool
 	eventBus := event.NewPostgresEventBus(repo, ConnectionString)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

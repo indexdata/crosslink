@@ -3,14 +3,16 @@ package test
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/google/uuid"
 	repository "github.com/indexdata/crosslink/broker/db"
 	queries "github.com/indexdata/crosslink/broker/db/generated"
 	"github.com/indexdata/crosslink/broker/db/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/mock"
-	"time"
 )
 
 type MockRepositorySuccess struct {
@@ -74,19 +76,12 @@ func (r *MockRepositorySuccess) Notify(eventId string, signal model.Signal) erro
 	return nil
 }
 
-func (r *MockRepositorySuccess) WithTx(ctx context.Context, fn func(repository.Repository) error) error {
+func (r *MockRepositorySuccess) WithTxFunc(ctx context.Context, fn func(repository.Repository) error) error {
 	return nil
 }
 
-func (r *MockRepositorySuccess) Clone(txConn *pgxpool.Conn, txQueries *queries.Queries) repository.Repository {
+func (r *MockRepositorySuccess) WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) repository.Repository {
 	return r
-}
-
-func (r *MockRepositorySuccess) GetDbConnection() *pgxpool.Conn {
-	return nil
-}
-func (r *MockRepositorySuccess) GetDbQueries() *queries.Queries {
-	return nil
 }
 
 type MockRepositoryError struct {
@@ -114,19 +109,12 @@ func (r *MockRepositoryError) Notify(eventId string, signal model.Signal) error 
 	return errors.New("DB error")
 }
 
-func (r *MockRepositoryError) WithTx(ctx context.Context, fn func(repository.Repository) error) error {
+func (r *MockRepositoryError) WithTxFunc(ctx context.Context, fn func(repository.Repository) error) error {
 	return errors.New("DB error")
 }
 
-func (r *MockRepositoryError) Clone(txConn *pgxpool.Conn, txQueries *queries.Queries) repository.Repository {
+func (r *MockRepositoryError) WithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) repository.Repository {
 	return r
-}
-
-func (r *MockRepositoryError) GetDbConnection() *pgxpool.Conn {
-	return nil
-}
-func (r *MockRepositoryError) GetDbQueries() *queries.Queries {
-	return nil
 }
 
 func getNow() pgtype.Timestamp {

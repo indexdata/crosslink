@@ -8,6 +8,7 @@ sql:
         package: "queries"
         out: "../db/generated"
         sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
         overrides:
           - column: "ill_transaction.ill_transaction_data"
             go_type:
