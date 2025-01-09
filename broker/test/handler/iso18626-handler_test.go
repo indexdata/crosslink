@@ -23,7 +23,7 @@ var mockEventRepoError = new(test.MockEventRepositoryError)
 var eventBussError = events.NewPostgresEventBus(mockEventRepoError, "mock")
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
-	data, _ := os.ReadFile("testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -44,7 +44,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongMethod(t *testing.T) {
-	data, _ := os.ReadFile("testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request.xml")
 	req, _ := http.NewRequest("GET", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -59,7 +59,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongContentType(t *testing.T) {
-	data, _ := os.ReadFile("testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -88,7 +88,7 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 }
 
 func TestIso18626PostHandlerFailToSave(t *testing.T) {
-	data, _ := os.ReadFile("testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 }
 
 func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
-	data, _ := os.ReadFile("testdata/request-invalid.xml")
+	data, _ := os.ReadFile("../testdata/request-invalid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -124,7 +124,7 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessage(t *testing.T) {
-	data, _ := os.ReadFile("testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -144,7 +144,7 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
-	data, _ := os.ReadFile("testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessageFailedToSave(t *testing.T) {
-	data, _ := os.ReadFile("testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -176,7 +176,7 @@ func TestIso18626PostSupplyingMessageFailedToSave(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("testdata/supplying-agency-message-invalid.xml")
+	data, _ := os.ReadFile("../testdata/supplying-agency-message-invalid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -196,7 +196,7 @@ func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessage(t *testing.T) {
-	data, _ := os.ReadFile("testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -216,7 +216,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
-	data, _ := os.ReadFile("testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -231,7 +231,7 @@ func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessageFailedToSaveEvent(t *testing.T) {
-	data, _ := os.ReadFile("testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -248,7 +248,7 @@ func TestIso18626PostRequestingMessageFailedToSaveEvent(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("testdata/requesting-agency-message-invalid.xml")
+	data, _ := os.ReadFile("../testdata/requesting-agency-message-invalid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()

@@ -1,14 +1,15 @@
-package main
+package events
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"github.com/indexdata/crosslink/broker/app"
-	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/indexdata/crosslink/broker/events"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net"
+	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +39,6 @@ func TestMain(m *testing.M) {
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = 19081
 
-	go main()
 	time.Sleep(1 * time.Second)
 
 	code := m.Run()
@@ -48,14 +48,39 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(code)
 }
+func TestEventHandling(t *testing.T) {
+	var eventBus events.EventBus
+	var requestReceived = []events.Event{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		app.RunMigrateScripts()
+		pool := app.InitDbPool()
+		eventRepo := app.CreateEventRepo(pool)
+		eventBus = app.InitEventBus(ctx, eventRepo)
+		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+			requestReceived = append(requestReceived, event)
+		})
+		illRepo := app.CreateIllRepo(pool)
+		go app.StartApp(illRepo, eventBus)
+	}()
+	time.Sleep(100 * time.Millisecond)
 
-func TestStartProcess(t *testing.T) {
-	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", app.HTTP_PORT))
-	if listener == nil {
-		// Port is taken by main
-		fmt.Printf("Port %d is taken\n", app.HTTP_PORT)
-	} else {
-		listener.Close()
-		t.Fatal("Can't start server")
+	data, _ := os.ReadFile("../testdata/request.xml")
+	req, _ := http.NewRequest("POST", "http://localhost:19081/iso18626", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status %d, got %d", 200, resp.StatusCode)
+	}
+
+	if len(requestReceived) != 1 {
+		t.Error("Expected to have request event received")
 	}
 }
