@@ -25,7 +25,7 @@ type BaseRepo interface {
 }
 
 type DerivedRepo interface {
-	SetBaseRepo(repo BaseRepo)
+	CreateWithBaseRepo(repo BaseRepo) DerivedRepo
 }
 
 type PgBaseRepo struct {
@@ -59,8 +59,8 @@ func (r *PgBaseRepo) WithTxFunc(ctx context.Context, repo DerivedRepo, fn func(D
 		}
 	}()
 	newBase := r.WithPoolAndTx(r.Pool, tx)
-	repo.SetBaseRepo(newBase)
-	err = fn(repo)
+	newRepo := repo.CreateWithBaseRepo(newBase)
+	err = fn(newRepo)
 	return err
 }
 

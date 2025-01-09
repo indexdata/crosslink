@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,7 +89,7 @@ func (p *PostgresEventBus) Start(ctx context.Context) error {
 						}
 					}
 				}
-				if er.Error() == "context canceled" {
+				if strings.Contains(er.Error(), "context canceled") {
 					fmt.Println("Context cancelled, stop listening to events")
 					break
 				}

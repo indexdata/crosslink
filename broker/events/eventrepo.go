@@ -22,8 +22,10 @@ type PgEventRepo struct {
 	queries Queries
 }
 
-func (r *PgEventRepo) SetBaseRepo(base repo.BaseRepo) {
-	r.PgBaseRepo = *base.(*repo.PgBaseRepo)
+func (r *PgEventRepo) CreateWithBaseRepo(base repo.BaseRepo) repo.DerivedRepo {
+	eventRepo := new(PgEventRepo)
+	eventRepo.PgBaseRepo = *base.(*repo.PgBaseRepo)
+	return eventRepo
 }
 
 func (r *PgEventRepo) SaveEvent(params SaveEventParams) (Event, error) {

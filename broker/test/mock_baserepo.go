@@ -11,7 +11,8 @@ import (
 type MockBaseRepo struct {
 }
 
-func (r *MockBaseRepo) SetBaseRepo(repo repo.BaseRepo) {
+func (r *MockBaseRepo) CreateWithBaseRepo(repo repo.BaseRepo) repo.DerivedRepo {
+	return new(MockBaseRepo)
 }
 
 func (r *MockBaseRepo) GetPoolOrTx() repo.DBTX {

@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = 19081
+	app.HTTP_PORT = 19082
 
 	time.Sleep(1 * time.Second)
 
@@ -62,15 +62,16 @@ func TestEventHandling(t *testing.T) {
 			requestReceived = append(requestReceived, event)
 		})
 		illRepo := app.CreateIllRepo(pool)
-		go app.StartApp(illRepo, eventBus)
+		app.StartApp(illRepo, eventBus)
 	}()
 	time.Sleep(100 * time.Millisecond)
 
 	data, _ := os.ReadFile("../testdata/request.xml")
-	req, _ := http.NewRequest("POST", "http://localhost:19081/iso18626", bytes.NewReader(data))
+	req, _ := http.NewRequest("POST", "http://localhost:19082/iso18626", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	resp, err := client.Do(req)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,28 @@ func TestEventHandling(t *testing.T) {
 		t.Errorf("Expected status %d, got %d", 200, resp.StatusCode)
 	}
 
-	if len(requestReceived) != 1 {
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(requestReceived) == 1
+	}) {
 		t.Error("Expected to have request event received")
+	}
+}
+
+func waitForPredicateToBeTrue(predicate func() bool) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(20 * time.Millisecond) // Check every 100ms
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			if predicate() {
+				return true
+			}
+		}
 	}
 }
