@@ -10,7 +10,7 @@ import (
 
 type MockIllRepositorySuccess struct {
 	mock.Mock
-	MockBaseRepo
+	MockBaseRepo[ill_db.IllRepo]
 }
 
 func (m *MockIllRepositorySuccess) CreateIllTransaction(params ill_db.CreateIllTransactionParams) (ill_db.IllTransaction, error) {
@@ -27,7 +27,7 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestId(request
 
 type MockIllRepositoryError struct {
 	mock.Mock
-	MockBaseRepo
+	MockBaseRepo[ill_db.IllRepo]
 }
 
 func (m *MockIllRepositoryError) CreateIllTransaction(params ill_db.CreateIllTransactionParams) (ill_db.IllTransaction, error) {

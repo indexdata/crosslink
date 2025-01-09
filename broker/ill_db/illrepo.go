@@ -8,13 +8,13 @@ import (
 )
 
 type IllRepo interface {
-	repo.BaseRepo
+	repo.BaseRepo[IllRepo]
 	CreateIllTransaction(params CreateIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (IllTransaction, error)
 }
 
 type PgIllRepo struct {
-	repo.PgBaseRepo
+	repo.PgBaseRepo[IllRepo]
 	queries Queries
 }
 

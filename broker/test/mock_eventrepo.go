@@ -12,7 +12,7 @@ import (
 
 type MockEventRepositorySuccess struct {
 	mock.Mock
-	MockBaseRepo
+	MockBaseRepo[events.EventRepo]
 }
 
 func (r *MockEventRepositorySuccess) SaveEvent(params events.SaveEventParams) (events.Event, error) {
@@ -61,7 +61,7 @@ func (r *MockEventRepositorySuccess) Notify(eventId string, signal events.Signal
 
 type MockEventRepositoryError struct {
 	mock.Mock
-	MockBaseRepo
+	MockBaseRepo[events.EventRepo]
 }
 
 func (r *MockEventRepositoryError) SaveEvent(params events.SaveEventParams) (events.Event, error) {

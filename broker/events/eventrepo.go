@@ -9,8 +9,8 @@ import (
 )
 
 type EventRepo interface {
-	repo.BaseRepo
-	repo.DerivedRepo
+	repo.BaseRepo[EventRepo]
+	repo.DerivedRepo[EventRepo]
 	SaveEvent(params SaveEventParams) (Event, error)
 	UpdateEventStatus(params UpdateEventStatusParams) error
 	GetEvent(id string) (Event, error)
@@ -18,13 +18,13 @@ type EventRepo interface {
 }
 
 type PgEventRepo struct {
-	repo.PgBaseRepo
+	repo.PgBaseRepo[EventRepo]
 	queries Queries
 }
 
-func (r *PgEventRepo) CreateWithBaseRepo(base repo.BaseRepo) repo.DerivedRepo {
+func (r *PgEventRepo) CreateWithBaseRepo(base repo.BaseRepo[EventRepo]) EventRepo {
 	eventRepo := new(PgEventRepo)
-	eventRepo.PgBaseRepo = *base.(*repo.PgBaseRepo)
+	eventRepo.PgBaseRepo = *base.(*repo.PgBaseRepo[EventRepo])
 	return eventRepo
 }
 
