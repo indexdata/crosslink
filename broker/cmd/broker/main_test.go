@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/app"
 	_ "github.com/lib/pq" // PostgreSQL driver
-	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"net"
+	"os"
 	"testing"
 	"time"
 )
 
-func TestStartProcess(t *testing.T) {
+func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
@@ -25,28 +26,34 @@ func TestStartProcess(t *testing.T) {
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
 	)
 	if err != nil {
-		t.Fatal(err)
+		panic(fmt.Sprintf("failed to start db container: %s", err))
 	}
 
-	t.Cleanup(func() {
-		if err := pgContainer.Terminate(ctx); err != nil {
-			t.Fatalf("failed to terminate pgContainer: %s", err)
-		}
-	})
-
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	assert.NoError(t, err)
+	if err != nil {
+		panic(fmt.Sprintf("failed to get conn string: %s", err))
+	}
 
-	ConnectionString = connStr
-	MigrationsFolder = "file://../../migrations"
-	HTTP_PORT = 19081
+	app.ConnectionString = connStr
+	app.MigrationsFolder = "file://../../migrations"
+	app.HTTP_PORT = 19081
 
 	go main()
 	time.Sleep(1 * time.Second)
-	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", HTTP_PORT))
+
+	code := m.Run()
+
+	if err := pgContainer.Terminate(ctx); err != nil {
+		panic(fmt.Sprintf("failed to stop db container: %s", err))
+	}
+	os.Exit(code)
+}
+
+func TestStartProcess(t *testing.T) {
+	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", app.HTTP_PORT))
 	if listener == nil {
 		// Port is taken by main
-		fmt.Printf("Port %d is taken\n", HTTP_PORT)
+		fmt.Printf("Port %d is taken\n", app.HTTP_PORT)
 	} else {
 		listener.Close()
 		t.Fatal("Can't start server")

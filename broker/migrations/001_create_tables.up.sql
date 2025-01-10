@@ -19,8 +19,7 @@ CREATE TABLE ill_transaction
     supplier_request_id  VARCHAR,
     ill_transaction_data jsonb     NOT NULL,
     FOREIGN KEY (requester_id) REFERENCES peer (id),
-    UNIQUE (requester_request_id),
-    UNIQUE (supplier_request_id)
+    UNIQUE (requester_request_id)
 );
 
 CREATE TABLE event_config
