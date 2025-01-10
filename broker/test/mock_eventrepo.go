@@ -7,18 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 )
 
 type MockEventRepositorySuccess struct {
 	mock.Mock
-	//MockBaseRepo[events.EventRepo]
-}
-
-func (r *MockEventRepositorySuccess) CreateWithBaseRepo(repo repo.BaseRepo[events.EventRepo]) events.EventRepo {
-	return nil
 }
 
 func (r *MockEventRepositorySuccess) WithTxFunc(ctx context.Context, fn func(events.EventRepo) error) error {
@@ -71,11 +65,6 @@ func (r *MockEventRepositorySuccess) Notify(eventId string, signal events.Signal
 
 type MockEventRepositoryError struct {
 	mock.Mock
-	//MockBaseRepo[events.EventRepo]
-}
-
-func (r *MockEventRepositoryError) CreateWithBaseRepo(repo repo.BaseRepo[events.EventRepo]) events.EventRepo {
-	return nil
 }
 
 func (r *MockEventRepositoryError) WithTxFunc(ctx context.Context, fn func(events.EventRepo) error) error {

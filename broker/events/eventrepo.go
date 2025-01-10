@@ -27,9 +27,9 @@ func (r *PgEventRepo) WithTxFunc(ctx context.Context, fn func(EventRepo) error) 
 }
 
 // DerivedRepo
-func (r *PgEventRepo) CreateWithBaseRepo(base repo.BaseRepo[EventRepo]) EventRepo {
+func (r *PgEventRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[EventRepo]) EventRepo {
 	eventRepo := new(PgEventRepo)
-	eventRepo.PgBaseRepo = *base.(*repo.PgBaseRepo[EventRepo])
+	eventRepo.PgBaseRepo = *base
 	return eventRepo
 }
 

@@ -20,14 +20,9 @@ type Transactional[T any] interface {
 	WithTxFunc(ctx context.Context, fn func(T) error) error
 }
 
-type BaseRepo[T any] interface {
-	//execute operations on the provided repo within a transaction
-	WithTxFunc(ctx context.Context, repo DerivedRepo[T], fn func(T) error) error
-}
-
-type DerivedRepo[T any] interface {
-	//create a new instance of the repo T backed by provided BaseRepo
-	CreateWithBaseRepo(repo BaseRepo[T]) T
+type PgDerivedRepo[T any] interface {
+	//create a new instance of the repo T backed by the provided PgBaseRepo
+	CreateWithPgBaseRepo(repo *PgBaseRepo[T]) T
 }
 
 type PgBaseRepo[T any] struct {
@@ -35,14 +30,14 @@ type PgBaseRepo[T any] struct {
 	Tx   pgx.Tx
 }
 
-func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) BaseRepo[T] {
+func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) *PgBaseRepo[T] {
 	return &PgBaseRepo[T]{
 		Pool: pool,
 		Tx:   tx,
 	}
 }
 
-func (r *PgBaseRepo[T]) WithTxFunc(ctx context.Context, repo DerivedRepo[T], fn func(T) error) error {
+func (r *PgBaseRepo[T]) WithTxFunc(ctx context.Context, repo PgDerivedRepo[T], fn func(T) error) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -61,7 +56,7 @@ func (r *PgBaseRepo[T]) WithTxFunc(ctx context.Context, repo DerivedRepo[T], fn 
 		}
 	}()
 	newBase := r.createWithPoolAndTx(r.Pool, tx)
-	newRepo := repo.CreateWithBaseRepo(newBase)
+	newRepo := repo.CreateWithPgBaseRepo(newBase)
 	err = fn(newRepo)
 	return err
 }
