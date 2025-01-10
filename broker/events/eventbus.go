@@ -148,7 +148,7 @@ func triggerHandlers(event Event, handlersMap map[EventName][]func(event Event))
 
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData) error {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(context.Background(), p.repo, func(eventRepo EventRepo) error {
+	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
 		_, err := eventRepo.SaveEvent(SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
@@ -168,7 +168,7 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 
 func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(context.Background(), p.repo, func(eventRepo EventRepo) error {
+	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
 		_, err := eventRepo.SaveEvent(SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
@@ -197,7 +197,7 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 	if event.EventStatus != EventStatusNew {
 		return errors.New("event is not in state NEW")
 	}
-	return p.repo.WithTxFunc(context.Background(), p.repo, func(eventRepo EventRepo) error {
+	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
 		err = eventRepo.UpdateEventStatus(UpdateEventStatusParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
@@ -221,7 +221,7 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 	if event.EventStatus != EventStatusProcessing {
 		return errors.New("event is not in state PROCESSING")
 	}
-	return p.repo.WithTxFunc(context.Background(), p.repo, func(eventRepo EventRepo) error {
+	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
 		_, err = eventRepo.SaveEvent(SaveEventParams{
 			ID:               event.ID,
 			IllTransactionID: event.IllTransactionID,

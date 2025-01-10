@@ -8,7 +8,6 @@ import (
 )
 
 type IllRepo interface {
-	repo.BaseRepo[IllRepo]
 	CreateIllTransaction(params CreateIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (IllTransaction, error)
 }
