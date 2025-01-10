@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -49,22 +52,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 func TestEventHandling(t *testing.T) {
-	var eventBus events.EventBus
-	var requestReceived = []events.Event{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go func() {
-		app.RunMigrateScripts()
-		pool := app.InitDbPool()
-		eventRepo := app.CreateEventRepo(pool)
-		eventBus = app.InitEventBus(ctx, eventRepo)
-		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
-			requestReceived = append(requestReceived, event)
-		})
-		illRepo := app.CreateIllRepo(pool)
-		app.StartApp(illRepo, eventBus)
-	}()
-	time.Sleep(100 * time.Millisecond)
+	eventBus, _, _ := startApp(ctx)
+	var requestReceived = []events.Event{}
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+		requestReceived = append(requestReceived, event)
+	})
 
 	data, _ := os.ReadFile("../testdata/request.xml")
 	req, _ := http.NewRequest("POST", "http://localhost:19082/iso18626", bytes.NewReader(data))
@@ -88,6 +82,209 @@ func TestEventHandling(t *testing.T) {
 	}
 }
 
+func TestCreateTask(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus, illRepo, _ := startApp(ctx)
+	var requestReceived = []events.Event{}
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+		requestReceived = append(requestReceived, event)
+	})
+
+	illId := createIllTrans(t, illRepo)
+
+	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
+	if err != nil {
+		t.Errorf("Task should be created without errors: %s", err)
+	}
+
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(requestReceived) == 1
+	}) {
+		t.Error("Expected to have request event received")
+	}
+
+	if requestReceived[0].IllTransactionID != illId {
+		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, requestReceived[0].IllTransactionID)
+	}
+}
+
+func TestCreateNotice(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus, illRepo, _ := startApp(ctx)
+	var eventReceived = []events.Event{}
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+		eventReceived = append(eventReceived, event)
+	})
+
+	illId := createIllTrans(t, illRepo)
+
+	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	if err != nil {
+		t.Errorf("Task should be created without errors: %s", err)
+	}
+
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(eventReceived) == 1
+	}) {
+		t.Error("Expected to have request event received")
+	}
+
+	if eventReceived[0].IllTransactionID != illId {
+		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, eventReceived[0].IllTransactionID)
+	}
+
+	if eventReceived[0].EventStatus != events.EventStatusSuccess {
+		t.Errorf("Event status does not match, expected %s, got %s", events.EventStatusSuccess, eventReceived[0].EventStatus)
+	}
+}
+
+func TestBeginAndCompleteTask(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus, illRepo, _ := startApp(ctx)
+	var eventsReceived = []events.Event{}
+	var eventsStarted = []events.Event{}
+	var eventsCompleted = []events.Event{}
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+		eventsReceived = append(eventsReceived, event)
+	})
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(event events.Event) {
+		eventsStarted = append(eventsStarted, event)
+	})
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(event events.Event) {
+		eventsCompleted = append(eventsCompleted, event)
+	})
+
+	illId := createIllTrans(t, illRepo)
+
+	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
+	if err != nil {
+		t.Errorf("Task should be created without errors: %s", err)
+	}
+
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(eventsReceived) == 1
+	}) {
+		t.Error("Expected to have request event received")
+	}
+
+	if eventsReceived[0].IllTransactionID != illId {
+		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, eventsReceived[0].IllTransactionID)
+	}
+
+	eventId := eventsReceived[0].ID
+
+	err = eventBus.BeginTask(eventId)
+	if err != nil {
+		t.Errorf("Task should be started: %s", err)
+	}
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(eventsStarted) == 1
+	}) {
+		t.Error("Expected to have request event received")
+	}
+	if eventsStarted[0].ID != eventId {
+		t.Errorf("Event id does not match, expected %s, got %s", eventId, eventsStarted[0].ID)
+	}
+	if eventsStarted[0].EventStatus != events.EventStatusProcessing {
+		t.Errorf("Event status does not match, expected %s, got %s", eventId, eventsStarted[0].EventStatus)
+	}
+
+	result := events.EventResult{}
+	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err != nil {
+		t.Errorf("Task should be started: %s", err)
+	}
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(eventsCompleted) == 1
+	}) {
+		t.Error("Expected to have request event received")
+	}
+	if eventsCompleted[0].ID != eventId {
+		t.Errorf("Event id does not match, expected %s, got %s", eventId, eventsCompleted[0].ID)
+	}
+	if eventsCompleted[0].EventStatus != events.EventStatusSuccess {
+		t.Errorf("Event status does not match, expected %s, got %s", events.EventStatusSuccess, eventsCompleted[0].EventStatus)
+	}
+}
+
+func TestBeginTaskNegative(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eventBus, illRepo, eventRepo := startApp(ctx)
+
+	illId := createIllTrans(t, illRepo)
+	eventId := uuid.New().String()
+
+	err := eventBus.BeginTask(eventId)
+	if err == nil || err.Error() != "no rows in result set" {
+		t.Errorf("Should fail with: no rows in result set")
+	}
+
+	eventId = createEvent(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess)
+
+	err = eventBus.BeginTask(eventId)
+	if err == nil || err.Error() != "event is not a TASK" {
+		t.Errorf("Should fail with: event is not a TASK")
+	}
+
+	eventId = createEvent(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess)
+
+	err = eventBus.BeginTask(eventId)
+	if err == nil || err.Error() != "event is not in state NEW" {
+		t.Errorf("Should fail with: event is not in state NEW")
+	}
+}
+
+func TestCompleteTaskNegative(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	eventBus, illRepo, eventRepo := startApp(ctx)
+
+	illId := createIllTrans(t, illRepo)
+	eventId := uuid.New().String()
+
+	result := events.EventResult{}
+	err := eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err == nil || err.Error() != "no rows in result set" {
+		t.Errorf("Should fail with: no rows in result set")
+	}
+
+	eventId = createEvent(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess)
+
+	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err == nil || err.Error() != "event is not a TASK" {
+		t.Errorf("Should fail with: event is not a TASK")
+	}
+
+	eventId = createEvent(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess)
+
+	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err == nil || err.Error() != "event is not in state PROCESSING" {
+		t.Errorf("Should fail with: event is not in state PROCESSING")
+	}
+}
+
+func startApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
+	var eventBus events.EventBus
+	var illRepo ill_db.IllRepo
+	var eventRepo events.EventRepo
+	go func() {
+		app.RunMigrateScripts()
+		pool := app.InitDbPool()
+		eventRepo = app.CreateEventRepo(pool)
+		eventBus = app.InitEventBus(ctx, eventRepo)
+		illRepo = app.CreateIllRepo(pool)
+		app.StartApp(illRepo, eventBus)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	return eventBus, illRepo, eventRepo
+}
+
 func waitForPredicateToBeTrue(predicate func() bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -104,5 +301,42 @@ func waitForPredicateToBeTrue(predicate func() bool) bool {
 				return true
 			}
 		}
+	}
+}
+
+func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
+	illId := uuid.New().String()
+	_, err := illRepo.CreateIllTransaction(ill_db.CreateIllTransactionParams{
+		ID:        illId,
+		Timestamp: getNow(),
+	})
+	if err != nil {
+		t.Errorf("Failed to create ill transaction: %s", err)
+	}
+	return illId
+}
+
+func createEvent(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus) string {
+	eventId := uuid.New().String()
+	_, err := eventRepo.SaveEvent(events.SaveEventParams{
+		ID:               eventId,
+		IllTransactionID: illId,
+		Timestamp:        getNow(),
+		EventType:        eventType,
+		EventName:        events.EventNameRequesterMsgReceived,
+		EventStatus:      status,
+		EventData:        events.EventData{},
+	})
+
+	if err != nil {
+		t.Errorf("Failed to create event: %s", err)
+	}
+	return eventId
+}
+
+func getNow() pgtype.Timestamp {
+	return pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
 	}
 }
