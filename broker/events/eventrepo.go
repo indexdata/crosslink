@@ -34,17 +34,17 @@ func (r *PgEventRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[EventRepo]) Eve
 }
 
 func (r *PgEventRepo) SaveEvent(params SaveEventParams) (Event, error) {
-	row, err := r.queries.SaveEvent(context.Background(), r.GetPoolOrTx(), params)
+	row, err := r.queries.SaveEvent(context.Background(), r.GetConnOrTx(), params)
 	return row.Event, err
 }
 
 func (r *PgEventRepo) GetEvent(id string) (Event, error) {
-	row, err := r.queries.GetEvent(context.Background(), r.GetPoolOrTx(), id)
+	row, err := r.queries.GetEvent(context.Background(), r.GetConnOrTx(), id)
 	return row.Event, err
 }
 
 func (r *PgEventRepo) UpdateEventStatus(params UpdateEventStatusParams) error {
-	return r.queries.UpdateEventStatus(context.Background(), r.GetPoolOrTx(), params)
+	return r.queries.UpdateEventStatus(context.Background(), r.GetConnOrTx(), params)
 }
 
 func (r *PgEventRepo) Notify(eventId string, signal Signal) error {
@@ -54,6 +54,6 @@ func (r *PgEventRepo) Notify(eventId string, signal Signal) error {
 	}
 	jsonData, _ := json.Marshal(data)
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
-	_, err := r.GetPoolOrTx().Exec(context.Background(), sql)
+	_, err := r.GetConnOrTx().Exec(context.Background(), sql)
 	return err
 }

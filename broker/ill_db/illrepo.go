@@ -18,11 +18,11 @@ type PgIllRepo struct {
 }
 
 func (r *PgIllRepo) CreateIllTransaction(params CreateIllTransactionParams) (IllTransaction, error) {
-	row, err := r.queries.CreateIllTransaction(context.Background(), r.GetPoolOrTx(), params)
+	row, err := r.queries.CreateIllTransaction(context.Background(), r.GetConnOrTx(), params)
 	return row.IllTransaction, err
 }
 
 func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (IllTransaction, error) {
-	row, err := r.queries.GetIllTransactionByRequesterRequestId(context.Background(), r.GetPoolOrTx(), requesterRequestID)
+	row, err := r.queries.GetIllTransactionByRequesterRequestId(context.Background(), r.GetConnOrTx(), requesterRequestID)
 	return row.IllTransaction, err
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type DBTX interface {
+type ConnOrTx interface {
 	Exec(context.Context, string, ...interface{}) (pgconn.CommandTag, error)
 	Query(context.Context, string, ...interface{}) (pgx.Rows, error)
 	QueryRow(context.Context, string, ...interface{}) pgx.Row
@@ -61,7 +61,7 @@ func (r *PgBaseRepo[T]) WithTxFunc(ctx context.Context, repo PgDerivedRepo[T], f
 	return err
 }
 
-func (r *PgBaseRepo[T]) GetPoolOrTx() DBTX {
+func (r *PgBaseRepo[T]) GetConnOrTx() ConnOrTx {
 	if r.Tx != nil {
 		return r.Tx //return active tx if any
 	} else {
