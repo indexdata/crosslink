@@ -151,15 +151,14 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 const updateEntry = `-- name: UpdateEntry :exec
 UPDATE entries
 SET
-  name = coalesce($1, CASE WHEN NOT $2::bool THEN name END),
-  contact_name = coalesce($3, CASE WHEN NOT $4::bool THEN contact_name END),
-  email = coalesce($5, CASE WHEN NOT $6::bool THEN email END)
-WHERE id = $7
+  name = coalesce($1, name),
+  contact_name = coalesce($2, CASE WHEN NOT $3::bool THEN contact_name END),
+  email = coalesce($4, CASE WHEN NOT $5::bool THEN email END)
+WHERE id = $6
 `
 
 type UpdateEntryParams struct {
 	Name           pgtype.Text
-	DelName        bool
 	ContactName    pgtype.Text
 	DelContactName bool
 	Email          pgtype.Text
@@ -170,7 +169,6 @@ type UpdateEntryParams struct {
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
 	_, err := q.db.Exec(ctx, updateEntry,
 		arg.Name,
-		arg.DelName,
 		arg.ContactName,
 		arg.DelContactName,
 		arg.Email,
