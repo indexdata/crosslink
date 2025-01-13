@@ -8,12 +8,15 @@ import (
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -266,6 +269,59 @@ func TestCompleteTaskNegative(t *testing.T) {
 	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "event is not in state PROCESSING" {
 		t.Errorf("Should fail with: event is not in state PROCESSING")
+	}
+}
+
+func TestFailedToConnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus := events.NewPostgresEventBus(nil, "postgres://crosslink:crosslink@localhost:111/crosslink?sslmode=disable")
+	err := eventBus.Start(ctx)
+	if err == nil || strings.Index(err.Error(), "failed to connect to") > 0 {
+		t.Errorf("Should fail with: ailed to connect to ... but had %s", err.Error())
+	}
+}
+
+func TestReconnectListenner(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus, illRepo, _ := startApp(ctx)
+
+	// Force App to reconnect to postgres LISTENER
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		conn, err := pgx.Connect(ctx, app.ConnectionString)
+		if err != nil {
+			t.Errorf("reconnect test unable to connect to database: %s", err)
+		}
+
+		_, err = conn.Exec(ctx, "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query LIKE 'LISTEN%'")
+		if err != nil {
+			t.Errorf("reconnect test unable to kill listen command: %s", err)
+		}
+	}()
+	wg.Wait()
+	// Wait for reconnect
+	time.Sleep(1000 * time.Millisecond)
+
+	var eventReceived = []events.Event{}
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+		eventReceived = append(eventReceived, event)
+	})
+
+	illId := createIllTrans(t, illRepo)
+
+	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	if err != nil {
+		t.Errorf("Task should be created without errors: %s", err)
+	}
+
+	if !waitForPredicateToBeTrue(func() bool {
+		return len(eventReceived) == 1
+	}) {
+		t.Error("Expected to have request event received")
 	}
 }
 
