@@ -24,6 +24,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Authority defines model for Authority.
+type Authority struct {
+	// Id Unique id
+	Id openapi_types.UUID `json:"id"`
+
+	// Symbol Uppercase string
+	Symbol string `json:"symbol"`
+}
+
+// AuthorityProperties defines model for AuthorityProperties.
+type AuthorityProperties struct {
+	// Symbol Uppercase string
+	Symbol *string `json:"symbol,omitempty"`
+}
+
+// AuthorityRequired defines model for AuthorityRequired.
+type AuthorityRequired = interface{}
+
 // Entry defines model for Entry.
 type Entry struct {
 	// ContactName Name of contact person
@@ -84,6 +102,12 @@ type Id struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
+// NewAuthority defines model for NewAuthority.
+type NewAuthority struct {
+	// Symbol Uppercase string
+	Symbol string `json:"symbol"`
+}
+
 // NewEntry defines model for NewEntry.
 type NewEntry struct {
 	// ContactName Name of contact person
@@ -126,6 +150,15 @@ type SymbolProperties struct {
 // SymbolRequired defines model for SymbolRequired.
 type SymbolRequired = interface{}
 
+// GetAuthoritiesParams defines parameters for GetAuthorities.
+type GetAuthoritiesParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit maximum number of results to return
+	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetEntriesParams defines parameters for GetEntries.
 type GetEntriesParams struct {
 	// Q keywords to filter by
@@ -135,6 +168,9 @@ type GetEntriesParams struct {
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// AddAuthorityJSONRequestBody defines body for AddAuthority for application/json ContentType.
+type AddAuthorityJSONRequestBody = NewAuthority
+
 // AddEntryJSONRequestBody defines body for AddEntry for application/json ContentType.
 type AddEntryJSONRequestBody = NewEntry
 
@@ -143,6 +179,12 @@ type UpdateEntryJSONRequestBody = EntryPatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Returns all authorities
+	// (GET /authorities)
+	GetAuthorities(w http.ResponseWriter, r *http.Request, params GetAuthoritiesParams)
+	// Creates a new authority
+	// (POST /authorities)
+	AddAuthority(w http.ResponseWriter, r *http.Request)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams)
@@ -168,6 +210,55 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAuthorities operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthorities(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAuthoritiesParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthorities(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddAuthority operation middleware
+func (siw *ServerInterfaceWrapper) AddAuthority(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddAuthority(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetEntries operation middleware
 func (siw *ServerInterfaceWrapper) GetEntries(w http.ResponseWriter, r *http.Request) {
@@ -413,6 +504,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/authorities", wrapper.GetAuthorities)
+	m.HandleFunc("POST "+options.BaseURL+"/authorities", wrapper.AddAuthority)
 	m.HandleFunc("GET "+options.BaseURL+"/entries", wrapper.GetEntries)
 	m.HandleFunc("POST "+options.BaseURL+"/entries", wrapper.AddEntry)
 	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{id}", wrapper.DeleteEntry)
@@ -420,6 +513,62 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PATCH "+options.BaseURL+"/entries/{id}", wrapper.UpdateEntry)
 
 	return m
+}
+
+type GetAuthoritiesRequestObject struct {
+	Params GetAuthoritiesParams
+}
+
+type GetAuthoritiesResponseObject interface {
+	VisitGetAuthoritiesResponse(w http.ResponseWriter) error
+}
+
+type GetAuthorities200JSONResponse []Authority
+
+func (response GetAuthorities200JSONResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAuthorities400TextResponse string
+
+func (response GetAuthorities400TextResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetAuthoritiesdefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response GetAuthoritiesdefaultJSONResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type AddAuthorityRequestObject struct {
+	Body *AddAuthorityJSONRequestBody
+}
+
+type AddAuthorityResponseObject interface {
+	VisitAddAuthorityResponse(w http.ResponseWriter) error
+}
+
+type AddAuthority200JSONResponse Id
+
+func (response AddAuthority200JSONResponse) VisitAddAuthorityResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type GetEntriesRequestObject struct {
@@ -620,6 +769,12 @@ func (response UpdateEntrydefaultTextResponse) VisitUpdateEntryResponse(w http.R
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Returns all authorities
+	// (GET /authorities)
+	GetAuthorities(ctx context.Context, request GetAuthoritiesRequestObject) (GetAuthoritiesResponseObject, error)
+	// Creates a new authority
+	// (POST /authorities)
+	AddAuthority(ctx context.Context, request AddAuthorityRequestObject) (AddAuthorityResponseObject, error)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error)
@@ -664,6 +819,63 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetAuthorities operation middleware
+func (sh *strictHandler) GetAuthorities(w http.ResponseWriter, r *http.Request, params GetAuthoritiesParams) {
+	var request GetAuthoritiesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAuthorities(ctx, request.(GetAuthoritiesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAuthorities")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAuthoritiesResponseObject); ok {
+		if err := validResponse.VisitGetAuthoritiesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddAuthority operation middleware
+func (sh *strictHandler) AddAuthority(w http.ResponseWriter, r *http.Request) {
+	var request AddAuthorityRequestObject
+
+	var body AddAuthorityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddAuthority(ctx, request.(AddAuthorityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddAuthority")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddAuthorityResponseObject); ok {
+		if err := validResponse.VisitAddAuthorityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetEntries operation middleware
@@ -811,24 +1023,26 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

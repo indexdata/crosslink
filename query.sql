@@ -37,3 +37,14 @@ INSERT INTO symbols (
   $1, $2, $3
 )
 RETURNING *;
+
+-- name: ListAuthorities :many
+SELECT * FROM authorities;
+
+-- name: CreateAuthority :one
+INSERT INTO authorities (
+  symbol
+) VALUES (
+  @symbol
+)
+RETURNING *;

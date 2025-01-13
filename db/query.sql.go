@@ -24,6 +24,22 @@ func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authori
 	return i, err
 }
 
+const createAuthority = `-- name: CreateAuthority :one
+INSERT INTO authorities (
+  symbol
+) VALUES (
+  $1
+)
+RETURNING id, symbol
+`
+
+func (q *Queries) CreateAuthority(ctx context.Context, symbol string) (Authority, error) {
+	row := q.db.QueryRow(ctx, createAuthority, symbol)
+	var i Authority
+	err := row.Scan(&i.ID, &i.Symbol)
+	return i, err
+}
+
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
   name, contact_name, email
@@ -101,6 +117,30 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 		&i.Phone,
 	)
 	return i, err
+}
+
+const listAuthorities = `-- name: ListAuthorities :many
+SELECT id, symbol FROM authorities
+`
+
+func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
+	rows, err := q.db.Query(ctx, listAuthorities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Authority
+	for rows.Next() {
+		var i Authority
+		if err := rows.Scan(&i.ID, &i.Symbol); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEntries = `-- name: ListEntries :many

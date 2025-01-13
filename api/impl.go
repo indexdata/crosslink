@@ -156,7 +156,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	var resp Id
 	resp.Id = insertedEntry.ID
 
-	tx.Commit(ctx)
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		log.Fatal(err)
 	}
 
-	tx.Commit(ctx)
+	err = tx.Commit(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -195,4 +195,46 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 func (ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
 	var resp DeleteEntryResponseObject
 	return resp, nil
+}
+
+func (a ApiImpl) AddAuthority(ctx context.Context, request AddAuthorityRequestObject) (AddAuthorityResponseObject, error) {
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	qtx := a.queries.WithTx(tx)
+
+	insertedAuthority, err := qtx.CreateAuthority(ctx, request.Body.Symbol)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var resp Id
+	resp.Id = insertedAuthority.ID
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return AddAuthority200JSONResponse(resp), nil
+}
+
+func (a ApiImpl) GetAuthorities(ctx context.Context, request GetAuthoritiesRequestObject) (GetAuthoritiesResponseObject, error) {
+	rows, err := a.queries.ListAuthorities(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp := make([]Authority, 0, len(rows))
+
+	for _, row := range rows {
+		resp = append(resp, Authority{
+			Id:     row.ID,
+			Symbol: row.Symbol,
+		})
+	}
+
+	return GetAuthorities200JSONResponse(resp), nil
 }
