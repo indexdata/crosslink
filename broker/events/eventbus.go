@@ -110,7 +110,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
-	event, err := p.repo.GetEvent(data.Event)
+	event, err := p.repo.GetEvent(p.ctx, data.Event)
 	if err != nil {
 		p.ctx.Logger().Error("Failed to read event", "error", err, "eventId", data.Event)
 		return
@@ -148,7 +148,7 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData) error {
 	id := uuid.New().String()
 	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
-		_, err := eventRepo.SaveEvent(SaveEventParams{
+		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getNow(),
@@ -160,15 +160,15 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(id, SignalTaskCreated)
+		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
 		return err
 	})
 }
 
 func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
-		_, err := eventRepo.SaveEvent(SaveEventParams{
+	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getNow(),
@@ -180,13 +180,13 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName Event
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(id, SignalNoticeCreated)
+		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated)
 		return err
 	})
 }
 
 func (p *PostgresEventBus) BeginTask(eventId string) error {
-	event, err := p.repo.GetEvent(eventId)
+	event, err := p.repo.GetEvent(p.ctx, eventId)
 	if err != nil {
 		return err
 	}
@@ -196,21 +196,21 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 	if event.EventStatus != EventStatusNew {
 		return errors.New("event is not in state NEW")
 	}
-	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
-		err = eventRepo.UpdateEventStatus(UpdateEventStatusParams{
+	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
 		})
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(eventId, SignalTaskBegin)
+		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
 		return err
 	})
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {
-	event, err := p.repo.GetEvent(eventId)
+	event, err := p.repo.GetEvent(p.ctx, eventId)
 	if err != nil {
 		return err
 	}
@@ -220,8 +220,8 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 	if event.EventStatus != EventStatusProcessing {
 		return errors.New("event is not in state PROCESSING")
 	}
-	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
-		_, err = eventRepo.SaveEvent(SaveEventParams{
+	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               event.ID,
 			IllTransactionID: event.IllTransactionID,
 			Timestamp:        event.Timestamp,
@@ -234,7 +234,7 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(eventId, SignalTaskComplete)
+		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete)
 		return err
 	})
 }

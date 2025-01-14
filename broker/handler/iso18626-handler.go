@@ -3,12 +3,12 @@ package handler
 import (
 	"encoding/xml"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/iso18626"
@@ -18,20 +18,21 @@ import (
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
 		if r.Method != http.MethodPost {
-			log.Printf("[iso18626-handler] error: method not allowed: %s %s\n", r.Method, r.URL)
+			ctx.Logger().Error("[iso18626-handler] method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		contentType := r.Header.Get("Content-Type")
 		if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
-			log.Printf("[iso18626-handler] error: content-type unsupported: %s %s\n", contentType, r.URL)
+			ctx.Logger().Error("[iso18626-handler] content-type unsupported", "contentType", contentType, "url", r.URL)
 			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
 			return
 		}
 		byteReq, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Println("[iso18626-server] error: failure reading request: ", err)
+			ctx.Logger().Error("[iso18626-server] failure reading request", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -43,11 +44,11 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.Han
 		}
 
 		if illMessage.Request != nil {
-			handleIso18626Request(&illMessage, w, repo, eventBus)
+			handleIso18626Request(ctx, &illMessage, w, repo, eventBus)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			handleIso18626RequestingAgencyMessage(&illMessage, w, repo, eventBus)
+			handleIso18626RequestingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			handleIso18626SupplyingAgencyMessage(&illMessage, w, repo, eventBus)
+			handleIso18626SupplyingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
 		} else {
 			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
 			return
@@ -55,7 +56,7 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.Han
 	}
 }
 
-func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	if illMessage.Request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illMessage, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -84,7 +85,7 @@ func handleIso18626Request(illMessage *iso18626.ISO18626Message, w http.Response
 		Time:  illMessage.Request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err := repo.CreateIllTransaction(ill_db.CreateIllTransactionParams{
+	_, err := repo.CreateIllTransaction(ctx, ill_db.CreateIllTransactionParams{
 		ID:                 id,
 		Timestamp:          timestamp,
 		RequesterSymbol:    requesterSymbol,
@@ -179,14 +180,14 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 	return header
 }
 
-func handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
 		handleRequestingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
-	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(createPgText(requestingRequestId))
+	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -226,14 +227,14 @@ func handleRequestingAgencyError(illMessage *iso18626.ISO18626Message, errorMess
 	writeResponse(resmsg, w)
 }
 
-func handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
 		handleSupplyingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
 		return
 	}
 
-	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(createPgText(requestingRequestId))
+	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

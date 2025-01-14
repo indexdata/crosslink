@@ -363,7 +363,7 @@ func waitForPredicateToBeTrue(predicate func() bool) bool {
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(ill_db.CreateIllTransactionParams{
+	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
 		ID:        illId,
 		Timestamp: getNow(),
 	})
@@ -375,7 +375,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
 
 func createEvent(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus) string {
 	eventId := uuid.New().String()
-	_, err := eventRepo.SaveEvent(events.SaveEventParams{
+	_, err := eventRepo.SaveEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
 		ID:               eventId,
 		IllTransactionID: illId,
 		Timestamp:        getNow(),
