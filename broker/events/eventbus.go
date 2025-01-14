@@ -135,7 +135,7 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 			wg.Add(1)
 			go func(h func(extctx.ExtendedContext, Event), e Event) {
 				defer wg.Done()
-				h(ctx.WithArgs(&extctx.LoggerArgs{"", event.IllTransactionID, event.ID}), e)
+				h(ctx.WithArgs(&extctx.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
 			}(handler, event)
 		}
 	} else {
