@@ -59,7 +59,7 @@ func TestEventHandling(t *testing.T) {
 	defer cancel()
 	eventBus, _, _ := startApp(ctx)
 	var requestReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx context.Context, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
 
@@ -90,7 +90,7 @@ func TestCreateTask(t *testing.T) {
 	defer cancel()
 	eventBus, illRepo, _ := startApp(ctx)
 	var requestReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx context.Context, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
 
@@ -117,7 +117,7 @@ func TestCreateNotice(t *testing.T) {
 	defer cancel()
 	eventBus, illRepo, _ := startApp(ctx)
 	var eventReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx context.Context, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
@@ -150,13 +150,13 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	var eventsReceived = []events.Event{}
 	var eventsStarted = []events.Event{}
 	var eventsCompleted = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx context.Context, event events.Event) {
 		eventsReceived = append(eventsReceived, event)
 	})
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx context.Context, event events.Event) {
 		eventsStarted = append(eventsStarted, event)
 	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx context.Context, event events.Event) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
@@ -307,7 +307,7 @@ func TestReconnectListenner(t *testing.T) {
 	time.Sleep(1000 * time.Millisecond)
 
 	var eventReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx context.Context, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
