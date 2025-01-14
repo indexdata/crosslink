@@ -3,20 +3,21 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var HTTP_PORT = utils.GetEnvInt("HTTP_PORT", 8081)
@@ -30,10 +31,17 @@ var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYP
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 
-func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
+
+func configLog() slog.Handler {
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
-		common.Logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		return slog.NewJSONHandler(os.Stdout, nil)
+	} else {
+		return slog.NewTextHandler(os.Stdout, nil)
 	}
+}
+
+func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
@@ -42,21 +50,21 @@ func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 
 	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
 
-	common.Logger.Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
+	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
 }
 
 func RunMigrateScripts() {
 	m, err := migrate.New(MigrationsFolder, ConnectionString)
 	if err != nil {
-		common.Logger.Error("failed to initiate migration", "error", err)
+		appCtx.Logger().Error("failed to initiate migration", "error", err)
 		return
 	}
 
 	// Migrate up
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
-		common.Logger.Error("failed to run migration", "error", err)
+		appCtx.Logger().Error("failed to run migration", "error", err)
 		return
 	}
 }
@@ -64,7 +72,7 @@ func RunMigrateScripts() {
 func InitDbPool() *pgxpool.Pool {
 	dbPool, err := pgxpool.New(context.Background(), ConnectionString)
 	if err != nil {
-		common.Logger.Error("Unable to create pool to database", "error", err)
+		appCtx.Logger().Error("Unable to create pool to database", "error", err)
 		os.Exit(1)
 	}
 	return dbPool
@@ -78,9 +86,9 @@ func CreateEventRepo(dbPool *pgxpool.Pool) events.EventRepo {
 
 func InitEventBus(ctx context.Context, eventRepo events.EventRepo) events.EventBus {
 	eventBus := events.NewPostgresEventBus(eventRepo, ConnectionString)
-	err := eventBus.Start(ctx)
+	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
-		common.Logger.Error("Unable to listen to database notify", "error", err)
+		appCtx.Logger().Error("Unable to listen to database notify", "error", err)
 		os.Exit(1)
 	}
 	return eventBus
