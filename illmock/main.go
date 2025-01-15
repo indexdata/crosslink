@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -71,5 +72,9 @@ func main() {
 	if httpPort == "" {
 		httpPort = "8081"
 	}
-	http.ListenAndServe(":"+httpPort, mux)
+	err := http.ListenAndServe(":"+httpPort, mux)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 }
