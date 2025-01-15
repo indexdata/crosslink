@@ -16,6 +16,8 @@ type ExtendedContext interface {
 	WithArgs(args *LoggerArgs) ExtendedContext
 }
 
+var DefaultLogHandler slog.Handler = slog.NewTextHandler(os.Stdout, nil)
+
 type LoggerArgs struct {
 	RequestId     string
 	TransactionId string
@@ -37,7 +39,7 @@ func (ctx *_ExtCtxImpl) WithArgs(args *LoggerArgs) ExtendedContext {
 }
 
 func CreateExtCtxWithArgs(ctx context.Context, args *LoggerArgs) ExtendedContext {
-	return CreateExtCtxWithLogArgsAndHandler(ctx, args, slog.NewTextHandler(os.Stdout, nil))
+	return CreateExtCtxWithLogArgsAndHandler(ctx, args, DefaultLogHandler)
 }
 
 func CreateExtCtxWithLogArgsAndHandler(ctx context.Context, args *LoggerArgs, logHandler slog.Handler) ExtendedContext {

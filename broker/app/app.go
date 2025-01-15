@@ -35,9 +35,11 @@ var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil,
 
 func configLog() slog.Handler {
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
-		return slog.NewJSONHandler(os.Stdout, nil)
+		jsonHandler := slog.NewJSONHandler(os.Stdout, nil)
+		extctx.DefaultLogHandler = jsonHandler
+		return jsonHandler
 	} else {
-		return slog.NewTextHandler(os.Stdout, nil)
+		return extctx.DefaultLogHandler
 	}
 }
 
