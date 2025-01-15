@@ -1,4 +1,4 @@
-SUBDIRS := $(patsubst %/Makefile,%,$(wildcard */Makefile))
+SUBDIRS := broker illmock
 GOALS := $(or $(MAKECMDGOALS),all)
 
 .PHONY: $(GOALS) $(SUBDIRS)
