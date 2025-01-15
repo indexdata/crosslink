@@ -4,8 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
@@ -13,12 +21,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net/http"
-	"os"
-	"strings"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -59,7 +61,7 @@ func TestEventHandling(t *testing.T) {
 	defer cancel()
 	eventBus, _, _ := startApp(ctx)
 	var requestReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
 
@@ -90,10 +92,9 @@ func TestCreateTask(t *testing.T) {
 	defer cancel()
 	eventBus, illRepo, _ := startApp(ctx)
 	var requestReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
-
 	illId := createIllTrans(t, illRepo)
 
 	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
@@ -117,7 +118,7 @@ func TestCreateNotice(t *testing.T) {
 	defer cancel()
 	eventBus, illRepo, _ := startApp(ctx)
 	var eventReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
@@ -150,13 +151,13 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	var eventsReceived = []events.Event{}
 	var eventsStarted = []events.Event{}
 	var eventsCompleted = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventsReceived = append(eventsReceived, event)
 	})
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventsStarted = append(eventsStarted, event)
 	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
@@ -276,7 +277,7 @@ func TestFailedToConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventBus := events.NewPostgresEventBus(nil, "postgres://crosslink:crosslink@localhost:111/crosslink?sslmode=disable")
-	err := eventBus.Start(ctx)
+	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err == nil || strings.Index(err.Error(), "failed to connect to") > 0 {
 		t.Errorf("Should fail with: ailed to connect to ... but had %s", err.Error())
 	}
@@ -307,7 +308,7 @@ func TestReconnectListenner(t *testing.T) {
 	time.Sleep(1000 * time.Millisecond)
 
 	var eventReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
@@ -362,7 +363,7 @@ func waitForPredicateToBeTrue(predicate func() bool) bool {
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(ill_db.CreateIllTransactionParams{
+	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
 		ID:        illId,
 		Timestamp: getNow(),
 	})
@@ -374,7 +375,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
 
 func createEvent(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus) string {
 	eventId := uuid.New().String()
-	_, err := eventRepo.SaveEvent(events.SaveEventParams{
+	_, err := eventRepo.SaveEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
 		ID:               eventId,
 		IllTransactionID: illId,
 		Timestamp:        getNow(),

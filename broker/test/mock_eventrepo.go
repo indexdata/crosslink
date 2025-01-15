@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
@@ -19,16 +20,16 @@ func (r *MockEventRepositorySuccess) WithTxFunc(ctx context.Context, fn func(eve
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) SaveEvent(params events.SaveEventParams) (events.Event, error) {
+func (r *MockEventRepositorySuccess) SaveEvent(ctx extctx.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
 	var event = (events.Event)(params)
 	return event, nil
 }
 
-func (r *MockEventRepositorySuccess) UpdateEventStatus(params events.UpdateEventStatusParams) error {
+func (r *MockEventRepositorySuccess) UpdateEventStatus(ctx extctx.ExtendedContext, params events.UpdateEventStatusParams) error {
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) GetEvent(id string) (events.Event, error) {
+func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id string) (events.Event, error) {
 	if id == "t-1-n" {
 		return events.Event{
 			ID:               id,
@@ -59,7 +60,7 @@ func (r *MockEventRepositorySuccess) GetEvent(id string) (events.Event, error) {
 	}
 }
 
-func (r *MockEventRepositorySuccess) Notify(eventId string, signal events.Signal) error {
+func (r *MockEventRepositorySuccess) Notify(ctx extctx.ExtendedContext, eventId string, signal events.Signal) error {
 	return nil
 }
 
@@ -71,19 +72,19 @@ func (r *MockEventRepositoryError) WithTxFunc(ctx context.Context, fn func(event
 	return nil
 }
 
-func (r *MockEventRepositoryError) SaveEvent(params events.SaveEventParams) (events.Event, error) {
+func (r *MockEventRepositoryError) SaveEvent(ctx extctx.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetEvent(id string) (events.Event, error) {
+func (r *MockEventRepositoryError) GetEvent(ctx extctx.ExtendedContext, id string) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) UpdateEventStatus(params events.UpdateEventStatusParams) error {
+func (r *MockEventRepositoryError) UpdateEventStatus(ctx extctx.ExtendedContext, params events.UpdateEventStatusParams) error {
 	return nil
 }
 
-func (r *MockEventRepositoryError) Notify(eventId string, signal events.Signal) error {
+func (r *MockEventRepositoryError) Notify(ctx extctx.ExtendedContext, eventId string, signal events.Signal) error {
 	return errors.New("DB error")
 }
 

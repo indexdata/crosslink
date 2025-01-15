@@ -1,15 +1,14 @@
 package ill_db
 
 import (
-	"context"
-
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type IllRepo interface {
-	CreateIllTransaction(params CreateIllTransactionParams) (IllTransaction, error)
-	GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (IllTransaction, error)
+	CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error)
+	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 }
 
 type PgIllRepo struct {
@@ -17,12 +16,12 @@ type PgIllRepo struct {
 	queries Queries
 }
 
-func (r *PgIllRepo) CreateIllTransaction(params CreateIllTransactionParams) (IllTransaction, error) {
-	row, err := r.queries.CreateIllTransaction(context.Background(), r.GetConnOrTx(), params)
+func (r *PgIllRepo) CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error) {
+	row, err := r.queries.CreateIllTransaction(ctx, r.GetConnOrTx(), params)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(requesterRequestID pgtype.Text) (IllTransaction, error) {
-	row, err := r.queries.GetIllTransactionByRequesterRequestId(context.Background(), r.GetConnOrTx(), requesterRequestID)
+func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
+	row, err := r.queries.GetIllTransactionByRequesterRequestId(ctx, r.GetConnOrTx(), requesterRequestID)
 	return row.IllTransaction, err
 }
