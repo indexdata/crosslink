@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 )
 
 type EventRepo interface {
 	repo.Transactional[EventRepo]
-	SaveEvent(params SaveEventParams) (Event, error)
-	UpdateEventStatus(params UpdateEventStatusParams) error
-	GetEvent(id string) (Event, error)
-	Notify(eventId string, signal Signal) error
+	SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error)
+	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error
+	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
+	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
 }
 
 type PgEventRepo struct {
@@ -33,27 +34,27 @@ func (r *PgEventRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[EventRepo]) Eve
 	return eventRepo
 }
 
-func (r *PgEventRepo) SaveEvent(params SaveEventParams) (Event, error) {
-	row, err := r.queries.SaveEvent(context.Background(), r.GetConnOrTx(), params)
+func (r *PgEventRepo) SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error) {
+	row, err := r.queries.SaveEvent(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) GetEvent(id string) (Event, error) {
-	row, err := r.queries.GetEvent(context.Background(), r.GetConnOrTx(), id)
+func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, error) {
+	row, err := r.queries.GetEvent(ctx, r.GetConnOrTx(), id)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) UpdateEventStatus(params UpdateEventStatusParams) error {
-	return r.queries.UpdateEventStatus(context.Background(), r.GetConnOrTx(), params)
+func (r *PgEventRepo) UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error {
+	return r.queries.UpdateEventStatus(ctx, r.GetConnOrTx(), params)
 }
 
-func (r *PgEventRepo) Notify(eventId string, signal Signal) error {
+func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error {
 	data := NotifyData{
 		Event:  eventId,
 		Signal: signal,
 	}
 	jsonData, _ := json.Marshal(data)
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
-	_, err := r.GetConnOrTx().Exec(context.Background(), sql)
+	_, err := r.GetConnOrTx().Exec(ctx, sql)
 	return err
 }
