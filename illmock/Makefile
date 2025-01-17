@@ -32,7 +32,7 @@ check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
 run: $(BINARY)
-	$(GO) run -buildvcs=true
+	$(GO) run -buildvcs=true .
 
 fmt:
 	$(GOFMT) -w $(GOFILES)
