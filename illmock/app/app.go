@@ -131,7 +131,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 		}
 
 		if illMessage.Request != nil {
-			app.handleIso18626Request(&illMessage, w)
+			app.handleIso18626Request(illMessage.Request, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
 			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
