@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
+	"github.com/indexdata/go-utils/utils"
 )
 
 type Role string
@@ -27,8 +29,71 @@ type MockApp struct {
 
 var log *slog.Logger = slogwrap.SlogWrap()
 
-func (app *MockApp) handleIso18626Request(illRequest *iso18626.ISO18626Message, w http.ResponseWriter) {
+func writeResponse(resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
+	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/xml")
+	w.Write(output)
+}
+
+func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus) *iso18626.ConfirmationHeader {
+	var header = &iso18626.ConfirmationHeader{}
+	header.RequestingAgencyId = &iso18626.TypeAgencyId{}
+	header.RequestingAgencyId.AgencyIdType = inHeader.RequestingAgencyId.AgencyIdType
+	header.RequestingAgencyId.AgencyIdValue = inHeader.RequestingAgencyId.AgencyIdValue
+	header.TimestampReceived = inHeader.Timestamp
+	header.RequestingAgencyRequestId = inHeader.RequestingAgencyRequestId
+
+	if len(inHeader.SupplyingAgencyId.AgencyIdValue) != 0 {
+		header.SupplyingAgencyId = &iso18626.TypeAgencyId{}
+		header.SupplyingAgencyId.AgencyIdType = inHeader.SupplyingAgencyId.AgencyIdType
+		header.SupplyingAgencyId.AgencyIdValue = inHeader.SupplyingAgencyId.AgencyIdValue
+	}
+
+	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+	header.MessageStatus = messageStatus
+	return header
+}
+
+func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ErrorData {
+	if errorMessage != nil {
+		var errorData = iso18626.ErrorData{
+			ErrorType:  *errorType,
+			ErrorValue: *errorMessage,
+		}
+		return &errorData
+	}
+	return nil
+}
+
+func createRequestResponse(illRequest *iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = &iso18626.ISO18626Message{}
+	header := createConfirmationHeader(&illRequest.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
+	}
+	return resmsg
+}
+
+func handleRequestError(illRequest *iso18626.Request, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	writeResponse(resmsg, w)
+}
+
+func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
 	log.Info("handleIso18626Request")
+	if illRequest.Header.RequestingAgencyRequestId == "" {
+		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
+	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
 }
 
 func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
