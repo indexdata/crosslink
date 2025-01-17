@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/client"
 	"log/slog"
 	"net/http"
 	"os"
@@ -86,14 +87,21 @@ func CreateEventRepo(dbPool *pgxpool.Pool) events.EventRepo {
 	return eventRepo
 }
 
-func InitEventBus(ctx context.Context, eventRepo events.EventRepo) events.EventBus {
+func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 	eventBus := events.NewPostgresEventBus(eventRepo, ConnectionString)
+	return eventBus
+}
+
+func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client) {
+	eventBus.HandleEventCreated("message-supplier", iso18626Client.MessageSupplier)
+	eventBus.HandleEventCreated("message-requester", iso18626Client.MessageRequester)
+}
+func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
 		appCtx.Logger().Error("Unable to listen to database notify", "error", err)
 		os.Exit(1)
 	}
-	return eventBus
 }
 
 func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
