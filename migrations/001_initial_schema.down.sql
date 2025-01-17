@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS entries;
+DROP TABLE IF EXISTS authorities;
+DROP TABLE IF EXISTS symbols;
+DROP VIEW IF EXISTS entrysymbols;
+DROP TABLE IF EXISTS consortia;
+DROP TABLE IF EXISTS tiers;
+DROP TABLE IF EXISTS networks;
+DROP TABLE IF EXISTS memberships;
+DROP TABLE IF EXISTS membership_tiers;
+DROP TABLE IF EXISTS membership_networks;
