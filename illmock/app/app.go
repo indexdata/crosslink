@@ -1,9 +1,8 @@
 package app
 
 import (
-	"bytes"
+	"context"
 	"encoding/xml"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,18 +10,28 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/illmock/http18626"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/go-utils/utils"
 )
 
 type Role string
 
+type state struct {
+	index             int
+	status            []iso18626.TypeStatus
+	supplierRequestId string
+}
+
 type MockApp struct {
 	httpPort    string
 	isSupplier  bool
 	isRequester bool
 	remoteUrl   string
+	requestId   map[string]*state
+	server      *http.Server
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -92,20 +101,106 @@ func handleRequestError(illRequest *iso18626.Request, errorMessage string, error
 
 func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
 	log.Info("handleIso18626Request")
+	if !app.isSupplier {
+		handleRequestError(illRequest, "Only supplier expects ISO18626 Request", iso18626.TypeErrorTypeUnsupportedActionType, w)
+	}
 	if illRequest.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
+	// TODO: check if illRequest.Header.SupplyingAgencyRequestId == ""
+
+	_, ok := app.requestId[illRequest.Header.RequestingAgencyRequestId]
+	if ok {
+		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
+	var status []iso18626.TypeStatus
+
+	// should be able to parse the value and put any types into status...
+	switch illRequest.Header.SupplyingAgencyId.AgencyIdValue {
+	case "WILLSUPPLY_LOANED":
+		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
+	case "WILLSUPPLY_UNFILLED":
+		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusUnfilled)
+	case "UNFILLED":
+		status = append(status, iso18626.TypeStatusUnfilled)
+	case "LOANED":
+		status = append(status, iso18626.TypeStatusLoaned)
+	default:
+		status = append(status, iso18626.TypeStatusUnfilled)
+	}
+	app.requestId[illRequest.Header.RequestingAgencyRequestId] = &state{status: status, index: 0,
+		supplierRequestId: "S" + uuid.NewString()}
+
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
+	go app.sendSupplyingAgencyMessage(&illRequest.Header)
+}
+
+func createSupplyingAgencyMessage() *iso18626.ISO18626Message {
+	var msg = &iso18626.ISO18626Message{}
+	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
+	return msg
+}
+
+func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
+	time.Sleep(500 * time.Millisecond)
+	log.Info("sendSupplyingAgencyMessage")
+
+	msg := createSupplyingAgencyMessage()
+	msg.SupplyingAgencyMessage.Header = *header
+
+	state, ok := app.requestId[header.RequestingAgencyRequestId]
+	if !ok {
+		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
+		return
+	}
+	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
+	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
+	state.index++
+	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
+	if err != nil {
+		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
+		return
+	}
+	if responseMsg.RequestingAgencyMessageConfirmation == nil {
+		log.Warn("sendSupplyingAgencyMessage did not receive RequestingAgencyMessageConfirmation")
+		return
+	}
+	if state.index < len(state.status) {
+		go app.sendSupplyingAgencyMessage(header)
+	}
 }
 
 func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
 }
 
+func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = &iso18626.ISO18626Message{}
+	header := createConfirmationHeader(&illMessage.SupplyingAgencyMessage.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
+	}
+	return resmsg
+}
+
+func handleSupplyingAgencyError(illMessage *iso18626.ISO18626Message, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	writeResponse(resmsg, w)
+}
+
 func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	log.Info("handleIso18626SupplyingAgencyMessage")
+	if !app.isRequester {
+		handleSupplyingAgencyError(illMessage, "Only requester expects ISO18626 SupplyingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
+		return
+	}
+	resmsg := createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
 }
 
 func iso18626Handler(app *MockApp) http.HandlerFunc {
@@ -148,50 +243,25 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func httpRequestResponse(client *http.Client, url string, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
-	buf, err := xml.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest("POST", url+"/iso18626", bytes.NewReader(buf))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Content-Type", "application/xml")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
-	}
-	var response iso18626.ISO18626Message
-	err = xml.Unmarshal(body, &response)
-	if err != nil {
-		return nil, err
-	}
-	return &response, nil
-}
-
 func (app *MockApp) runRequester() {
 	slog.Info("requester: initiating")
 	time.Sleep(100 * time.Millisecond)
 	msg := createRequest()
-	responseMsg, err := httpRequestResponse(http.DefaultClient, app.remoteUrl, msg)
+	header := &msg.Request.Header
+	header.RequestingAgencyRequestId = "R" + uuid.NewString()
+	header.RequestingAgencyId.AgencyIdType.Text = "MOCK"
+	header.RequestingAgencyId.AgencyIdValue = "WILLSUPPLY_LOANED"
+	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
 		return
 	}
-	slog.Info("requester: OK")
 	requestConfirmation := responseMsg.RequestConfirmation
-	if requestConfirmation != nil {
-		slog.Info("Got requestConfirmation")
+	if requestConfirmation == nil {
+		slog.Warn("requester: Did not receive requestConfirmation")
+		return
 	}
+	slog.Info("Got requestConfirmation")
 }
 
 func (app *MockApp) parseConfig() error {
@@ -213,6 +283,13 @@ func (app *MockApp) parseConfig() error {
 	return nil
 }
 
+func (app *MockApp) Shutdown() error {
+	if app.server != nil {
+		return app.server.Shutdown(context.TODO())
+	}
+	return nil
+}
+
 func (app *MockApp) Run() error {
 	err := app.parseConfig()
 	if err != nil {
@@ -225,5 +302,7 @@ func (app *MockApp) Run() error {
 	if app.isRequester {
 		go app.runRequester()
 	}
-	return http.ListenAndServe(":"+app.httpPort, mux)
+	app.server = &http.Server{Addr: ":" + app.httpPort}
+	// both requester and responder serves HTTP
+	return app.server.ListenAndServe()
 }
