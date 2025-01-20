@@ -270,9 +270,6 @@ func (app *MockApp) runRequester() {
 
 func (app *MockApp) parseConfig() error {
 	app.httpPort = os.Getenv("HTTP_PORT")
-	if app.httpPort == "" {
-		app.httpPort = "8081"
-	}
 	role := strings.ToLower(os.Getenv("ROLE"))
 	if role == "" || strings.Contains(role, "supplier") {
 		app.isSupplier = true
@@ -299,6 +296,7 @@ func (app *MockApp) Run() error {
 	if err != nil {
 		return err
 	}
+	app.requestId = make(map[string]*state)
 	log.Info("Mock starting", "requester", app.isRequester, "supplier", app.isSupplier)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
@@ -306,7 +304,11 @@ func (app *MockApp) Run() error {
 	if app.isRequester {
 		go app.runRequester()
 	}
-	app.server = &http.Server{Addr: ":" + app.httpPort}
+	if app.httpPort == "" {
+		app.httpPort = "8081"
+	}
+	log.Info("Start HTTP serve on " + app.httpPort)
+	app.server = &http.Server{Addr: ":" + app.httpPort, Handler: mux}
 	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()
 }
