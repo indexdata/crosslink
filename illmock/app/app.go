@@ -44,7 +44,10 @@ func writeResponse(resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/xml")
-	w.Write(output)
+	_, err = w.Write(output)
+	if err != nil {
+		log.Warn("writeResponse", "error", err.Error())
+	}
 }
 
 func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus) *iso18626.ConfirmationHeader {
