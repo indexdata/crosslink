@@ -208,6 +208,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.IS
 
 func iso18626Handler(app *MockApp) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Info("[iso18626-handler]")
 		if r.Method != http.MethodPost {
 			log.Info("[iso18626-handler] error: method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)

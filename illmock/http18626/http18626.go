@@ -23,7 +23,7 @@ func SendReceive(client *http.Client, url string, msg *iso18626.ISO18626Message)
 	if err != nil {
 		return nil, err
 	}
-	log.Info("send XML", "xml", buf)
+	log.Info("send XML", "url", url, "xml", buf)
 	req, err := http.NewRequest("POST", url+"/iso18626", bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
