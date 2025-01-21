@@ -10,8 +10,10 @@ type IllRepo interface {
 	CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
+	CreatePeer(ctx extctx.ExtendedContext, params CreatePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
+	CreateLocatedSupplier(ctx extctx.ExtendedContext, params CreateLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransitionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionAndStatusParams) ([]LocatedSupplier, error)
 }
 
@@ -48,10 +50,20 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 func (r *PgIllRepo) GetLocatedSupplierByIllTransitionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionAndStatusParams) ([]LocatedSupplier, error) {
 	rows, err := r.queries.GetLocatedSupplierByIllTransitionAndStatus(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
-	if err != nil {
+	if err == nil {
 		for _, r := range rows {
 			suppliers = append(suppliers, r.LocatedSupplier)
 		}
 	}
 	return suppliers, err
+}
+
+func (r *PgIllRepo) CreatePeer(ctx extctx.ExtendedContext, params CreatePeerParams) (Peer, error) {
+	row, err := r.queries.CreatePeer(ctx, r.GetConnOrTx(), params)
+	return row.Peer, err
+}
+
+func (r *PgIllRepo) CreateLocatedSupplier(ctx extctx.ExtendedContext, params CreateLocatedSupplierParams) (LocatedSupplier, error) {
+	row, err := r.queries.CreateLocatedSupplier(ctx, r.GetConnOrTx(), params)
+	return row.LocatedSupplier, err
 }

@@ -1,7 +1,6 @@
 package events
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -23,7 +22,7 @@ type PgEventRepo struct {
 }
 
 // delegate transaction handling to Base
-func (r *PgEventRepo) WithTxFunc(ctx context.Context, fn func(EventRepo) error) error {
+func (r *PgEventRepo) WithTxFunc(ctx extctx.ExtendedContext, fn func(EventRepo) error) error {
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 

@@ -20,12 +20,20 @@ import (
 type Iso18626Client struct {
 	eventBus events.EventBus
 	illRepo  ill_db.IllRepo
+	client   *http.Client
 }
 
 func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo) Iso18626Client {
 	return Iso18626Client{
 		eventBus: eventBus,
 		illRepo:  illRepo,
+		client:   http.DefaultClient,
+	}
+}
+
+func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
+	return Iso18626Client{
+		client: client,
 	}
 }
 
@@ -63,12 +71,14 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
+	supplier, _ := c.getSupplier(ctx, illTrans)
 
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
-		Header:      c.createMessageHeader(illTrans, nil),
+		Header:      c.createMessageHeader(illTrans, supplier),
 		MessageInfo: c.createMessageInfo(illTrans),
 		StatusInfo:  c.createStatusInfo(illTrans),
 	}
+	resultData["message"] = message
 
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
@@ -76,7 +86,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("Failed to get requester", "error", err)
 		status = events.EventStatusError
 	} else {
-		response, err := c.sendHttpPost(requester.Address.String, message, "")
+		response, err := c.SendHttpPost(requester.Address.String, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -100,22 +110,22 @@ func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.Extende
 
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
-	var message = &iso18626.ISO18626Message{}
-	resultData["message"] = message
-
-	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-		Header: c.createMessageHeader(illTrans, nil),
-		Action: iso18626.TypeActionNotification, // TODO correct action
-		Note:   "",
-	}
 
 	supplier, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
 		resultData["error"] = err
-		ctx.Logger().Error("Failed to get requester", "error", err)
+		ctx.Logger().Error("Failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
-		response, err := c.sendHttpPost(supplier.Address.String, message, "")
+		var message = &iso18626.ISO18626Message{}
+		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+			Header: c.createMessageHeader(illTrans, supplier),
+			Action: iso18626.TypeActionNotification, // TODO correct action
+			Note:   "",
+		}
+		resultData["message"] = message
+
+		response, err := c.SendHttpPost(supplier.Address.String, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -151,6 +161,9 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer) iso18626.Header {
 	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
+	if len(requesterSymbol) < 2 {
+		requesterSymbol = append(requesterSymbol, "")
+	}
 	supplierSymbol := []string{"", ""}
 	if supplier != nil {
 		supplierSymbol = strings.Split(supplier.Symbol, ":")
@@ -198,7 +211,7 @@ func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction) iso
 	}
 }
 
-func (c *Iso18626Client) sendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
 	breq, err := xml.Marshal(msg)
 	if err != nil {
 		return nil, err
@@ -212,7 +225,7 @@ func (c *Iso18626Client) sendHttpPost(url string, msg *iso18626.ISO18626Message,
 	if len(tenant) > 0 {
 		req.Header.Set("X-Okapi-Tenant", tenant)
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
