@@ -2,7 +2,7 @@ package repo
 
 import (
 	"context"
-	"fmt"
+	extctx "github.com/indexdata/crosslink/broker/common"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,7 +17,7 @@ type ConnOrTx interface {
 
 type Transactional[T any] interface {
 	//execute operations on the receiver repo within a transaction
-	WithTxFunc(ctx context.Context, fn func(T) error) error
+	WithTxFunc(ctx extctx.ExtendedContext, fn func(T) error) error
 }
 
 type PgDerivedRepo[T any] interface {
@@ -37,21 +37,21 @@ func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) *PgBa
 	}
 }
 
-func (r *PgBaseRepo[T]) WithTxFunc(ctx context.Context, repo PgDerivedRepo[T], fn func(T) error) error {
+func (r *PgBaseRepo[T]) WithTxFunc(ctx extctx.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("db tx rollback")
+			ctx.Logger().Error("db tx rollback")
 			_ = tx.Rollback(ctx)
 			panic(r)
 		} else if err != nil {
-			fmt.Println("db tx error and rollback:", err)
+			ctx.Logger().Error("db tx error and rollback", "error", err)
 			_ = tx.Rollback(ctx)
 		} else {
-			fmt.Println("db tx commit")
+			ctx.Logger().Info("db tx commit")
 			err = tx.Commit(ctx)
 		}
 	}()
