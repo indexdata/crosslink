@@ -179,13 +179,13 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	}
 }
 
-func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.RequestingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
 }
 
-func createSupplyingAgencyResponse(illMessage *iso18626.Iso18626MessageNS, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
 	var resmsg = &iso18626.Iso18626MessageNS{}
-	header := createConfirmationHeader(&illMessage.SupplyingAgencyMessage.Header, messageStatus)
+	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
 		ConfirmationHeader: *header,
@@ -194,21 +194,24 @@ func createSupplyingAgencyResponse(illMessage *iso18626.Iso18626MessageNS, messa
 	return resmsg
 }
 
-func handleSupplyingAgencyError(illMessage *iso18626.Iso18626MessageNS, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func handleSupplyingAgencyError(illMessage *iso18626.SupplyingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	writeResponse(resmsg, w)
 }
 
-func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626SupplyingAgencyMessage")
 	if !app.isRequester {
-		handleSupplyingAgencyError(illMessage, "Only requester expects ISO18626 SupplyingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
+		handleSupplyingAgencyError(supplyingAgencyMessage, "Only requester expects ISO18626 SupplyingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
 		return
 	}
-	resmsg := createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	writeResponse(resmsg, w)
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+		// TODO: RequestAgencyMessage
+	}
 }
 
 func iso18626Handler(app *MockApp) http.HandlerFunc {
@@ -241,9 +244,9 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 		if illMessage.Request != nil {
 			app.handleIso18626Request(illMessage.Request, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
+			app.handleIso18626RequestingAgencyMessage(illMessage.RequestingAgencyMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			app.handleIso18626SupplyingAgencyMessage(&illMessage, w)
+			app.handleIso18626SupplyingAgencyMessage(illMessage.SupplyingAgencyMessage, w)
 		} else {
 			log.Warn("invalid ISO18626 message")
 			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
