@@ -39,7 +39,7 @@ type MockApp struct {
 
 var log *slog.Logger = slogwrap.SlogWrap()
 
-func writeResponse(resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
+func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -83,8 +83,8 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 	return nil
 }
 
-func createRequestResponse(illRequest *iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
-	var resmsg = &iso18626.ISO18626Message{}
+func createRequestResponse(illRequest *iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+	var resmsg = &iso18626.Iso18626MessageNS{}
 	header := createConfirmationHeader(&illRequest.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
@@ -94,8 +94,8 @@ func createRequestResponse(illRequest *iso18626.Request, messageStatus iso18626.
 	return resmsg
 }
 
-func createRequest() *iso18626.ISO18626Message {
-	var msg = &iso18626.ISO18626Message{}
+func createRequest() *iso18626.Iso18626MessageNS {
+	var msg = &iso18626.Iso18626MessageNS{}
 	msg.Request = &iso18626.Request{}
 	return msg
 }
@@ -144,8 +144,8 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
 }
 
-func createSupplyingAgencyMessage() *iso18626.ISO18626Message {
-	var msg = &iso18626.ISO18626Message{}
+func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
+	var msg = &iso18626.Iso18626MessageNS{}
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	return msg
 }
@@ -179,12 +179,12 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	}
 }
 
-func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
 }
 
-func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
-	var resmsg = &iso18626.ISO18626Message{}
+func createSupplyingAgencyResponse(illMessage *iso18626.Iso18626MessageNS, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+	var resmsg = &iso18626.Iso18626MessageNS{}
 	header := createConfirmationHeader(&illMessage.SupplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
@@ -194,12 +194,12 @@ func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, message
 	return resmsg
 }
 
-func handleSupplyingAgencyError(illMessage *iso18626.ISO18626Message, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func handleSupplyingAgencyError(illMessage *iso18626.Iso18626MessageNS, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	writeResponse(resmsg, w)
 }
 
-func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	log.Info("handleIso18626SupplyingAgencyMessage")
 	if !app.isRequester {
 		handleSupplyingAgencyError(illMessage, "Only requester expects ISO18626 SupplyingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
@@ -232,7 +232,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 		log.Info("S recv", "xml", byteReq)
-		var illMessage iso18626.ISO18626Message
+		var illMessage iso18626.Iso18626MessageNS
 		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -299,6 +299,7 @@ func (app *MockApp) Shutdown() error {
 }
 
 func (app *MockApp) Run() error {
+
 	err := app.parseConfig()
 	if err != nil {
 		return err
@@ -312,6 +313,7 @@ func (app *MockApp) Run() error {
 	if app.requestingAgencyId == "" {
 		app.requestingAgencyId = "REQ"
 	}
+	iso18626.InitNs()
 	app.requestId = make(map[string]*state)
 	log.Info("Mock starting", "requester", app.isRequester, "supplier", app.isSupplier)
 	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded

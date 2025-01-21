@@ -14,11 +14,11 @@ import (
 
 var log *slog.Logger = slogwrap.SlogWrap()
 
-func SendReceiveDefault(url string, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func SendReceiveDefault(url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
 	return SendReceive(http.DefaultClient, url, msg)
 }
 
-func SendReceive(client *http.Client, url string, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
 	buf, err := xml.Marshal(msg)
 	if err != nil {
 		return nil, err
