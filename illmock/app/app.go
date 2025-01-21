@@ -26,12 +26,15 @@ type state struct {
 }
 
 type MockApp struct {
-	httpPort    string
-	isSupplier  bool
-	isRequester bool
-	remoteUrl   string
-	requestId   map[string]*state
-	server      *http.Server
+	httpPort           string
+	isSupplier         bool
+	isRequester        bool
+	supplyingAgencyId  string
+	requestingAgencyId string
+	agencyType         string
+	remoteUrl          string
+	requestId          map[string]*state
+	server             *http.Server
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -134,7 +137,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
 	app.requestId[illRequest.Header.RequestingAgencyRequestId] = &state{status: status, index: 0,
-		supplierRequestId: "S" + uuid.NewString()}
+		supplierRequestId: uuid.NewString()}
 
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
@@ -148,7 +151,7 @@ func createSupplyingAgencyMessage() *iso18626.ISO18626Message {
 }
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	log.Info("sendSupplyingAgencyMessage")
 
 	msg := createSupplyingAgencyMessage()
@@ -167,8 +170,8 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
 	}
-	if responseMsg.RequestingAgencyMessageConfirmation == nil {
-		log.Warn("sendSupplyingAgencyMessage did not receive RequestingAgencyMessageConfirmation")
+	if responseMsg.SupplyingAgencyMessageConfirmation == nil {
+		log.Warn("sendSupplyingAgencyMessage did not receive SupplyingAgencyMessageConfirmation")
 		return
 	}
 	if state.index < len(state.status) {
@@ -203,6 +206,8 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.IS
 		return
 	}
 	resmsg := createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	reason := iso18626.TypeReasonForMessageRequestResponse
+	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	writeResponse(resmsg, w)
 }
 
@@ -226,13 +231,13 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		log.Info("S recv", "xml", byteReq)
 		var illMessage iso18626.ISO18626Message
 		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
 		if illMessage.Request != nil {
 			app.handleIso18626Request(illMessage.Request, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
@@ -252,9 +257,11 @@ func (app *MockApp) runRequester() {
 	time.Sleep(100 * time.Millisecond)
 	msg := createRequest()
 	header := &msg.Request.Header
-	header.RequestingAgencyRequestId = "R" + uuid.NewString()
-	header.RequestingAgencyId.AgencyIdType.Text = "MOCK"
-	header.RequestingAgencyId.AgencyIdValue = "WILLSUPPLY_LOANED"
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
+	header.RequestingAgencyId.AgencyIdValue = app.requestingAgencyId
+	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
+	header.SupplyingAgencyId.AgencyIdValue = app.supplyingAgencyId
 	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
@@ -296,10 +303,17 @@ func (app *MockApp) Run() error {
 	if err != nil {
 		return err
 	}
+	if app.agencyType == "" {
+		app.agencyType = "MOCK"
+	}
+	if app.supplyingAgencyId == "" {
+		app.supplyingAgencyId = "WILLSUPPLY_LOANED"
+	}
+	if app.requestingAgencyId == "" {
+		app.requestingAgencyId = "REQ"
+	}
 	app.requestId = make(map[string]*state)
 	log.Info("Mock starting", "requester", app.isRequester, "supplier", app.isSupplier)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/iso18626", iso18626Handler(app))
 	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded
 	if app.isRequester {
 		go app.runRequester()
@@ -307,8 +321,14 @@ func (app *MockApp) Run() error {
 	if app.httpPort == "" {
 		app.httpPort = "8081"
 	}
-	log.Info("Start HTTP serve on " + app.httpPort)
-	app.server = &http.Server{Addr: ":" + app.httpPort, Handler: mux}
+	addr := app.httpPort
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+	log.Info("Start HTTP serve on " + addr)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/iso18626", iso18626Handler(app))
+	app.server = &http.Server{Addr: addr, Handler: mux}
 	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()
 }

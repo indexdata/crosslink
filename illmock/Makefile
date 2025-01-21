@@ -10,7 +10,7 @@ MODULE=illmock
 COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 
-.PHONY: all docker generate check run fmt fmt-check vet clean
+.PHONY: all check clean coverage docker fmt fmt-check generate run
 
 all: $(BINARY)
 
@@ -30,6 +30,9 @@ $(BINARY):  $(COMMIT_ID) $(GOFILES)
 
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
+
+coverage:
+	$(GO) tool cover -html=$(COVERAGE)
 
 run: $(BINARY)
 	$(GO) run -buildvcs=true .
