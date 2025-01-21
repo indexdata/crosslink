@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
@@ -40,6 +41,11 @@ func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageN
 	}
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
+	}
+	contentType := resp.Header.Get("Content-Type")
+	log.Info("recv", "Content-Type", contentType)
+	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
+		return nil, fmt.Errorf("only application/xml or text/xml accepted")
 	}
 	log.Info("recv XML", "xml", buf)
 	var response iso18626.ISO18626Message
