@@ -31,7 +31,7 @@ $(BINARY):  $(COMMIT_ID) $(GOFILES)
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
-coverage:
+coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
 
 run: $(BINARY)

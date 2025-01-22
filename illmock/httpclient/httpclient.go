@@ -1,4 +1,4 @@
-package http18626
+package httpclient
 
 import (
 	"bytes"
@@ -19,18 +19,22 @@ func SendReceiveDefault(url string, msg *iso18626.Iso18626MessageNS) (*iso18626.
 	return SendReceive(http.DefaultClient, url, msg)
 }
 
-func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
-	buf, err := xml.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-	log.Info("send XML", "url", url, "xml", buf)
-	req, err := http.NewRequest("POST", url+"/iso18626", bytes.NewReader(buf))
+func clientDo(client *http.Client, method string, url string, reader io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, reader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Content-Type", "application/xml")
-	resp, err := client.Do(req)
+	return client.Do(req)
+}
+
+func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
+	buf, _ := xml.Marshal(msg)
+	if buf == nil {
+		return nil, fmt.Errorf("marshal failed")
+	}
+	log.Info("send XML", "url", url, "xml", buf)
+	resp, err := clientDo(client, http.MethodPost, url+"/iso18626", bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}

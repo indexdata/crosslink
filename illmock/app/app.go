@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/iso18626"
-	"github.com/indexdata/crosslink/illmock/http18626"
+	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -170,7 +170,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
 	state.index++
-	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
@@ -265,7 +265,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
 
-	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
 	if err != nil {
 		log.Warn("sendRequestingAgencyMessage", "error", err.Error())
 		return
@@ -336,7 +336,7 @@ func (app *MockApp) runRequester() {
 	header.RequestingAgencyId.AgencyIdValue = app.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
 	header.SupplyingAgencyId.AgencyIdValue = app.supplyingAgencyId
-	responseMsg, err := http18626.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
 		return
@@ -368,7 +368,7 @@ func (app *MockApp) parseConfig() error {
 
 func (app *MockApp) Shutdown() error {
 	if app.server != nil {
-		return app.server.Shutdown(context.TODO())
+		return app.server.Shutdown(context.Background())
 	}
 	return nil
 }
