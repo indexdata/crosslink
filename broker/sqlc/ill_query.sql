@@ -55,6 +55,10 @@ SELECT sqlc.embed(located_supplier) FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
+-- name: GetLocatedSupplierByIllTransactionAndStatus :many
+SELECT sqlc.embed(located_supplier) FROM located_supplier
+WHERE ill_transaction_id = $1 and supplier_status = $2;
+
 -- name: CreateLocatedSupplier :one
 INSERT INTO located_supplier (
     id, ill_transaction_id, supplier_id, ordinal, supplier_status
