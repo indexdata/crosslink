@@ -1,7 +1,6 @@
 package events
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -147,7 +146,7 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData) error {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(context.Background(), func(eventRepo EventRepo) error {
+	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,

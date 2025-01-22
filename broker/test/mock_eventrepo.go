@@ -1,7 +1,6 @@
 package test
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -16,7 +15,7 @@ type MockEventRepositorySuccess struct {
 	mock.Mock
 }
 
-func (r *MockEventRepositorySuccess) WithTxFunc(ctx context.Context, fn func(events.EventRepo) error) error {
+func (r *MockEventRepositorySuccess) WithTxFunc(ctx extctx.ExtendedContext, fn func(events.EventRepo) error) error {
 	return nil
 }
 
@@ -68,7 +67,7 @@ type MockEventRepositoryError struct {
 	mock.Mock
 }
 
-func (r *MockEventRepositoryError) WithTxFunc(ctx context.Context, fn func(events.EventRepo) error) error {
+func (r *MockEventRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(events.EventRepo) error) error {
 	return nil
 }
 
