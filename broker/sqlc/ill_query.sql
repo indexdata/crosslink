@@ -55,7 +55,7 @@ SELECT sqlc.embed(located_supplier) FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
--- name: GetLocatedSupplierByIllTransitionAndStatus :many
+-- name: GetLocatedSupplierByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier) FROM located_supplier
 WHERE ill_transaction_id = $1 and supplier_status = $2;
 
