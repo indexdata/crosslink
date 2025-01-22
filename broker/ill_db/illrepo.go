@@ -14,7 +14,7 @@ type IllRepo interface {
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
 	CreateLocatedSupplier(ctx extctx.ExtendedContext, params CreateLocatedSupplierParams) (LocatedSupplier, error)
-	GetLocatedSupplierByIllTransitionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionAndStatusParams) ([]LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 }
 
 type PgIllRepo struct {
@@ -47,8 +47,8 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransitionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionAndStatusParams) ([]LocatedSupplier, error) {
-	rows, err := r.queries.GetLocatedSupplierByIllTransitionAndStatus(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error) {
+	rows, err := r.queries.GetLocatedSupplierByIllTransactionAndStatus(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
 	if err == nil {
 		for _, r := range rows {

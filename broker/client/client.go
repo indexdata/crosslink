@@ -142,7 +142,7 @@ func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.Extende
 }
 
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.Peer, error) {
-	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransitionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransitionAndStatusParams{
+	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: transaction.ID,
 		SupplierStatus: pgtype.Text{
 			String: "selected",
