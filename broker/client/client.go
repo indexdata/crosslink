@@ -212,9 +212,9 @@ func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction) iso
 }
 
 func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
-	breq, err := xml.Marshal(msg)
-	if err != nil {
-		return nil, err
+	breq, _ := xml.Marshal(msg)
+	if breq == nil {
+		return nil, fmt.Errorf("marshal returned nil")
 	}
 	reader := bytes.NewReader(breq)
 	req, err := http.NewRequest(http.MethodPost, url, reader)
