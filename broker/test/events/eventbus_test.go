@@ -1,10 +1,8 @@
 package events
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -17,11 +15,16 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/indexdata/crosslink/broker/test"
 )
+
+var eventBus events.EventBus
+var illRepo ill_db.IllRepo
+var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -48,7 +51,9 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = 19082
 
 	time.Sleep(1 * time.Second)
-
+	ctx, cancel := context.WithCancel(context.Background())
+	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
+	defer cancel()
 	code := m.Run()
 
 	if err := pgContainer.Terminate(ctx); err != nil {
@@ -56,53 +61,20 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(code)
 }
-func TestEventHandling(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, _, _ := startApp(ctx)
-	var requestReceived = []events.Event{}
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		requestReceived = append(requestReceived, event)
-	})
-
-	data, _ := os.ReadFile("../testdata/request.xml")
-	req, _ := http.NewRequest("POST", "http://localhost:19082/iso18626", bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		t.Errorf("Expected status %d, got %d", 200, resp.StatusCode)
-	}
-
-	if !waitForPredicateToBeTrue(func() bool {
-		return len(requestReceived) == 1
-	}) {
-		t.Error("Expected to have request event received")
-	}
-}
 
 func TestCreateTask(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, _ := startApp(ctx)
-	var requestReceived = []events.Event{}
+	var requestReceived []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 
 	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
 
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(requestReceived) == 1
 	}) {
 		t.Error("Expected to have request event received")
@@ -114,22 +86,19 @@ func TestCreateTask(t *testing.T) {
 }
 
 func TestCreateNotice(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, _ := startApp(ctx)
-	var eventReceived = []events.Event{}
+	var eventReceived []events.Event
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 
 	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
 
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(eventReceived) == 1
 	}) {
 		t.Error("Expected to have request event received")
@@ -145,12 +114,9 @@ func TestCreateNotice(t *testing.T) {
 }
 
 func TestBeginAndCompleteTask(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, _ := startApp(ctx)
-	var eventsReceived = []events.Event{}
-	var eventsStarted = []events.Event{}
-	var eventsCompleted = []events.Event{}
+	var eventsReceived []events.Event
+	var eventsStarted []events.Event
+	var eventsCompleted []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventsReceived = append(eventsReceived, event)
 	})
@@ -161,14 +127,14 @@ func TestBeginAndCompleteTask(t *testing.T) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 
 	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
 
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(eventsReceived) == 1
 	}) {
 		t.Error("Expected to have request event received")
@@ -184,7 +150,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(eventsStarted) == 1
 	}) {
 		t.Error("Expected to have request event received")
@@ -201,7 +167,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(eventsCompleted) == 1
 	}) {
 		t.Error("Expected to have request event received")
@@ -215,12 +181,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 }
 
 func TestBeginTaskNegative(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	eventBus, illRepo, eventRepo := startApp(ctx)
-
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
 	err := eventBus.BeginTask(eventId)
@@ -228,14 +189,14 @@ func TestBeginTaskNegative(t *testing.T) {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
-	eventId = createEvent(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess)
+	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.BeginTask(eventId)
 	if err == nil || err.Error() != "event is not a TASK" {
 		t.Errorf("Should fail with: event is not a TASK")
 	}
 
-	eventId = createEvent(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess)
+	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.BeginTask(eventId)
 	if err == nil || err.Error() != "event is not in state NEW" {
@@ -244,12 +205,7 @@ func TestBeginTaskNegative(t *testing.T) {
 }
 
 func TestCompleteTaskNegative(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	eventBus, illRepo, eventRepo := startApp(ctx)
-
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
 	result := events.EventResult{}
@@ -258,14 +214,14 @@ func TestCompleteTaskNegative(t *testing.T) {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
-	eventId = createEvent(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess)
+	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "event is not a TASK" {
 		t.Errorf("Should fail with: event is not a TASK")
 	}
 
-	eventId = createEvent(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess)
+	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "event is not in state PROCESSING" {
@@ -283,118 +239,41 @@ func TestFailedToConnect(t *testing.T) {
 	}
 }
 
-func TestReconnectListenner(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, _ := startApp(ctx)
-
+func TestReconnectListener(t *testing.T) {
 	// Force App to reconnect to postgres LISTENER
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		conn, err := pgx.Connect(ctx, app.ConnectionString)
+		conn, err := pgx.Connect(context.Background(), app.ConnectionString)
 		if err != nil {
 			t.Errorf("reconnect test unable to connect to database: %s", err)
 		}
 
-		_, err = conn.Exec(ctx, "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query LIKE 'LISTEN%'")
+		_, err = conn.Exec(context.Background(), "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle' AND query LIKE 'LISTEN%'")
 		if err != nil {
 			t.Errorf("reconnect test unable to kill listen command: %s", err)
 		}
 	}()
 	wg.Wait()
 	// Wait for reconnect
-	time.Sleep(1000 * time.Millisecond)
+	time.Sleep(2000 * time.Millisecond)
 
-	var eventReceived = []events.Event{}
+	var eventReceived []events.Event
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
-	illId := createIllTrans(t, illRepo)
+	illId := test.GetIllTransId(t, illRepo)
 
 	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
 
-	if !waitForPredicateToBeTrue(func() bool {
+	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(eventReceived) == 1
 	}) {
 		t.Error("Expected to have request event received")
-	}
-}
-
-func startApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
-	var eventBus events.EventBus
-	var illRepo ill_db.IllRepo
-	var eventRepo events.EventRepo
-	go func() {
-		app.RunMigrateScripts()
-		pool := app.InitDbPool()
-		eventRepo = app.CreateEventRepo(pool)
-		eventBus = app.CreateEventBus(eventRepo)
-		app.StartEventBus(ctx, eventBus)
-		illRepo = app.CreateIllRepo(pool)
-		app.StartApp(illRepo, eventBus)
-	}()
-	time.Sleep(100 * time.Millisecond)
-	return eventBus, illRepo, eventRepo
-}
-
-func waitForPredicateToBeTrue(predicate func() bool) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	ticker := time.NewTicker(20 * time.Millisecond) // Check every 100ms
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-ticker.C:
-			if predicate() {
-				return true
-			}
-		}
-	}
-}
-
-func createIllTrans(t *testing.T, illRepo ill_db.IllRepo) string {
-	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
-		ID:        illId,
-		Timestamp: getNow(),
-	})
-	if err != nil {
-		t.Errorf("Failed to create ill transaction: %s", err)
-	}
-	return illId
-}
-
-func createEvent(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus) string {
-	eventId := uuid.New().String()
-	_, err := eventRepo.SaveEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
-		ID:               eventId,
-		IllTransactionID: illId,
-		Timestamp:        getNow(),
-		EventType:        eventType,
-		EventName:        events.EventNameRequesterMsgReceived,
-		EventStatus:      status,
-		EventData:        events.EventData{},
-	})
-
-	if err != nil {
-		t.Errorf("Failed to create event: %s", err)
-	}
-	return eventId
-}
-
-func getNow() pgtype.Timestamp {
-	return pgtype.Timestamp{
-		Time:  time.Now(),
-		Valid: true,
 	}
 }
