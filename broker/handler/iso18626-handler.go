@@ -121,8 +121,8 @@ func writeResponse(resmsg *iso18626.ISO18626Message, w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/xml")
+	w.WriteHeader(http.StatusOK)
 	w.Write(output)
 }
 
