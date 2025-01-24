@@ -50,7 +50,7 @@ func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/xml")
+	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(output)
 	if err != nil {
@@ -291,9 +291,9 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		contentType := r.Header.Get("Content-Type")
-		if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
-			log.Info("[iso18626-handler] error: content-type unsupported", "contentType", contentType, "url", r.URL)
+		contentType := r.Header.Get(httpclient.ContentType)
+		if !strings.HasPrefix(contentType, httpclient.ContentTypeApplicationXml) && !strings.HasPrefix(contentType, httpclient.ContentTypeTextXml) {
+			log.Info("[iso18626-handler] error: content-type unsupported", httpclient.ContentType, contentType, "url", r.URL)
 			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
 			return
 		}

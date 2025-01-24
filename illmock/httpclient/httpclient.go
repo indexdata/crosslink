@@ -13,6 +13,12 @@ import (
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 )
 
+const (
+	ContentTypeTextXml        string = "text/xml"
+	ContentTypeApplicationXml string = "application/xml"
+	ContentType               string = "Content-Type"
+)
+
 var log *slog.Logger = slogwrap.SlogWrap()
 
 func SendReceiveDefault(url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
@@ -24,7 +30,7 @@ func clientDo(client *http.Client, method string, url string, reader io.Reader) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Content-Type", "application/xml")
+	req.Header.Add(ContentType, ContentTypeApplicationXml)
 	return client.Do(req)
 }
 
@@ -46,7 +52,7 @@ func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageN
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
 	}
-	contentType := resp.Header.Get("Content-Type")
+	contentType := resp.Header.Get(ContentType)
 	log.Info("recv", "Content-Type", contentType)
 	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
 		return nil, fmt.Errorf("only application/xml or text/xml accepted")
