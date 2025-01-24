@@ -369,8 +369,8 @@ func (app *MockApp) runRequester(agencyId string) {
 
 func (app *MockApp) parseConfig() error {
 	app.httpPort = os.Getenv("HTTP_PORT")
-	role := strings.ToLower(os.Getenv("ROLE"))
-	if role == "" || strings.Contains(role, "supplier") {
+	role := os.Getenv("SUPPLIER")
+	if role == "true" {
 		app.supplier = &Supplier{}
 	}
 	reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
