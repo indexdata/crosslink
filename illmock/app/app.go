@@ -41,7 +41,7 @@ type MockApp struct {
 	requestingAgencyId string
 	agencyType         string
 	remoteUrl          string
-	supplierState      map[string]*supplierInfo
+	supplierState      sync.Map
 	server             *http.Server
 	requester          *Requester
 }
@@ -125,7 +125,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	}
 	// TODO: check if illRequest.Header.SupplyingAgencyRequestId == ""
 
-	_, ok := app.supplierState[illRequest.Header.RequestingAgencyRequestId]
+	_, ok := app.supplierState.Load(illRequest.Header.RequestingAgencyRequestId)
 	if ok {
 		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -145,8 +145,8 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	app.supplierState[illRequest.Header.RequestingAgencyRequestId] = &supplierInfo{status: status, index: 0,
-		supplierRequestId: uuid.NewString()}
+	app.supplierState.Store(illRequest.Header.RequestingAgencyRequestId, &supplierInfo{status: status, index: 0,
+		supplierRequestId: uuid.NewString()})
 
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
@@ -166,11 +166,12 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
 
-	state, ok := app.supplierState[header.RequestingAgencyRequestId]
+	v, ok := app.supplierState.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
 		return
 	}
+	state := v.(*supplierInfo)
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
 	state.index++
@@ -395,7 +396,6 @@ func (app *MockApp) Run() error {
 		app.requestingAgencyId = "REQ"
 	}
 	iso18626.InitNs()
-	app.supplierState = make(map[string]*supplierInfo)
 	log.Info("Mock starting", "requester", app.requester != nil, "supplier", app.isSupplier)
 	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded
 	if app.requester != nil {
