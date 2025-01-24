@@ -20,30 +20,33 @@ import (
 
 type Role string
 
-type supplierInfo struct {
-	index             int
-	status            []iso18626.TypeStatus
-	supplierRequestId string
-}
-
 type requesterInfo struct {
 	action iso18626.TypeAction
 }
 
 type Requester struct {
+	requestingAgencyId string
 	supplyingAgencyIds []string
-	requesterState     sync.Map
+	requests           sync.Map // key is requesting agency request id
+}
+
+type supplierInfo struct {
+	index             int                   // index into status below
+	status            []iso18626.TypeStatus // the status that the supplier will return
+	supplierRequestId string                // supplier request Id
+}
+
+type Supplier struct {
+	requests sync.Map // key is requesting agency request id
 }
 
 type MockApp struct {
-	httpPort           string
-	isSupplier         bool
-	requestingAgencyId string
-	agencyType         string
-	remoteUrl          string
-	supplierState      sync.Map
-	server             *http.Server
-	requester          *Requester
+	httpPort   string
+	agencyType string
+	remoteUrl  string
+	server     *http.Server
+	requester  *Requester
+	supplier   *Supplier
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -116,7 +119,8 @@ func handleRequestError(illRequest *iso18626.Request, errorMessage string, error
 
 func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
 	log.Info("handleIso18626Request")
-	if !app.isSupplier {
+	supplier := app.supplier
+	if supplier == nil {
 		handleRequestError(illRequest, "Only supplier expects ISO18626 Request", iso18626.TypeErrorTypeUnsupportedActionType, w)
 	}
 	if illRequest.Header.RequestingAgencyRequestId == "" {
@@ -125,7 +129,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	}
 	// TODO: check if illRequest.Header.SupplyingAgencyRequestId == ""
 
-	_, ok := app.supplierState.Load(illRequest.Header.RequestingAgencyRequestId)
+	_, ok := supplier.requests.Load(illRequest.Header.RequestingAgencyRequestId)
 	if ok {
 		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -145,7 +149,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	app.supplierState.Store(illRequest.Header.RequestingAgencyRequestId, &supplierInfo{status: status, index: 0,
+	supplier.requests.Store(illRequest.Header.RequestingAgencyRequestId, &supplierInfo{status: status, index: 0,
 		supplierRequestId: uuid.NewString()})
 
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
@@ -166,7 +170,8 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
 
-	v, ok := app.supplierState.Load(header.RequestingAgencyRequestId)
+	supplier := app.supplier
+	v, ok := supplier.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
 		return
@@ -207,7 +212,8 @@ func handleRequestingAgencyError(illMessage *iso18626.RequestingAgencyMessage, e
 
 func (app *MockApp) handleIso18626RequestingAgencyMessage(requestingAgencyMessage *iso18626.RequestingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
-	if !app.isSupplier {
+	supplier := app.supplier
+	if supplier == nil {
 		handleRequestingAgencyError(requestingAgencyMessage, "Only supplier expects ISO18626 RequestingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
 		return
 	}
@@ -246,7 +252,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 		return
 	}
 	header := &supplyingAgencyMessage.Header
-	_, ok := requester.requesterState.Load(header.RequestingAgencyRequestId)
+	_, ok := requester.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -263,7 +269,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	requester := app.requester
-	v, ok := requester.requesterState.Load(header.RequestingAgencyRequestId)
+	v, ok := requester.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		return
 	}
@@ -341,9 +347,9 @@ func (app *MockApp) runRequester(agencyId string) {
 	header := &msg.Request.Header
 	header.RequestingAgencyRequestId = uuid.NewString()
 
-	requester.requesterState.Store(header.RequestingAgencyRequestId, &requesterInfo{action: iso18626.TypeActionReceived})
+	requester.requests.Store(header.RequestingAgencyRequestId, &requesterInfo{action: iso18626.TypeActionReceived})
 	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
-	header.RequestingAgencyId.AgencyIdValue = app.requestingAgencyId
+	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
 	header.SupplyingAgencyId.AgencyIdValue = agencyId
 	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
@@ -364,7 +370,7 @@ func (app *MockApp) parseConfig() error {
 	app.httpPort = os.Getenv("HTTP_PORT")
 	role := strings.ToLower(os.Getenv("ROLE"))
 	if role == "" || strings.Contains(role, "supplier") {
-		app.isSupplier = true
+		app.supplier = &Supplier{}
 	}
 	reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
 	if reqEnv != "" {
@@ -392,14 +398,15 @@ func (app *MockApp) Run() error {
 	if app.agencyType == "" {
 		app.agencyType = "MOCK"
 	}
-	if app.requestingAgencyId == "" {
-		app.requestingAgencyId = "REQ"
-	}
 	iso18626.InitNs()
-	log.Info("Mock starting", "requester", app.requester != nil, "supplier", app.isSupplier)
+	log.Info("Mock starting", "requester", app.requester != nil, "supplier", app.supplier != nil)
 	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded
-	if app.requester != nil {
-		for _, id := range app.requester.supplyingAgencyIds {
+	requester := app.requester
+	if requester != nil {
+		if requester.requestingAgencyId == "" {
+			requester.requestingAgencyId = "REQ"
+		}
+		for _, id := range requester.supplyingAgencyIds {
 			go app.runRequester(id)
 		}
 	}
