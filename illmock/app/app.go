@@ -122,6 +122,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	supplier := app.supplier
 	if supplier == nil {
 		handleRequestError(illRequest, "Only supplier expects ISO18626 Request", iso18626.TypeErrorTypeUnsupportedActionType, w)
+		return
 	}
 	if illRequest.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
