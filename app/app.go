@@ -37,6 +37,18 @@ func httpLoggingMiddleware(next http.Handler) http.Handler {
 }
 
 func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
+	handler := InitHandler(ctx, dbpool)
+	addr := fmt.Sprintf("%s:%s", Host, Port)
+	log.Printf("Starting directoryish at %s...", addr)
+	s := &http.Server{
+		Handler: handler,
+		Addr:    addr,
+	}
+
+	log.Fatal(s.ListenAndServe())
+}
+
+func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	swagger, err := api.GetSwagger()
 	if err != nil {
 		log.Fatal("Error loading API spec")
@@ -49,15 +61,7 @@ func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
 	h := api.HandlerFromMux(si, m)
 	validationMiddleware := apiValidator.OapiRequestValidator(swagger)
 	wrapped := httpLoggingMiddleware(validationMiddleware(h))
-
-	addr := fmt.Sprintf("%s:%s", Host, Port)
-	log.Printf("Starting directoryish at %s...", addr)
-	s := &http.Server{
-		Handler: wrapped,
-		Addr:    addr,
-	}
-
-	log.Fatal(s.ListenAndServe())
+	return wrapped
 }
 
 func InitDbPool() *pgxpool.Pool {
