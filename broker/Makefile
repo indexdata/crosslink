@@ -71,6 +71,9 @@ fmt-check:
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
 
+check-coverage: check
+	${GO} run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+
 clean:
 	rm -f $(BINARY)
 	rm -f $(GEN_SCHEMA_OUT)
