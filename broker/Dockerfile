@@ -4,6 +4,7 @@ FROM golang:1.23
 WORKDIR /app
 COPY go.work go.work.sum ./
 COPY common/go.mod ./common/go.mod
+COPY illmock/go.mod ./illmock/go.mod
 
 # Set destination for COPY
 WORKDIR /app/broker
