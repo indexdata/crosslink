@@ -71,6 +71,12 @@ jobs:
     - name: Test
       run: make check
 
+    - name: Check test coverage
+      uses: vladopajic/go-test-coverage@v2
+      continue-on-error: true
+      with:
+        config: ${{ matrix.modules }}/.testcoverage.yaml
+
     - name: Check vulnerabilities in '${{ matrix.modules }}'
       uses: golang/govulncheck-action@v1
       with:
