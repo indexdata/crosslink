@@ -5,16 +5,17 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"io"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type Iso18626Client struct {
@@ -212,7 +213,7 @@ func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction) iso
 }
 
 func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
-	breq, _ := xml.Marshal(msg)
+	breq := utils.Must(xml.Marshal(msg))
 	if breq == nil {
 		return nil, fmt.Errorf("marshal returned nil")
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
+	"github.com/indexdata/go-utils/utils"
 )
 
 const (
@@ -35,7 +36,7 @@ func clientDo(client *http.Client, method string, url string, reader io.Reader) 
 }
 
 func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
-	buf, _ := xml.MarshalIndent(msg, "  ", "  ")
+	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}

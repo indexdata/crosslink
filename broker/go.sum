@@ -57,6 +57,8 @@ github.com/hashicorp/go-multierror v1.1.1 h1:H5DkEtf6CXdFp0N0Em5UCwQpXMWke8IA0+l
 github.com/hashicorp/go-multierror v1.1.1/go.mod h1:iw975J/qwKPdAO1clOe2L8331t/9/fmwbPZ6JB6eMoM=
 github.com/indexdata/go-utils v0.0.0-20241205160758-6eb91e66be34 h1:p2tRLUnA3eMkRt6naWPjMhXXmJ5knGF5NPKtjQp0m7w=
 github.com/indexdata/go-utils v0.0.0-20241205160758-6eb91e66be34/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
+github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b h1:AEZ5+Di1EMSoyMb1Bxv4TZughLTzKzSLu0eaPYd6e6Q=
+github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.1.0 h1:HBh3F9Ie65hsR6K7X17KgPlENtcuFjZ7jaeBwoFnp2M=
 github.com/indexdata/xsd2goxsl v1.1.0/go.mod h1:8sXNGyaUfpRCgSCamB5p9GQNLyPHF5N2MYBrhWSss8Y=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=

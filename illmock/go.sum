@@ -2,6 +2,8 @@ github.com/golang-migrate/migrate/v4 v4.18.1/go.mod h1:HAX6m3sQgcdO81tdjn5exv20+
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/indexdata/go-utils v0.0.0-20250124183827-a1262e54d033 h1:3ED+3nJWcagPpinnRWkwZj/GbvoDPUViNbxlPvmBC28=
 github.com/indexdata/go-utils v0.0.0-20250124183827-a1262e54d033/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
+github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b h1:AEZ5+Di1EMSoyMb1Bxv4TZughLTzKzSLu0eaPYd6e6Q=
+github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.1.0/go.mod h1:8sXNGyaUfpRCgSCamB5p9GQNLyPHF5N2MYBrhWSss8Y=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/testcontainers/testcontainers-go v0.34.0/go.mod h1:6P/kMkQe8yqPHfPWNulFGdFHTD8HB2vLq/231xY2iPQ=
