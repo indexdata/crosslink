@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/indexdata/crosslink/broker/client"
+	"github.com/indexdata/crosslink/broker/service"
 	"log/slog"
 	"net/http"
 	"os"
@@ -92,9 +93,10 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 	return eventBus
 }
 
-func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client) {
+func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator) {
 	eventBus.HandleEventCreated("message-supplier", iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated("message-requester", iso18626Client.MessageRequester)
+	eventBus.HandleEventCreated("locate-suppliers", supplierLocator.LocateSuppliers)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
