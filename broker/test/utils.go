@@ -3,11 +3,13 @@ package test
 import (
 	"context"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/client"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 	"time"
@@ -51,7 +53,8 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 		eventBus = app.CreateEventBus(eventRepo)
 		illRepo = app.CreateIllRepo(pool)
 		iso18626Client = client.CreateIso18626Client(eventBus, illRepo)
-		app.AddDefaultHandlers(eventBus, iso18626Client)
+		supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator)
 		app.StartEventBus(ctx, eventBus)
 		app.StartApp(illRepo, eventBus)
 	}()
