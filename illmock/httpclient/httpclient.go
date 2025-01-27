@@ -35,11 +35,12 @@ func clientDo(client *http.Client, method string, url string, reader io.Reader) 
 }
 
 func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
-	buf, _ := xml.Marshal(msg)
+	buf, _ := xml.MarshalIndent(msg, "  ", "  ")
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
-	log.Info("send XML", "url", url, "xml", buf)
+	lead := fmt.Sprintf("send XML\n%s", buf)
+	log.Info(lead)
 	resp, err := clientDo(client, http.MethodPost, url+"/iso18626", bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
@@ -57,11 +58,15 @@ func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageN
 	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
 		return nil, fmt.Errorf("only application/xml or text/xml accepted")
 	}
-	log.Info("recv XML", "xml", buf)
 	var response iso18626.ISO18626Message
 	err = xml.Unmarshal(buf, &response)
 	if err != nil {
 		return nil, err
+	}
+	buf1, _ := xml.MarshalIndent(&response, "  ", "  ")
+	if buf1 != nil {
+		lead = fmt.Sprintf("recv XML\n%s", buf1)
+		log.Info(lead)
 	}
 	return &response, nil
 }
