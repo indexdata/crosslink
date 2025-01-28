@@ -1,6 +1,6 @@
 # illmock
 
-illmock is a mocking ISO18626 client / server utility. It is mostly
+The illmock program is a mocking ISO18626 client / server utility. It is mostly
 controlled by environment variables. For either role, a listening address
 can be set with `HTTP_PORT. For example:
  
@@ -10,20 +10,21 @@ or just with port to listen for on any interface with
 
     HTTP_PORT=9001 ./illmock
 
-For either role, the illmock will send messages to REMOTE_URL (todo: must be
+For either role, the illmock will send messages to PEER_URL (todo: must be
 configurable per peer later).
 
 if `REQUESTER_SUPPLY_IDS` is given, illmock is acting as a requester. The
 value is a list of comma separated agency IDs that the requester will send
 requests to (in parallel).
 
-If `SUPPLIER=true` is given, illmock will act as a supplier.
+The illmock program is always acting as a supplier.
 
-Example of starting illmock in supplier and requester mode:
+Example of starting illmock instances. The first is acting as a supplier. The 2nd
+is acting as both, but only the requester part is used.
 
-    SUPPLIER=true HTTP_PORT=8082 REMOTE_URL=http://localhost:8081 ./illmock
+    HTTP_PORT=8082 PEER_URL=http://localhost:8081 ./illmock
 
-    HTTP_PORT=8081 REMOTE_URL=http://localhost:8082 REQUESTER_SUPPLY_IDS=WILLSUPPLY_LOANED ./illmock
+    HTTP_PORT=8081 PEER_URL=http://localhost:8082 REQUESTER_SUPPLY_IDS=WILLSUPPLY_LOANED ./illmock
 
 
 

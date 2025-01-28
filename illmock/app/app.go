@@ -18,8 +18,6 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
-type Role string
-
 type requesterInfo struct {
 	action iso18626.TypeAction
 }
@@ -43,10 +41,10 @@ type Supplier struct {
 type MockApp struct {
 	httpPort   string
 	agencyType string
-	remoteUrl  string
+	peerUrl    string
 	server     *http.Server
 	requester  *Requester
-	supplier   *Supplier
+	supplier   Supplier
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -119,11 +117,7 @@ func handleRequestError(illRequest *iso18626.Request, errorMessage string, error
 
 func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
 	log.Info("handleIso18626Request")
-	supplier := app.supplier
-	if supplier == nil {
-		handleRequestError(illRequest, "Only supplier expects ISO18626 Request", iso18626.TypeErrorTypeUnsupportedActionType, w)
-		return
-	}
+	supplier := &app.supplier
 	if illRequest.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -181,7 +175,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
 	state.index++
-	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
@@ -213,11 +207,7 @@ func handleRequestingAgencyError(illMessage *iso18626.RequestingAgencyMessage, e
 
 func (app *MockApp) handleIso18626RequestingAgencyMessage(requestingAgencyMessage *iso18626.RequestingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
-	supplier := app.supplier
-	if supplier == nil {
-		handleRequestingAgencyError(requestingAgencyMessage, "Only supplier expects ISO18626 RequestingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
-		return
-	}
+	// supplier role
 	var resmsg = createRequestingAgencyConfirmation(requestingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
 	writeResponse(resmsg, w)
@@ -281,7 +271,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
 
-	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
 		log.Warn("sendRequestingAgencyMessage", "error", err.Error())
 		return
@@ -353,7 +343,7 @@ func (app *MockApp) runRequester(agencyId string) {
 	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
 	header.SupplyingAgencyId.AgencyIdValue = agencyId
-	responseMsg, err := httpclient.SendReceiveDefault(app.remoteUrl, msg)
+	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
 		return
@@ -369,17 +359,13 @@ func (app *MockApp) runRequester(agencyId string) {
 
 func (app *MockApp) parseConfig() error {
 	app.httpPort = os.Getenv("HTTP_PORT")
-	role := os.Getenv("SUPPLIER")
-	if role == "true" {
-		app.supplier = &Supplier{}
-	}
 	reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
 	if reqEnv != "" {
 		app.requester = &Requester{supplyingAgencyIds: strings.Split(reqEnv, ",")}
 	}
-	app.remoteUrl = os.Getenv("REMOTE_URL")
-	if app.remoteUrl == "" {
-		app.remoteUrl = "http://localhost:8081"
+	app.peerUrl = os.Getenv("PEER_URL")
+	if app.peerUrl == "" {
+		app.peerUrl = "http://localhost:8081"
 	}
 	return nil
 }
@@ -400,7 +386,7 @@ func (app *MockApp) Run() error {
 		app.agencyType = "MOCK"
 	}
 	iso18626.InitNs()
-	log.Info("Mock starting", "requester", app.requester != nil, "supplier", app.supplier != nil)
+	log.Info("Mock starting", "requester", app.requester != nil, "supplier", true)
 	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded
 	requester := app.requester
 	if requester != nil {

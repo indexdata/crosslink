@@ -9,7 +9,6 @@ import (
 
 func TestWillSupplyLoaned(t *testing.T) {
 	var app MockApp
-	app.supplier = &Supplier{}
 	app.requester = &Requester{supplyingAgencyIds: []string{"WILLSUPPLY_LOANDED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANDED"}}
 	go func() {
 		time.Sleep(1000 * time.Millisecond)
