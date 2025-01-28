@@ -198,11 +198,6 @@ func createRequestingAgencyConfirmation(requestingAgencyMessage *iso18626.Reques
 	return resmsg
 }
 
-func handleRequestingAgencyError(illMessage *iso18626.RequestingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
-	var resmsg = createRequestingAgencyConfirmation(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeResponse(resmsg, w)
-}
-
 func (app *MockApp) handleIso18626RequestingAgencyMessage(requestingAgencyMessage *iso18626.RequestingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626RequestingAgencyMessage")
 	// supplier role
