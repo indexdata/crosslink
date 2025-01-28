@@ -76,6 +76,7 @@ jobs:
       continue-on-error: true
       with:
         config: ${{ matrix.modules }}/.testcoverage.yaml
+        profile: ${{ matrix.modules }}/coverage.out
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
       uses: golang/govulncheck-action@v1
