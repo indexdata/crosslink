@@ -17,6 +17,7 @@ COPY broker/go.mod broker/go.sum ./
 RUN go mod download
 
 # Copy sources
+COPY broker/adapter ./adapter
 COPY broker/app ./app
 COPY broker/client ./client
 COPY broker/cmd ./cmd
@@ -26,6 +27,7 @@ COPY broker/handler ./handler
 COPY broker/ill_db ./ill_db
 COPY broker/iso18626 ./iso18626
 COPY broker/repo ./repo
+COPY broker/service ./service
 
 # Copy DB migrations
 COPY broker/migrations ./migrations
