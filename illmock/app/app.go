@@ -163,7 +163,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
 
-	supplier := app.supplier
+	supplier := &app.supplier
 	v, ok := supplier.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
