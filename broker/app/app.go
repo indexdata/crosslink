@@ -98,6 +98,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
+	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))

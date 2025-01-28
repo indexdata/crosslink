@@ -59,12 +59,21 @@ ORDER BY ordinal;
 SELECT sqlc.embed(located_supplier) FROM located_supplier
 WHERE ill_transaction_id = $1 and supplier_status = $2;
 
--- name: CreateLocatedSupplier :one
+-- name: GetLocatedSupplierByIllTransactionAndSupplier :one
+SELECT sqlc.embed(located_supplier) FROM located_supplier
+WHERE ill_transaction_id = $1 and supplier_id = $2;
+
+-- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (
     id, ill_transaction_id, supplier_id, ordinal, supplier_status
 ) VALUES (
              $1, $2, $3, $4, $5
          )
+ON CONFLICT (id) DO UPDATE
+    SET ill_transaction_id = EXCLUDED.ill_transaction_id,
+        supplier_id = EXCLUDED.supplier_id,
+        ordinal = EXCLUDED.ordinal,
+        supplier_status = EXCLUDED.supplier_status
 RETURNING sqlc.embed(located_supplier);
 
 -- name: DeleteLocatedSupplier :exec

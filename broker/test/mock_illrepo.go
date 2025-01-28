@@ -38,7 +38,7 @@ func (r *MockIllRepositorySuccess) GetPeerBySymbol(ctx extctx.ExtendedContext, s
 	}, nil
 }
 
-func (r *MockIllRepositorySuccess) CreateLocatedSupplier(ctx extctx.ExtendedContext, params ill_db.CreateLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
+func (r *MockIllRepositorySuccess) SaveLocatedSupplier(ctx extctx.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
 	var supplier = (ill_db.LocatedSupplier)(params)
 	return supplier, nil
 }
@@ -50,6 +50,18 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndStatus(c
 		SupplierStatus:   params.SupplierStatus,
 		SupplierID:       uuid.New().String(),
 	}}, nil
+}
+
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		ID:               uuid.New().String(),
+		IllTransactionID: params.IllTransactionID,
+		SupplierStatus: pgtype.Text{
+			String: "new",
+			Valid:  true,
+		},
+		SupplierID: uuid.New().String(),
+	}, nil
 }
 
 func (r *MockIllRepositorySuccess) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
@@ -88,12 +100,16 @@ func (r *MockIllRepositoryError) GetPeerBySymbol(ctx extctx.ExtendedContext, sym
 	return ill_db.Peer{}, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) CreateLocatedSupplier(ctx extctx.ExtendedContext, params ill_db.CreateLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
+func (r *MockIllRepositoryError) SaveLocatedSupplier(ctx extctx.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndStatusParams) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
