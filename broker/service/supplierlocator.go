@@ -27,7 +27,7 @@ func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dir
 }
 
 func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event events.Event) {
-	s.processTask(ctx, event, s.locateSupplier)
+	s.processTask(ctx, event, s.locateSuppliers)
 }
 
 func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
@@ -45,7 +45,7 @@ func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.E
 	}
 }
 
-func (s *SupplierLocator) locateSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "failed to read ill transaction", err)

@@ -94,9 +94,9 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 }
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator) {
-	eventBus.HandleEventCreated("message-supplier", iso18626Client.MessageSupplier)
-	eventBus.HandleEventCreated("message-requester", iso18626Client.MessageRequester)
-	eventBus.HandleEventCreated("locate-suppliers", supplierLocator.LocateSuppliers)
+	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
+	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
+	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
