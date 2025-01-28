@@ -6,6 +6,7 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 )
@@ -28,6 +29,10 @@ func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dir
 
 func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event events.Event) {
 	s.processTask(ctx, event, s.locateSuppliers)
+}
+
+func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event events.Event) {
+	s.processTask(ctx, event, s.selectSupplier)
 }
 
 func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
@@ -121,7 +126,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 		}
 	}
 
-	supplier, err := s.illRepo.CreateLocatedSupplier(ctx, ill_db.CreateLocatedSupplierParams{
+	supplier, err := s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: transId,
 		SupplierID:       peer.ID,
@@ -132,6 +137,41 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 		},
 	})
 	return &supplier, err
+}
+
+func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	if event.EventData.ISO18626Message == nil || event.EventData.ISO18626Message.SupplyingAgencyMessage == nil {
+		return logProblemAndReturnResult(ctx, "event does not have supplying agency message")
+	}
+	supId := event.EventData.ISO18626Message.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	supType := event.EventData.ISO18626Message.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text
+	if supId == "" {
+		return logProblemAndReturnResult(ctx, "supplier id is missing in ISO18626 message")
+	}
+	if event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status != iso18626.TypeStatusUnfilled {
+		return logProblemAndReturnResult(ctx, string("ISO18626 message status incorrect, should be Unfilled but is "+event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status))
+	}
+	symbol := supType + ":" + supId
+	sup, err := s.illRepo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "could not find supplier by symbol: "+symbol, err)
+	}
+	locSup, err := s.illRepo.GetLocatedSupplierByIllTransactionAndSupplier(ctx, ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierID:       sup.ID,
+	})
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "could not find located supplier by id: "+sup.ID, err)
+	}
+	locSup.SupplierStatus = pgtype.Text{
+		String: "selected",
+		Valid:  true,
+	}
+	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
+	}
+	return events.EventStatusSuccess, getEventResult(map[string]any{"supplier": sup.Symbol, "supplierId": sup.ID})
 }
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
