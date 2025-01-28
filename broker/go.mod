@@ -5,7 +5,7 @@ go 1.23.3
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/go-utils v0.0.0-20241205160758-6eb91e66be34
+	github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b
 	github.com/indexdata/xsd2goxsl v1.1.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/lib/pq v1.10.9
