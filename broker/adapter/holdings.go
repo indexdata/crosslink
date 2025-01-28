@@ -23,18 +23,18 @@ type MockHoldingsLookupAdapter struct {
 }
 
 func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
-	if strings.Contains(params.Identifier, "error") {
-		return []Holding{}, errors.New("there is error")
-	}
-	if strings.Contains(params.Identifier, "h-not-found") {
-		return []Holding{}, nil
-	}
 	if strings.Index(params.Identifier, "return-") == 0 {
 		value := strings.TrimPrefix(params.Identifier, "return-")
 		return []Holding{{
 			Symbol:     value,
 			Identifier: value,
 		}}, nil
+	}
+	if strings.Contains(params.Identifier, "error") {
+		return []Holding{}, errors.New("there is error")
+	}
+	if strings.Contains(params.Identifier, "h-not-found") {
+		return []Holding{}, nil
 	}
 	count := 1
 	if strings.Index(params.Identifier, "count-") == 0 {
