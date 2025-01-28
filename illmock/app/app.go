@@ -122,8 +122,6 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
-	// TODO: check if illRequest.Header.SupplyingAgencyRequestId == ""
-
 	_, ok := supplier.requests.Load(illRequest.Header.RequestingAgencyRequestId)
 	if ok {
 		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
