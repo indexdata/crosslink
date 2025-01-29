@@ -55,7 +55,6 @@ func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageN
 		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
 	}
 	contentType := resp.Header.Get(ContentType)
-	log.Info("recv", "Content-Type", contentType)
 	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
 		return nil, fmt.Errorf("only application/xml or text/xml accepted")
 	}
