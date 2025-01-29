@@ -9,7 +9,7 @@ import (
 
 func TestWillSupplyLoaned(t *testing.T) {
 	var app MockApp
-	app.requester = &Requester{supplyingAgencyIds: []string{"WILLSUPPLY_LOANDED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANDED"}}
+	app.requester = &Requester{supplyingAgencyIds: []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"}}
 	go func() {
 		time.Sleep(1000 * time.Millisecond)
 		err := app.Shutdown()
