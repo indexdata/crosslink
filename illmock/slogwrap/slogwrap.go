@@ -7,10 +7,9 @@ import (
 	"strconv"
 )
 
-func SlogWrap() *slog.Logger {
-	enableJsonLog := os.Getenv("ENABLE_JSON_LOG")
-	if enableJsonLog != "" {
-		v, err := strconv.ParseBool(enableJsonLog)
+func slogEnable(enable string) *slog.Logger {
+	if enable != "" {
+		v, err := strconv.ParseBool(enable)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
@@ -20,4 +19,8 @@ func SlogWrap() *slog.Logger {
 		}
 	}
 	return slog.Default()
+}
+
+func SlogWrap() *slog.Logger {
+	return slogEnable(os.Getenv("ENABLE_JSON_LOG"))
 }

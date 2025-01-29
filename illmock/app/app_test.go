@@ -29,7 +29,10 @@ func TestWillSupplyLoaned(t *testing.T) {
 func TestBadMethod(t *testing.T) {
 	var app MockApp
 	go func() {
-		app.Run()
+		err := app.Run()
+		if err != nil {
+			t.Logf("app.Run failed: %s", err.Error())
+		}
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
 
