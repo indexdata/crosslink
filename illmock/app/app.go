@@ -360,17 +360,19 @@ func (app *MockApp) runRequester(agencyId string) {
 	slog.Info("Got requestConfirmation")
 }
 
-func (app *MockApp) parseConfig() error {
-	app.httpPort = os.Getenv("HTTP_PORT")
-	reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
-	if reqEnv != "" {
-		app.requester = &Requester{supplyingAgencyIds: strings.Split(reqEnv, ",")}
+func (app *MockApp) parseConfig() {
+	if app.httpPort == "" {
+		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
-	app.peerUrl = os.Getenv("PEER_URL")
+	if app.requester == nil {
+		reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
+		if reqEnv != "" {
+			app.requester = &Requester{supplyingAgencyIds: strings.Split(reqEnv, ",")}
+		}
+	}
 	if app.peerUrl == "" {
-		app.peerUrl = "http://localhost:8081"
+		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081")
 	}
-	return nil
 }
 
 func (app *MockApp) Shutdown() error {
@@ -381,10 +383,7 @@ func (app *MockApp) Shutdown() error {
 }
 
 func (app *MockApp) Run() error {
-	err := app.parseConfig()
-	if err != nil {
-		return err
-	}
+	app.parseConfig()
 	if app.agencyType == "" {
 		app.agencyType = "MOCK"
 	}
@@ -399,9 +398,6 @@ func (app *MockApp) Run() error {
 		for _, id := range requester.supplyingAgencyIds {
 			go app.runRequester(id)
 		}
-	}
-	if app.httpPort == "" {
-		app.httpPort = "8081"
 	}
 	addr := app.httpPort
 	if !strings.Contains(addr, ":") {
