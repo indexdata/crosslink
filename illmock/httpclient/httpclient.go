@@ -64,6 +64,7 @@ func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageN
 	if err != nil {
 		return nil, err
 	}
+	// only to log the received message. We encode again to pretty print
 	buf1, _ := xml.MarshalIndent(&response, "  ", "  ")
 	if buf1 != nil {
 		lead = fmt.Sprintf("recv XML\n%s", buf1)
