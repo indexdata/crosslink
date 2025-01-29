@@ -51,14 +51,16 @@ type MockApp struct {
 var log *slog.Logger = slogwrap.SlogWrap()
 
 func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
-	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
+	buf, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	lead := fmt.Sprintf("res XML\n%s", buf)
+	log.Info(lead)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(output)
+	_, err = w.Write(buf)
 	if err != nil {
 		log.Warn("writeResponse", "error", err.Error())
 	}
@@ -247,6 +249,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	writeResponse(resmsg, w)
+	log.Info("handleIso18626SupplyingAgencyMessage", "status", supplyingAgencyMessage.StatusInfo.Status)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
 	}
@@ -313,7 +316,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 		// only to log the incoming message. We encode again to pretty print
 		buf, _ := xml.MarshalIndent(&illMessage, "  ", "  ")
 		if buf != nil {
-			lead := fmt.Sprintf("inco XML\n%s", buf)
+			lead := fmt.Sprintf("req XML\n%s", buf)
 			log.Info(lead)
 		}
 		if illMessage.Request != nil {
