@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -325,6 +326,12 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			log.Info("[iso18626-handler] error: unmarshal", "error", err)
 			http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
 			return
+		}
+		// only to log the incoming message. We encode again to pretty print
+		buf, _ := xml.MarshalIndent(&illMessage, "  ", "  ")
+		if buf != nil {
+			lead := fmt.Sprintf("inco XML\n%s", buf)
+			log.Info(lead)
 		}
 		if illMessage.Request != nil {
 			app.handleIso18626Request(illMessage.Request, w)
