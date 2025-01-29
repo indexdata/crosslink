@@ -3,13 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/client"
-	"github.com/indexdata/crosslink/broker/service"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/indexdata/crosslink/broker/client"
+	"github.com/indexdata/crosslink/broker/service"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -22,7 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var HTTP_PORT = utils.GetEnvInt("HTTP_PORT", 8081)
+var HTTP_PORT = utils.Must(utils.GetEnvInt("HTTP_PORT", 8081))
 var DB_TYPE = utils.GetEnv("DB_TYPE", "postgres")
 var DB_USER = utils.GetEnv("DB_USER", "crosslink")
 var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "crosslink")
