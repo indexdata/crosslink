@@ -3,19 +3,36 @@
 The illmock program is a mocking ISO18626 client / server utility. It is mostly
 controlled by environment variables.
 
-if `AGENCY_SCENARIO` is given, illmock will send ILL requests. The
-value is a list of comma separated of IDs that the requester will send
-requests to (in parallel). Each identifier is stored in
-BibliographicInfo.SupplierUniqueRecordId of the Request.
+illmock is acting as both request and supplier as the XML ISO18626 message can determine its role.
 
-Example of starting two illmock instances. The first is acting as a supplier. The 2nd
-is acting as supplier.
+Example of launching two illmock instances that will send messages to each other.
 
     HTTP_PORT=8082 PEER_URL=http://localhost:8081 ./illmock
 
-    HTTP_PORT=8081 PEER_URL=http://localhost:8082 AGENCY_SCENARIO=WILLSUPPLY_LOANED ./illmock
+    HTTP_PORT=8081 PEER_URL=http://localhost:8082 ./illmock
 
-## Environment varitables
+We will use the former as a requester and the latter as a supplier, by sending a Patron Request
+to the former with:
+
+    curl -XPOST -HContent-Type:text/xml \ -d'<ISO18626Message><request><bibliographicInfo><supplierUniqueRecordId>WILLSUPPLY_LOANED</supplierUniqueRecordId>
+     </bibliographicInfo><serviceInfo><requestType>New</requestType><requestSubType>PatronRequest</requestSubType><serviceType>
+     </serviceType></serviceInfo></request></ISO18626Message>' http://localhost:8081/iso18626
+
+The supplierUniqueRecordId value is used by supplier to perform a particular scenario.
+
+## Scenario
+
+The scenario is used by the supplier to perform a particular work-flow. The following values are recognized:
+
+    WILLSUPPLY_LOANED
+    WILLSUPPLY_UNFILLED
+    UNFILLED
+    LOANED
+
+The scenario is inspected as part of `<bibliographicInfo><supplierUniqueRecordId>` or it may be given
+as environment variable `AGENCY_SCENARIO`.
+
+## Environment variables
 
 ### HTTP_PORT
 
@@ -30,13 +47,8 @@ The default value is `http://localhost:8081` .
 
 ### AGENCY_SCENARIO
 
-If `AGENCY_SCENARIO` is omitted or empty, no requests will be send. If non-empty it is a comma-separated
-list of scenario identifiers. Each identifier must be one of:
-
-    WILLSUPPLY_LOANED
-    WILLSUPPLY_UNFILLED
-    UNFILLED
-    LOANED
+If `AGENCY_SCENARIO` is defined and non-empty the illmock program will initiate requests during start (100 ms after launch).
+See [Scenario].
 
 ### AGENCY_TYPE
 
