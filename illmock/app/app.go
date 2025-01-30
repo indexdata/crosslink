@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ import (
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/go-utils/utils"
 )
+
+// Request : RequestSubType .. RequestType.. remove supply ..
 
 type requesterInfo struct {
 	action iso18626.TypeAction
@@ -114,13 +117,65 @@ func createRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
+func createPatronRequest() *iso18626.Iso18626MessageNS {
+	var msg = createRequest()
+	msg.Request = &iso18626.Request{}
+	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	si := iso18626.TypeRequestTypeNew
+	msg.Request.ServiceInfo.RequestType = &si
+	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
+	return msg
+}
+
 func handleRequestError(illRequest *iso18626.Request, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	writeResponse(resmsg, w)
 }
 
-func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
-	log.Info("handleIso18626Request")
+func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
+	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
+
+	requester := &app.requester
+	msg := createRequest()
+	msg.Request = illRequest // using same Request as received
+	header := &illRequest.Header
+	// patron may omit RequestingAgencyRequestId
+	if header.RequestingAgencyRequestId == "" {
+		header.RequestingAgencyRequestId = uuid.NewString()
+	}
+	msg.Request.ServiceInfo = nil // not a patron request any more
+	requester.requests.Store(header.RequestingAgencyRequestId, &requesterInfo{action: iso18626.TypeActionReceived})
+
+	if header.RequestingAgencyId.AgencyIdType.Text == "" {
+		header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
+	}
+	if header.RequestingAgencyId.AgencyIdValue == "" {
+		header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
+	}
+	if header.SupplyingAgencyId.AgencyIdType.Text == "" {
+		header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
+	}
+	if header.SupplyingAgencyId.AgencyIdValue == "" {
+		header.SupplyingAgencyId.AgencyIdValue = requester.supplyingAgencyId
+	}
+	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+
+	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
+	if err != nil {
+		slog.Error("requester:", "msg", err.Error())
+		return
+	}
+	requestConfirmation := responseMsg.RequestConfirmation
+	if requestConfirmation == nil {
+		slog.Warn("requester: Did not receive requestConfirmation")
+		return
+	}
+	slog.Info("Got requestConfirmation")
+
+}
+
+func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
 	if illRequest.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
@@ -152,6 +207,18 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
+}
+
+func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
+	log.Info("handleIso18626Request")
+	if illRequest.ServiceInfo != nil {
+		subtypes := illRequest.ServiceInfo.RequestSubType
+		if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
+			app.handlePatronRequest(illRequest, w)
+			return
+		}
+	}
+	app.handleSupplierRequest(illRequest, w)
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {

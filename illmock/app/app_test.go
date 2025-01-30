@@ -153,6 +153,24 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
+	t.Run("Create patron request", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		// have to wait for the exchanges to complete
+		time.Sleep(500 * time.Millisecond)
+	})
+
 	err := app.Shutdown()
 	assert.Nil(t, err)
 }
