@@ -28,7 +28,7 @@ SQL_GEN_IN = sqlc/*.sql
 all: $(BINARY)
 
 docker: generate
-	cd .. && $(DOCKER) build -f ./$(MODULE)/Dockerfile .
+	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
 generate: generate-schema generate-commit-id generate-sqlc
 

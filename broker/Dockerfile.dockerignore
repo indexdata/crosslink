@@ -1,0 +1,16 @@
+# Exclude everything by default
+broker/*
+
+# Include go.mod and go.sum
+!broker/go.mod
+!broker/go.sum
+
+# Include .go files
+!broker/**/*.go
+
+# Exclude tests
+broker/test
+broker/**/*_test.go
+
+# Include migrations
+!broker/migrations/**
