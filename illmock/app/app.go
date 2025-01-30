@@ -25,7 +25,7 @@ type requesterInfo struct {
 
 type Requester struct {
 	requestingAgencyId string
-	supplyingAgencyIds []string
+	agencyScenario     []string
 	requests           sync.Map // key is requesting agency request id
 }
 
@@ -133,7 +133,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 	var status []iso18626.TypeStatus
 
 	// should be able to parse the value and put any types into status...
-	switch illRequest.Header.SupplyingAgencyId.AgencyIdValue {
+	switch illRequest.BibliographicInfo.SupplierUniqueRecordId {
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 	case "WILLSUPPLY_UNFILLED":
@@ -333,7 +333,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func (app *MockApp) runRequester(agencyId string) {
+func (app *MockApp) runRequester(agencyScenario string) {
 	requester := app.requester
 	slog.Info("requester: initiating")
 	time.Sleep(100 * time.Millisecond)
@@ -345,7 +345,10 @@ func (app *MockApp) runRequester(agencyId string) {
 	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
 	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
-	header.SupplyingAgencyId.AgencyIdValue = agencyId
+	header.SupplyingAgencyId.AgencyIdValue = "AGENCY"
+	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+	msg.Request.BibliographicInfo.SupplierUniqueRecordId = agencyScenario
+
 	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
@@ -365,9 +368,9 @@ func (app *MockApp) parseConfig() {
 		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
 	if app.requester == nil {
-		reqEnv := os.Getenv("REQUESTER_SUPPLY_IDS")
+		reqEnv := os.Getenv("AGENCY_SCENARIO")
 		if reqEnv != "" {
-			app.requester = &Requester{supplyingAgencyIds: strings.Split(reqEnv, ",")}
+			app.requester = &Requester{agencyScenario: strings.Split(reqEnv, ",")}
 		}
 	}
 	if app.peerUrl == "" {
@@ -395,7 +398,7 @@ func (app *MockApp) Run() error {
 		if requester.requestingAgencyId == "" {
 			requester.requestingAgencyId = "REQ"
 		}
-		for _, id := range requester.supplyingAgencyIds {
+		for _, id := range requester.agencyScenario {
 			go app.runRequester(id)
 		}
 	}

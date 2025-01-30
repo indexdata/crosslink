@@ -14,14 +14,14 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	os.Setenv("REQUESTER_SUPPLY_IDS", "Some")
+	os.Setenv("AGENCY_SCENARIO", "Some")
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
 	var app MockApp
 	app.parseConfig()
 	assert.Equal(t, "8082", app.httpPort)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
-	assert.ElementsMatch(t, []string{"Some"}, app.requester.supplyingAgencyIds)
+	assert.ElementsMatch(t, []string{"Some"}, app.requester.agencyScenario)
 }
 
 // getFreePort asks the kernel for a free open port that is ready to use.
@@ -55,7 +55,7 @@ func TestWillSupplyLoaned(t *testing.T) {
 	dynPort := getFreePortTest(t)
 	app.httpPort = dynPort
 	app.peerUrl = "http://localhost:" + dynPort
-	app.requester = &Requester{supplyingAgencyIds: []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"}}
+	app.requester = &Requester{agencyScenario: []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"}}
 	go func() {
 		time.Sleep(1000 * time.Millisecond)
 		err := app.Shutdown()
