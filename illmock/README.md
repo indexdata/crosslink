@@ -1,17 +1,7 @@
 # illmock
 
 The illmock program is a mocking ISO18626 client / server utility. It is mostly
-controlled by environment variables. For either role, a listening address
-can be set with `HTTP_PORT`. For example:
- 
-    HTTP_PORT=1.2.3.4:9001 ./illmock
-
-or just with port to listen for on any interface with
-
-    HTTP_PORT=9001 ./illmock
-
-For either role, the illmock program will send messages to `PEER_URL` (todo: must be
-configurable per peer later).
+controlled by environment variables.
 
 if `AGENCY_SCENARIO` is given, illmock will send ILL requests. The
 value is a list of comma separated of IDs that the requester will send
@@ -29,9 +19,9 @@ is acting as supplier.
 
 ### HTTP_PORT
 
-Listen adress + port. If empty or omitted, the program will listen on any interrface port `8081`.
+Listen adress + port. If empty or omitted, the program will listen on any interface, port `8081`.
 
-If the value includes a colon, it is assumed to be listening address + port, for example: `127.0.0.1:8090`.
+If the value includes a colon, it is assumed to be listening address and port, for example: `127.0.0.1:8090`.
 Without colon, it translates to `:`value which will bind on any interface and port given.
 
 ### PEER_URL
