@@ -18,7 +18,8 @@ func main() {
 	illRepo := app.CreateIllRepo(pool)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
-	app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator)
+	workflowManager := service.CreateWorkflowManager(eventBus)
+	app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	app.StartEventBus(ctx, eventBus)
 	app.StartApp(illRepo, eventBus)
 }

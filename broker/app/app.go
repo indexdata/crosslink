@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,6 +35,7 @@ var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
+var INIT_DATA = utils.GetEnv("INIT_DATA", "true")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -47,6 +50,9 @@ func configLog() slog.Handler {
 }
 
 func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+	if strings.EqualFold(INIT_DATA, "true") {
+		initData(illRepo)
+	}
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
@@ -94,11 +100,17 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 	return eventBus
 }
 
-func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator) {
+func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
+
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)
+
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, workflowManager.RequestReceived)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, workflowManager.SupplierMessageReceived)
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
@@ -120,4 +132,35 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func initData(illRepo ill_db.IllRepo) {
+	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
+				ID:     uuid.New().String(),
+				Name:   "Requester",
+				Symbol: "isil:req",
+				Address: pgtype.Text{
+					String: "http://localhost:8082/iso18626",
+					Valid:  true,
+				},
+			}))
+		}
+	}
+	_, err = illRepo.GetPeerBySymbol(appCtx, "isil:LOANED")
+	if err != nil {
+		if err.Error() == "no rows in result set" {
+			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
+				ID:     uuid.New().String(),
+				Name:   "Supplier",
+				Symbol: "isil:LOANED",
+				Address: pgtype.Text{
+					String: "http://localhost:8083/iso18626",
+					Valid:  true,
+				},
+			}))
+		}
+	}
 }

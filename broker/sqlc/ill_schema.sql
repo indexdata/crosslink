@@ -28,6 +28,10 @@ CREATE TABLE located_supplier
     supplier_id        VARCHAR NOT NULL,
     ordinal            INT     NOT NULL DEFAULT 0,
     supplier_status    VARCHAR,
+    previous_action VARCHAR,
+    previous_status VARCHAR,
+    last_action VARCHAR,
+    last_status VARCHAR,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );

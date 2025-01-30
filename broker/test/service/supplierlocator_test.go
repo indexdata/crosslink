@@ -8,14 +8,12 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/indexdata/crosslink/broker/test"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"os"
-	"strings"
 	"testing"
 	"time"
 )
@@ -103,15 +101,6 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 
 	// Select Supplier
 	eventId = test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
-	event, _ := eventRepo.GetEvent(appCtx, eventId)
-	event.EventData = events.EventData{
-		Timestamp:       test.GetNow(),
-		ISO18626Message: getIsoMessage("isil:resp1", iso18626.TypeStatusUnfilled),
-	}
-	_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams(event))
-	if err != nil {
-		t.Error("failed to save event " + err.Error())
-	}
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -120,6 +109,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		completedSelect = append(completedSelect, event)
 	})
+	var event events.Event
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedSelect) == 1 {
 			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
@@ -130,9 +120,9 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	symbol := event.ResultData.Data["supplier"].(string)
-	if symbol != "isil:resp1" {
-		t.Error("Expected to have supplier isil:resp1 but got " + symbol)
+	supplierId, ok := event.ResultData.Data["supplierId"]
+	if !ok || supplierId.(string) == "" {
+		t.Error("Expected to have supplierId")
 	}
 }
 
@@ -233,48 +223,15 @@ func TestLocateSuppliersErrors(t *testing.T) {
 }
 
 func TestSelectSupplierErrors(t *testing.T) {
-	peer := test.CreatePeer(t, illRepo, "isil:resp", "address")
 	tests := []struct {
 		name        string
 		eventStatus events.EventStatus
 		message     string
-		iso18626M   *iso18626.ISO18626Message
 	}{
 		{
-			name:        "MissingIsoMessage",
-			eventStatus: events.EventStatusProblem,
-			message:     "event does not have supplying agency message",
-			iso18626M:   nil,
-		},
-		{
-			name:        "MissingIsoSupplierMessage",
-			eventStatus: events.EventStatusProblem,
-			message:     "event does not have supplying agency message",
-			iso18626M:   &iso18626.ISO18626Message{},
-		},
-		{
-			name:        "MissingSupplierId",
-			eventStatus: events.EventStatusProblem,
-			message:     "supplier id is missing in ISO18626 message",
-			iso18626M:   getIsoMessage(":", iso18626.TypeStatusUnfilled),
-		},
-		{
-			name:        "IncorrectMessageStatus",
-			eventStatus: events.EventStatusProblem,
-			message:     "ISO18626 message status incorrect, should be Unfilled but is WillSupply",
-			iso18626M:   getIsoMessage("isil:resp", iso18626.TypeStatusWillSupply),
-		},
-		{
-			name:        "NotFoundSupplier",
-			eventStatus: events.EventStatusError,
-			message:     "could not find supplier by symbol: isil:not_found",
-			iso18626M:   getIsoMessage("isil:not_found", iso18626.TypeStatusUnfilled),
-		},
-		{
 			name:        "NotFoundLocatedSupplier",
-			eventStatus: events.EventStatusError,
-			message:     "could not find located supplier by id: " + peer.ID,
-			iso18626M:   getIsoMessage("isil:resp", iso18626.TypeStatusUnfilled),
+			eventStatus: events.EventStatusProblem,
+			message:     "no suppliers with new status",
 		},
 	}
 
@@ -288,14 +245,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 
 			illTrId := test.GetIllTransId(t, illRepo)
 			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
-			update, _ := eventRepo.GetEvent(appCtx, eventId)
-			update.EventData.Timestamp = test.GetNow()
-			update.EventData.ISO18626Message = tt.iso18626M
-			_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams(update))
-			if err != nil {
-				t.Error("failed to save event " + err.Error())
-			}
-			err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
 				t.Error("Failed to notify with error " + err.Error())
 			}
@@ -333,23 +283,4 @@ func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRequestId strin
 		t.Errorf("Failed to create ill transaction: %s", err)
 	}
 	return illId
-}
-
-func getIsoMessage(supplierSymbol string, status iso18626.TypeStatus) *iso18626.ISO18626Message {
-	sup := strings.Split(supplierSymbol, ":")
-	return &iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdValue: sup[1],
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: sup[0],
-					},
-				},
-			},
-			StatusInfo: iso18626.StatusInfo{
-				Status: status,
-			},
-		},
-	}
 }

@@ -38,7 +38,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	}
 	if len(dirs) == 0 {
 		dirs = append(dirs, DirectoryEntry{
-			Symbol: "isil:resp",
+			Symbol: "isil:sup",
 			URL:    "http://localhost:19082/iso18626",
 		})
 	}
