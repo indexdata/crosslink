@@ -65,15 +65,19 @@ WHERE ill_transaction_id = $1 and supplier_id = $2;
 
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (
-    id, ill_transaction_id, supplier_id, ordinal, supplier_status
+    id, ill_transaction_id, supplier_id, ordinal, supplier_status, previous_action, previous_status, last_action, last_status
 ) VALUES (
-             $1, $2, $3, $4, $5
+             $1, $2, $3, $4, $5, $6, $7, $8, $9
          )
 ON CONFLICT (id) DO UPDATE
     SET ill_transaction_id = EXCLUDED.ill_transaction_id,
         supplier_id = EXCLUDED.supplier_id,
         ordinal = EXCLUDED.ordinal,
-        supplier_status = EXCLUDED.supplier_status
+        supplier_status = EXCLUDED.supplier_status,
+        previous_action = EXCLUDED.previous_action,
+        previous_status = EXCLUDED.previous_status,
+        last_action = EXCLUDED.last_action,
+        last_status = EXCLUDED.last_status
 RETURNING sqlc.embed(located_supplier);
 
 -- name: DeleteLocatedSupplier :exec

@@ -47,9 +47,13 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 	var holdings []Holding
 	for i := 1; i <= count; i++ {
 		holdings = append(holdings, Holding{
-			Symbol:     "isil:resp" + strconv.Itoa(i),
+			Symbol:     "isil:sup" + strconv.Itoa(i),
 			Identifier: "658a98ab-866e-48f7-b2eb-da5f95ca525" + strconv.Itoa(i),
 		})
 	}
+	holdings = append(holdings, Holding{
+		Symbol:     "isil:LOANED",
+		Identifier: "658a98ab-866e-48f7-b2eb-da5f95ca5222",
+	})
 	return holdings, nil
 }
