@@ -6,7 +6,6 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 )
@@ -140,29 +139,42 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 }
 
 func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	if event.EventData.ISO18626Message == nil || event.EventData.ISO18626Message.SupplyingAgencyMessage == nil {
-		return logProblemAndReturnResult(ctx, "event does not have supplying agency message")
-	}
-	supId := event.EventData.ISO18626Message.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	supType := event.EventData.ISO18626Message.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text
-	if supId == "" {
-		return logProblemAndReturnResult(ctx, "supplier id is missing in ISO18626 message")
-	}
-	if event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status != iso18626.TypeStatusUnfilled {
-		return logProblemAndReturnResult(ctx, string("ISO18626 message status incorrect, should be Unfilled but is "+event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status))
-	}
-	symbol := supType + ":" + supId
-	sup, err := s.illRepo.GetPeerBySymbol(ctx, symbol)
-	if err != nil {
-		return logErrorAndReturnResult(ctx, "could not find supplier by symbol: "+symbol, err)
-	}
-	locSup, err := s.illRepo.GetLocatedSupplierByIllTransactionAndSupplier(ctx, ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams{
+	suppliers, err := s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
-		SupplierID:       sup.ID,
+		SupplierStatus: pgtype.Text{
+			String: "selected",
+			Valid:  true,
+		},
 	})
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "could not find located supplier by id: "+sup.ID, err)
+		return logErrorAndReturnResult(ctx, "could not find selected suppliers", err)
 	}
+	if len(suppliers) > 0 {
+		for _, supplier := range suppliers {
+			supplier.SupplierStatus = pgtype.Text{
+				String: "skipped",
+				Valid:  true,
+			}
+			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
+			if err != nil {
+				return logErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
+			}
+		}
+	}
+	suppliers, err = s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierStatus: pgtype.Text{
+			String: "new",
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "could not find located suppliers", err)
+	}
+	if len(suppliers) == 0 {
+		return logProblemAndReturnResult(ctx, "no suppliers with new status")
+	}
+	locSup := suppliers[0]
 	locSup.SupplierStatus = pgtype.Text{
 		String: "selected",
 		Valid:  true,
@@ -171,7 +183,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	return events.EventStatusSuccess, getEventResult(map[string]any{"supplier": sup.Symbol, "supplierId": sup.ID})
+	return events.EventStatusSuccess, getEventResult(map[string]any{"supplierId": locSup.SupplierID})
 }
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {

@@ -63,6 +63,11 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	}
 
 	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
+	requester, err := repo.GetPeerBySymbol(ctx, requesterSymbol.String)
+	if err != nil {
+		handleRequestError(illMessage, "Cannot resolve requester symbol", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
 	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	requestAction := createPgText("Request")
 	state := createPgText("NEW")
@@ -85,10 +90,11 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Time:  illMessage.Request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err := repo.CreateIllTransaction(ctx, ill_db.CreateIllTransactionParams{
+	_, err = repo.CreateIllTransaction(ctx, ill_db.CreateIllTransactionParams{
 		ID:                 id,
 		Timestamp:          timestamp,
 		RequesterSymbol:    requesterSymbol,
+		RequesterID:        createPgText(requester.ID),
 		RequesterAction:    requestAction,
 		SupplierSymbol:     supplierSymbol,
 		State:              state,
@@ -105,7 +111,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Timestamp:       getNow(),
 		ISO18626Message: illMessage,
 	}
-	err = eventBus.CreateTask(id, events.EventNameRequestReceived, eventData)
+	err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -253,8 +259,34 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
+	updateLocatedSupplierStatus(ctx, repo, illTrans.ID, symbol, string(status))
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
+}
+
+func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illId string, symbol string, status string) {
+	peer, err := repo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		ctx.Logger().Error("failed to locate peer for symbol: "+symbol, "error", err)
+		return
+	}
+	locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplier(ctx, ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams{
+		IllTransactionID: illId,
+		SupplierID:       peer.ID,
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to get located supplier with peer id: "+peer.ID, "error", err)
+		return
+	}
+	locSup.PreviousStatus = locSup.LastStatus
+	locSup.LastStatus = createPgText(status)
+	_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
+	if err != nil {
+		ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err)
+		return
+	}
 }
 
 func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {

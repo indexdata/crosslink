@@ -43,7 +43,7 @@ func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event even
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
-	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendRequestingAgencyMessage)
+	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) triggerNotificationsAndProcessEvent(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
@@ -72,10 +72,10 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
-	supplier, _ := c.getSupplier(ctx, illTrans)
+	_, peer, _ := c.getSupplier(ctx, illTrans)
 
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
-		Header:      c.createMessageHeader(illTrans, supplier),
+		Header:      c.createMessageHeader(illTrans, peer),
 		MessageInfo: c.createMessageInfo(illTrans),
 		StatusInfo:  c.createStatusInfo(illTrans),
 	}
@@ -102,7 +102,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 }
 
-func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		ctx.Logger().Error("failed to read ill transaction", "error", err)
@@ -112,21 +112,37 @@ func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.Extende
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
 
-	supplier, err := c.getSupplier(ctx, illTrans)
+	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
 		resultData["error"] = err
 		ctx.Logger().Error("Failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
 		var message = &iso18626.ISO18626Message{}
-		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-			Header: c.createMessageHeader(illTrans, supplier),
-			Action: iso18626.TypeActionNotification, // TODO correct action
-			Note:   "",
+		if selected.LastAction.String == "" {
+			message.Request = &iso18626.Request{
+				Header:                c.createMessageHeader(illTrans, peer),
+				BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
+				PublicationInfo:       illTrans.IllTransactionData.PublicationInfo,
+				ServiceInfo:           illTrans.IllTransactionData.ServiceInfo,
+				SupplierInfo:          illTrans.IllTransactionData.SupplierInfo,
+				RequestedDeliveryInfo: illTrans.IllTransactionData.RequestedDeliveryInfo,
+				PatronInfo:            illTrans.IllTransactionData.PatronInfo,
+				BillingInfo:           illTrans.IllTransactionData.BillingInfo,
+				RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
+			}
+			c.updateSelectedSupplierAction(&selected, "Request")
+		} else {
+			message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+				Header: c.createMessageHeader(illTrans, peer),
+				Action: iso18626.TypeActionNotification, // TODO correct action
+				Note:   "",
+			}
+			c.updateSelectedSupplierAction(&selected, string(iso18626.TypeActionNotification))
 		}
 		resultData["message"] = message
 
-		response, err := c.SendHttpPost(supplier.Address.String, message, "")
+		response, err := c.SendHttpPost(peer.Address.String, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -135,6 +151,7 @@ func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.Extende
 			ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 			status = events.EventStatusError
 		}
+		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selected)))
 	}
 
 	return status, &events.EventResult{
@@ -142,7 +159,15 @@ func (c *Iso18626Client) createAndSendRequestingAgencyMessage(ctx extctx.Extende
 	}
 }
 
-func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.Peer, error) {
+func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplier, action string) {
+	sup.PreviousAction = sup.LastAction
+	sup.LastAction = pgtype.Text{
+		String: action,
+		Valid:  true,
+	}
+}
+
+func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (ill_db.LocatedSupplier, *ill_db.Peer, error) {
 	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: transaction.ID,
 		SupplierStatus: pgtype.Text{
@@ -151,13 +176,13 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 		},
 	})
 	if err != nil {
-		return nil, err
+		return ill_db.LocatedSupplier{}, nil, err
 	}
 	if len(locatedSuppliers) == 0 {
-		return nil, errors.New("missing selected supplier")
+		return ill_db.LocatedSupplier{}, nil, errors.New("missing selected supplier")
 	}
 	peer, err := c.illRepo.GetPeerById(ctx, locatedSuppliers[0].SupplierID)
-	return &peer, err
+	return locatedSuppliers[0], &peer, err
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer) iso18626.Header {
