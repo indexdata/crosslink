@@ -25,6 +25,7 @@ type requesterInfo struct {
 
 type Requester struct {
 	requestingAgencyId string
+	supplyingAgencyId  string
 	agencyScenario     []string
 	requests           sync.Map // key is requesting agency request id
 }
@@ -44,7 +45,7 @@ type MockApp struct {
 	agencyType string
 	peerUrl    string
 	server     *http.Server
-	requester  *Requester
+	requester  Requester
 	supplier   Supplier
 }
 
@@ -233,12 +234,9 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 
 func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, w http.ResponseWriter) {
 	log.Info("handleIso18626SupplyingAgencyMessage")
-	requester := app.requester
-	if requester == nil {
-		handleSupplyingAgencyError(supplyingAgencyMessage, "Only requester expects ISO18626 SupplyingAgencyMessage", iso18626.TypeErrorTypeUnsupportedActionType, w)
-		return
-	}
+	requester := &app.requester
 	header := &supplyingAgencyMessage.Header
+	log.Info("handleIso18626SupplyingAgencyMessage", "id", header.RequestingAgencyRequestId)
 	_, ok := requester.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
@@ -256,7 +254,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 }
 
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
-	requester := app.requester
+	requester := &app.requester
 	v, ok := requester.requests.Load(header.RequestingAgencyRequestId)
 	if !ok {
 		return
@@ -334,7 +332,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 }
 
 func (app *MockApp) runRequester(agencyScenario string) {
-	requester := app.requester
+	requester := &app.requester
 	slog.Info("requester: initiating")
 	time.Sleep(100 * time.Millisecond)
 	msg := createRequest()
@@ -345,7 +343,7 @@ func (app *MockApp) runRequester(agencyScenario string) {
 	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
 	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
-	header.SupplyingAgencyId.AgencyIdValue = "AGENCY"
+	header.SupplyingAgencyId.AgencyIdValue = requester.supplyingAgencyId
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = agencyScenario
 
@@ -359,7 +357,6 @@ func (app *MockApp) runRequester(agencyScenario string) {
 		slog.Warn("requester: Did not receive requestConfirmation")
 		return
 	}
-
 	slog.Info("Got requestConfirmation")
 }
 
@@ -367,11 +364,18 @@ func (app *MockApp) parseConfig() {
 	if app.httpPort == "" {
 		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
-	if app.requester == nil {
+	if app.agencyType == "" {
+		app.agencyType = os.Getenv("AGENCY_TYPE")
+	}
+	if len(app.requester.agencyScenario) == 0 {
 		reqEnv := os.Getenv("AGENCY_SCENARIO")
-		if reqEnv != "" {
-			app.requester = &Requester{agencyScenario: strings.Split(reqEnv, ",")}
-		}
+		app.requester.agencyScenario = strings.Split(reqEnv, ",")
+	}
+	if app.requester.supplyingAgencyId == "" {
+		app.requester.supplyingAgencyId = os.Getenv("SUPPLYING_AGENCY_ID")
+	}
+	if app.requester.requestingAgencyId == "" {
+		app.requester.requestingAgencyId = os.Getenv("REQUESTING_AGENCY_ID")
 	}
 	if app.peerUrl == "" {
 		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081")
@@ -387,20 +391,20 @@ func (app *MockApp) Shutdown() error {
 
 func (app *MockApp) Run() error {
 	app.parseConfig()
+	iso18626.InitNs()
+	log.Info("Mock starting")
 	if app.agencyType == "" {
 		app.agencyType = "MOCK"
 	}
-	iso18626.InitNs()
-	log.Info("Mock starting", "requester", app.requester != nil, "supplier", true)
-	// it would be great if we could ensure that Requester only be started if ListenAndServe succeeded
-	requester := app.requester
-	if requester != nil {
-		if requester.requestingAgencyId == "" {
-			requester.requestingAgencyId = "REQ"
-		}
-		for _, id := range requester.agencyScenario {
-			go app.runRequester(id)
-		}
+	requester := &app.requester
+	if requester.requestingAgencyId == "" {
+		requester.requestingAgencyId = "REQ"
+	}
+	if requester.supplyingAgencyId == "" {
+		requester.supplyingAgencyId = "SUP"
+	}
+	for _, id := range requester.agencyScenario {
+		go app.runRequester(id)
 	}
 	addr := app.httpPort
 	if !strings.Contains(addr, ":") {
