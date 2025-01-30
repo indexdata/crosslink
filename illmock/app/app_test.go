@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"encoding/xml"
 	"errors"
 	"net"
 	"net/http"
@@ -10,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -75,7 +79,7 @@ func TestWillSupplyLoaned(t *testing.T) {
 	}
 }
 
-func TestBadMethod(t *testing.T) {
+func TestService(t *testing.T) {
 	var app MockApp
 	dynPort := getFreePortTest(t)
 	app.httpPort = dynPort
@@ -89,24 +93,41 @@ func TestBadMethod(t *testing.T) {
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
 
-	resp, err := http.Get(isoUrl)
-	assert.Nil(t, err)
-	assert.Equal(t, 405, resp.StatusCode)
+	t.Run("Bad method", func(t *testing.T) {
+		resp, err := http.Get(isoUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 405, resp.StatusCode)
+	})
+	t.Run("Bad content type", func(t *testing.T) {
+		resp, err := http.Post(isoUrl, "text/plain", strings.NewReader("hello"))
+		assert.Nil(t, err)
+		assert.Equal(t, 415, resp.StatusCode)
+	})
 
-	resp, err = http.Post(isoUrl, "text/plain", strings.NewReader("hello"))
-	assert.Nil(t, err)
-	assert.Equal(t, 415, resp.StatusCode)
+	t.Run("Bad XML", func(t *testing.T) {
+		resp, err := http.Post(isoUrl, "text/xml", strings.NewReader("<badxml"))
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+	})
 
-	resp, err = http.Post(isoUrl, "text/xml", strings.NewReader("<badxml"))
-	assert.Nil(t, err)
-	assert.Equal(t, 400, resp.StatusCode)
+	t.Run("Invalid message", func(t *testing.T) {
+		var msg = &iso18626.Iso18626MessageNS{}
+		msg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{}
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+	})
 
-	resp, err = http.Post(isoUrl, "text/xml", strings.NewReader(
-		`<ISO18626Message ill:version="1.2">
-		<requestingAgencyMessageConfirmation/></ISO18626Message>`))
-	assert.Nil(t, err)
-	assert.Equal(t, 400, resp.StatusCode)
+	t.Run("Empty RequestingAgencyRequestId", func(t *testing.T) {
+		msg := createRequest()
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		// TOOD: check response body
+	})
 
-	err = app.Shutdown()
+	err := app.Shutdown()
 	assert.Nil(t, err)
 }
