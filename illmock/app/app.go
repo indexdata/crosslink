@@ -400,7 +400,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 
 func (app *MockApp) runRequester(agencyScenario string) {
 	requester := &app.requester
-	slog.Info("requester: initiating")
+	slog.Info("requester: initiating ", "scenario", agencyScenario)
 	time.Sleep(100 * time.Millisecond)
 	msg := createRequest()
 	header := &msg.Request.Header
@@ -436,7 +436,9 @@ func (app *MockApp) parseConfig() {
 	}
 	if len(app.requester.agencyScenario) == 0 {
 		reqEnv := os.Getenv("AGENCY_SCENARIO")
-		app.requester.agencyScenario = strings.Split(reqEnv, ",")
+		if reqEnv != "" {
+			app.requester.agencyScenario = strings.Split(reqEnv, ",")
+		}
 	}
 	if app.requester.supplyingAgencyId == "" {
 		app.requester.supplyingAgencyId = os.Getenv("SUPPLYING_AGENCY_ID")
