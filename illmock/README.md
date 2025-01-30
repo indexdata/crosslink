@@ -29,7 +29,7 @@ is acting as both, but only the requester part is used.
 
 ## schenarios
 
-At this stage the following schenarios are supported:
+At this stage the following scenarios are supported:
 
     WILLSUPPLY_LOANED
     WILLSUPPLY_UNFILLED
