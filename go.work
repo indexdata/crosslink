@@ -4,4 +4,5 @@ use (
 	./broker
 	./common
 	./illmock
+	./iso18626
 )
