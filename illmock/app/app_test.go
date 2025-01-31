@@ -88,8 +88,8 @@ func TestService(t *testing.T) {
 	isoUrl := "http://localhost:" + dynPort + "/iso18626"
 	go func() {
 		err := app.Run()
-		if err != nil {
-			t.Logf("app.Run failed: %s", err.Error())
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Logf("app.Run error %s", err.Error())
 		}
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
@@ -153,7 +153,7 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("Create patron request", func(t *testing.T) {
+	t.Run("Patron request WILLSUPPLY_LOANED", func(t *testing.T) {
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 		buf := utils.Must(xml.Marshal(msg))
@@ -167,8 +167,37 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
+		//assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		// have to wait for the exchanges to complete
 		time.Sleep(500 * time.Millisecond)
+	})
+
+	t.Run("Patron request bad peer URL", func(t *testing.T) {
+		// connect to port with no listening server
+		port, err := getFreePort()
+		assert.Nil(t, err)
+		// when we can set peer URL per request, this will be easier
+		app.peerUrl = "http://localhost:" + strconv.Itoa(port)
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
+		// have to wait for the exchanges to complete
+		time.Sleep(200 * time.Millisecond)
 	})
 
 	err := app.Shutdown()
