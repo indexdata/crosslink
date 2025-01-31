@@ -4,7 +4,7 @@
 */chart/*.tgz
 commit.txt
 coverage.out
-broker/iso18626/schema.go
+iso18626/schema.go
 broker/*/*models-gen.go
 broker/*/*db-gen.go
 broker/*/*.sql-gen.go

@@ -10,21 +10,14 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-# TODO remove this when iso18626 package is move to top-level
-BROKER_DIR = ../broker
-BROKER_TARGET = generate
-
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc $(BROKER_DIR)/$(BROKER_TARGET)
+.PHONY: all check clean coverage docker fmt fmt-check generate run doc
 
 all: $(PROGRAMS)
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id $(BROKER_DIR)/$(BROKER_TARGET)
-
-$(BROKER_DIR)/$(BROKER_TARGET):
-	$(MAKE) -C $(BROKER_DIR) $(BROKER_TARGET)
+generate: generate-commit-id
 
 generate-commit-id: $(COMMIT_ID)
 
