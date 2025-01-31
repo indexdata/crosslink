@@ -3,7 +3,6 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 DOCKER ?= docker
-XSLT ?= xsltproc
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
 GOTOOLS=tools.go

@@ -26,8 +26,7 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 clean:
 	rm -f $(GEN_SCHEMA_OUT)
 
-check:
-	echo "no checks in iso18626"
+check: generate
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
