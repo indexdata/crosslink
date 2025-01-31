@@ -10,8 +10,6 @@ GOTOOLS=tools.go
 BINARY=broker
 MAIN_PACKAGE=cmd/broker
 MODULE=broker
-GEN_SCHEMA_IN=xsd/ISO-18626-v1_2.xsd
-GEN_SCHEMA_OUT=iso18626/schema.go
 COMMIT_ID=cmd/broker/commit.txt
 COVERAGE=coverage.out
 
@@ -23,16 +21,14 @@ SQL_GEN_OUT_EVENT = events/*-gen.go
 SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT)
 SQL_GEN_IN = sqlc/*.sql
 
-.PHONY: all docker generate generate-sqlc generate-schema generate-commit-id check run fmt fmt-check vet clean
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean
 
 all: $(BINARY)
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-schema generate-commit-id generate-sqlc
-
-generate-schema: $(GEN_SCHEMA_OUT)
+generate: generate-commit-id generate-sqlc
 
 generate-commit-id: $(COMMIT_ID)
 
@@ -43,15 +39,6 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
-
-$(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl@v1.1.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
-	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
-	qAttrType=utils.PrefixAttr \
-	dateTimeType=utils.XSDDateTime \
-	decimalType=utils.XSDDecimal \
-	json=yes
-	$(GO) fmt $(GEN_SCHEMA_OUT)
 
 $(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
@@ -76,7 +63,6 @@ check-coverage: check
 
 clean:
 	rm -f $(BINARY)
-	rm -f $(GEN_SCHEMA_OUT)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
 	rm -f $(SQL_GEN_OUT)
