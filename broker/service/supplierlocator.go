@@ -55,12 +55,12 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logErrorAndReturnResult(ctx, "failed to read ill transaction", err)
 	}
 
-	if illTrans.SupplierRequestID.String == "" {
-		return logProblemAndReturnResult(ctx, "ill transaction missing supplier request id")
+	if illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId == "" {
+		return logProblemAndReturnResult(ctx, "ill transaction missing SupplierUniqueRecordId")
 	}
 
 	holdings, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
-		Identifier: illTrans.SupplierRequestID.String,
+		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
 	})
 
 	if err != nil {
