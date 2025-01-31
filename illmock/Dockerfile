@@ -3,11 +3,13 @@ FROM golang:1.23
 # Builds from the workspace root dir
 WORKDIR /app
 COPY go.work go.work.sum ./
-COPY common/go.mod ./common/go.mod
+
+# copy only go.mods so Go doesn't complain on missing workspace modules
 COPY broker/go.mod ./broker/go.mod
 
-# REMOVE this when iso18626 client is moved to top level
-COPY broker/iso18626 ./broker/iso18626
+# copy common sources
+COPY common/ ./common
+COPY iso18626/ ./iso18626
 
 # Set destination for COPY
 WORKDIR /app/illmock
