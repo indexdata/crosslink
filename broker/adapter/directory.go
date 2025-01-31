@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"errors"
+	"github.com/indexdata/go-utils/utils"
 	"strings"
 )
+
+var MOCK_SUPPLIER_PORT = utils.GetEnv("MOCK_SUPPLIER_PORT", "8083")
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error)
@@ -33,13 +36,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	for _, value := range params.Symbols {
 		dirs = append(dirs, DirectoryEntry{
 			Symbol: value,
-			URL:    "http://localhost:19082/iso18626",
-		})
-	}
-	if len(dirs) == 0 {
-		dirs = append(dirs, DirectoryEntry{
-			Symbol: "isil:sup",
-			URL:    "http://localhost:19082/iso18626",
+			URL:    "http://localhost:" + MOCK_SUPPLIER_PORT + "/iso18626",
 		})
 	}
 	return dirs, nil

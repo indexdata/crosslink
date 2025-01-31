@@ -62,6 +62,11 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		return
 	}
 
+	if illMessage.Request.BibliographicInfo.SupplierUniqueRecordId == "" {
+		handleRequestError(illMessage, "SupplierUniqueRecordId cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
+
 	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
 	requester, err := repo.GetPeerBySymbol(ctx, requesterSymbol.String)
 	if err != nil {

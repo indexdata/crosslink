@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: crosslink_postgres
+    environment:
+      POSTGRES_USER: crosslink
+      POSTGRES_PASSWORD: crosslink
+      POSTGRES_DB: crosslink
+    ports:
+      - "35432:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+  ill_mock_sup:
+    build:
