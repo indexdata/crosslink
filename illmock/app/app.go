@@ -100,9 +100,9 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 	return nil
 }
 
-func createRequestResponse(illRequest *iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
 	var resmsg = &iso18626.Iso18626MessageNS{}
-	header := createConfirmationHeader(&illRequest.Header, messageStatus)
+	header := createConfirmationHeader(requestHeader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
 		ConfirmationHeader: *header,
@@ -127,14 +127,13 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func handleRequestError(illRequest *iso18626.Request, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
-	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+func handleRequestError(requestHeader *iso18626.Header, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createRequestResponse(requestHeader, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	writeResponse(resmsg, w)
 }
 
 func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
-	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
-	writeResponse(resmsg, w)
+	patronReqHeader := illRequest.Header
 
 	requester := &app.requester
 	msg := createRequest()
@@ -164,26 +163,31 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
+		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
+		handleRequestError(&patronReqHeader, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
 		slog.Warn("requester: Did not receive requestConfirmation")
+		handleRequestError(&patronReqHeader, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	slog.Info("Got requestConfirmation")
 
+	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
+	writeResponse(resmsg, w)
 }
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
 	if illRequest.Header.RequestingAgencyRequestId == "" {
-		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestError(&illRequest.Header, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	_, ok := supplier.requests.Load(illRequest.Header.RequestingAgencyRequestId)
 	if ok {
-		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestError(&illRequest.Header, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	var status []iso18626.TypeStatus
@@ -204,7 +208,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	supplier.requests.Store(illRequest.Header.RequestingAgencyRequestId, &supplierInfo{status: status, index: 0,
 		supplierRequestId: uuid.NewString()})
 
-	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
+	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
 }
