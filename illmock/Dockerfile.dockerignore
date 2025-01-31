@@ -1,0 +1,13 @@
+# Exclude everything by default
+illmock/*
+
+# Include go.mod and go.sum
+!illmock/go.mod
+!illmock/go.sum
+
+# Include .go files
+!illmock/**/*.go
+
+# Exclude tests
+illmock/test
+illmock/**/*_test.go
