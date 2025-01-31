@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/go-utils/utils"

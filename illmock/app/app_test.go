@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
