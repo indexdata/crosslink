@@ -33,10 +33,6 @@ type Requester struct {
 	requests           sync.Map
 }
 
-func (requester *Requester) key(header *iso18626.Header) string {
-	return header.SupplyingAgencyId.AgencyIdValue + header.SupplyingAgencyRequestId
-}
-
 type supplierInfo struct {
 	index             int                   // index into status below
 	status            []iso18626.TypeStatus // the status that the supplier will return
@@ -47,7 +43,7 @@ type Supplier struct {
 	requests sync.Map
 }
 
-func (supplier *Supplier) key(header *iso18626.Header) string {
+func getKey(header *iso18626.Header) string {
 	return header.RequestingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
 }
 
@@ -179,7 +175,7 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 		return
 	}
 	slog.Info("Got requestConfirmation")
-
+	requester.requests.Store(getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
 }
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
@@ -188,7 +184,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		handleRequestError(illRequest, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
-	_, ok := supplier.requests.Load(supplier.key(&illRequest.Header))
+	_, ok := supplier.requests.Load(getKey(&illRequest.Header))
 	if ok {
 		handleRequestError(illRequest, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -208,7 +204,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	supplier.requests.Store(supplier.key(&illRequest.Header), &supplierInfo{status: status, index: 0,
+	supplier.requests.Store(getKey(&illRequest.Header), &supplierInfo{status: status, index: 0,
 		supplierRequestId: uuid.NewString()})
 
 	var resmsg = createRequestResponse(illRequest, iso18626.TypeMessageStatusOK, nil, nil)
@@ -242,7 +238,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg.SupplyingAgencyMessage.Header = *header
 
 	supplier := &app.supplier
-	v, ok := supplier.requests.Load(supplier.key(header))
+	v, ok := supplier.requests.Load(getKey(header))
 	if !ok {
 		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
 		return
@@ -311,7 +307,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 	requester := &app.requester
 	header := &supplyingAgencyMessage.Header
 	log.Info("handleIso18626SupplyingAgencyMessage", "id", header.RequestingAgencyRequestId)
-	_, ok := requester.requests.Load(requester.key(header))
+	_, ok := requester.requests.Load(getKey(header))
 	if !ok {
 		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -329,7 +325,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	requester := &app.requester
-	v, ok := requester.requests.Load(requester.key(header))
+	v, ok := requester.requests.Load(getKey(header))
 	if !ok {
 		return
 	}
@@ -413,7 +409,7 @@ func (app *MockApp) runRequester(agencyScenario string) {
 	header := &msg.Request.Header
 	header.RequestingAgencyRequestId = uuid.NewString()
 
-	requester.requests.Store(requester.key(header), &requesterInfo{action: iso18626.TypeActionReceived})
+	requester.requests.Store(getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
 	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
 	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
