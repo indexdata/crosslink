@@ -1,7 +1,7 @@
 package ill_db
 
 import (
-	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/iso18626"
 )
 
 type IllTransactionData struct {
