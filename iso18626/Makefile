@@ -6,7 +6,7 @@ XSLT ?= xsltproc
 GEN_SCHEMA_IN=xsd/ISO-18626-v1_2.xsd
 GEN_SCHEMA_OUT=schema.go
 
-.PHONY: all generate generate-schema
+.PHONY: all generate generate-schema lint check clean
 
 all: generate
 
@@ -25,3 +25,9 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 
 clean:
 	rm -f $(GEN_SCHEMA_OUT)
+
+check:
+	echo "no checks in iso18626"
+
+lint: generate
+	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
