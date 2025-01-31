@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
 )
 
