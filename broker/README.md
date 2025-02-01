@@ -1,6 +1,19 @@
 # Introduction
 
-ISO18626 broker
+Crosslink broker manages inter-library loan (ILL) transactions, specifically:
+
+* accepts and handles ISO18626 requests
+* locates suppliers via _Search/Retrieval via URL_ (SRU) protocol
+* negotiates loans with suppliers via ISO18626
+* forwards settled loan notification to requesters
+
+# Configuration
+
+Configuration is provided via environment variables:
+
+| Name                     | Description                                                            | Default value                                     |
+|--------------------------|------------------------------------------------------------------------|---------------------------------------------------|
+| HTTP_PORT                | Server port                                                            | 8081                                              |
 
 # Deploy on Kubernetes
 
@@ -61,17 +74,10 @@ or run test for selected `_test` package
 go test -v -coverpkg=./.. -cover ./cmd/main_test
 ```
 
-# Run
+# Run locally
 
 You can run the program locally with:
 
 ```
 make run
 ```
-
-
-### Environment variables
-
-| Name                     | Description                                                            | Default value                                     |
-|--------------------------|------------------------------------------------------------------------|---------------------------------------------------|
-| HTTP_PORT                | Server port                                                            | 8081                                              |
