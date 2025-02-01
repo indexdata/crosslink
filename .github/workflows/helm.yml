@@ -24,6 +24,9 @@ jobs:
           - chart_name: crosslink-broker
             chart_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: ./broker/chart
+          - chart_name: crosslink-illmock
+            chart_version: "0.1.0-main.${{ github.run_number }}"
+            chart_path: ./broker/chart
     steps:
       - uses: actions/checkout@v4
       - name: helm lint

@@ -23,6 +23,8 @@ jobs:
         include:
           - dockerfile: ./broker/Dockerfile
             image: ghcr.io/${{ github.repository }}-broker
+          - dockerfile: ./illmock/Dockerfile
+            image: ghcr.io/${{ github.repository }}-illmock
     permissions:
       contents: read
       packages: write
