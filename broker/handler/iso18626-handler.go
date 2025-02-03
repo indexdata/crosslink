@@ -75,7 +75,6 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	}
 	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	requestAction := createPgText("Request")
-	state := createPgText("NEW")
 	requesterRequestId := createPgText(illMessage.Request.Header.RequestingAgencyRequestId)
 	supplierRequestId := createPgText(illMessage.Request.Header.SupplyingAgencyRequestId)
 
@@ -95,17 +94,16 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Time:  illMessage.Request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err = repo.CreateIllTransaction(ctx, ill_db.CreateIllTransactionParams{
-		ID:                 id,
-		Timestamp:          timestamp,
-		RequesterSymbol:    requesterSymbol,
-		RequesterID:        createPgText(requester.ID),
-		RequesterAction:    requestAction,
-		SupplierSymbol:     supplierSymbol,
-		State:              state,
-		RequesterRequestID: requesterRequestId,
-		SupplierRequestID:  supplierRequestId,
-		IllTransactionData: illTransactionData,
+	_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+		ID:                  id,
+		Timestamp:           timestamp,
+		RequesterSymbol:     requesterSymbol,
+		RequesterID:         createPgText(requester.ID),
+		LastRequesterAction: requestAction,
+		SupplierSymbol:      supplierSymbol,
+		RequesterRequestID:  requesterRequestId,
+		SupplierRequestID:   supplierRequestId,
+		IllTransactionData:  illTransactionData,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -208,6 +206,13 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 
+	illTrans.PreviousRequesterAction = illTrans.LastRequesterAction
+	illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
+	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	eventData := events.EventData{
 		Timestamp:       getNow(),
 		ISO18626Message: illMessage,

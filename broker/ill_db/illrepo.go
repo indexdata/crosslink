@@ -7,7 +7,7 @@ import (
 )
 
 type IllRepo interface {
-	CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error)
+	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	CreatePeer(ctx extctx.ExtendedContext, params CreatePeerParams) (Peer, error)
@@ -23,8 +23,8 @@ type PgIllRepo struct {
 	queries Queries
 }
 
-func (r *PgIllRepo) CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error) {
-	row, err := r.queries.CreateIllTransaction(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
+	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
 	return row.IllTransaction, err
 }
 

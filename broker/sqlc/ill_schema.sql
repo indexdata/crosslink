@@ -8,16 +8,16 @@ CREATE TABLE peer
 
 CREATE TABLE ill_transaction
 (
-    id                   VARCHAR PRIMARY KEY,
-    timestamp            TIMESTAMP NOT NULL,
-    requester_symbol     VARCHAR,
-    requester_id         VARCHAR,
-    requester_action     VARCHAR,
-    supplier_symbol      VARCHAR,
-    state                VARCHAR,
-    requester_request_id VARCHAR,
-    supplier_request_id  VARCHAR,
-    ill_transaction_data jsonb     NOT NULL,
+    id                        VARCHAR PRIMARY KEY,
+    timestamp                 TIMESTAMP NOT NULL,
+    requester_symbol          VARCHAR,
+    requester_id              VARCHAR,
+    last_requester_action     VARCHAR,
+    previous_requester_action VARCHAR,
+    supplier_symbol           VARCHAR,
+    requester_request_id      VARCHAR,
+    supplier_request_id       VARCHAR,
+    ill_transaction_data      jsonb     NOT NULL,
     FOREIGN KEY (requester_id) REFERENCES peer (id)
 );
 
@@ -32,7 +32,7 @@ CREATE TABLE located_supplier
     previous_status    VARCHAR,
     last_action        VARCHAR,
     last_status        VARCHAR,
-    
+    local_id           VARCHAR,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
