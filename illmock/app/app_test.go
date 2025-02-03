@@ -143,6 +143,52 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Requesting agency request id cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
+	t.Run("Reuse RequestingAgencyRequestId", func(t *testing.T) {
+		msg := createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+
+		msg = createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S2"
+		buf = utils.Must(xml.Marshal(msg))
+		resp2, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp2.StatusCode)
+		defer resp2.Body.Close()
+		buf, err = io.ReadAll(resp2.Body)
+		assert.Nil(t, err)
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+
+		msg = createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		buf = utils.Must(xml.Marshal(msg))
+		resp3, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp3.StatusCode)
+		defer resp3.Body.Close()
+		buf, err = io.ReadAll(resp3.Body)
+		assert.Nil(t, err)
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
+	})
+
 	t.Run("Non existing RequestingAgencyRequestId", func(t *testing.T) {
 		msg := createSupplyingAgencyMessage()
 		buf := utils.Must(xml.Marshal(msg))
