@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -78,6 +79,11 @@ func TestWillSupplyLoaned(t *testing.T) {
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		t.Fatalf("app.Run error %s", err.Error())
 	}
+}
+
+func TestAppShutdown(t *testing.T) {
+	var app MockApp
+	app.Shutdown() // no server running
 }
 
 func TestService(t *testing.T) {
@@ -167,13 +173,13 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
-		//assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Nil(t, response.RequestConfirmation.ErrorData)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		// have to wait for the exchanges to complete
 		time.Sleep(500 * time.Millisecond)
 	})
 
-	t.Run("Patron request bad peer URL", func(t *testing.T) {
+	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
 		// connect to port with no listening server
 		port, err := getFreePort()
 		assert.Nil(t, err)
@@ -196,8 +202,55 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
-		// have to wait for the exchanges to complete
-		time.Sleep(200 * time.Millisecond)
+		assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, "connection refused")
+	})
+
+	t.Run("Patron request, no request confirmation", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/xml")
+			w.WriteHeader(http.StatusOK)
+			output, _ := xml.Marshal(&iso18626.Iso18626MessageNS{})
+			_, err := w.Write(output)
+			assert.Nil(t, err)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
+		assert.Equal(t, "Did not receive requestConfirmation from supplier", response.RequestConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("writeResponse null", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeResponse(nil, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	err := app.Shutdown()

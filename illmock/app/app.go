@@ -59,16 +59,16 @@ type MockApp struct {
 var log *slog.Logger = slogwrap.SlogWrap()
 
 func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
-	buf, err := xml.MarshalIndent(resmsg, "  ", "  ")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
+	if buf == nil {
+		http.Error(w, "marshal failed", http.StatusInternalServerError)
 		return
 	}
 	lead := fmt.Sprintf("res XML\n%s", buf)
 	log.Info(lead)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(buf)
+	_, err := w.Write(buf)
 	if err != nil {
 		log.Warn("writeResponse", "error", err.Error())
 	}
@@ -387,7 +387,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 		// only to log the incoming message. We encode again to pretty print
-		buf, _ := xml.MarshalIndent(&illMessage, "  ", "  ")
+		buf := utils.Must(xml.MarshalIndent(&illMessage, "  ", "  "))
 		if buf != nil {
 			lead := fmt.Sprintf("req XML\n%s", buf)
 			log.Info(lead)
