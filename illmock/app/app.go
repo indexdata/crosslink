@@ -33,6 +33,10 @@ type Requester struct {
 	requests           sync.Map
 }
 
+func (r *Requester) getKey(header *iso18626.Header) string {
+	return header.SupplyingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
+}
+
 type supplierInfo struct {
 	index             int                   // index into status below
 	status            []iso18626.TypeStatus // the status that the supplier will return
@@ -43,8 +47,8 @@ type Supplier struct {
 	requests sync.Map
 }
 
-func getKey(header *iso18626.Header) string {
-	return header.RequestingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
+func (s *Supplier) getKey(header *iso18626.Header) string {
+	return header.SupplyingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
 }
 
 type MockApp struct {
@@ -178,7 +182,7 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	}
 	slog.Info("Got requestConfirmation")
 
-	requester.requests.Store(getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
+	requester.requests.Store(requester.getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
 }
@@ -189,7 +193,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		handleRequestError(&illRequest.Header, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
-	_, ok := supplier.requests.Load(getKey(&illRequest.Header))
+	_, ok := supplier.requests.Load(supplier.getKey(&illRequest.Header))
 	if ok {
 		handleRequestError(&illRequest.Header, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -209,7 +213,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	supplier.requests.Store(getKey(&illRequest.Header), &supplierInfo{status: status, index: 0,
+	supplier.requests.Store(supplier.getKey(&illRequest.Header), &supplierInfo{status: status, index: 0,
 		supplierRequestId: uuid.NewString()})
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
@@ -243,7 +247,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	msg.SupplyingAgencyMessage.Header = *header
 
 	supplier := &app.supplier
-	v, ok := supplier.requests.Load(getKey(header))
+	v, ok := supplier.requests.Load(supplier.getKey(header))
 	if !ok {
 		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
 		return
@@ -312,7 +316,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 	requester := &app.requester
 	header := &supplyingAgencyMessage.Header
 	log.Info("handleIso18626SupplyingAgencyMessage", "id", header.RequestingAgencyRequestId)
-	_, ok := requester.requests.Load(getKey(header))
+	_, ok := requester.requests.Load(requester.getKey(header))
 	if !ok {
 		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -330,7 +334,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	requester := &app.requester
-	v, ok := requester.requests.Load(getKey(header))
+	v, ok := requester.requests.Load(requester.getKey(header))
 	if !ok {
 		return
 	}
@@ -414,7 +418,7 @@ func (app *MockApp) runRequester(agencyScenario string) {
 	header := &msg.Request.Header
 	header.RequestingAgencyRequestId = uuid.NewString()
 
-	requester.requests.Store(getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
+	requester.requests.Store(requester.getKey(header), &requesterInfo{action: iso18626.TypeActionReceived})
 	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
 	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
 	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
