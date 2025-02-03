@@ -234,6 +234,7 @@ func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messag
 	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
 		ConfirmationHeader: *header,
 		ErrorData:          errorData,
+		Action:             &illMessage.RequestingAgencyMessage.Action,
 	}
 	return resmsg
 }
