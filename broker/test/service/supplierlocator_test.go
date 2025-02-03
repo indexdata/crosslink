@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -45,6 +46,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = 19082
+	adapter.MOCK_SUPPLIER_PORT = "19082"
 
 	time.Sleep(1 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -65,6 +67,10 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
+	var completedSelect []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedSelect = append(completedSelect, event)
+	})
 
 	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
@@ -83,32 +89,6 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	supplier, err := illRepo.GetLocatedSupplierByIllTransactionAndStatus(appCtx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-		IllTransactionID: illTrId,
-		SupplierStatus: pgtype.Text{
-			String: "new",
-			Valid:  true,
-		},
-	})
-
-	if err != nil {
-		t.Error("Failed to get located suppliers " + err.Error())
-	}
-
-	if len(supplier) != 1 {
-		t.Error("there should be one located supplier")
-	}
-
-	// Select Supplier
-	eventId = test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
-	if err != nil {
-		t.Error("Failed to notify with error " + err.Error())
-	}
-	var completedSelect []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedSelect = append(completedSelect, event)
-	})
 	var event events.Event
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedSelect) == 1 {
@@ -160,7 +140,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			message:     "ill transaction missing supplier request id",
+			message:     "ill transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -269,15 +249,17 @@ func TestSelectSupplierErrors(t *testing.T) {
 	}
 }
 
-func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRequestId string) string {
-	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
-		ID:        illId,
-		Timestamp: test.GetNow(),
-		SupplierRequestID: pgtype.Text{
-			String: supplierRequestId,
-			Valid:  true,
+func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
+	data := ill_db.IllTransactionData{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: supplierRecordId,
 		},
+	}
+	illId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID:                 illId,
+		Timestamp:          test.GetNow(),
+		IllTransactionData: data,
 	})
 	if err != nil {
 		t.Errorf("Failed to create ill transaction: %s", err)

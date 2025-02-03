@@ -3,7 +3,7 @@ package service
 import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/iso18626"
+	"github.com/indexdata/crosslink/iso18626"
 )
 
 type WorkflowManager struct {
@@ -51,6 +51,10 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 	case iso18626.TypeStatusCancelled:
 		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{})) // TODO Check message. Maybe need to send message to requester
 	}
+}
+
+func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
+	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}))
 }
 
 func Must(ctx extctx.ExtendedContext, err error) {
