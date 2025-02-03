@@ -418,7 +418,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string) stri
 		}
 	}
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:          illId,
 		Timestamp:   test.GetNow(),
 		RequesterID: requesterId,

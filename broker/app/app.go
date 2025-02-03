@@ -109,6 +109,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, workflowManager.RequestReceived)
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, workflowManager.SupplierMessageReceived)
+	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, workflowManager.RequesterMessageReceived)
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 }
@@ -143,7 +144,7 @@ func initData(illRepo ill_db.IllRepo) {
 				Name:   "Requester",
 				Symbol: "isil:req",
 				Address: pgtype.Text{
-					String: "http://localhost:8082/iso18626",
+					String: "http://localhost:8083/iso18626",
 					Valid:  true,
 				},
 			}))

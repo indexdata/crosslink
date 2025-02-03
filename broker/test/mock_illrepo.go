@@ -68,7 +68,7 @@ func (r *MockIllRepositorySuccess) WithTxFunc(ctx extctx.ExtendedContext, fn fun
 	return nil
 }
 
-func (m *MockIllRepositorySuccess) CreateIllTransaction(ctx extctx.ExtendedContext, params ill_db.CreateIllTransactionParams) (ill_db.IllTransaction, error) {
+func (m *MockIllRepositorySuccess) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	var illTransaction = (ill_db.IllTransaction)(params)
 	return illTransaction, nil
 }
@@ -116,7 +116,7 @@ func (r *MockIllRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(
 	return nil
 }
 
-func (m *MockIllRepositoryError) CreateIllTransaction(ctx extctx.ExtendedContext, params ill_db.CreateIllTransactionParams) (ill_db.IllTransaction, error) {
+func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
 
