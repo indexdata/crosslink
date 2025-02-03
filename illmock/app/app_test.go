@@ -7,19 +7,30 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
 
+func createPatronRequest() *iso18626.Iso18626MessageNS {
+	var msg = createRequest()
+	msg.Request = &iso18626.Request{}
+	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	si := iso18626.TypeRequestTypeNew
+	msg.Request.ServiceInfo.RequestType = &si
+	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
+	return msg
+}
+
 func TestParseConfig(t *testing.T) {
-	os.Setenv("AGENCY_SCENARIO", "Some")
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
 	os.Setenv("AGENCY_TYPE", "ABC")
@@ -32,7 +43,6 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
-	assert.ElementsMatch(t, []string{"Some"}, app.requester.agencyScenario)
 }
 
 // getFreePort asks the kernel for a free open port that is ready to use.
@@ -61,23 +71,10 @@ func getFreePortTest(t *testing.T) string {
 	return strconv.Itoa(port)
 }
 
-func TestWillSupplyLoaned(t *testing.T) {
+func TestAppShutdown(t *testing.T) {
 	var app MockApp
-	dynPort := getFreePortTest(t)
-	app.httpPort = dynPort
-	app.peerUrl = "http://localhost:" + dynPort
-	app.requester.agencyScenario = []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"}
-	go func() {
-		time.Sleep(1000 * time.Millisecond)
-		err := app.Shutdown()
-		if err != nil {
-			t.Logf("Shutdown failed: %s", err.Error())
-		}
-	}()
-	err := app.Run()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		t.Fatalf("app.Run error %s", err.Error())
-	}
+	err := app.Shutdown() // no server running
+	assert.Nil(t, err)
 }
 
 func TestService(t *testing.T) {
@@ -126,7 +123,6 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		// TOOD: check response body
 		defer resp.Body.Close()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
@@ -180,6 +176,7 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.RequestConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
@@ -196,30 +193,32 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("Patron request WILLSUPPLY_LOANED", func(t *testing.T) {
-		msg := createPatronRequest()
-		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
-		buf := utils.Must(xml.Marshal(msg))
-		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
-		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var response iso18626.ISO18626Message
-		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
-		assert.NotNil(t, response.RequestConfirmation)
-		//assert.NotNil(t, response.RequestConfirmation.ErrorData)
-		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-		// have to wait for the exchanges to complete
+	t.Run("Patron request scenarios", func(t *testing.T) {
+		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {
+			msg := createPatronRequest()
+			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+			buf := utils.Must(xml.Marshal(msg))
+			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+			assert.Nil(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			defer resp.Body.Close()
+			buf, err = io.ReadAll(resp.Body)
+			assert.Nil(t, err)
+			var response iso18626.ISO18626Message
+			err = xml.Unmarshal(buf, &response)
+			assert.Nil(t, err)
+			assert.NotNil(t, response.RequestConfirmation)
+			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+			assert.Nil(t, response.RequestConfirmation.ErrorData)
+		}
 		time.Sleep(500 * time.Millisecond)
 	})
 
-	t.Run("Patron request bad peer URL", func(t *testing.T) {
+	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
 		// connect to port with no listening server
 		port, err := getFreePort()
 		assert.Nil(t, err)
@@ -242,8 +241,171 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
-		// have to wait for the exchanges to complete
-		time.Sleep(200 * time.Millisecond)
+		assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, "connection refused")
+	})
+
+	t.Run("Patron request, no request confirmation", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/xml")
+			w.WriteHeader(http.StatusOK)
+			output, _ := xml.Marshal(&iso18626.Iso18626MessageNS{})
+			_, err := w.Write(output)
+			assert.Nil(t, err)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
+		assert.Equal(t, "Did not receive requestConfirmation from supplier", response.RequestConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("writeResponse null", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeResponse(nil, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("sendRequestingAgency no key", func(t *testing.T) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency internal error", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency unexpected ISO18626 message", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency action mismatch", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
+			act := iso18626.TypeActionReceived
+			resmsg.RequestingAgencyMessageConfirmation.Action = &act
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendSupplyingAgencyMessage no key", func(t *testing.T) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		app.sendSupplyingAgencyMessage(header)
+	})
+
+	t.Run("sendSuppluingAgency internal error", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+
+		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+		app.supplier.store(header, supplierInfo)
+		app.sendSupplyingAgencyMessage(header)
+	})
+
+	t.Run("sendSupplyingAgency unexpected ISO18626 message", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+
+		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+		app.supplier.store(header, supplierInfo)
+		app.sendSupplyingAgencyMessage(header)
 	})
 
 	err := app.Shutdown()
