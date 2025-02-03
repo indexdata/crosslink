@@ -262,8 +262,8 @@ func (c *Iso18626Client) createMessageInfo(transaction ill_db.IllTransaction) is
 
 func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier ill_db.LocatedSupplier) iso18626.StatusInfo {
 	status := iso18626.TypeStatusLoaned // TODO Status if supplier is not selected jet
-	if supplier.LastAction.String != "" {
-		s, ok := statusMap[supplier.LastAction.String]
+	if supplier.LastStatus.String != "" {
+		s, ok := statusMap[supplier.LastStatus.String]
 		if ok {
 			status = s
 		}
