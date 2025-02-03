@@ -28,8 +28,6 @@ The scenario is used by the supplier to perform a particular workflow. The follo
     LOANED
 
 The scenario is inspected in the supplier request `<bibliographicInfo><supplierUniqueRecordId>` field.
-It may be also given at startup with the environment variable `AGENCY_SCENARIO` which will launch the
-supplier request automatically to the peer specified with `PEER_URL`.
 
 ## Environment variables
 
@@ -43,11 +41,6 @@ Without colon, it translates to `:`value which will bind on any interface and po
 ### PEER_URL
 
 The default value is `http://localhost:8081`.
-
-### AGENCY_SCENARIO
-
-If `AGENCY_SCENARIO` is defined and non-empty the `illmock` program will initiate requests during start (100 ms after launch).
-See [Scenario].
 
 ### AGENCY_TYPE
 
