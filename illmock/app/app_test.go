@@ -20,6 +20,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func createPatronRequest() *iso18626.Iso18626MessageNS {
+	var msg = createRequest()
+	msg.Request = &iso18626.Request{}
+	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	si := iso18626.TypeRequestTypeNew
+	msg.Request.ServiceInfo.RequestType = &si
+	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
+	return msg
+}
+
 func TestParseConfig(t *testing.T) {
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
@@ -113,7 +123,6 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		// TOOD: check response body
 		defer resp.Body.Close()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)

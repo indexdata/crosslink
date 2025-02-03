@@ -146,16 +146,6 @@ func createRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func createPatronRequest() *iso18626.Iso18626MessageNS {
-	var msg = createRequest()
-	msg.Request = &iso18626.Request{}
-	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
-	si := iso18626.TypeRequestTypeNew
-	msg.Request.ServiceInfo.RequestType = &si
-	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
-	return msg
-}
-
 func handleRequestError(requestHeader *iso18626.Header, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestResponse(requestHeader, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	writeResponse(resmsg, w)
