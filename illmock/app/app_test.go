@@ -63,7 +63,8 @@ func getFreePortTest(t *testing.T) string {
 
 func TestAppShutdown(t *testing.T) {
 	var app MockApp
-	app.Shutdown() // no server running
+	err := app.Shutdown() // no server running
+	assert.Nil(t, err)
 }
 
 func TestService(t *testing.T) {
