@@ -46,6 +46,10 @@ func (r *Requester) store(header *iso18626.Header, info *requesterInfo) {
 	r.requests.Store(r.getKey(header), info)
 }
 
+func (s *Requester) delete(header *iso18626.Header) {
+	s.requests.Delete(s.getKey(header))
+}
+
 type supplierInfo struct {
 	index             int                   // index into status below
 	status            []iso18626.TypeStatus // the status that the supplier will return
@@ -70,6 +74,10 @@ func (s *Supplier) load(header *iso18626.Header) *supplierInfo {
 
 func (s *Supplier) store(header *iso18626.Header, info *supplierInfo) {
 	s.requests.Store(s.getKey(header), info)
+}
+
+func (s *Supplier) delete(header *iso18626.Header) {
+	s.requests.Delete(s.getKey(header))
 }
 
 type MockApp struct {
@@ -260,11 +268,14 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	supplier := &app.supplier
 	state := supplier.load(header)
 	if state == nil {
-		log.Warn("sendSupplyingAgencyMessage no state", "id", header.RequestingAgencyRequestId)
+		log.Warn("sendSupplyingAgencyMessage no key", "key", supplier.getKey(header))
 		return
 	}
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
+	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
+		supplier.delete(header)
+	}
 	state.index++
 	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
 	if err != nil {
@@ -297,6 +308,23 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(requestingAgencyMessag
 	var resmsg = createRequestingAgencyConfirmation(requestingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
 	writeResponse(resmsg, w)
+
+	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
+		return
+	}
+	msg := createSupplyingAgencyMessage()
+	msg.SupplyingAgencyMessage.Header = requestingAgencyMessage.Header
+	header := &requestingAgencyMessage.Header
+
+	supplier := &app.supplier
+	state := supplier.load(header)
+	if state == nil {
+		log.Warn("sendSupplyingAgencyMessage no key", "key", supplier.getKey(header))
+		return
+	}
+	state.index = 0
+	state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
+	go app.sendSupplyingAgencyMessage(header)
 }
 
 func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
@@ -339,6 +367,9 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 	log.Info("handleIso18626SupplyingAgencyMessage", "status", supplyingAgencyMessage.StatusInfo.Status)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
+	}
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
+		requester.delete(header)
 	}
 }
 
