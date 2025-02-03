@@ -20,7 +20,6 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	os.Setenv("AGENCY_SCENARIO", "Some")
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
 	os.Setenv("AGENCY_TYPE", "ABC")
@@ -33,7 +32,6 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
-	assert.ElementsMatch(t, []string{"Some"}, app.requester.agencyScenario)
 }
 
 // getFreePort asks the kernel for a free open port that is ready to use.
@@ -60,25 +58,6 @@ func getFreePortTest(t *testing.T) string {
 		t.Fatalf("Failed to get a free port: %v", err)
 	}
 	return strconv.Itoa(port)
-}
-
-func TestWillSupplyLoaned(t *testing.T) {
-	var app MockApp
-	dynPort := getFreePortTest(t)
-	app.httpPort = dynPort
-	app.peerUrl = "http://localhost:" + dynPort
-	app.requester.agencyScenario = []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"}
-	go func() {
-		time.Sleep(1000 * time.Millisecond)
-		err := app.Shutdown()
-		if err != nil {
-			t.Logf("Shutdown failed: %s", err.Error())
-		}
-	}()
-	err := app.Run()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		t.Fatalf("app.Run error %s", err.Error())
-	}
 }
 
 func TestAppShutdown(t *testing.T) {
@@ -186,6 +165,7 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.RequestConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
@@ -202,26 +182,28 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("Patron request WILLSUPPLY_LOANED", func(t *testing.T) {
-		msg := createPatronRequest()
-		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
-		buf := utils.Must(xml.Marshal(msg))
-		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
-		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var response iso18626.ISO18626Message
-		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
-		assert.NotNil(t, response.RequestConfirmation)
-		assert.Nil(t, response.RequestConfirmation.ErrorData)
-		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-		// have to wait for the exchanges to complete
+	t.Run("Patron request scenarios", func(t *testing.T) {
+		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {
+			msg := createPatronRequest()
+			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+			buf := utils.Must(xml.Marshal(msg))
+			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+			assert.Nil(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			defer resp.Body.Close()
+			buf, err = io.ReadAll(resp.Body)
+			assert.Nil(t, err)
+			var response iso18626.ISO18626Message
+			err = xml.Unmarshal(buf, &response)
+			assert.Nil(t, err)
+			assert.NotNil(t, response.RequestConfirmation)
+			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+			assert.Nil(t, response.RequestConfirmation.ErrorData)
+		}
 		time.Sleep(500 * time.Millisecond)
 	})
 

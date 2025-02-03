@@ -20,8 +20,6 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
-// Request : RequestSubType .. RequestType.. remove supply ..
-
 type requesterInfo struct {
 	action iso18626.TypeAction
 }
@@ -29,7 +27,6 @@ type requesterInfo struct {
 type Requester struct {
 	requestingAgencyId string
 	supplyingAgencyId  string
-	agencyScenario     []string
 	requests           sync.Map
 }
 
@@ -432,47 +429,12 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func (app *MockApp) runRequester(agencyScenario string) {
-	requester := &app.requester
-	slog.Info("requester: initiating ", "scenario", agencyScenario)
-	time.Sleep(100 * time.Millisecond)
-	msg := createRequest()
-	header := &msg.Request.Header
-	header.RequestingAgencyRequestId = uuid.NewString()
-
-	requester.store(header, &requesterInfo{action: iso18626.TypeActionReceived})
-	header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
-	header.RequestingAgencyId.AgencyIdValue = requester.requestingAgencyId
-	header.SupplyingAgencyId.AgencyIdType.Text = app.agencyType
-	header.SupplyingAgencyId.AgencyIdValue = requester.supplyingAgencyId
-	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
-	msg.Request.BibliographicInfo.SupplierUniqueRecordId = agencyScenario
-
-	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
-	if err != nil {
-		slog.Error("requester:", "msg", err.Error())
-		return
-	}
-	requestConfirmation := responseMsg.RequestConfirmation
-	if requestConfirmation == nil {
-		slog.Warn("requester: Did not receive requestConfirmation")
-		return
-	}
-	slog.Info("Got requestConfirmation")
-}
-
 func (app *MockApp) parseConfig() {
 	if app.httpPort == "" {
 		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
 	if app.agencyType == "" {
 		app.agencyType = os.Getenv("AGENCY_TYPE")
-	}
-	if len(app.requester.agencyScenario) == 0 {
-		reqEnv := os.Getenv("AGENCY_SCENARIO")
-		if reqEnv != "" {
-			app.requester.agencyScenario = strings.Split(reqEnv, ",")
-		}
 	}
 	if app.requester.supplyingAgencyId == "" {
 		app.requester.supplyingAgencyId = os.Getenv("SUPPLYING_AGENCY_ID")
@@ -505,9 +467,6 @@ func (app *MockApp) Run() error {
 	}
 	if requester.supplyingAgencyId == "" {
 		requester.supplyingAgencyId = "SUP"
-	}
-	for _, id := range requester.agencyScenario {
-		go app.runRequester(id)
 	}
 	addr := app.httpPort
 	if !strings.Contains(addr, ":") {
