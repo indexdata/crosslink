@@ -34,7 +34,7 @@ type Requester struct {
 }
 
 func (r *Requester) getKey(header *iso18626.Header) string {
-	return header.SupplyingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
+	return header.SupplyingAgencyId.AgencyIdValue + "/" + header.RequestingAgencyRequestId
 }
 
 type supplierInfo struct {
@@ -48,7 +48,7 @@ type Supplier struct {
 }
 
 func (s *Supplier) getKey(header *iso18626.Header) string {
-	return header.SupplyingAgencyId.AgencyIdValue + header.RequestingAgencyRequestId
+	return header.SupplyingAgencyId.AgencyIdValue + "/" + header.RequestingAgencyId.AgencyIdValue + "/" + header.RequestingAgencyRequestId
 }
 
 type MockApp struct {
