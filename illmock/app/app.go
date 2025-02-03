@@ -356,6 +356,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	requester := &app.requester
 	state := requester.load(header)
 	if state == nil {
+		log.Warn("sendRequestingAgencyMessage request gone", "key", requester.getKey(header))
 		return
 	}
 	log.Info("sendRequestingAgencyMessage")

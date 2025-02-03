@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -279,6 +280,122 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("sendRequestingAgency no key", func(t *testing.T) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency internal error", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency unexpected ISO18626 message", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency action mismatch", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
+			act := iso18626.TypeActionReceived
+			resmsg.RequestingAgencyMessageConfirmation.Action = &act
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendSupplyingAgencyMessage no key", func(t *testing.T) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		app.sendSupplyingAgencyMessage(header)
+	})
+
+	t.Run("sendSuppluingAgency internal error", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+
+		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+		app.supplier.store(header, supplierInfo)
+		app.sendSupplyingAgencyMessage(header)
+	})
+
+	t.Run("sendSupplyingAgency unexpected ISO18626 message", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			writeResponse(resmsg, w)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+
+		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+		app.supplier.store(header, supplierInfo)
+		app.sendSupplyingAgencyMessage(header)
 	})
 
 	err := app.Shutdown()
