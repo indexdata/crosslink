@@ -193,7 +193,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 }
 
 func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplier, action string) {
-	sup.PreviousAction = sup.LastAction
+	sup.PrevAction = sup.LastAction
 	sup.LastAction = pgtype.Text{
 		String: action,
 		Valid:  true,

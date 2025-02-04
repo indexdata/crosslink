@@ -36,7 +36,7 @@ ORDER BY timestamp;
 
 -- name: SaveIllTransaction :one
 INSERT INTO ill_transaction (
-    id, timestamp, requester_symbol, requester_id, last_requester_action, previous_requester_action, supplier_symbol, requester_request_id, supplier_request_id, ill_transaction_data
+    id, timestamp, requester_symbol, requester_id, last_requester_action, prev_requester_action, supplier_symbol, requester_request_id, supplier_request_id, ill_transaction_data
 ) VALUES (
              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          )
@@ -45,7 +45,7 @@ ON CONFLICT (id) DO UPDATE
         requester_symbol = EXCLUDED.requester_symbol,
         requester_id = EXCLUDED.requester_id,
         last_requester_action = EXCLUDED.last_requester_action,
-        previous_requester_action = EXCLUDED.previous_requester_action,
+        prev_requester_action = EXCLUDED.prev_requester_action,
         supplier_symbol = EXCLUDED.supplier_symbol,
         requester_request_id = EXCLUDED.requester_request_id,
         supplier_request_id = EXCLUDED.supplier_request_id,
@@ -75,7 +75,7 @@ WHERE ill_transaction_id = $1 and supplier_id = $2;
 
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (
-    id, ill_transaction_id, supplier_id, ordinal, supplier_status, previous_action, previous_status, last_action, last_status, local_id
+    id, ill_transaction_id, supplier_id, ordinal, supplier_status, prev_action, prev_status, last_action, last_status, local_id
 ) VALUES (
              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          )
@@ -84,8 +84,8 @@ ON CONFLICT (id) DO UPDATE
         supplier_id = EXCLUDED.supplier_id,
         ordinal = EXCLUDED.ordinal,
         supplier_status = EXCLUDED.supplier_status,
-        previous_action = EXCLUDED.previous_action,
-        previous_status = EXCLUDED.previous_status,
+        prev_action = EXCLUDED.prev_action,
+        prev_status = EXCLUDED.prev_status,
         last_action = EXCLUDED.last_action,
         last_status = EXCLUDED.last_status,
         local_id = EXCLUDED.local_id

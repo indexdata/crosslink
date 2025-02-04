@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = 19082
-	adapter.MOCK_SUPPLIER_PORT = "19082"
+	adapter.MOCK_CLIENT_URL = "http://localhost:19082/iso18626"
 
 	time.Sleep(1 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())

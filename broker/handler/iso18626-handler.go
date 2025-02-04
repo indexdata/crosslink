@@ -206,7 +206,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 
-	illTrans.PreviousRequesterAction = illTrans.LastRequesterAction
+	illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 	illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
 	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 	if err != nil {
@@ -291,7 +291,7 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 		ctx.Logger().Error("failed to get located supplier with peer id: "+peer.ID, "error", err)
 		return
 	}
-	locSup.PreviousStatus = locSup.LastStatus
+	locSup.PrevStatus = locSup.LastStatus
 	locSup.LastStatus = createPgText(status)
 	_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
