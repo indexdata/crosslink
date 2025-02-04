@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
@@ -144,21 +145,7 @@ func initData(illRepo ill_db.IllRepo) {
 				Name:   "Requester",
 				Symbol: "isil:req",
 				Address: pgtype.Text{
-					String: "http://localhost:8083/iso18626",
-					Valid:  true,
-				},
-			}))
-		}
-	}
-	_, err = illRepo.GetPeerBySymbol(appCtx, "isil:LOANED")
-	if err != nil {
-		if err.Error() == "no rows in result set" {
-			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
-				ID:     uuid.New().String(),
-				Name:   "Supplier",
-				Symbol: "isil:LOANED",
-				Address: pgtype.Text{
-					String: "http://localhost:8083/iso18626",
+					String: adapter.MOCK_CLIENT_URL,
 					Valid:  true,
 				},
 			}))
