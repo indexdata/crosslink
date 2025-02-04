@@ -77,6 +77,29 @@ func TestAppShutdown(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestSendReceiveMarshalFailed(t *testing.T) {
+	var app MockApp
+	_, err := app.sendReceive(nil)
+	assert.ErrorContains(t, err, "marshal failed")
+}
+
+func TestSendReceiveUnmarshalFailed(t *testing.T) {
+	var app MockApp
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		output := []byte("<")
+		_, err := w.Write(output)
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	app.peerUrl = server.URL
+	_, err := app.sendReceive(&iso18626.Iso18626MessageNS{})
+	assert.ErrorContains(t, err, "unexpected EOF")
+}
+
 func TestService(t *testing.T) {
 	var app MockApp
 	dynPort := getFreePortTest(t)
