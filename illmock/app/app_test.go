@@ -79,7 +79,7 @@ func TestAppShutdown(t *testing.T) {
 
 func TestSendReceiveMarshalFailed(t *testing.T) {
 	var app MockApp
-	_, err := app.sendReceive(nil)
+	_, err := app.sendReceive(nil, "supplier", nil)
 	assert.ErrorContains(t, err, "marshal failed")
 }
 
@@ -96,7 +96,13 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	defer server.Close()
 
 	app.peerUrl = server.URL
-	_, err := app.sendReceive(&iso18626.Iso18626MessageNS{})
+	msg := &iso18626.Iso18626MessageNS{}
+	msg.Request = &iso18626.Request{Header: iso18626.Header{
+		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1"},
+		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
+		RequestingAgencyRequestId: uuid.NewString(),
+	}}
+	_, err := app.sendReceive(msg, "supplier", &msg.Request.Header)
 	assert.ErrorContains(t, err, "unexpected EOF")
 }
 
@@ -302,7 +308,7 @@ func TestService(t *testing.T) {
 
 	t.Run("writeResponse null", func(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			writeResponse(nil, w)
+			writeResponse(nil, w, "requester", nil)
 		})
 		server := httptest.NewServer(handler)
 		defer server.Close()
@@ -344,7 +350,11 @@ func TestService(t *testing.T) {
 	t.Run("sendRequestingAgency unexpected ISO18626 message", func(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var resmsg = &iso18626.Iso18626MessageNS{}
-			writeResponse(resmsg, w)
+			header := &iso18626.Header{}
+			header.RequestingAgencyRequestId = uuid.NewString()
+			header.SupplyingAgencyId.AgencyIdValue = "S1"
+			header.RequestingAgencyId.AgencyIdValue = "R1"
+			writeResponse(resmsg, w, "supplier", header)
 		})
 		server := httptest.NewServer(handler)
 		defer server.Close()
@@ -366,7 +376,35 @@ func TestService(t *testing.T) {
 			resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
 			act := iso18626.TypeActionReceived
 			resmsg.RequestingAgencyMessageConfirmation.Action = &act
-			writeResponse(resmsg, w)
+			header := &iso18626.Header{}
+			header.RequestingAgencyRequestId = uuid.NewString()
+			header.SupplyingAgencyId.AgencyIdValue = "S1"
+			header.RequestingAgencyId.AgencyIdValue = "R1"
+			writeResponse(resmsg, w, "supplier", header)
+		})
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		app.peerUrl = server.URL
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+		app.requester.store(header, requesterInfo)
+		app.sendRequestingAgencyMessage(header)
+	})
+
+	t.Run("sendRequestingAgency action nil", func(t *testing.T) {
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var resmsg = &iso18626.Iso18626MessageNS{}
+			resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
+			header := &iso18626.Header{}
+			header.RequestingAgencyRequestId = uuid.NewString()
+			header.SupplyingAgencyId.AgencyIdValue = "S1"
+			header.RequestingAgencyId.AgencyIdValue = "R1"
+			writeResponse(resmsg, w, "supplier", header)
 		})
 		server := httptest.NewServer(handler)
 		defer server.Close()
@@ -413,7 +451,11 @@ func TestService(t *testing.T) {
 	t.Run("sendSupplyingAgency unexpected ISO18626 message", func(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var resmsg = &iso18626.Iso18626MessageNS{}
-			writeResponse(resmsg, w)
+			header := &iso18626.Header{}
+			header.RequestingAgencyRequestId = uuid.NewString()
+			header.SupplyingAgencyId.AgencyIdValue = "S1"
+			header.RequestingAgencyId.AgencyIdValue = "R1"
+			writeResponse(resmsg, w, "requester", header)
 		})
 		server := httptest.NewServer(handler)
 		defer server.Close()

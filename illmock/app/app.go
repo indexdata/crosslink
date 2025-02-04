@@ -91,14 +91,13 @@ type MockApp struct {
 
 var log *slog.Logger = slogwrap.SlogWrap()
 
-func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role string, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
 		http.Error(w, "marshal failed", http.StatusInternalServerError)
 		return
 	}
-	lead := fmt.Sprintf("res XML\n%s", buf)
-	log.Info(lead)
+	logResponse(role, header, resmsg)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 	w.WriteHeader(http.StatusOK)
 	_, err := w.Write(buf)
@@ -154,27 +153,27 @@ func createRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func handleRequestError(requestHeader *iso18626.Header, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func handleRequestError(requestHeader *iso18626.Header, role string, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestResponse(requestHeader, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, role, requestHeader)
 }
 
-func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
+func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role string, header *iso18626.Header) (*iso18626.ISO18626Message, error) {
 	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
-	lead := fmt.Sprintf("send XML\n%s", buf)
-	log.Info(lead)
 	resp, err := httpclient.SendReceiveXml(http.DefaultClient, app.peerUrl+"/iso18626", buf)
 	if err != nil {
 		return nil, err
 	}
+	logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 200)
 	var response iso18626.ISO18626Message
 	err = xml.Unmarshal(resp, &response)
 	if err != nil {
 		return nil, err
 	}
+	logIncoming(role, header, msg)
 	return &response, nil
 }
 
@@ -205,35 +204,43 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	}
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 
-	responseMsg, err := app.sendReceive(msg)
+	responseMsg, err := app.sendReceive(msg, "requester", header)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
-		handleRequestError(&patronReqHeader, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		handleRequestError(&patronReqHeader, "requester", errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
 		slog.Warn("requester: Did not receive requestConfirmation")
-		handleRequestError(&patronReqHeader, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		handleRequestError(&patronReqHeader, "requester", "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	slog.Info("Got requestConfirmation")
 
 	requester.store(header, &requesterInfo{action: iso18626.TypeActionReceived})
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, "requester", header)
 }
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
 	if illRequest.Header.RequestingAgencyRequestId == "" {
-		handleRequestError(&illRequest.Header, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestError(&illRequest.Header, "supplier", "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
+	// if illRequest.Header.RequestingAgencyId.AgencyIdValue == "" {
+	// 	handleRequestError(&illRequest.Header, "supplier", "Requesting agency id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+	// 	return
+	// }
+	// if illRequest.Header.SupplyingAgencyId.AgencyIdValue == "" {
+	// 	handleRequestError(&illRequest.Header, "supplier", "Supplying agency id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+	// 	return
+	// }
 	v := supplier.load(&illRequest.Header)
 	if v != nil {
-		handleRequestError(&illRequest.Header, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestError(&illRequest.Header, "suppler", "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	var status []iso18626.TypeStatus
@@ -255,12 +262,44 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		supplierRequestId: uuid.NewString()})
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, "supplier", &illRequest.Header)
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
 }
 
-func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.ResponseWriter) {
-	log.Info("handleIso18626Request")
+func logIncoming(role string, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+	buf := utils.Must(xml.MarshalIndent(illMessage, "  ", "  "))
+	if buf == nil {
+		return
+	}
+	lead := fmt.Sprintf("incoming %s %s %s %s\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
+		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, buf)
+	slog.Info(lead)
+}
+
+func logOutgoing(role string, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
+	url string, statusCode int) {
+	buf := utils.Must(xml.MarshalIndent(illMessage, "  ", "  "))
+	if buf == nil {
+		return
+	}
+	lead := fmt.Sprintf("outgoing %s %s %s %s %s %d\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
+		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, url, statusCode, buf)
+	slog.Info(lead)
+}
+
+func logResponse(role string, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+	buf := utils.Must(xml.MarshalIndent(illMessage, "  ", "  "))
+	if buf == nil {
+		return
+	}
+	lead := fmt.Sprintf("response %s %s %s %s\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
+		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, buf)
+	slog.Info(lead)
+}
+
+func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+	illRequest := illMessage.Request
+
 	if illRequest.ServiceInfo != nil {
 		subtypes := illRequest.ServiceInfo.RequestSubType
 		if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
@@ -268,6 +307,7 @@ func (app *MockApp) handleIso18626Request(illRequest *iso18626.Request, w http.R
 			return
 		}
 	}
+	logIncoming("supplier", &illRequest.Header, illMessage)
 	app.handleSupplierRequest(illRequest, w)
 }
 
@@ -296,7 +336,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 		supplier.delete(header)
 	}
 	state.index++
-	responseMsg, err := app.sendReceive(msg)
+	responseMsg, err := app.sendReceive(msg, "supplier", header)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
@@ -321,12 +361,12 @@ func createRequestingAgencyConfirmation(requestingAgencyMessage *iso18626.Reques
 	return resmsg
 }
 
-func (app *MockApp) handleIso18626RequestingAgencyMessage(requestingAgencyMessage *iso18626.RequestingAgencyMessage, w http.ResponseWriter) {
-	log.Info("handleIso18626RequestingAgencyMessage")
-	// supplier role
+func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+	requestingAgencyMessage := illMessage.RequestingAgencyMessage
+	logIncoming("supplier", &requestingAgencyMessage.Header, illMessage)
 	var resmsg = createRequestingAgencyConfirmation(requestingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, "supplier", &requestingAgencyMessage.Header)
 
 	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
 		return
@@ -359,7 +399,7 @@ func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAge
 
 func handleSupplyingAgencyError(illMessage *iso18626.SupplyingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, "requester", &illMessage.Header)
 }
 
 func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
@@ -368,10 +408,11 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, w http.ResponseWriter) {
-	log.Info("handleIso18626SupplyingAgencyMessage")
+func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	requester := &app.requester
+	supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
 	header := &supplyingAgencyMessage.Header
+	logIncoming("requester", header, illMessage)
 	log.Info("handleIso18626SupplyingAgencyMessage", "id", header.RequestingAgencyRequestId)
 	v := requester.load(header)
 	if v == nil {
@@ -382,7 +423,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(supplyingAgencyMessage 
 	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
-	writeResponse(resmsg, w)
+	writeResponse(resmsg, w, "requester", header)
 	log.Info("handleIso18626SupplyingAgencyMessage", "status", supplyingAgencyMessage.StatusInfo.Status)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
@@ -405,7 +446,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
 
-	responseMsg, err := app.sendReceive(msg)
+	responseMsg, err := app.sendReceive(msg, "requester", header)
 	if err != nil {
 		log.Warn("sendRequestingAgencyMessage", "error", err.Error())
 		return
@@ -414,7 +455,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 		log.Warn("sendRequestingAgencyMessage did not receive RequestingAgencyMessageConfirmation")
 		return
 	}
-	if *responseMsg.RequestingAgencyMessageConfirmation.Action != state.action {
+	if responseMsg.RequestingAgencyMessageConfirmation.Action == nil || *responseMsg.RequestingAgencyMessageConfirmation.Action != state.action {
 		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation")
 		return
 	}
@@ -450,18 +491,12 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		// only to log the incoming message. We encode again to pretty print
-		buf := utils.Must(xml.MarshalIndent(&illMessage, "  ", "  "))
-		if buf != nil {
-			lead := fmt.Sprintf("req XML\n%s", buf)
-			log.Info(lead)
-		}
 		if illMessage.Request != nil {
-			app.handleIso18626Request(illMessage.Request, w)
+			app.handleIso18626Request(&illMessage, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			app.handleIso18626RequestingAgencyMessage(illMessage.RequestingAgencyMessage, w)
+			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			app.handleIso18626SupplyingAgencyMessage(illMessage.SupplyingAgencyMessage, w)
+			app.handleIso18626SupplyingAgencyMessage(&illMessage, w)
 		} else {
 			log.Warn("invalid ISO18626 message")
 			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
