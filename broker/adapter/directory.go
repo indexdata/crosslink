@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var MOCK_SUPPLIER_PORT = utils.GetEnv("MOCK_SUPPLIER_PORT", "8083")
+var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:8083/iso18626")
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error)
@@ -36,7 +36,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	for _, value := range params.Symbols {
 		dirs = append(dirs, DirectoryEntry{
 			Symbol: value,
-			URL:    "http://localhost:" + MOCK_SUPPLIER_PORT + "/iso18626",
+			URL:    MOCK_CLIENT_URL,
 		})
 	}
 	return dirs, nil
