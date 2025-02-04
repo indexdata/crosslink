@@ -159,6 +159,25 @@ func handleRequestError(requestHeader *iso18626.Header, errorMessage string, err
 	writeResponse(resmsg, w)
 }
 
+func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
+	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
+	if buf == nil {
+		return nil, fmt.Errorf("marshal failed")
+	}
+	lead := fmt.Sprintf("send XML\n%s", buf)
+	log.Info(lead)
+	resp, err := httpclient.SendReceiveXml(http.DefaultClient, app.peerUrl+"/iso18626", buf)
+	if err != nil {
+		return nil, err
+	}
+	var response iso18626.ISO18626Message
+	err = xml.Unmarshal(resp, &response)
+	if err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
 func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	patronReqHeader := illRequest.Header
 
@@ -186,7 +205,7 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	}
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 
-	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
+	responseMsg, err := app.sendReceive(msg)
 	if err != nil {
 		slog.Error("requester:", "msg", err.Error())
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
@@ -277,7 +296,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 		supplier.delete(header)
 	}
 	state.index++
-	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
+	responseMsg, err := app.sendReceive(msg)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
@@ -386,7 +405,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
 
-	responseMsg, err := httpclient.SendReceiveDefault(app.peerUrl, msg)
+	responseMsg, err := app.sendReceive(msg)
 	if err != nil {
 		log.Warn("sendRequestingAgencyMessage", "error", err.Error())
 		return
