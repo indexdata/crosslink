@@ -102,8 +102,31 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
 		RequestingAgencyRequestId: uuid.NewString(),
 	}}
-	_, err := app.sendReceive(msg, "supplier", &msg.Request.Header)
+	_, err := app.sendReceive(msg, "requester", &msg.Request.Header)
 	assert.ErrorContains(t, err, "unexpected EOF")
+}
+
+func TestSendReceiveAgencyUrl(t *testing.T) {
+	var app MockApp
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := &iso18626.Header{}
+		var resmsg = createRequestResponse(&iso18626.Header{}, iso18626.TypeMessageStatusOK, nil, nil)
+		writeResponse(resmsg, w, RoleRequester, header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	msg := &iso18626.Iso18626MessageNS{}
+	msg.Request = &iso18626.Request{Header: iso18626.Header{
+		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1;" + server.URL},
+		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
+		RequestingAgencyRequestId: uuid.NewString(),
+	}}
+	response, err := app.sendReceive(msg, "requester", &msg.Request.Header)
+	assert.Nil(t, err)
+	assert.NotNil(t, response)
+	assert.NotNil(t, response.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 }
 
 func TestLogIncoming(t *testing.T) {

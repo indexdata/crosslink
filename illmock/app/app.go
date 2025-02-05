@@ -189,17 +189,31 @@ func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role Role, head
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
-	resp, err := httpclient.SendReceiveXml(http.DefaultClient, app.peerUrl+"/iso18626", buf)
+	var dstAgency string
+	if role == RoleRequester {
+		dstAgency = header.SupplyingAgencyId.AgencyIdValue
+	} else {
+		dstAgency = header.RequestingAgencyId.AgencyIdValue
+	}
+	pos := strings.Index(dstAgency, ";http")
+	var url string
+	if pos == -1 {
+		url = app.peerUrl
+	} else {
+		url = dstAgency[pos+1:]
+	}
+	url = url + "/iso18626"
+	resp, err := httpclient.SendReceiveXml(http.DefaultClient, url, buf)
 	if err != nil {
 		httpErr, ok := err.(*httpclient.HttpError)
 		if ok {
-			logOutgoing(role, header, msg, app.peerUrl+"/iso18626", httpErr.StatusCode)
+			logOutgoing(role, header, msg, url, httpErr.StatusCode)
 		} else {
-			logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 0)
+			logOutgoing(role, header, msg, url, 0)
 		}
 		return nil, err
 	}
-	logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 200)
+	logOutgoing(role, header, msg, url, 200)
 	var response iso18626.ISO18626Message
 	err = xml.Unmarshal(resp, &response)
 	if err != nil {
