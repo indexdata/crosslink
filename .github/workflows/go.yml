@@ -59,14 +59,14 @@ jobs:
     - name: Generate sources
       run: make generate
 
+    - name: Build
+      run: make all
+
     - name: Lint module '${{ matrix.modules }}'
       uses: golangci/golangci-lint-action@v6
       with:
         version: ${{ env.GOLANGCI_LINT_VERSION }}
         working-directory: ${{ matrix.modules }}
-
-    - name: Build
-      run: make all
 
     - name: Test
       run: make check
