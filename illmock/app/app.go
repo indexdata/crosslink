@@ -189,10 +189,14 @@ func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role Role, head
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
-	// TODO: should really make a custom error for the SendReceiveXml to get status code out..
 	resp, err := httpclient.SendReceiveXml(http.DefaultClient, app.peerUrl+"/iso18626", buf)
 	if err != nil {
-		logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 500) // TODO: get status code from error
+		httpErr, ok := err.(*httpclient.HttpError)
+		if ok {
+			logOutgoing(role, header, msg, app.peerUrl+"/iso18626", httpErr.StatusCode)
+		} else {
+			logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 0)
+		}
 		return nil, err
 	}
 	logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 200)
@@ -235,19 +239,15 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 
 	responseMsg, err := app.sendReceive(msg, RoleRequester, header)
 	if err != nil {
-		slog.Error("requester:", "msg", err.Error())
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
 		handleRequestError(&patronReqHeader, RoleRequester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
-		slog.Warn("requester: Did not receive requestConfirmation")
 		handleRequestError(&patronReqHeader, RoleRequester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
-	slog.Info("Got requestConfirmation")
-
 	requester.store(header, &requesterInfo{action: iso18626.TypeActionReceived})
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w, RoleRequester, header)
@@ -293,9 +293,9 @@ func logIncoming(role Role, header *iso18626.Header, illMessage *iso18626.Iso186
 	if buf == nil {
 		return
 	}
-	lead := fmt.Sprintf("incoming %s %s %s %s\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
-		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, buf)
-	slog.Info(lead)
+	lead := fmt.Sprintf("incoming role:%s id:%s req:%s sup:%s\n%s", role, header.RequestingAgencyRequestId,
+		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, buf)
+	log.Info(lead)
 }
 
 func logOutgoing(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
@@ -304,9 +304,9 @@ func logOutgoing(role Role, header *iso18626.Header, illMessage *iso18626.Iso186
 	if buf == nil {
 		return
 	}
-	lead := fmt.Sprintf("outgoing %s %s %s %s %s %d\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
-		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, url, statusCode, buf)
-	slog.Info(lead)
+	lead := fmt.Sprintf("outgoing role:%s id:%s req:%s sup:%s url:%s code:%d\n%s", role, header.RequestingAgencyRequestId,
+		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, url, statusCode, buf)
+	log.Info(lead)
 }
 
 func logResponse(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
@@ -314,9 +314,9 @@ func logResponse(role Role, header *iso18626.Header, illMessage *iso18626.Iso186
 	if buf == nil {
 		return
 	}
-	lead := fmt.Sprintf("response %s %s %s %s\n%s", role, header.SupplyingAgencyId.AgencyIdValue,
-		header.RequestingAgencyId.AgencyIdValue, header.RequestingAgencyRequestId, buf)
-	slog.Info(lead)
+	lead := fmt.Sprintf("response role:%s id:%s req:%s sup:%s\n%s", role, header.RequestingAgencyRequestId,
+		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, buf)
+	log.Info(lead)
 }
 
 func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
@@ -341,7 +341,6 @@ func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	time.Sleep(100 * time.Millisecond)
-	log.Info("sendSupplyingAgencyMessage")
 
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
@@ -469,8 +468,6 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 		log.Warn("sendRequestingAgencyMessage request gone", "key", requester.getKey(header))
 		return
 	}
-	log.Info("sendRequestingAgencyMessage")
-
 	msg := createRequestingAgencyMessage()
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
@@ -497,26 +494,22 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 func iso18626Handler(app *MockApp) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			log.Info("[iso18626-handler] error: method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		contentType := r.Header.Get(httpclient.ContentType)
 		if !strings.HasPrefix(contentType, httpclient.ContentTypeApplicationXml) && !strings.HasPrefix(contentType, httpclient.ContentTypeTextXml) {
-			log.Info("[iso18626-handler] error: content-type unsupported", httpclient.ContentType, contentType, "url", r.URL)
 			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
 			return
 		}
 		byteReq, err := io.ReadAll(r.Body)
 		if err != nil {
-			log.Info("[iso18626-handler] error: failure reading request: ", "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		var illMessage iso18626.Iso18626MessageNS
 		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
-			log.Info("[iso18626-handler] error: unmarshal", "error", err)
 			http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
 			return
 		}

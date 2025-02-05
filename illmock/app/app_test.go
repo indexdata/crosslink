@@ -455,6 +455,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 500, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		assert.Contains(t, string(buf), "marshal failed")
 	})
 
 	t.Run("sendRequestingAgency no key", func(t *testing.T) {
