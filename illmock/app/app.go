@@ -91,6 +91,19 @@ type MockApp struct {
 
 var log *slog.Logger = slogwrap.SlogWrap()
 
+func validateHeader(header *iso18626.Header) error {
+	if header.RequestingAgencyRequestId == "" {
+		return fmt.Errorf("RequestingAgencyRequestId cannot be empty")
+	}
+	if header.RequestingAgencyId.AgencyIdValue == "" {
+		return fmt.Errorf("RequestingAgencyId cannot be empty")
+	}
+	if header.SupplyingAgencyId.AgencyIdValue == "" {
+		return fmt.Errorf("SupplyingAgencyId cannot be empty")
+	}
+	return nil
+}
+
 func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role string, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
@@ -158,6 +171,12 @@ func handleRequestError(requestHeader *iso18626.Header, role string, errorMessag
 	writeResponse(resmsg, w, role, requestHeader)
 }
 
+func handleRequestingAgencyMessageError(request *iso18626.RequestingAgencyMessage, role string, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+	var resmsg = createRequestingAgencyConfirmation(&request.Header, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
+	resmsg.RequestingAgencyMessageConfirmation.Action = &request.Action
+	writeResponse(resmsg, w, role, &request.Header)
+}
+
 func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role string, header *iso18626.Header) (*iso18626.ISO18626Message, error) {
 	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
 	if buf == nil {
@@ -184,12 +203,13 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	msg := createRequest()
 	msg.Request = illRequest // using same Request as received
 	header := &illRequest.Header
+
+	msg.Request.ServiceInfo = nil // not a patron request any more
+
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
 		header.RequestingAgencyRequestId = uuid.NewString()
 	}
-	msg.Request.ServiceInfo = nil // not a patron request any more
-
 	if header.RequestingAgencyId.AgencyIdType.Text == "" {
 		header.RequestingAgencyId.AgencyIdType.Text = app.agencyType
 	}
@@ -226,18 +246,11 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
-	if illRequest.Header.RequestingAgencyRequestId == "" {
-		handleRequestError(&illRequest.Header, "supplier", "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+	err := validateHeader(&illRequest.Header)
+	if err != nil {
+		handleRequestError(&illRequest.Header, "supplier", err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
-	// if illRequest.Header.RequestingAgencyId.AgencyIdValue == "" {
-	// 	handleRequestError(&illRequest.Header, "supplier", "Requesting agency id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
-	// 	return
-	// }
-	// if illRequest.Header.SupplyingAgencyId.AgencyIdValue == "" {
-	// 	handleRequestError(&illRequest.Header, "supplier", "Supplying agency id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
-	// 	return
-	// }
 	v := supplier.load(&illRequest.Header)
 	if v != nil {
 		handleRequestError(&illRequest.Header, "suppler", "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
@@ -350,9 +363,9 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	}
 }
 
-func createRequestingAgencyConfirmation(requestingAgencyMessage *iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
 	var resmsg = &iso18626.Iso18626MessageNS{}
-	header := createConfirmationHeader(&requestingAgencyMessage.Header, messageStatus)
+	header := createConfirmationHeader(iheader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
 		ConfirmationHeader: *header,
@@ -364,7 +377,12 @@ func createRequestingAgencyConfirmation(requestingAgencyMessage *iso18626.Reques
 func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	requestingAgencyMessage := illMessage.RequestingAgencyMessage
 	logIncoming("supplier", &requestingAgencyMessage.Header, illMessage)
-	var resmsg = createRequestingAgencyConfirmation(requestingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
+	err := validateHeader(&requestingAgencyMessage.Header)
+	if err != nil {
+		handleRequestingAgencyMessageError(requestingAgencyMessage, "supplier", err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
+	var resmsg = createRequestingAgencyConfirmation(&requestingAgencyMessage.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
 	writeResponse(resmsg, w, "supplier", &requestingAgencyMessage.Header)
 
@@ -413,18 +431,20 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
 	header := &supplyingAgencyMessage.Header
 	logIncoming("requester", header, illMessage)
-	log.Info("handleIso18626SupplyingAgencyMessage", "id", header.RequestingAgencyRequestId)
+	err := validateHeader(header)
+	if err != nil {
+		handleSupplyingAgencyError(supplyingAgencyMessage, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	}
 	v := requester.load(header)
 	if v == nil {
 		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
-
 	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	writeResponse(resmsg, w, "requester", header)
-	log.Info("handleIso18626SupplyingAgencyMessage", "status", supplyingAgencyMessage.StatusInfo.Status)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
 	}
