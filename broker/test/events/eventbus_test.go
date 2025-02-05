@@ -84,6 +84,42 @@ func TestCreateTask(t *testing.T) {
 		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, requestReceived[0].IllTransactionID)
 	}
 }
+func TestTransactionRollback(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	eventId := uuid.New().String()
+	illId := test.GetIllTransId(t, illRepo)
+	err := eventRepo.WithTxFunc(appCtx, func(eventRepo events.EventRepo) error {
+		_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+			ID:               eventId,
+			IllTransactionID: illId,
+			Timestamp:        test.GetNow(),
+			EventType:        events.EventTypeTask,
+			EventName:        events.EventNameMessageRequester,
+			EventStatus:      events.EventStatusNew,
+			EventData:        events.EventData{},
+		})
+		if err != nil {
+			t.Error("Should not be error")
+		}
+		_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+			ID:               uuid.New().String(),
+			IllTransactionID: uuid.New().String(),
+			Timestamp:        test.GetNow(),
+			EventType:        events.EventTypeTask,
+			EventName:        events.EventNameMessageRequester,
+			EventStatus:      events.EventStatusNew,
+			EventData:        events.EventData{},
+		})
+		return err
+	})
+	if err == nil {
+		t.Error("should be sql error")
+	}
+	_, err = eventRepo.GetEvent(appCtx, eventId)
+	if err == nil {
+		t.Error("should not find event")
+	}
+}
 
 func TestCreateNotice(t *testing.T) {
 	var eventReceived []events.Event
