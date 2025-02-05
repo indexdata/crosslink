@@ -189,8 +189,10 @@ func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role Role, head
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
+	// TODO: should really make a custom error for the SendReceiveXml to get status code out..
 	resp, err := httpclient.SendReceiveXml(http.DefaultClient, app.peerUrl+"/iso18626", buf)
 	if err != nil {
+		logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 500) // TODO: get status code from error
 		return nil, err
 	}
 	logOutgoing(role, header, msg, app.peerUrl+"/iso18626", 200)
