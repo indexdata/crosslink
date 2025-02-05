@@ -36,9 +36,9 @@ ORDER BY timestamp;
 
 -- name: SaveIllTransaction :one
 INSERT INTO ill_transaction (
-    id, timestamp, requester_symbol, requester_id, last_requester_action, prev_requester_action, supplier_symbol, requester_request_id, supplier_request_id, ill_transaction_data
+    id, timestamp, requester_symbol, requester_id, last_requester_action, prev_requester_action, supplier_symbol, requester_request_id, supplier_request_id, last_supplier_status, prev_supplier_status, ill_transaction_data
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
@@ -49,7 +49,9 @@ ON CONFLICT (id) DO UPDATE
         supplier_symbol = EXCLUDED.supplier_symbol,
         requester_request_id = EXCLUDED.requester_request_id,
         supplier_request_id = EXCLUDED.supplier_request_id,
-        ill_transaction_data = EXCLUDED.ill_transaction_data
+        ill_transaction_data = EXCLUDED.ill_transaction_data,
+        last_supplier_status = EXCLUDED.last_supplier_status,
+        prev_supplier_status = EXCLUDED.prev_supplier_status
 RETURNING sqlc.embed(ill_transaction);
 
 -- name: DeleteIllTransaction :exec

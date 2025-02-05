@@ -17,6 +17,8 @@ CREATE TABLE ill_transaction
     supplier_symbol       VARCHAR,
     requester_request_id  VARCHAR,
     supplier_request_id   VARCHAR,
+    last_supplier_status  VARCHAR,
+    prev_supplier_status  VARCHAR,
     ill_transaction_data  jsonb     NOT NULL,
     FOREIGN KEY (requester_id) REFERENCES peer (id)
 );
