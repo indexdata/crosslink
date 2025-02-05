@@ -34,7 +34,7 @@ RUN adduser \
   --shell "/sbin/nologin" \
   --no-create-home \
   --uid 65532 \
-  broker-user
+  illmock-user
 
 # create small runtime image
 FROM scratch
@@ -52,4 +52,5 @@ ENV HTTP_PORT=8081
 EXPOSE ${HTTP_PORT}
 
 # Run
+USER illmock-user:illmock-user
 CMD ["/illmock"]
