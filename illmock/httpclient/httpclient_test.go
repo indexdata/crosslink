@@ -99,8 +99,8 @@ func TestServerBrokenPipe(t *testing.T) {
 		defer conn.Close()
 		var buf [100]byte
 		n, err := conn.Read(buf[:])
-		assert.Greater(t, n, 10)
 		assert.Nil(t, err)
+		assert.Greater(t, n, 10)
 		// length is 2 but only 1 byte sent
 		n, err = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: text/xml\r\n\r\nX"))
 		assert.Nil(t, err)
