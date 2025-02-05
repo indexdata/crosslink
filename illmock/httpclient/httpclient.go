@@ -14,6 +14,15 @@ const (
 	ContentType               string = "Content-Type"
 )
 
+type HttpError struct {
+	StatusCode int
+	message    string
+}
+
+func (e *HttpError) Error() string {
+	return e.message
+}
+
 func clientDo(client *http.Client, method string, url string, reader io.Reader) (*http.Response, error) {
 	req, err := http.NewRequest(method, url, reader)
 	if err != nil {
@@ -30,7 +39,7 @@ func SendReceiveXml(client *http.Client, url string, buf []byte) ([]byte, error)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
+		return nil, &HttpError{resp.StatusCode, fmt.Sprintf("HTTP POST error: %d", resp.StatusCode)}
 	}
 	buf, err = io.ReadAll(resp.Body)
 	if err != nil {
