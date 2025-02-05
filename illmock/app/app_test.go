@@ -129,7 +129,6 @@ func TestWriteResponseNil(t *testing.T) {
 	defer server.Close()
 
 	msg := createPatronRequest()
-	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 	buf := utils.Must(xml.Marshal(msg))
 	resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
 	assert.Nil(t, err)
@@ -142,7 +141,6 @@ func TestWriteResponseNil(t *testing.T) {
 
 func TestWriteResponseWriteFailed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info("handlerFunc")
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = strings.Repeat("S1", 16000)
@@ -155,7 +153,6 @@ func TestWriteResponseWriteFailed(t *testing.T) {
 	defer server.Close()
 
 	msg := createPatronRequest()
-	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 	buf := utils.Must(xml.Marshal(msg))
 
 	conn, err := net.Dial("tcp", server.URL[7:])
