@@ -77,6 +77,113 @@ func TestAppShutdown(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestSendReceiveUrlEmpty(t *testing.T) {
+	var app MockApp
+	_, err := app.sendReceive("", nil, "supplier", nil)
+	assert.ErrorContains(t, err, "url cannot be empty")
+}
+
+func TestSendReceiveMarshalFailed(t *testing.T) {
+	var app MockApp
+	_, err := app.sendReceive("http://localhost:8081", nil, "supplier", nil)
+	assert.ErrorContains(t, err, "marshal failed")
+}
+
+func TestSendReceiveUnmarshalFailed(t *testing.T) {
+	var app MockApp
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		output := []byte("<")
+		_, err := w.Write(output)
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	app.peerUrl = server.URL
+	msg := &iso18626.Iso18626MessageNS{}
+	msg.Request = &iso18626.Request{Header: iso18626.Header{
+		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1"},
+		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
+		RequestingAgencyRequestId: uuid.NewString(),
+	}}
+	_, err := app.sendReceive(app.peerUrl, msg, "supplier", &msg.Request.Header)
+	assert.ErrorContains(t, err, "unexpected EOF")
+}
+
+func TestLogIncomingReq(t *testing.T) {
+	header := &iso18626.Header{}
+	logIncomingReq("supplier", header, nil)
+}
+
+func TestLogOutgoingReq(t *testing.T) {
+	header := &iso18626.Header{}
+	logOutgoingReq("supplier", header, nil, "http://localhost")
+}
+
+func TestLogIncomingRes(t *testing.T) {
+	header := &iso18626.Header{}
+	logIncomingRes("supplier", header, nil, "http://localhost")
+}
+
+func TestLogOutgoingRes(t *testing.T) {
+	header := &iso18626.Header{}
+	logOutgoingRes("supplier", header, nil)
+}
+
+func TestLogOutgoingErr(t *testing.T) {
+	header := &iso18626.Header{}
+	logOutgoingErr("supplier", header, nil, "http://localhost", 500, "service unavailable")
+}
+
+func TestWriteResponseNil(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeResponse(nil, w, "requester", nil)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	msg := createPatronRequest()
+	buf := utils.Must(xml.Marshal(msg))
+	resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
+	assert.Nil(t, err)
+	assert.Equal(t, 500, resp.StatusCode)
+	defer resp.Body.Close()
+	buf, err = io.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	assert.Contains(t, string(buf), "marshal failed")
+}
+
+func TestWriteResponseWriteFailed(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = strings.Repeat("S1", 16000)
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		var resmsg = createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
+		time.Sleep(5 * time.Millisecond)
+		writeResponse(resmsg, w, "supplier", header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	msg := createPatronRequest()
+	buf := utils.Must(xml.Marshal(msg))
+
+	conn, err := net.Dial("tcp", server.URL[7:])
+	assert.Nil(t, err)
+	defer conn.Close()
+	n, err := conn.Write([]byte("POST /iso18626 HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/xml\r\n" +
+		"Content-Length: " + strconv.Itoa(len(buf)) + "\r\n\r\n"))
+	assert.Nil(t, err)
+	assert.Greater(t, n, 20)
+	n, err = conn.Write(buf)
+	assert.Nil(t, err)
+	assert.Equal(t, len(buf), n)
+	conn.Close()
+}
+
 func TestService(t *testing.T) {
 	var app MockApp
 	dynPort := getFreePortTest(t)
@@ -91,24 +198,34 @@ func TestService(t *testing.T) {
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
 
-	t.Run("Bad method", func(t *testing.T) {
+	t.Run("iso18626 handler: Bad method", func(t *testing.T) {
 		resp, err := http.Get(isoUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
-	t.Run("Bad content type", func(t *testing.T) {
+	t.Run("iso18626 handler: Bad content type", func(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/plain", strings.NewReader("hello"))
 		assert.Nil(t, err)
 		assert.Equal(t, 415, resp.StatusCode)
 	})
 
-	t.Run("Bad XML", func(t *testing.T) {
+	t.Run("iso18626 handler: Read fail", func(t *testing.T) {
+		conn, err := net.Dial("tcp", "localhost:"+dynPort)
+		assert.Nil(t, err)
+		defer conn.Close()
+		// Bad chunked stream
+		n, err := conn.Write([]byte("POST /iso18626 HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Type: text/xml\r\n\r\n2\r\n"))
+		assert.Nil(t, err)
+		assert.Greater(t, n, 20)
+	})
+
+	t.Run("iso18626 handler: Bad XML", func(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", strings.NewReader("<badxml"))
 		assert.Nil(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
-	t.Run("Invalid message", func(t *testing.T) {
+	t.Run("iso18626 handler: Invalid message", func(t *testing.T) {
 		var msg = &iso18626.Iso18626MessageNS{}
 		msg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{}
 		buf := utils.Must(xml.Marshal(msg))
@@ -117,8 +234,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
-	t.Run("Empty RequestingAgencyRequestId", func(t *testing.T) {
+	t.Run("request: Empty RequestingAgencyRequestId", func(t *testing.T) {
 		msg := createRequest()
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
@@ -130,13 +249,50 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
-		assert.Equal(t, "Requesting agency request id cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
+		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("Reuse RequestingAgencyRequestId", func(t *testing.T) {
+	t.Run("request: Empty SupplyingAgencyId", func(t *testing.T) {
+		msg := createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, "SupplyingAgencyId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("request: Empty RequestingAgencyId", func(t *testing.T) {
 		msg := createRequest()
 		msg.Request.Header.RequestingAgencyRequestId = "1"
 		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, "RequestingAgencyId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("request: Reuse RequestingAgencyRequestId", func(t *testing.T) {
+		msg := createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
@@ -152,6 +308,7 @@ func TestService(t *testing.T) {
 		msg = createRequest()
 		msg.Request.Header.RequestingAgencyRequestId = "1"
 		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S2"
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf = utils.Must(xml.Marshal(msg))
 		resp2, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
@@ -166,6 +323,7 @@ func TestService(t *testing.T) {
 		msg = createRequest()
 		msg.Request.Header.RequestingAgencyRequestId = "1"
 		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf = utils.Must(xml.Marshal(msg))
 		resp3, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
@@ -180,8 +338,88 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("Non existing RequestingAgencyRequestId", func(t *testing.T) {
+	t.Run("requestingAgencyMessage: Empty RequestingAgencyRequestId", func(t *testing.T) {
+		msg := createRequestingAgencyMessage()
+		msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		msg.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Nil(t, response.RequestConfirmation)
+		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("requestingAgencyMessage: Empty Supplying Agency Id value", func(t *testing.T) {
+		msg := createRequestingAgencyMessage()
+		msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId = uuid.NewString()
+		msg.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Nil(t, response.RequestConfirmation)
+		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Equal(t, "SupplyingAgencyId cannot be empty", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("requestingAgencyMessage: Empty Requesting Agency Id value", func(t *testing.T) {
+		msg := createRequestingAgencyMessage()
+		msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId = uuid.NewString()
+		msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Nil(t, response.RequestConfirmation)
+		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Equal(t, "RequestingAgencyId cannot be empty", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("supplying agency message: missing ids", func(t *testing.T) {
 		msg := createSupplyingAgencyMessage()
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
+		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	})
+
+	t.Run("supplying agency message: Non existing RequestingAgencyRequestId", func(t *testing.T) {
+		msg := createSupplyingAgencyMessage()
+		msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId = uuid.NewString()
+		msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
+		msg.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
@@ -244,6 +482,31 @@ func TestService(t *testing.T) {
 		assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, "connection refused")
 	})
 
+	t.Run("Patron request, supplier URL", func(t *testing.T) {
+		port, err := getFreePort()
+		assert.Nil(t, err)
+		app.peerUrl = "http://localhost:" + strconv.Itoa(port) // nothing listening here now!
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		msg.Request.SupplierInfo = []iso18626.SupplierInfo{{SupplierDescription: "http://localhost:" + dynPort}}
+		address := iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{ElectronicAddressData: "http://localhost:" + dynPort}}
+		msg.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{Address: []iso18626.Address{address}}
+
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	})
+
 	t.Run("Patron request, no request confirmation", func(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/xml")
@@ -277,137 +540,178 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Did not receive requestConfirmation from supplier", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("writeResponse null", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			writeResponse(nil, w)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
+	t.Run("Request shipped return", func(t *testing.T) {
+		msg := createRequestingAgencyMessage()
+		header := &msg.RequestingAgencyMessage.Header
 
-		msg := createPatronRequest()
-		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
-		buf := utils.Must(xml.Marshal(msg))
-		resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		msg.RequestingAgencyMessage.Action = iso18626.TypeActionShippedReturn
+
+		responseMsg, err := app.sendReceive(app.peerUrl, msg, "requester", header)
 		assert.Nil(t, err)
-		assert.Equal(t, 500, resp.StatusCode)
-	})
-
-	t.Run("sendRequestingAgency no key", func(t *testing.T) {
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		app.sendRequestingAgencyMessage(header)
-	})
-
-	t.Run("sendRequestingAgency internal error", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
-
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
-
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-
-		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
-		app.requester.store(header, requesterInfo)
-		app.sendRequestingAgencyMessage(header)
-	})
-
-	t.Run("sendRequestingAgency unexpected ISO18626 message", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var resmsg = &iso18626.Iso18626MessageNS{}
-			writeResponse(resmsg, w)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
-
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
-
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
-		app.requester.store(header, requesterInfo)
-		app.sendRequestingAgencyMessage(header)
-	})
-
-	t.Run("sendRequestingAgency action mismatch", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var resmsg = &iso18626.Iso18626MessageNS{}
-			resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
-			act := iso18626.TypeActionReceived
-			resmsg.RequestingAgencyMessageConfirmation.Action = &act
-			writeResponse(resmsg, w)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
-
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
-
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
-		app.requester.store(header, requesterInfo)
-		app.sendRequestingAgencyMessage(header)
-	})
-
-	t.Run("sendSupplyingAgencyMessage no key", func(t *testing.T) {
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		header.RequestingAgencyId.AgencyIdValue = "R1"
-		app.sendSupplyingAgencyMessage(header)
-	})
-
-	t.Run("sendSuppluingAgency internal error", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "internal error", http.StatusInternalServerError)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
-
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
-
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		header.RequestingAgencyId.AgencyIdValue = "R1"
-
-		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
-		app.supplier.store(header, supplierInfo)
-		app.sendSupplyingAgencyMessage(header)
-	})
-
-	t.Run("sendSupplyingAgency unexpected ISO18626 message", func(t *testing.T) {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var resmsg = &iso18626.Iso18626MessageNS{}
-			writeResponse(resmsg, w)
-		})
-		server := httptest.NewServer(handler)
-		defer server.Close()
-
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
-
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = "S1"
-		header.RequestingAgencyId.AgencyIdValue = "R1"
-
-		supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
-		app.supplier.store(header, supplierInfo)
-		app.sendSupplyingAgencyMessage(header)
+		assert.NotNil(t, responseMsg.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, responseMsg.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Nil(t, responseMsg.RequestingAgencyMessageConfirmation.ErrorData)
+		assert.NotNil(t, responseMsg.RequestingAgencyMessageConfirmation.Action)
+		assert.Equal(t, iso18626.TypeActionShippedReturn, *responseMsg.RequestingAgencyMessageConfirmation.Action)
 	})
 
 	err := app.Shutdown()
 	assert.Nil(t, err)
+}
+
+func TestSendRequestingAgencyNoKey(t *testing.T) {
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	var app MockApp
+	app.sendRequestingAgencyMessage(header)
+}
+
+func TestSendRequestingAgencyInternalError(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	app.requester.store(header, requesterInfo)
+	app.sendRequestingAgencyMessage(header)
+}
+
+func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var resmsg = &iso18626.Iso18626MessageNS{}
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		writeResponse(resmsg, w, "supplier", header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	app.requester.store(header, requesterInfo)
+	app.sendRequestingAgencyMessage(header)
+}
+
+func TestSendRequestingAgencyActionMismatch(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var resmsg = &iso18626.Iso18626MessageNS{}
+		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
+		act := iso18626.TypeActionReceived
+		resmsg.RequestingAgencyMessageConfirmation.Action = &act
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		writeResponse(resmsg, w, "supplier", header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	app.requester.store(header, requesterInfo)
+	app.sendRequestingAgencyMessage(header)
+}
+
+func TestSendRequestingAgencyActionNil(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var resmsg = &iso18626.Iso18626MessageNS{}
+		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		writeResponse(resmsg, w, "supplier", header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	app.requester.store(header, requesterInfo)
+	app.sendRequestingAgencyMessage(header)
+}
+
+func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
+	var app MockApp
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	header.RequestingAgencyId.AgencyIdValue = "R1"
+	app.sendSupplyingAgencyMessage(header)
+}
+
+func TestSendSuppluingAgencyInternalError(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	header.RequestingAgencyId.AgencyIdValue = "R1"
+
+	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
+	app.supplier.store(header, supplierInfo)
+	app.sendSupplyingAgencyMessage(header)
+}
+
+func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := &iso18626.Header{}
+		header.RequestingAgencyRequestId = uuid.NewString()
+		header.SupplyingAgencyId.AgencyIdValue = "S1"
+		header.RequestingAgencyId.AgencyIdValue = "R1"
+		resmsg := createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
+		writeResponse(resmsg, w, "requester", header)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var app MockApp
+	app.peerUrl = server.URL
+
+	header := &iso18626.Header{}
+	header.RequestingAgencyRequestId = uuid.NewString()
+	header.SupplyingAgencyId.AgencyIdValue = "S1"
+	header.RequestingAgencyId.AgencyIdValue = "R1"
+
+	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
+	app.supplier.store(header, supplierInfo)
+	app.sendSupplyingAgencyMessage(header)
 }

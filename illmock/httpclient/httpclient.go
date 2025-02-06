@@ -2,16 +2,10 @@ package httpclient
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/indexdata/crosslink/illmock/slogwrap"
-	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 )
 
 const (
@@ -20,10 +14,13 @@ const (
 	ContentType               string = "Content-Type"
 )
 
-var log *slog.Logger = slogwrap.SlogWrap()
+type HttpError struct {
+	StatusCode int
+	message    string
+}
 
-func SendReceiveDefault(url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
-	return SendReceive(http.DefaultClient, url, msg)
+func (e *HttpError) Error() string {
+	return e.message
 }
 
 func clientDo(client *http.Client, method string, url string, reader io.Reader) (*http.Response, error) {
@@ -35,39 +32,22 @@ func clientDo(client *http.Client, method string, url string, reader io.Reader) 
 	return client.Do(req)
 }
 
-func SendReceive(client *http.Client, url string, msg *iso18626.Iso18626MessageNS) (*iso18626.ISO18626Message, error) {
-	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
-	if buf == nil {
-		return nil, fmt.Errorf("marshal failed")
-	}
-	lead := fmt.Sprintf("send XML\n%s", buf)
-	log.Info(lead)
-	resp, err := clientDo(client, http.MethodPost, url+"/iso18626", bytes.NewReader(buf))
+func SendReceiveXml(client *http.Client, url string, buf []byte) ([]byte, error) {
+	resp, err := clientDo(client, http.MethodPost, url, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, &HttpError{resp.StatusCode, fmt.Sprintf("HTTP POST error: %d", resp.StatusCode)}
+	}
 	buf, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP POST error: %d", resp.StatusCode)
-	}
 	contentType := resp.Header.Get(ContentType)
-	if !strings.HasPrefix(contentType, "application/xml") && !strings.HasPrefix(contentType, "text/xml") {
+	if !strings.HasPrefix(contentType, ContentTypeApplicationXml) && !strings.HasPrefix(contentType, ContentTypeTextXml) {
 		return nil, fmt.Errorf("only application/xml or text/xml accepted")
 	}
-	var response iso18626.ISO18626Message
-	err = xml.Unmarshal(buf, &response)
-	if err != nil {
-		return nil, err
-	}
-	// only to log the received message. We encode again to pretty print
-	buf1, _ := xml.MarshalIndent(&response, "  ", "  ")
-	if buf1 != nil {
-		lead = fmt.Sprintf("recv XML\n%s", buf1)
-		log.Info(lead)
-	}
-	return &response, nil
+	return buf, nil
 }
