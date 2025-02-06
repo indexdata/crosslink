@@ -77,9 +77,15 @@ func TestAppShutdown(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestSendReceiveUrlEmpty(t *testing.T) {
+	var app MockApp
+	_, err := app.sendReceive("", nil, "supplier", nil)
+	assert.ErrorContains(t, err, "url cannot be empty")
+}
+
 func TestSendReceiveMarshalFailed(t *testing.T) {
 	var app MockApp
-	_, err := app.sendReceive(nil, "supplier", nil)
+	_, err := app.sendReceive("http://localhost:8081", nil, "supplier", nil)
 	assert.ErrorContains(t, err, "marshal failed")
 }
 
@@ -102,7 +108,7 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
 		RequestingAgencyRequestId: uuid.NewString(),
 	}}
-	_, err := app.sendReceive(msg, "supplier", &msg.Request.Header)
+	_, err := app.sendReceive(app.peerUrl, msg, "supplier", &msg.Request.Header)
 	assert.ErrorContains(t, err, "unexpected EOF")
 }
 
@@ -476,6 +482,31 @@ func TestService(t *testing.T) {
 		assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, "connection refused")
 	})
 
+	t.Run("Patron request, supplier URL", func(t *testing.T) {
+		port, err := getFreePort()
+		assert.Nil(t, err)
+		app.peerUrl = "http://localhost:" + strconv.Itoa(port) // nothing listening here now!
+		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
+		msg.Request.SupplierInfo = []iso18626.SupplierInfo{{SupplierDescription: "http://localhost:" + dynPort}}
+		address := iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{ElectronicAddressData: "http://localhost:" + dynPort}}
+		msg.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{Address: []iso18626.Address{address}}
+
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	})
+
 	t.Run("Patron request, no request confirmation", func(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/xml")
@@ -518,7 +549,7 @@ func TestService(t *testing.T) {
 		header.RequestingAgencyId.AgencyIdValue = "R1"
 		msg.RequestingAgencyMessage.Action = iso18626.TypeActionShippedReturn
 
-		responseMsg, err := app.sendReceive(msg, "requester", header)
+		responseMsg, err := app.sendReceive(app.peerUrl, msg, "requester", header)
 		assert.Nil(t, err)
 		assert.NotNil(t, responseMsg.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, responseMsg.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -553,7 +584,7 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
 	app.sendRequestingAgencyMessage(header)
 }
@@ -576,7 +607,7 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
 	app.sendRequestingAgencyMessage(header)
 }
@@ -602,7 +633,7 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
 	app.sendRequestingAgencyMessage(header)
 }
@@ -626,7 +657,7 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel}
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
 	app.sendRequestingAgencyMessage(header)
 }
@@ -655,7 +686,7 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
 
-	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
 }
@@ -680,7 +711,7 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
 
-	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}}
+	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
 }
