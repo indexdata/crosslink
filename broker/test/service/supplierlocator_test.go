@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -15,10 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	tc "github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net/http"
-	"os"
-	"testing"
-	"time"
 )
 
 var eventBus events.EventBus
@@ -33,7 +34,7 @@ func TestMain(m *testing.M) {
 	}
 	compose.WaitForService("postgres", wait.ForLog("database system is ready to accept connections").
 		WithOccurrence(2).WithStartupTimeout(5*time.Second))
-	err = compose.Up(ctx, tc.Wait(true))
+	err = compose.WithOsEnv().Up(ctx, tc.Wait(true))
 	if err != nil {
 		panic(fmt.Sprintf("failed to start docker compose: %s", err))
 	}
