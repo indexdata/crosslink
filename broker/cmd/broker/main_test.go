@@ -3,18 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/app"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net"
-	"os"
-	"testing"
-	"time"
 )
 
 func TestMain(m *testing.M) {
+	fmt.Printf("HOST_IP=%s\n", os.Getenv("HOST_IP"))
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
