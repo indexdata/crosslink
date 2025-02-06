@@ -524,6 +524,20 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	}
 }
 
+func healthHandler(app *MockApp) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("OK\r\n"))
+		if err != nil {
+			log.Warn("healthHandler", "error", err.Error())
+		}
+	}
+}
+
 func iso18626Handler(app *MockApp) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -606,6 +620,7 @@ func (app *MockApp) Run() error {
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
+	mux.HandleFunc("/health", healthHandler(app))
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()

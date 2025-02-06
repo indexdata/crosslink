@@ -18,7 +18,9 @@ import (
 	"github.com/indexdata/crosslink/broker/test"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/testcontainers/testcontainers-go"
 	tc "github.com/testcontainers/testcontainers-go/modules/compose"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -28,23 +30,37 @@ var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	pgContainer, err := postgres.Run(ctx, "postgres",
+		postgres.WithDatabase("crosslink"),
+		postgres.WithUsername("crosslink"),
+		postgres.WithPassword("crosslink"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to start db container: %s", err))
+	}
+
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		panic(fmt.Sprintf("failed to get conn string: %s", err))
+	}
+
 	compose, err := tc.NewDockerCompose("../../docker-compose-test.yml")
 	if err != nil {
 		panic(fmt.Sprintf("failed to init docker compose: %s", err))
 	}
-	compose.WaitForService("postgres", wait.ForLog("database system is ready to accept connections").
-		WithOccurrence(2).WithStartupTimeout(5*time.Second))
-	err = compose.WithOsEnv().Up(ctx, tc.Wait(true))
+	err = compose.WithOsEnv().WaitForService("ill_mock", wait.ForHTTP("/health").WithStartupTimeout(10*time.Second)).Up(ctx)
 	if err != nil {
 		panic(fmt.Sprintf("failed to start docker compose: %s", err))
 	}
-
-	app.ConnectionString = "postgres://crosslink:crosslink@localhost:35432/crosslink?sslmode=disable"
+	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = 19082
 	adapter.MOCK_CLIENT_URL = "http://localhost:19083/iso18626"
 
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second) // very disturbing, but without it tests may fail
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
@@ -53,6 +69,9 @@ func TestMain(m *testing.M) {
 
 	if err := compose.Down(ctx); err != nil {
 		panic(fmt.Sprintf("failed to stop docker compose: %s", err))
+	}
+	if err := pgContainer.Terminate(ctx); err != nil {
+		panic(fmt.Sprintf("failed to stop db container: %s", err))
 	}
 	os.Exit(code)
 }
