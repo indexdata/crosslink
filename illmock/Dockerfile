@@ -1,4 +1,4 @@
-FROM golang:1.23
+FROM golang:1.23 AS build
 
 # Builds from the workspace root dir
 WORKDIR /app
@@ -26,9 +26,31 @@ RUN go mod download
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /illmock ./cmd/illmock
 
-ENV HTTP_PORT=8081
+# create runtime user
+RUN adduser \
+  --disabled-password \
+  --gecos "" \
+  --home "/nonexistent" \
+  --shell "/sbin/nologin" \
+  --no-create-home \
+  --uid 65532 \
+  illmock-user
 
+# create small runtime image
+FROM scratch
+
+# need to copy SSL certs and runtime use
+COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build /etc/passwd /etc/passwd
+COPY --from=build /etc/group /etc/group
+
+# copy the binary
+COPY --from=build /illmock .
+
+ENV HTTP_PORT=8081
 EXPOSE ${HTTP_PORT}
 
 # Run
+USER illmock-user:illmock-user
 CMD ["/illmock"]
