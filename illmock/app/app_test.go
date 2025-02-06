@@ -106,19 +106,29 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	assert.ErrorContains(t, err, "unexpected EOF")
 }
 
-func TestLogIncoming(t *testing.T) {
+func TestLogIncomingReq(t *testing.T) {
 	header := &iso18626.Header{}
-	logIncoming("supplier", header, nil)
+	logIncomingReq("supplier", header, nil)
 }
 
-func TestLogOutgoing(t *testing.T) {
+func TestLogOutgoingReq(t *testing.T) {
 	header := &iso18626.Header{}
-	logOutgoing("supplier", header, nil, "http://localhost", 200)
+	logOutgoingReq("supplier", header, nil, "http://localhost")
 }
 
-func TestLogResponse(t *testing.T) {
+func TestLogIncomingRes(t *testing.T) {
 	header := &iso18626.Header{}
-	logResponse("supplier", header, nil)
+	logIncomingRes("supplier", header, nil, "http://localhost")
+}
+
+func TestLogOutgoingRes(t *testing.T) {
+	header := &iso18626.Header{}
+	logOutgoingRes("supplier", header, nil)
+}
+
+func TestLogOutgoingErr(t *testing.T) {
+	header := &iso18626.Header{}
+	logOutgoingErr("supplier", header, nil, "http://localhost", 500, "service unavailable")
 }
 
 func TestWriteResponseNil(t *testing.T) {
