@@ -10,7 +10,7 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc
+.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage
 
 all: $(PROGRAMS)
 
@@ -34,7 +34,7 @@ view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
 
 check-coverage: check
-	${GO} run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 fmt:
 	$(GOFMT) -w $(GOFILES)

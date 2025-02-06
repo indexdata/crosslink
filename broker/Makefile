@@ -20,7 +20,7 @@ SQL_GEN_OUT_EVENT = events/*-gen.go
 SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT)
 SQL_GEN_IN = sqlc/*.sql
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
 
 all: $(BINARY)
 
@@ -61,7 +61,7 @@ view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
 
 check-coverage: check
-	${GO} run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 clean:
 	rm -f $(BINARY)
