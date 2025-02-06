@@ -73,7 +73,7 @@ jobs:
       run: make check
       working-directory: ${{ matrix.modules }}
       env:
-        PEER_URL: "http://172.17.0.1:19082"
+        HOST_DOCKER_INTERNAL: "172.17.0.1"
 
     - name: Check test coverage
       uses: vladopajic/go-test-coverage@v2
