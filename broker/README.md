@@ -11,9 +11,18 @@ Crosslink broker manages inter-library loan (ILL) transactions, specifically:
 
 Configuration is provided via environment variables:
 
-| Name                     | Description                                                            | Default value                                     |
-|--------------------------|------------------------------------------------------------------------|---------------------------------------------------|
-| HTTP_PORT                | Server port                                                            | 8081                                              |
+| Name            | Description                                | Default value                   |
+|-----------------|--------------------------------------------|---------------------------------|
+| HTTP_PORT       | Server port                                | 8081                            |
+| DB_TYPE         | Database type                              | postgres                        |
+| DB_USER         | Database user                              | crosslink                       |
+| DB_PASSWORD     | Database password                          | crosslink                       |
+| DB_HOST         | Database host                              | localhost                       |
+| DB_DATABASE     | Database name                              | crosslink                       |
+| DB_PORT         | Database port                              | 25432                           |
+| ENABLE_JSON_LOG | Should JSON log format be enabled          | false                           |
+| INIT_DATA       | Should init test data                      | true                            |
+| MOCK_CLIENT_URL | Mock client URL used for directory entries | http://localhost:19083/iso18626 |
 
 # Deploy on Kubernetes
 
@@ -67,6 +76,9 @@ You can also run included tests with:
 ```
 make check
 ```
+This will execute tests. Tests will start program on port `19082`, 
+ill mock client on port `19083` and postgres DB on port `35432`.
+
 
 or run test for selected `_test` package
 
@@ -81,3 +93,7 @@ You can run the program locally with:
 ```
 make run
 ```
+
+Program needs DB. You can start DB in docker. 
+There is `docker-compose.yml` file prepared to start DB with default user credentials and default port.
+

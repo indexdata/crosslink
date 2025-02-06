@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
@@ -139,7 +141,7 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 func initData(illRepo ill_db.IllRepo) {
 	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		if errors.Is(err, pgx.ErrNoRows) {
 			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
 				ID:     uuid.New().String(),
 				Name:   "Requester",
@@ -149,6 +151,8 @@ func initData(illRepo ill_db.IllRepo) {
 					Valid:  true,
 				},
 			}))
+		} else {
+			panic(err.Error())
 		}
 	}
 }
