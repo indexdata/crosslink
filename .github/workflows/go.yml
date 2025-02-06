@@ -67,9 +67,11 @@ jobs:
 
     - name: Build
       run: make all
+      working-directory: ${{ matrix.modules }}
 
     - name: Test
       run: make check
+      working-directory: ${{ matrix.modules }}
 
     - name: Check test coverage
       uses: vladopajic/go-test-coverage@v2
