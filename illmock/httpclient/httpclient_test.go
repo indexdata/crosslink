@@ -35,7 +35,11 @@ func TestServerForbidden(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	_, err := SendReceiveXml(http.DefaultClient, server.URL, nil)
+	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "HTTP POST error: 403")
+	httpErr, ok := err.(*HttpError)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusForbidden, httpErr.StatusCode)
 }
 
 func TestServerBadContentType(t *testing.T) {
