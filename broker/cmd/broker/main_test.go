@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/docker/docker/api/types/container"
 	"github.com/indexdata/crosslink/broker/app"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/testcontainers/testcontainers-go"
@@ -16,7 +17,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	fmt.Printf("HOST_IP=%s\n", os.Getenv("HOST_IP"))
+	hostDockerInternal := os.Getenv("HOST_DOCKER_INTERNAL")
+	fmt.Printf("HOST_DOCKER_INTERNAL=%s\n", hostDockerInternal)
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
@@ -26,6 +28,11 @@ func TestMain(m *testing.M) {
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+		testcontainers.WithHostConfigModifier(func(hc *container.HostConfig) {
+			if len(hostDockerInternal) > 0 {
+				hc.ExtraHosts = append(hc.ExtraHosts, fmt.Sprintf("host.docker.internal:%s", hostDockerInternal))
+			}
+		}),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to start db container: %s", err))

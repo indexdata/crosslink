@@ -69,14 +69,11 @@ jobs:
       run: make all
       working-directory: ${{ matrix.modules }}
 
-    - name: Determine host IP
-      run: echo "HOST_IP=$(ip route get 1 | awk '{print $(NF-2);exit}')" >> $GITHUB_ENV
-
     - name: Test
       run: make check
       working-directory: ${{ matrix.modules }}
       env:
-        HOST_IP: ${{ env.HOST_IP }}
+        HOST_DOCKER_INTERNAL: "172.17.0.1"
 
     - name: Check test coverage
       uses: vladopajic/go-test-coverage@v2
