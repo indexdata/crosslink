@@ -21,7 +21,8 @@ import (
 )
 
 type requesterInfo struct {
-	action iso18626.TypeAction
+	action      iso18626.TypeAction
+	supplierUrl string
 }
 
 type Role string
@@ -61,6 +62,7 @@ type supplierInfo struct {
 	index             int                   // index into status below
 	status            []iso18626.TypeStatus // the status that the supplier will return
 	supplierRequestId string                // supplier request Id
+	requesterUrl      string                // requester URL
 }
 
 type Supplier struct {
@@ -184,12 +186,15 @@ func handleRequestingAgencyMessageError(request *iso18626.RequestingAgencyMessag
 	writeResponse(resmsg, w, role, &request.Header)
 }
 
-func (app *MockApp) sendReceive(msg *iso18626.Iso18626MessageNS, role Role, header *iso18626.Header) (*iso18626.Iso18626MessageNS, error) {
+func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, role Role, header *iso18626.Header) (*iso18626.Iso18626MessageNS, error) {
+	if url == "" {
+		return nil, fmt.Errorf("url cannot be empty")
+	}
 	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
 	if buf == nil {
 		return nil, fmt.Errorf("marshal failed")
 	}
-	url := app.peerUrl + "/iso18626"
+	url = url + "/iso18626"
 	logOutgoingReq(role, header, msg, url)
 	resp, err := httpclient.SendReceiveXml(http.DefaultClient, url, buf)
 	if err != nil {
@@ -237,7 +242,15 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	}
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 
-	responseMsg, err := app.sendReceive(msg, RoleRequester, header)
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionReceived, supplierUrl: app.peerUrl}
+	for _, supplierInfo := range illRequest.SupplierInfo {
+		description := supplierInfo.SupplierDescription
+		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
+			requesterInfo.supplierUrl = description
+			break
+		}
+	}
+	responseMsg, err := app.sendReceive(requesterInfo.supplierUrl, msg, RoleRequester, header)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
 		handleRequestError(&patronReqHeader, RoleRequester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
@@ -248,7 +261,8 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 		handleRequestError(&patronReqHeader, RoleRequester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
-	requester.store(header, &requesterInfo{action: iso18626.TypeActionReceived})
+	requester.store(header, requesterInfo)
+
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w, RoleRequester, header)
 }
@@ -266,7 +280,6 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		return
 	}
 	var status []iso18626.TypeStatus
-
 	// should be able to parse the value and put any types into status...
 	switch illRequest.BibliographicInfo.SupplierUniqueRecordId {
 	case "WILLSUPPLY_LOANED":
@@ -280,8 +293,22 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	supplier.store(&illRequest.Header, &supplierInfo{status: status, index: 0,
-		supplierRequestId: uuid.NewString()})
+
+	supplierInfo := &supplierInfo{status: status, index: 0, supplierRequestId: uuid.NewString(), requesterUrl: app.peerUrl}
+	requestingAgencyInfo := illRequest.RequestingAgencyInfo
+	if requestingAgencyInfo != nil {
+		for _, address := range requestingAgencyInfo.Address {
+			electronicAddress := address.ElectronicAddress
+			if electronicAddress != nil {
+				data := electronicAddress.ElectronicAddressData
+				if strings.HasPrefix(data, "http://") || strings.HasPrefix(data, "https://") {
+					supplierInfo.requesterUrl = data
+					break
+				}
+			}
+		}
+	}
+	supplier.store(&illRequest.Header, supplierInfo)
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w, RoleSupplier, &illRequest.Header)
@@ -363,7 +390,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 		supplier.delete(header)
 	}
 	state.index++
-	responseMsg, err := app.sendReceive(msg, RoleSupplier, header)
+	responseMsg, err := app.sendReceive(state.requesterUrl, msg, RoleSupplier, header)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
 		return
@@ -478,9 +505,9 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = state.action
 
-	responseMsg, err := app.sendReceive(msg, "requester", header)
+	responseMsg, err := app.sendReceive(state.supplierUrl, msg, "requester", header)
 	if err != nil {
-		log.Warn("sendRequestingAgencyMessage", "error", err.Error())
+		log.Warn("sendRequestingAgencyMessage", "url", state.supplierUrl, "error", err.Error())
 		return
 	}
 	if responseMsg.RequestingAgencyMessageConfirmation == nil {
