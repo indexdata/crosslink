@@ -30,8 +30,11 @@ $(PROGRAMS): generate $(GOFILES)
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
-coverage: check
+view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
+
+check-coverage: check
+	${GO} run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 fmt:
 	$(GOFMT) -w $(GOFILES)
