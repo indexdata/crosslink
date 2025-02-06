@@ -242,7 +242,7 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	}
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionShippedReturn, supplierUrl: app.peerUrl}
+	requesterInfo := &requesterInfo{action: iso18626.TypeActionReceived, supplierUrl: app.peerUrl}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
 		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
