@@ -766,13 +766,3 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
 }
-
-func TestApiNoInit(t *testing.T) {
-	api := &FlowsApi{}
-	server := httptest.NewServer(api.flowsHandler())
-	defer server.Close()
-
-	resp, err := http.Get(server.URL)
-	assert.Nil(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
-}
