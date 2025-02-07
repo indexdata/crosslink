@@ -1,9 +1,12 @@
 package httpclient
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -25,7 +28,8 @@ func TestBadConnectionRefused(t *testing.T) {
 	assert.Nil(t, err)
 	port := strconv.Itoa(addr.Port)
 	_, err = SendReceiveXml(http.DefaultClient, "http://localhost:"+port, nil)
-	assert.ErrorContains(t, err, "connection refused")
+	errType := fmt.Sprintf("%s", reflect.TypeOf(errors.Unwrap(err)))
+	assert.Equal(t, "*net.OpError", errType)
 }
 
 func TestServerForbidden(t *testing.T) {
