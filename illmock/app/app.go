@@ -96,6 +96,7 @@ type MockApp struct {
 	server     *http.Server
 	requester  Requester
 	supplier   Supplier
+	flowsApi   *FlowsApi
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -366,6 +367,7 @@ func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS
 			return
 		}
 	}
+	app.flowsApi.addFlow(Flow{Message: *illMessage})
 	logIncomingReq(RoleSupplier, &illRequest.Header, illMessage)
 	app.handleSupplierRequest(illRequest, w)
 }
@@ -617,11 +619,13 @@ func (app *MockApp) Run() error {
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
+	app.flowsApi = createFlowsApi()
+
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
 	mux.HandleFunc("/health", healthHandler())
+	mux.HandleFunc("/api/flows", app.flowsApi.flowsHandler())
 	app.server = &http.Server{Addr: addr, Handler: mux}
-	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()
 }

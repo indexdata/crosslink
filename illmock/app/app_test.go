@@ -155,41 +155,30 @@ func TestWriteResponseNil(t *testing.T) {
 	assert.Contains(t, string(buf), "marshal failed")
 }
 
-func TestWriteResponseWriteFailed(t *testing.T) {
+func TestWriteHttpResponseWriteFailed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		header := &iso18626.Header{}
-		header.RequestingAgencyRequestId = uuid.NewString()
-		header.SupplyingAgencyId.AgencyIdValue = strings.Repeat("S1", 16000)
-		header.RequestingAgencyId.AgencyIdValue = "R1"
-		var resmsg = createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
-		time.Sleep(5 * time.Millisecond)
-		writeIso18626Response(resmsg, w, "supplier", header)
+		writeHttpResponse(w, []byte(strings.Repeat("S1", 16000)))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	msg := createPatronRequest()
-	buf := utils.Must(xml.Marshal(msg))
-
 	conn, err := net.Dial("tcp", server.URL[7:])
 	assert.Nil(t, err)
 	defer conn.Close()
-	n, err := conn.Write([]byte("POST /iso18626 HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/xml\r\n" +
-		"Content-Length: " + strconv.Itoa(len(buf)) + "\r\n\r\n"))
+	n, err := conn.Write([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/xml\r\n" +
+		"Content-Length: 0\r\n\r\n"))
 	assert.Nil(t, err)
 	assert.Greater(t, n, 20)
-	n, err = conn.Write(buf)
-	assert.Nil(t, err)
-	assert.Equal(t, len(buf), n)
-	conn.Close()
 }
 
 func TestService(t *testing.T) {
 	var app MockApp
 	dynPort := getFreePortTest(t)
 	app.httpPort = dynPort
-	app.peerUrl = "http://localhost:" + dynPort
-	isoUrl := "http://localhost:" + dynPort + "/iso18626"
+	url := "http://localhost:" + dynPort
+	app.peerUrl = url
+	isoUrl := url + "/iso18626"
+	apiUrl := url + "/api/flows"
 	healthUrl := "http://localhost:" + dynPort + "/health"
 	go func() {
 		err := app.Run()
@@ -207,6 +196,18 @@ func TestService(t *testing.T) {
 
 	t.Run("health: method", func(t *testing.T) {
 		resp, err := http.Post(healthUrl, "text/plain", strings.NewReader("Hello"))
+		assert.Nil(t, err)
+		assert.Equal(t, 405, resp.StatusCode)
+	})
+
+	t.Run("api handler: ok", func(t *testing.T) {
+		resp, err := http.Get(apiUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	t.Run("api handler: Bad method", func(t *testing.T) {
+		resp, err := http.Post(apiUrl, "text/plain", strings.NewReader("hello"))
 		assert.Nil(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
