@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/test"
+	"github.com/indexdata/go-utils/utils"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -25,27 +27,21 @@ func TestMain(m *testing.M) {
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
 	)
-	if err != nil {
-		panic(fmt.Sprintf("failed to start db container: %s", err))
-	}
+	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get conn string: %s", err))
-	}
+	test.Expect(err, "failed to get conn string")
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = 19081
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	go main()
-	time.Sleep(1 * time.Second)
+	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
-	if err := pgContainer.Terminate(ctx); err != nil {
-		panic(fmt.Sprintf("failed to stop db container: %s", err))
-	}
+	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }
 

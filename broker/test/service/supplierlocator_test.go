@@ -3,9 +3,12 @@ package service
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"github.com/indexdata/go-utils/utils"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,9 +19,9 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
-	tc "github.com/testcontainers/testcontainers-go/modules/compose"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -28,32 +31,41 @@ var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	compose, err := tc.NewDockerCompose("../../docker-compose-test.yml")
-	if err != nil {
-		panic(fmt.Sprintf("failed to init docker compose: %s", err))
-	}
-	compose.WaitForService("postgres", wait.ForLog("database system is ready to accept connections").
-		WithOccurrence(2).WithStartupTimeout(5*time.Second))
-	err = compose.WithOsEnv().Up(ctx, tc.Wait(true))
-	if err != nil {
-		panic(fmt.Sprintf("failed to start docker compose: %s", err))
-	}
+	pgContainer, err := postgres.Run(ctx, "postgres",
+		postgres.WithDatabase("crosslink"),
+		postgres.WithUsername("crosslink"),
+		postgres.WithPassword("crosslink"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+	)
+	test.Expect(err, "failed to start db container")
 
-	app.ConnectionString = "postgres://crosslink:crosslink@localhost:35432/crosslink?sslmode=disable"
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	test.Expect(err, "failed to get conn string")
+
+	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
+	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)), "failed to set peer URL")
+
+	go func() {
+		var mockApp mockapp.MockApp
+		test.Expect(mockApp.Run(), "failed to start ill mock client")
+	}()
+	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = 19082
-	adapter.MOCK_CLIENT_URL = "http://localhost:19083/iso18626"
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
 
-	time.Sleep(1 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
 
+	test.WaitForServiceUp(app.HTTP_PORT)
+
 	code := m.Run()
 
-	if err := compose.Down(ctx); err != nil {
-		panic(fmt.Sprintf("failed to stop docker compose: %s", err))
-	}
+	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }
 
