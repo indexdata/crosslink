@@ -76,9 +76,6 @@ You can also run included tests with:
 ```
 make check
 ```
-This will execute tests. Tests will start program on port `19082`, 
-ill mock client on port `19083` and postgres DB on port `35432`.
-
 
 or run test for selected `_test` package
 
