@@ -48,12 +48,13 @@ func TestApiUnmarshal(t *testing.T) {
 	resp.Body.Close()
 	assert.Nil(t, err)
 	var flows Flows
-	xml.Unmarshal(buf, &flows)
+	err = xml.Unmarshal(buf, &flows)
+	assert.Nil(t, err)
 	assert.NotNil(t, flows)
 	assert.Equal(t, 0, len(flows.Flows))
 
-	illMessage := &iso18626.Iso18626MessageNS{}
-	flowMessage := FlowMessage{Kind: "somekind", Timestamp: utils.XSDDateTime{Time: time.Now()}, Message: *illMessage}
+	illMessage := iso18626.Iso18626MessageNS{}
+	flowMessage := FlowMessage{Kind: "somekind", Timestamp: utils.XSDDateTime{Time: time.Now()}, Message: illMessage}
 	api.addFlow(Flow{Message: flowMessage, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"})
 
 	resp, err = http.Get(server.URL)
@@ -64,7 +65,8 @@ func TestApiUnmarshal(t *testing.T) {
 	resp.Body.Close()
 	assert.Nil(t, err)
 	var flows1 Flows
-	xml.Unmarshal(buf, &flows1)
+	err = xml.Unmarshal(buf, &flows1)
+	assert.Nil(t, err)
 	assert.NotNil(t, flows1)
 	assert.Equal(t, 0, len(flows1.Flows))
 	// assert.Equal(t, "rid", flows.Flows[0].Id)
