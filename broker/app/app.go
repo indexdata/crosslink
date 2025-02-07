@@ -52,7 +52,21 @@ func configLog() slog.Handler {
 	}
 }
 
-func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+func StartApp(ctx context.Context) {
+	RunMigrateScripts()
+	pool := InitDbPool()
+	eventRepo := CreateEventRepo(pool)
+	eventBus := CreateEventBus(eventRepo)
+	illRepo := CreateIllRepo(pool)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+	workflowManager := service.CreateWorkflowManager(eventBus)
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
+	StartEventBus(ctx, eventBus)
+	StartServer(illRepo, eventBus)
+}
+
+func StartServer(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 	if strings.EqualFold(INIT_DATA, "true") {
 		initData(illRepo)
 	}

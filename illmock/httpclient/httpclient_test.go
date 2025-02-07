@@ -23,7 +23,10 @@ func TestBadUrlChar(t *testing.T) {
 func TestBadConnectionRefused(t *testing.T) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 	assert.Nil(t, err)
-	port := strconv.Itoa(addr.Port)
+	l, err := net.ListenTCP("tcp", addr)
+	assert.Nil(t, err)
+	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+	l.Close()
 	_, err = SendReceiveXml(http.DefaultClient, "http://localhost:"+port, nil)
 	assert.ErrorContains(t, err, "connection refused")
 }

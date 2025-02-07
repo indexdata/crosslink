@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -11,6 +12,10 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/jackc/pgx/v5/pgtype"
+	"net"
+	"net/http"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -46,6 +51,8 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 	var illRepo ill_db.IllRepo
 	var eventRepo events.EventRepo
 	var iso18626Client client.Iso18626Client
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		app.RunMigrateScripts()
 		pool := app.InitDbPool()
@@ -57,9 +64,10 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 		workflowManager := service.CreateWorkflowManager(eventBus)
 		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 		app.StartEventBus(ctx, eventBus)
-		app.StartApp(illRepo, eventBus)
+		wg.Done()
+		app.StartServer(illRepo, eventBus)
 	}()
-	time.Sleep(100 * time.Millisecond)
+	wg.Wait()
 	return eventBus, illRepo, eventRepo, iso18626Client
 }
 
@@ -124,4 +132,41 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 		t.Errorf("Failed to create peer: %s", err)
 	}
 	return supplier
+}
+
+func Expect(err error, message string) {
+	if err != nil {
+		panic(fmt.Sprintf(message+" Errror : %s", err))
+	}
+}
+
+// GetFreePort asks the kernel for a free open port that is ready to use.
+func GetFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	// release for now so it can be bound by the actual server
+	// a more robust solution would be to bind the server to the port and close it here
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+func WaitForServiceUp(port int) {
+	if !WaitForPredicateToBeTrue(func() bool {
+		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		if err != nil {
+			return false
+		}
+		return resp.StatusCode == http.StatusOK
+	}) {
+		panic("failed to start broker")
+	} else {
+		fmt.Println("Service up")
+	}
 }
