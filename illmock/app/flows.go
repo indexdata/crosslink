@@ -14,24 +14,22 @@ type FlowsApi struct {
 }
 
 type FlowMessage struct {
-	XMLName   xml.Name          `xml:"message"`
 	Kind      string            `xml:"kind,attr"`
 	Timestamp utils.XSDDateTime `xml:"timestamp,attr"`
 	Message   iso18626.Iso18626MessageNS
 }
 
 type Flow struct {
-	XMLName   xml.Name `xml:"flow"`
-	Id        string   `xml:"id,attr"`
-	Role      Role     `xml:"role,attr"`
-	Supplier  string   `xml:"supplier,attr"`
-	Requester string   `xml:"requester,attr"`
+	Id        string `xml:"id,attr"`
+	Role      Role   `xml:"role,attr"`
+	Supplier  string `xml:"supplier,attr"`
+	Requester string `xml:"requester,attr"`
 	Message   FlowMessage
 }
 
 type Flows struct {
 	XMLName xml.Name `xml:"flows"`
-	Flows   []Flow
+	Flows   []Flow   `xml:"flow"`
 }
 
 func createFlowsApi() *FlowsApi {

@@ -68,6 +68,6 @@ func TestApiUnmarshal(t *testing.T) {
 	err = xml.Unmarshal(buf, &flows1)
 	assert.Nil(t, err)
 	assert.NotNil(t, flows1)
-	assert.Equal(t, 0, len(flows1.Flows))
-	// assert.Equal(t, "rid", flows.Flows[0].Id)
+	assert.Equal(t, 1, len(flows1.Flows))
+	assert.Equal(t, "rid", flows1.Flows[0].Id)
 }
