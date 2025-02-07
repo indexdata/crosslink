@@ -3,6 +3,9 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 DOCKER ?= docker
+ifeq (Linux, $(OS))
+export HOST_DOCKER_INTERNAL=172.17.0.1
+endif
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
 GOTOOLS=tools.go

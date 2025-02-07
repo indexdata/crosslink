@@ -15,8 +15,8 @@ type HoldingLookupParams struct {
 }
 
 type Holding struct {
-	Symbol     string
-	Identifier string
+	Symbol          string
+	LocalIdentifier string
 }
 
 type MockHoldingsLookupAdapter struct {
@@ -26,8 +26,8 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 	if strings.Index(params.Identifier, "return-") == 0 {
 		value := strings.TrimPrefix(params.Identifier, "return-")
 		return []Holding{{
-			Symbol:     value,
-			Identifier: value,
+			Symbol:          value,
+			LocalIdentifier: value,
 		}}, nil
 	}
 	if strings.Contains(params.Identifier, "error") {
@@ -36,20 +36,15 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 	if strings.Contains(params.Identifier, "h-not-found") {
 		return []Holding{}, nil
 	}
-	count := 1
-	if strings.Index(params.Identifier, "count-") == 0 {
-		value := strings.TrimPrefix(params.Identifier, "count-")
-		num, err := strconv.Atoi(value)
-		if err == nil {
-			count = num
-		}
-	}
+	ids := strings.Split(params.Identifier, ",")
+	i := 1
 	var holdings []Holding
-	for i := 1; i <= count; i++ {
+	for _, id := range ids {
 		holdings = append(holdings, Holding{
-			Symbol:     "isil:resp" + strconv.Itoa(i),
-			Identifier: "658a98ab-866e-48f7-b2eb-da5f95ca525" + strconv.Itoa(i),
+			Symbol:          "isil:sup" + strconv.Itoa(i),
+			LocalIdentifier: id,
 		})
+		i++
 	}
 	return holdings, nil
 }

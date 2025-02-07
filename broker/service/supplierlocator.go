@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -30,6 +31,10 @@ func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event even
 	s.processTask(ctx, event, s.locateSuppliers)
 }
 
+func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event events.Event) {
+	s.processTask(ctx, event, s.selectSupplier)
+}
+
 func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
 	err := s.eventBus.BeginTask(event.ID)
 	if err != nil {
@@ -51,12 +56,12 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logErrorAndReturnResult(ctx, "failed to read ill transaction", err)
 	}
 
-	if illTrans.SupplierRequestID.String == "" {
-		return logProblemAndReturnResult(ctx, "ill transaction missing supplier request id")
+	if illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId == "" {
+		return logProblemAndReturnResult(ctx, "ill transaction missing SupplierUniqueRecordId")
 	}
 
 	holdings, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
-		Identifier: illTrans.SupplierRequestID.String,
+		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
 	})
 
 	if err != nil {
@@ -64,12 +69,14 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	}
 
 	if len(holdings) == 0 {
-		return logProblemAndReturnResult(ctx, "could not find holdings for supplier request id: "+illTrans.SupplierRequestID.String)
+		return logProblemAndReturnResult(ctx, "could not find holdings for supplier request id: "+illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId)
 	}
 
 	symbols := make([]string, 0, len(holdings))
+	symLocalIdMapping := make(map[string]string, len(holdings))
 	for _, holding := range holdings {
 		symbols = append(symbols, holding.Symbol)
+		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
 	}
 
 	directories, err := s.dirAdapter.Lookup(adapter.DirectoryLookupParams{
@@ -87,7 +94,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	count := int32(0)
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	for _, dir := range directories {
-		sup, err := s.addLocatedSupplier(ctx, dir, illTrans.ID, count)
+		sup, err := s.addLocatedSupplier(ctx, dir, illTrans.ID, count, symLocalIdMapping)
 		if err == nil {
 			count++
 			locatedSuppliers = append(locatedSuppliers, sup)
@@ -101,7 +108,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
 }
 
-func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32) (*ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32, symLocalIdMapping map[string]string) (*ill_db.LocatedSupplier, error) {
 	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
 	if err != nil {
 		if err.Error() == "no rows in result set" {
@@ -120,8 +127,13 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 			return nil, err
 		}
 	}
+	locId, ok := symLocalIdMapping[dir.Symbol]
+	if !ok {
+		ctx.Logger().Error("could not get local id for symbol", "symbol", dir.Symbol, "mapping", symLocalIdMapping)
+		return nil, errors.New("could not get local id for symbol")
+	}
 
-	supplier, err := s.illRepo.CreateLocatedSupplier(ctx, ill_db.CreateLocatedSupplierParams{
+	supplier, err := s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: transId,
 		SupplierID:       peer.ID,
@@ -130,8 +142,60 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 			String: "new",
 			Valid:  true,
 		},
+		LocalID: pgtype.Text{
+			String: locId,
+			Valid:  true,
+		},
 	})
 	return &supplier, err
+}
+
+func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	suppliers, err := s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierStatus: pgtype.Text{
+			String: "selected",
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+	}
+	if len(suppliers) > 0 {
+		for _, supplier := range suppliers {
+			supplier.SupplierStatus = pgtype.Text{
+				String: "skipped",
+				Valid:  true,
+			}
+			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
+			if err != nil {
+				return logErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
+			}
+		}
+	}
+	suppliers, err = s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierStatus: pgtype.Text{
+			String: "new",
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "could not find located suppliers", err)
+	}
+	if len(suppliers) == 0 {
+		return logProblemAndReturnResult(ctx, "no suppliers with new status")
+	}
+	locSup := suppliers[0]
+	locSup.SupplierStatus = pgtype.Text{
+		String: "selected",
+		Valid:  true,
+	}
+	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
+	}
+	return events.EventStatusSuccess, getEventResult(map[string]any{"supplierId": locSup.SupplierID})
 }
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {

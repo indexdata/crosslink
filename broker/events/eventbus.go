@@ -114,13 +114,17 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		p.ctx.Logger().Error("Failed to read event", "error", err, "eventId", data.Event)
 		return
 	}
+	eventCtx := p.ctx.WithArgs(&extctx.LoggerArgs{
+		TransactionId: event.IllTransactionID,
+		EventId:       event.ID,
+	})
 	switch data.Signal {
 	case SignalTaskCreated, SignalNoticeCreated:
-		triggerHandlers(p.ctx, event, p.EventCreatedHandlers)
+		triggerHandlers(eventCtx, event, p.EventCreatedHandlers)
 	case SignalTaskBegin:
-		triggerHandlers(p.ctx, event, p.TaskStartedHandlers)
+		triggerHandlers(eventCtx, event, p.TaskStartedHandlers)
 	case SignalTaskComplete:
-		triggerHandlers(p.ctx, event, p.TaskCompletedHandlers)
+		triggerHandlers(eventCtx, event, p.TaskCompletedHandlers)
 	default:
 		p.ctx.Logger().Error("Not supported signal", "signal", data.Signal)
 	}

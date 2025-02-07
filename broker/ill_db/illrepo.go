@@ -7,14 +7,15 @@ import (
 )
 
 type IllRepo interface {
-	CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error)
+	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	CreatePeer(ctx extctx.ExtendedContext, params CreatePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	CreateLocatedSupplier(ctx extctx.ExtendedContext, params CreateLocatedSupplierParams) (LocatedSupplier, error)
+	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error)
 }
 
 type PgIllRepo struct {
@@ -22,8 +23,8 @@ type PgIllRepo struct {
 	queries Queries
 }
 
-func (r *PgIllRepo) CreateIllTransaction(ctx extctx.ExtendedContext, params CreateIllTransactionParams) (IllTransaction, error) {
-	row, err := r.queries.CreateIllTransaction(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
+	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
 	return row.IllTransaction, err
 }
 
@@ -63,7 +64,12 @@ func (r *PgIllRepo) CreatePeer(ctx extctx.ExtendedContext, params CreatePeerPara
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) CreateLocatedSupplier(ctx extctx.ExtendedContext, params CreateLocatedSupplierParams) (LocatedSupplier, error) {
-	row, err := r.queries.CreateLocatedSupplier(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error) {
+	row, err := r.queries.SaveLocatedSupplier(ctx, r.GetConnOrTx(), params)
+	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error) {
+	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplier(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
 }

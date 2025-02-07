@@ -74,6 +74,8 @@ jobs:
     - name: Test
       run: make check
       working-directory: ${{ matrix.modules }}
+      env:
+        HOST_DOCKER_INTERNAL: "172.17.0.1"
 
     - name: Check test coverage
       uses: vladopajic/go-test-coverage@v2

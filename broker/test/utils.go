@@ -54,7 +54,8 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 		illRepo = app.CreateIllRepo(pool)
 		iso18626Client = client.CreateIso18626Client(eventBus, illRepo)
 		supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
-		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator)
+		workflowManager := service.CreateWorkflowManager(eventBus)
+		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 		app.StartEventBus(ctx, eventBus)
 		app.StartApp(illRepo, eventBus)
 	}()
@@ -64,7 +65,7 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 
 func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:        illId,
 		Timestamp: GetNow(),
 	})
@@ -109,7 +110,7 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, address str
 }
 
 func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId string, supplierId string) ill_db.LocatedSupplier {
-	supplier, err := illRepo.CreateLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateLocatedSupplierParams{
+	supplier, err := illRepo.SaveLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: illTransId,
 		SupplierID:       supplierId,
