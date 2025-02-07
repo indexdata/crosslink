@@ -51,6 +51,8 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 		// api.flowsList is not a pointer so MarshalIndent will always work
 		buf := utils.Must(xml.MarshalIndent(api.flowsList, "  ", "  "))
+
+		// TODO filter the list of flows
 		writeHttpResponse(w, buf)
 	}
 }

@@ -187,7 +187,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
-	healthUrl := "http://localhost:" + dynPort + "/health"
+	healthUrl := url + "/health"
 	go func() {
 		err := app.Run()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

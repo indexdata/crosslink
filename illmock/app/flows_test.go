@@ -54,8 +54,9 @@ func TestApiUnmarshal(t *testing.T) {
 	assert.Equal(t, 0, len(flows.Flows))
 
 	illMessage := iso18626.Iso18626MessageNS{}
-	flowMessage := FlowMessage{Kind: "somekind", Timestamp: utils.XSDDateTime{Time: time.Now()}, Message: illMessage}
-	api.addFlow(Flow{Message: flowMessage, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"})
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Second)}, Message: illMessage}
+	flow1 := Flow{Message: flowMessage, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	api.addFlow(flow1)
 
 	resp, err = http.Get(server.URL)
 	assert.Nil(t, err)
@@ -64,10 +65,24 @@ func TestApiUnmarshal(t *testing.T) {
 	buf, err = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	assert.Nil(t, err)
-	var flows1 Flows
-	err = xml.Unmarshal(buf, &flows1)
+	var flows1R Flows
+	err = xml.Unmarshal(buf, &flows1R)
 	assert.Nil(t, err)
-	assert.NotNil(t, flows1)
-	assert.Equal(t, 1, len(flows1.Flows))
-	assert.Equal(t, "rid", flows1.Flows[0].Id)
+	assert.Equal(t, []Flow{flow1}, flows1R.Flows)
+
+	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Second)}, Message: illMessage}
+	flow2 := Flow{Message: flowMessage, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
+	api.addFlow(flow2)
+
+	resp, err = http.Get(server.URL)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+	buf, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.Nil(t, err)
+	var flows2R Flows
+	err = xml.Unmarshal(buf, &flows2R)
+	assert.Nil(t, err)
+	assert.Equal(t, []Flow{flow1, flow2}, flows2R.Flows)
 }
