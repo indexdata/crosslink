@@ -113,7 +113,15 @@ func validateHeader(header *iso18626.Header) error {
 	return nil
 }
 
-func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role Role, header *iso18626.Header) {
+func writeHttpResponse(w http.ResponseWriter, buf []byte) {
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write(buf)
+	if err != nil {
+		log.Warn("writeResponse", "error", err.Error())
+	}
+}
+
+func writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role Role, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
 		http.Error(w, "marshal failed", http.StatusInternalServerError)
@@ -121,11 +129,7 @@ func writeResponse(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, ro
 	}
 	logOutgoingRes(role, header, resmsg)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(buf)
-	if err != nil {
-		log.Warn("writeResponse", "error", err.Error())
-	}
+	writeHttpResponse(w, buf)
 }
 
 func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus) *iso18626.ConfirmationHeader {
@@ -177,13 +181,13 @@ func createRequest() *iso18626.Iso18626MessageNS {
 
 func handleRequestError(requestHeader *iso18626.Header, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestResponse(requestHeader, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeResponse(resmsg, w, role, requestHeader)
+	writeIso18626Response(resmsg, w, role, requestHeader)
 }
 
 func handleRequestingAgencyMessageError(request *iso18626.RequestingAgencyMessage, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestingAgencyConfirmation(&request.Header, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &request.Action
-	writeResponse(resmsg, w, role, &request.Header)
+	writeIso18626Response(resmsg, w, role, &request.Header)
 }
 
 func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, role Role, header *iso18626.Header) (*iso18626.Iso18626MessageNS, error) {
@@ -264,7 +268,7 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	requester.store(header, requesterInfo)
 
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
-	writeResponse(resmsg, w, RoleRequester, header)
+	writeIso18626Response(resmsg, w, RoleRequester, header)
 }
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
@@ -311,7 +315,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	supplier.store(&illRequest.Header, supplierInfo)
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
-	writeResponse(resmsg, w, RoleSupplier, &illRequest.Header)
+	writeIso18626Response(resmsg, w, RoleSupplier, &illRequest.Header)
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
 }
 
@@ -425,7 +429,7 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 	}
 	var resmsg = createRequestingAgencyConfirmation(&requestingAgencyMessage.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
-	writeResponse(resmsg, w, RoleSupplier, &requestingAgencyMessage.Header)
+	writeIso18626Response(resmsg, w, RoleSupplier, &requestingAgencyMessage.Header)
 
 	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
 		return
@@ -458,7 +462,7 @@ func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAge
 
 func handleSupplyingAgencyError(illMessage *iso18626.SupplyingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeResponse(resmsg, w, RoleRequester, &illMessage.Header)
+	writeIso18626Response(resmsg, w, RoleRequester, &illMessage.Header)
 }
 
 func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
@@ -485,7 +489,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
-	writeResponse(resmsg, w, RoleRequester, header)
+	writeIso18626Response(resmsg, w, RoleRequester, header)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
 	}
@@ -521,6 +525,16 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	if state.action == iso18626.TypeActionReceived {
 		state.action = iso18626.TypeActionShippedReturn
 		go app.sendRequestingAgencyMessage(header)
+	}
+}
+
+func healthHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		writeHttpResponse(w, []byte("OK\r\n"))
 	}
 }
 
@@ -606,6 +620,7 @@ func (app *MockApp) Run() error {
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
+	mux.HandleFunc("/health", healthHandler())
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()

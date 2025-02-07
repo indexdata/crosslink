@@ -139,7 +139,7 @@ func TestLogOutgoingErr(t *testing.T) {
 
 func TestWriteResponseNil(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeResponse(nil, w, "requester", nil)
+		writeIso18626Response(nil, w, "requester", nil)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -163,7 +163,7 @@ func TestWriteResponseWriteFailed(t *testing.T) {
 		header.RequestingAgencyId.AgencyIdValue = "R1"
 		var resmsg = createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
 		time.Sleep(5 * time.Millisecond)
-		writeResponse(resmsg, w, "supplier", header)
+		writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -190,6 +190,7 @@ func TestService(t *testing.T) {
 	app.httpPort = dynPort
 	app.peerUrl = "http://localhost:" + dynPort
 	isoUrl := "http://localhost:" + dynPort + "/iso18626"
+	healthUrl := "http://localhost:" + dynPort + "/health"
 	go func() {
 		err := app.Run()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -197,6 +198,18 @@ func TestService(t *testing.T) {
 		}
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
+
+	t.Run("health: ok", func(t *testing.T) {
+		resp, err := http.Get(healthUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	t.Run("health: method", func(t *testing.T) {
+		resp, err := http.Post(healthUrl, "text/plain", strings.NewReader("Hello"))
+		assert.Nil(t, err)
+		assert.Equal(t, 405, resp.StatusCode)
+	})
 
 	t.Run("iso18626 handler: Bad method", func(t *testing.T) {
 		resp, err := http.Get(isoUrl)
@@ -596,7 +609,7 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeResponse(resmsg, w, "supplier", header)
+		writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -622,7 +635,7 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeResponse(resmsg, w, "supplier", header)
+		writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -646,7 +659,7 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeResponse(resmsg, w, "supplier", header)
+		writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -698,7 +711,7 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
 		resmsg := createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
-		writeResponse(resmsg, w, "requester", header)
+		writeIso18626Response(resmsg, w, "requester", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
