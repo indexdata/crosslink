@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -91,6 +92,7 @@ func TestSendReceiveMarshalFailed(t *testing.T) {
 
 func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	var app MockApp
+	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -114,32 +116,38 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 
 func TestLogIncomingReq(t *testing.T) {
 	header := &iso18626.Header{}
-	logIncomingReq("supplier", header, nil)
+	var app MockApp
+	app.logIncomingReq("supplier", header, nil)
 }
 
 func TestLogOutgoingReq(t *testing.T) {
 	header := &iso18626.Header{}
-	logOutgoingReq("supplier", header, nil, "http://localhost")
+	var app MockApp
+	app.logOutgoingReq("supplier", header, nil, "http://localhost")
 }
 
 func TestLogIncomingRes(t *testing.T) {
 	header := &iso18626.Header{}
-	logIncomingRes("supplier", header, nil, "http://localhost")
+	var app MockApp
+	app.logIncomingRes("supplier", header, nil, "http://localhost")
 }
 
 func TestLogOutgoingRes(t *testing.T) {
 	header := &iso18626.Header{}
-	logOutgoingRes("supplier", header, nil)
+	var app MockApp
+	app.logOutgoingRes("supplier", header, nil)
 }
 
 func TestLogOutgoingErr(t *testing.T) {
 	header := &iso18626.Header{}
-	logOutgoingErr("supplier", header, nil, "http://localhost", 500, "service unavailable")
+	var app MockApp
+	app.logOutgoingErr("supplier", header, "http://localhost", 500, "service unavailable")
 }
 
 func TestWriteResponseNil(t *testing.T) {
+	var app MockApp
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeIso18626Response(nil, w, "requester", nil)
+		app.writeIso18626Response(nil, w, "requester", nil)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -188,6 +196,12 @@ func TestService(t *testing.T) {
 	}()
 	time.Sleep(5 * time.Millisecond) // wait for app to serve
 
+	t.Run("notfound", func(t *testing.T) {
+		resp, err := http.Get(url + "/foo")
+		assert.Nil(t, err)
+		assert.Equal(t, 404, resp.StatusCode)
+	})
+
 	t.Run("health: ok", func(t *testing.T) {
 		resp, err := http.Get(healthUrl)
 		assert.Nil(t, err)
@@ -204,6 +218,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Get(apiUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		assert.Contains(t, string(buf), "<flows")
 	})
 
 	t.Run("api handler: Bad method", func(t *testing.T) {
@@ -267,8 +285,10 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("request: Empty SupplyingAgencyId", func(t *testing.T) {
+		app.flowsApi.init() // clear flows, so only this request is present
+
 		msg := createRequest()
-		msg.Request.Header.RequestingAgencyRequestId = "1"
+		msg.Request.Header.RequestingAgencyRequestId = uuid.NewString()
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
@@ -282,6 +302,15 @@ func TestService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, "SupplyingAgencyId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
+
+		resp, err = http.Get(apiUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		assert.Contains(t, string(buf), ">"+msg.Request.Header.RequestingAgencyRequestId+"<")
+		assert.Contains(t, string(buf), "id=\""+msg.Request.Header.RequestingAgencyRequestId)
 	})
 
 	t.Run("request: Empty RequestingAgencyId", func(t *testing.T) {
@@ -593,6 +622,7 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 
 	var app MockApp
 	app.peerUrl = server.URL
+	app.flowsApi = createFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
@@ -604,18 +634,19 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 }
 
 func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
+	var app MockApp
+	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = &iso18626.Iso18626MessageNS{}
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeIso18626Response(resmsg, w, "supplier", header)
+		app.writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var app MockApp
 	app.peerUrl = server.URL
 
 	header := &iso18626.Header{}
@@ -627,6 +658,8 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 }
 
 func TestSendRequestingAgencyActionMismatch(t *testing.T) {
+	var app MockApp
+	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = &iso18626.Iso18626MessageNS{}
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
@@ -636,12 +669,11 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeIso18626Response(resmsg, w, "supplier", header)
+		app.writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var app MockApp
 	app.peerUrl = server.URL
 
 	header := &iso18626.Header{}
@@ -653,6 +685,8 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 }
 
 func TestSendRequestingAgencyActionNil(t *testing.T) {
+	var app MockApp
+	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = &iso18626.Iso18626MessageNS{}
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
@@ -660,12 +694,11 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
-		writeIso18626Response(resmsg, w, "supplier", header)
+		app.writeIso18626Response(resmsg, w, "supplier", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var app MockApp
 	app.peerUrl = server.URL
 
 	header := &iso18626.Header{}
@@ -678,6 +711,7 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 
 func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
 	var app MockApp
+	app.flowsApi = createFlowsApi()
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
@@ -694,6 +728,7 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 
 	var app MockApp
 	app.peerUrl = server.URL
+	app.flowsApi = createFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
@@ -706,19 +741,21 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 }
 
 func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
+	var app MockApp
+	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
 		header.RequestingAgencyId.AgencyIdValue = "R1"
 		resmsg := createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
-		writeIso18626Response(resmsg, w, "requester", header)
+		app.writeIso18626Response(resmsg, w, "requester", header)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var app MockApp
 	app.peerUrl = server.URL
+	app.flowsApi = createFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
@@ -728,4 +765,14 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
+}
+
+func TestApiNoInit(t *testing.T) {
+	api := &FlowsApi{}
+	server := httptest.NewServer(api.flowsHandler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
 }

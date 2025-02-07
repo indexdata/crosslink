@@ -6,15 +6,27 @@ import (
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 )
 
 type FlowsApi struct {
 	flowsList Flows
 }
 
+type FlowMessage struct {
+	XMLName   xml.Name          `xml:"message"`
+	Kind      string            `xml:"kind,attr"`
+	Timestamp utils.XSDDateTime `xml:"timestamp,attr"`
+	Message   iso18626.Iso18626MessageNS
+}
+
 type Flow struct {
-	XMLName xml.Name                   `xml:"flow"`
-	Message iso18626.Iso18626MessageNS `xml:"message"`
+	XMLName   xml.Name `xml:"flow"`
+	Id        string   `xml:"id,attr"`
+	Role      Role     `xml:"role,attr"`
+	Supplier  string   `xml:"supplier,attr"`
+	Requester string   `xml:"requester,attr"`
+	Message   FlowMessage
 }
 
 type Flows struct {
@@ -24,8 +36,12 @@ type Flows struct {
 
 func createFlowsApi() *FlowsApi {
 	api := &FlowsApi{}
-	api.flowsList.Flows = make([]Flow, 0)
+	api.init()
 	return api
+}
+
+func (api *FlowsApi) init() {
+	api.flowsList.Flows = make([]Flow, 0)
 }
 
 func (api *FlowsApi) flowsHandler() http.HandlerFunc {
@@ -35,11 +51,8 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			return
 		}
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-		buf, err := xml.MarshalIndent(api.flowsList.Flows, "  ", "  ")
-		if err != nil {
-			http.Error(w, "failed to marshal flows", http.StatusInternalServerError)
-			return
-		}
+		// api.flowsList is not a pointer so MarshalIndent will always work
+		buf := utils.Must(xml.MarshalIndent(api.flowsList, "  ", "  "))
 		writeHttpResponse(w, buf)
 	}
 }
