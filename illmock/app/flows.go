@@ -14,9 +14,14 @@ type FlowsApi struct {
 }
 
 type FlowMessage struct {
-	Kind      string            `xml:"kind,attr"`
-	Timestamp utils.XSDDateTime `xml:"timestamp,attr"`
-	Message   iso18626.Iso18626MessageNS
+	Kind      string                     `xml:"kind,attr"`
+	Timestamp utils.XSDDateTime          `xml:"timestamp,attr"`
+	Message   iso18626.Iso18626MessageNS `xml:",innerxml"`
+}
+
+type FlowError struct {
+	Kind    string `xml:"kind,attr"`
+	Message string `xml:"message"`
 }
 
 type Flow struct {
@@ -24,7 +29,8 @@ type Flow struct {
 	Role      Role   `xml:"role,attr"`
 	Supplier  string `xml:"supplier,attr"`
 	Requester string `xml:"requester,attr"`
-	Message   FlowMessage
+	Message   *FlowMessage
+	Error     *FlowError `xml:"error,omitempty"`
 }
 
 type Flows struct {
