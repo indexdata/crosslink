@@ -15,9 +15,9 @@ type FlowsApi struct {
 }
 
 type FlowMessage struct {
-	Kind      string            `xml:"kind,attr"`
-	Timestamp utils.XSDDateTime `xml:"timestamp,attr"`
-	Message   iso18626.Iso18626MessageNS
+	Kind      string                     `xml:"kind,attr"`
+	Timestamp utils.XSDDateTime          `xml:"timestamp,attr"`
+	Message   iso18626.Iso18626MessageNS `xml:"ISO18626Message"`
 }
 
 type FlowError struct {
