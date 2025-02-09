@@ -35,14 +35,14 @@ func TestApiBadMethod(t *testing.T) {
 	assert.Equal(t, 405, resp.StatusCode)
 }
 
-func TestMarshallRequest(t *testing.T) {
+func TestMarshalRequest(t *testing.T) {
 	iso18626.InitNs()
 
 	illMessage := iso18626.Iso18626MessageNS{}
 	illMessage.Request = &iso18626.Request{}
 	illMessage.Request.Header.RequestingAgencyRequestId = "rid"
-	flowMessage := &FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage}
-	flow := Flow{Message: flowMessage, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage}
+	flow := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
 	buf, err := xml.MarshalIndent(&flow, "  ", "  ")
 	assert.Nil(t, err)
 	assert.Contains(t, string(buf), "xmlns=\"http://illtransactions.org/2013/iso18626\"")         // namespace declaration
@@ -54,10 +54,9 @@ func TestMarshallRequest(t *testing.T) {
 	assert.Nil(t, flowR.Error)
 	assert.NotNil(t, flowR.Message)
 
+	assert.Len(t, flowR.Message, 1)
 	// Did not expect this to be nil!!
-	assert.Nil(t, flowR.Message.Message.Request)
-	// assert.NotNil(t, flowR.Message.Message.Request)
-	// assert.Equal(t, flow, flowR)
+	assert.Nil(t, flowR.Message[0].Message.Request)
 }
 
 func TestMarshalError(t *testing.T) {
@@ -76,7 +75,7 @@ func TestMarshalError(t *testing.T) {
 	assert.Equal(t, flow, flowR)
 }
 
-func TestGetFlows(t *testing.T) {
+func TestGetTwoFlows(t *testing.T) {
 	iso18626.InitNs()
 
 	api := createFlowsApi()
@@ -97,9 +96,9 @@ func TestGetFlows(t *testing.T) {
 	assert.Equal(t, 0, len(flows.Flows))
 
 	illMessage1 := iso18626.Iso18626MessageNS{}
-	// works only if all members are nil in illMessage
-	flowMessage := &FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage1}
-	flow1 := Flow{Message: flowMessage, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	// works only if all members are nil in illMessage1
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage1}
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
 	api.addFlow(flow1)
 
 	resp, err = http.Get(server.URL)
@@ -115,13 +114,14 @@ func TestGetFlows(t *testing.T) {
 	err = xml.Unmarshal(buf, &flows1R)
 	assert.Nil(t, err)
 
-	assert.NotNil(t, flows1R.Flows[0].Message.Message)
+	assert.Len(t, flows1R.Flows, 1)
 	assert.Equal(t, []Flow{flow1}, flows1R.Flows)
+	assert.Len(t, flows1R.Flows[0].Message, 1)
 
 	illMessage2 := iso18626.Iso18626MessageNS{}
-	// works only if all members are nil in illMessage
-	flowMessage = &FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage2}
-	flow2 := Flow{Message: flowMessage, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
+	// works only if all members are nil in illMessage2
+	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: illMessage2}
+	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
 	api.addFlow(flow2)
 
 	resp, err = http.Get(server.URL)
@@ -132,6 +132,7 @@ func TestGetFlows(t *testing.T) {
 	resp.Body.Close()
 	assert.Nil(t, err)
 	var flows2R Flows
+	log.Info(string(buf))
 	err = xml.Unmarshal(buf, &flows2R)
 	assert.Nil(t, err)
 	assert.Equal(t, []Flow{flow1, flow2}, flows2R.Flows)

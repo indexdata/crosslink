@@ -333,8 +333,8 @@ func (app *MockApp) logIso18626Message(role Role, kind string, header *iso18626.
 	logmsg := fmt.Sprintf("%s role:%s id:%s req:%s sup:%s%s", kind, role, header.RequestingAgencyRequestId,
 		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, extra)
 	if logMessage(logmsg, illMessage) {
-		flowMessage := &FlowMessage{Kind: kind, Timestamp: header.Timestamp, Message: *illMessage}
-		app.flowsApi.addFlow(Flow{Message: flowMessage, Id: header.RequestingAgencyRequestId, Role: role,
+		flowMessage := FlowMessage{Kind: kind, Timestamp: header.Timestamp, Message: *illMessage}
+		app.flowsApi.addFlow(Flow{Message: []FlowMessage{flowMessage}, Id: header.RequestingAgencyRequestId, Role: role,
 			Supplier: header.SupplyingAgencyId.AgencyIdValue, Requester: header.RequestingAgencyId.AgencyIdValue})
 	}
 }

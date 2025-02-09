@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/xml"
 	"net/http"
+	"sync"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
@@ -10,13 +11,13 @@ import (
 )
 
 type FlowsApi struct {
-	flowsList Flows
+	flows sync.Map
 }
 
 type FlowMessage struct {
-	Kind      string                     `xml:"kind,attr"`
-	Timestamp utils.XSDDateTime          `xml:"timestamp,attr"`
-	Message   iso18626.Iso18626MessageNS `xml:",innerxml"`
+	Kind      string            `xml:"kind,attr"`
+	Timestamp utils.XSDDateTime `xml:"timestamp,attr"`
+	Message   iso18626.Iso18626MessageNS
 }
 
 type FlowError struct {
@@ -25,12 +26,12 @@ type FlowError struct {
 }
 
 type Flow struct {
-	Id        string `xml:"id,attr"`
-	Role      Role   `xml:"role,attr"`
-	Supplier  string `xml:"supplier,attr"`
-	Requester string `xml:"requester,attr"`
-	Message   *FlowMessage
-	Error     *FlowError `xml:"error,omitempty"`
+	Id        string        `xml:"id,attr"`
+	Role      Role          `xml:"role,attr"`
+	Supplier  string        `xml:"supplier,attr"`
+	Requester string        `xml:"requester,attr"`
+	Message   []FlowMessage `xml:"message,omitempty"`
+	Error     *FlowError    `xml:"error,omitempty"`
 }
 
 type Flows struct {
@@ -45,7 +46,7 @@ func createFlowsApi() *FlowsApi {
 }
 
 func (api *FlowsApi) init() {
-	api.flowsList.Flows = make([]Flow, 0)
+	api.flows.Clear()
 }
 
 func (api *FlowsApi) flowsHandler() http.HandlerFunc {
@@ -54,15 +55,27 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		flowsList := Flows{}
+		api.flows.Range(func(key, value interface{}) bool {
+			flow := value.(Flow)
+			// TODO filter the list of flows
+			flowsList.Flows = append(flowsList.Flows, flow)
+			return true
+		})
+		// flowsList is not a pointer so MarshalIndent will always work
+		buf := utils.Must(xml.MarshalIndent(flowsList, "  ", "  "))
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-		// api.flowsList is not a pointer so MarshalIndent will always work
-		buf := utils.Must(xml.MarshalIndent(api.flowsList, "  ", "  "))
-
-		// TODO filter the list of flows
 		writeHttpResponse(w, buf)
 	}
 }
 
-func (FlowsApi *FlowsApi) addFlow(flow Flow) {
-	FlowsApi.flowsList.Flows = append(FlowsApi.flowsList.Flows, flow)
+func (api *FlowsApi) addFlow(flow Flow) {
+	key := string(flow.Role) + "/" + flow.Id
+	v, ok := api.flows.Load(key)
+	if ok {
+		eFlow := v.(Flow)
+		eFlow.Message = append(eFlow.Message, flow.Message...)
+	} else {
+		api.flows.Store(key, flow)
+	}
 }
