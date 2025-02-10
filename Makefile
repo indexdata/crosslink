@@ -23,8 +23,13 @@ $(COMMIT_ID):
 $(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-check:
+checkinclgen:
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
+
+check:
+	$(GO) test -v -coverpkg=./... -coverprofile=$(COVERAGE).tmp ./...
+	grep -v "\.gen\.go" $(COVERAGE).tmp | grep -v "/db/" > $(COVERAGE)
+	$(GO) tool cover -func $(COVERAGE)
 
 run: $(BINARY)
 	$(GO) run -buildvcs=true ./$(MAIN_PACKAGE)

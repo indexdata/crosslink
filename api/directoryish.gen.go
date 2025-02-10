@@ -57,14 +57,29 @@ type Entry struct {
 	Id openapi_types.UUID `json:"id"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name string `json:"name"`
+	Name nullable.Nullable[string] `json:"name"`
 
 	// Symbols Symbols associated with this entry
 	Symbols *[]Symbol `json:"symbols,omitempty"`
 }
 
 // EntryPatch defines model for EntryPatch.
-type EntryPatch = EntryProperties
+type EntryPatch struct {
+	// ContactName Name of contact person
+	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
+
+	// Description Detailed description of the entity described by this entry
+	Description nullable.Nullable[string] `json:"description,omitempty"`
+
+	// Email Main contact email
+	Email nullable.Nullable[string] `json:"email,omitempty"`
+
+	// Name Name of the institution or branch this directory entry describes
+	Name nullable.Nullable[string] `json:"name,omitempty"`
+
+	// Symbols Symbols associated with this entry
+	Symbols nullable.Nullable[[]SymbolPatch] `json:"symbols,omitempty"`
+}
 
 // EntryProperties defines model for EntryProperties.
 type EntryProperties struct {
@@ -78,10 +93,7 @@ type EntryProperties struct {
 	Email nullable.Nullable[string] `json:"email,omitempty"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name *string `json:"name,omitempty"`
-
-	// Symbols Symbols associated with this entry
-	Symbols *[]Symbol `json:"symbols,omitempty"`
+	Name nullable.Nullable[string] `json:"name,omitempty"`
 }
 
 // EntryRequired defines model for EntryRequired.
@@ -102,6 +114,12 @@ type Id struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
+// MaybeId defines model for MaybeId.
+type MaybeId struct {
+	// Id Unique id
+	Id nullable.Nullable[openapi_types.UUID] `json:"id,omitempty"`
+}
+
 // NewAuthority defines model for NewAuthority.
 type NewAuthority struct {
 	// Symbol Uppercase string
@@ -120,10 +138,19 @@ type NewEntry struct {
 	Email nullable.Nullable[string] `json:"email,omitempty"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name string `json:"name"`
+	Name nullable.Nullable[string] `json:"name"`
 
 	// Symbols Symbols associated with this entry
-	Symbols *[]Symbol `json:"symbols,omitempty"`
+	Symbols nullable.Nullable[[]NewSymbol] `json:"symbols,omitempty"`
+}
+
+// NewSymbol defines model for NewSymbol.
+type NewSymbol struct {
+	// Authority Uppercase string
+	Authority *string `json:"authority,omitempty"`
+
+	// Symbol Uppercase string
+	Symbol string `json:"symbol"`
 }
 
 // Symbol defines model for Symbol.
@@ -133,6 +160,18 @@ type Symbol struct {
 
 	// Id Unique id
 	Id openapi_types.UUID `json:"id"`
+
+	// Symbol Uppercase string
+	Symbol string `json:"symbol"`
+}
+
+// SymbolPatch defines model for SymbolPatch.
+type SymbolPatch struct {
+	// Authority Uppercase string
+	Authority *string `json:"authority,omitempty"`
+
+	// Id Unique id
+	Id nullable.Nullable[openapi_types.UUID] `json:"id,omitempty"`
 
 	// Symbol Uppercase string
 	Symbol string `json:"symbol"`
@@ -738,6 +777,16 @@ func (response GetEntryByID400TextResponse) VisitGetEntryByIDResponse(w http.Res
 	return err
 }
 
+type GetEntryByID404TextResponse string
+
+func (response GetEntryByID404TextResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type GetEntryByIDdefaultJSONResponse struct {
 	Body       Error
 	StatusCode int
@@ -1046,26 +1095,27 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

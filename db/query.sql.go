@@ -98,6 +98,29 @@ func (q *Queries) CreateSymbol(ctx context.Context, arg CreateSymbolParams) (Sym
 	return i, err
 }
 
+const deleteAllOwnedSymbols = `-- name: DeleteAllOwnedSymbols :exec
+DELETE FROM symbols WHERE owner = $1
+`
+
+func (q *Queries) DeleteAllOwnedSymbols(ctx context.Context, owner uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllOwnedSymbols, owner)
+	return err
+}
+
+const deleteOtherOwnedSymbols = `-- name: DeleteOtherOwnedSymbols :exec
+DELETE FROM symbols WHERE owner = $1 AND ID <> ALL($2::uuid[])
+`
+
+type DeleteOtherOwnedSymbolsParams struct {
+	Owner uuid.UUID
+	Ids   []uuid.UUID
+}
+
+func (q *Queries) DeleteOtherOwnedSymbols(ctx context.Context, arg DeleteOtherOwnedSymbolsParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherOwnedSymbols, arg.Owner, arg.Ids)
+	return err
+}
+
 const entryById = `-- name: EntryById :one
 SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries
 WHERE id = $1 LIMIT 1
@@ -144,19 +167,22 @@ func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.id, a.symbol
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
+LEFT JOIN authorities a ON a.id = s.authority
+WHERE e.id = $1 OR $1 IS NULL
 ORDER BY e.name, e.id
 `
 
 type ListEntriesRow struct {
 	Entry       Entry
 	Entrysymbol Entrysymbol
+	Authority   Authority
 }
 
-func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
-	rows, err := q.db.Query(ctx, listEntries)
+func (q *Queries) ListEntries(ctx context.Context, id pgtype.UUID) ([]ListEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listEntries, id)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +203,8 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 			&i.Entrysymbol.Owner,
 			&i.Entrysymbol.Authority,
 			&i.Entrysymbol.Symbol,
+			&i.Authority.ID,
+			&i.Authority.Symbol,
 		); err != nil {
 			return nil, err
 		}
@@ -191,29 +219,66 @@ func (q *Queries) ListEntries(ctx context.Context) ([]ListEntriesRow, error) {
 const updateEntry = `-- name: UpdateEntry :exec
 UPDATE entries
 SET
-  name = coalesce($1, name),
-  contact_name = coalesce($2, CASE WHEN NOT $3::bool THEN contact_name END),
-  email = coalesce($4, CASE WHEN NOT $5::bool THEN email END)
-WHERE id = $6
+  name = $1,
+  contact_name = $2,
+  email = $3
+WHERE id = $4
 `
 
 type UpdateEntryParams struct {
-	Name           pgtype.Text
-	ContactName    pgtype.Text
-	DelContactName bool
-	Email          pgtype.Text
-	DelEmail       bool
-	ID             uuid.UUID
+	Name        string
+	ContactName pgtype.Text
+	Email       pgtype.Text
+	ID          uuid.UUID
 }
 
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
 	_, err := q.db.Exec(ctx, updateEntry,
 		arg.Name,
 		arg.ContactName,
-		arg.DelContactName,
 		arg.Email,
-		arg.DelEmail,
 		arg.ID,
 	)
 	return err
+}
+
+const upsertSymbol = `-- name: UpsertSymbol :one
+INSERT INTO symbols (
+  id, owner, symbol, authority
+) VALUES (
+  coalesce($1, gen_random_uuid()),
+  $2,
+  $3,
+  $4
+)
+ON CONFLICT (id) DO UPDATE SET
+  owner = $2,
+  symbol = $3,
+  authority = $4
+WHERE symbols.id = $1
+RETURNING id, owner, authority, symbol
+`
+
+type UpsertSymbolParams struct {
+	ID        interface{}
+	Owner     uuid.UUID
+	Symbol    string
+	Authority uuid.UUID
+}
+
+func (q *Queries) UpsertSymbol(ctx context.Context, arg UpsertSymbolParams) (Symbol, error) {
+	row := q.db.QueryRow(ctx, upsertSymbol,
+		arg.ID,
+		arg.Owner,
+		arg.Symbol,
+		arg.Authority,
+	)
+	var i Symbol
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.Authority,
+		&i.Symbol,
+	)
+	return i, err
 }

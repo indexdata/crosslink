@@ -16,29 +16,6 @@ import (
 	"indexdata/directoryish/db"
 )
 
-func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
-	if nlbl.IsNull() || !nlbl.IsSpecified() {
-		return pgtype.Text{String: "", Valid: false}
-	}
-	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
-}
-
-func PtrToPGTxt(ptr *string) pgtype.Text {
-	if ptr == nil {
-		return pgtype.Text{String: "", Valid: false}
-	}
-	return pgtype.Text{String: *ptr, Valid: true}
-}
-
-func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
-	if !pgtxt.Valid {
-		nlbl := nullable.NewNullNullable[string]()
-		nlbl.SetUnspecified() // We don't store explicitly null strings
-		return nlbl
-	}
-	return nullable.NewNullableWithValue(pgtxt.String)
-}
-
 type ApiImpl struct {
 	pool    *pgxpool.Pool
 	queries *db.Queries
@@ -51,8 +28,25 @@ func NewApiImpl(pool *pgxpool.Pool, queries *db.Queries) ApiImpl {
 	return ApiImpl{pool: pool, queries: queries}
 }
 
+func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
+	if row.Entrysymbol.ID.Valid {
+		if entry.Symbols == nil {
+			s := []Symbol{}
+			entry.Symbols = &s
+		}
+
+		symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
+
+		*entry.Symbols = append(*entry.Symbols, Symbol{
+			Id:        symid,
+			Symbol:    row.Entrysymbol.Symbol.String,
+			Authority: &row.Authority.Symbol,
+		})
+	}
+}
+
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx)
+	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,42 +62,40 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 
 		if last < 0 || resp[last].Id != row.Entry.ID {
 			resp = append(resp, Entry{
-				Id:    row.Entry.ID,
-				Name:  row.Entry.Name,
-				Email: PGTxtToNlbl(row.Entry.Email),
+				Id:          row.Entry.ID,
+				Name:        nullable.NewNullableWithValue(row.Entry.Name),
+				ContactName: PGTxtToNlbl(row.Entry.ContactName),
+				Email:       PGTxtToNlbl(row.Entry.Email),
 			})
 			last++
 		}
 
-		if row.Entrysymbol.ID.Valid {
-			if resp[last].Symbols == nil {
-				s := []Symbol{}
-				resp[last].Symbols = &s
-			}
-
-			symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
-
-			*resp[last].Symbols = append(*resp[last].Symbols, Symbol{
-				Id:     symid,
-				Symbol: row.Entrysymbol.Symbol.String,
-			})
-		}
+		addRowToEntry(row, &resp[last])
 	}
 
 	return GetEntries200JSONResponse(resp), nil
 }
 
 func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	var resp Entry
-	entry, err := a.queries.EntryById(ctx, request.Id)
+	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	resp.Id = entry.ID
-	resp.Name = entry.Name
-	resp.ContactName = PGTxtToNlbl(entry.ContactName)
-	resp.Email = PGTxtToNlbl(entry.Email)
+	if len(rows) == 0 {
+		return GetEntryByID404TextResponse("Entry not found"), nil
+	}
+
+	var resp = Entry{
+		Id:          rows[0].Entry.ID,
+		Name:        nullable.NewNullableWithValue(rows[0].Entry.Name),
+		ContactName: PGTxtToNlbl(rows[0].Entry.ContactName),
+		Email:       PGTxtToNlbl(rows[0].Entry.Email),
+	}
+
+	for _, row := range rows {
+		addRowToEntry(row, &resp)
+	}
 
 	return GetEntryByID200JSONResponse(resp), nil
 }
@@ -117,7 +109,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
-		Name:        request.Body.Name,
+		Name:        request.Body.Name.MustGet(),
 		ContactName: NlblToPGTxt(request.Body.ContactName),
 		Email:       NlblToPGTxt(request.Body.Email),
 	}
@@ -126,8 +118,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		log.Fatal(err)
 	}
 
-	if request.Body.Symbols != nil {
-		for _, symbol := range *request.Body.Symbols {
+	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
+		for _, symbol := range request.Body.Symbols.MustGet() {
 			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(*symbol.Authority))
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
@@ -144,7 +136,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 			if err != nil {
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {
-					if pge.SQLState() == "23505" {
+					if pge.SQLState() == "23505" { //unique_violation
 						log.Println("Duplicate symbol")
 					}
 				}
@@ -165,6 +157,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 }
 
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
+	var orig db.Entry
+	orig, err := a.queries.EntryById(ctx, request.Id)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -173,15 +171,59 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	qtx := a.queries.WithTx(tx)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:           PtrToPGTxt(request.Body.Name),
-		ContactName:    NlblToPGTxt(request.Body.ContactName),
-		DelContactName: request.Body.ContactName.IsNull(),
-		Email:          NlblToPGTxt(request.Body.Email),
-		DelEmail:       request.Body.Email.IsNull(),
-		ID:             request.Id,
+		Name:        maybeUpdateTxtCol(orig.Name, request.Body.Name),
+		ContactName: maybeUpdateTxtCol(orig.ContactName, request.Body.ContactName),
+		Email:       maybeUpdateTxtCol(orig.Email, request.Body.Email),
+		ID:          request.Id,
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
+		reqsyms := request.Body.Symbols.MustGet()
+		// Delete existing symbols not present
+		var patchedSymbols []uuid.UUID
+		for _, symbol := range reqsyms {
+			if symbol.Id.IsSpecified() && !symbol.Id.IsNull() {
+				patchedSymbols = append(patchedSymbols, symbol.Id.MustGet())
+			}
+		}
+		if len(patchedSymbols) > 0 {
+			qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: request.Id, Ids: patchedSymbols})
+		} else {
+			qtx.DeleteAllOwnedSymbols(ctx, request.Id)
+		}
+
+		// Update/create symbols
+		for _, symbol := range reqsyms {
+			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(*symbol.Authority))
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					log.Println("Unrecognized authority")
+				}
+				log.Fatal(err)
+			}
+
+			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
+				ID:        NlblToPGUUID(symbol.Id),
+				Owner:     request.Id,
+				Symbol:    strings.ToUpper(symbol.Symbol),
+				Authority: auth.ID,
+			})
+			if err != nil {
+				log.Println(err)
+				var pge *pgconn.PgError
+				if errors.As(err, &pge) {
+					if pge.SQLState() == "23505" { //unique_violation
+						log.Println("Duplicate symbol")
+					}
+				}
+				log.Fatal(err)
+			}
+		}
+	} else if request.Body.Symbols.IsNull() {
+		qtx.DeleteAllOwnedSymbols(ctx, request.Id)
 	}
 
 	err = tx.Commit(ctx)
@@ -207,7 +249,8 @@ func (a ApiImpl) AddAuthority(ctx context.Context, request AddAuthorityRequestOb
 
 	insertedAuthority, err := qtx.CreateAuthority(ctx, request.Body.Symbol)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return AddAuthority400TextResponse("Error creating authority"), nil
 	}
 
 	var resp Id

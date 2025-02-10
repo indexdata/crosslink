@@ -108,6 +108,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '404':
+          description: Entry not found
+          content:
+            text/plain:
+              schema:
+                type: string
         default:
           description: unexpected error
           content:
@@ -255,6 +261,13 @@ components:
           type: string
           format: uuid
           description: Unique id
+    MaybeId:
+      properties:
+        id:
+          type: string
+          nullable: true
+          format: uuid
+          description: Unique id
     EntryRequired:
       required:
         - name
@@ -262,6 +275,7 @@ components:
       properties:
         name:
           type: string
+          nullable: true
           description: Name of the institution or branch this directory entry describes
           minLength: 1
         description:
@@ -279,23 +293,39 @@ components:
           nullable: true
           description: Main contact email
           minLength: 6
-        symbols:
-          type: array
-          description: Symbols associated with this entry
-          items:
-            $ref: '#/components/schemas/Symbol'
     Entry: 
       allOf: 
         - $ref: '#/components/schemas/Id'
         - $ref: '#/components/schemas/EntryProperties'
         - $ref: '#/components/schemas/EntryRequired'
+        - properties:
+            symbols:
+              type: array
+              description: Symbols associated with this entry
+              items:
+                $ref: '#/components/schemas/Symbol'
     NewEntry: 
       allOf: 
         - $ref: '#/components/schemas/EntryProperties'
         - $ref: '#/components/schemas/EntryRequired'
+        - properties:
+            symbols:
+              type: array
+              nullable: true
+              description: Symbols associated with this entry
+              items:
+                $ref: '#/components/schemas/NewSymbol'
     EntryPatch: 
       allOf: 
         - $ref: '#/components/schemas/EntryProperties'
+        - properties:
+            symbols:
+              type: array
+              nullable: true
+              description: Symbols associated with this entry
+              items:
+                $ref: '#/components/schemas/SymbolPatch'
+
     SymbolProperties:
       properties:
         symbol:
@@ -316,6 +346,12 @@ components:
       allOf:
         - $ref: '#/components/schemas/SymbolProperties'
         - $ref: '#/components/schemas/SymbolRequired'
+    SymbolPatch:
+      allOf:
+        - $ref: '#/components/schemas/MaybeId'
+        - $ref: '#/components/schemas/SymbolProperties'
+        - $ref: '#/components/schemas/SymbolRequired'
+
     AuthorityProperties:
       properties:
         symbol:
