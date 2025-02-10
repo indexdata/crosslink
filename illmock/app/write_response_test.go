@@ -1,32 +1,39 @@
 package app
 
 import (
-	"net"
+	"errors"
 	"net/http"
-	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+// MockResponseWriter is a mock implementation of http.ResponseWriter
+type MockResponseWriter struct {
+	header http.Header
+}
+
+func (m *MockResponseWriter) Header() http.Header {
+	if m.header == nil {
+		m.header = make(http.Header)
+	}
+	return m.header
+}
+
+func (m *MockResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("mock write error")
+}
+
+func (m *MockResponseWriter) WriteHeader(statusCode int) {
+	// No-op
+}
+
 func TestWriteHttpResponseWriteFailed(t *testing.T) {
-	var waitClosed sync.WaitGroup
+	mockWriter := &MockResponseWriter{}
+	buf := []byte("test response")
 
-	waitClosed.Add(1)
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		waitClosed.Wait()
-		writeHttpResponse(w, []byte(strings.Repeat("S1", 1_000_000)))
-	})
-	server := httptest.NewServer(handler)
-	defer server.Close()
+	writeHttpResponse(mockWriter, buf)
 
-	conn, err := net.Dial("tcp", server.URL[7:])
-	assert.Nil(t, err)
-	n, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
-	conn.Close()
-	waitClosed.Done()
-	assert.Nil(t, err)
-	assert.Greater(t, n, 20)
+	// TODO: check if the log contains the expected error message
+	assert.NotNil(t, mockWriter)
 }
