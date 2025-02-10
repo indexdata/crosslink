@@ -24,8 +24,7 @@ func TestWriteHttpResponseWriteFailed(t *testing.T) {
 
 	conn, err := net.Dial("tcp", server.URL[7:])
 	assert.Nil(t, err)
-	n, err := conn.Write([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/xml\r\n" +
-		"Content-Length: 0\r\n\r\n"))
+	n, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"))
 	conn.Close()
 	waitClosed.Done()
 	assert.Nil(t, err)
