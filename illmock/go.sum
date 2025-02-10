@@ -6,6 +6,8 @@ github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b h1:AEZ5+Di1EMSo
 github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/go-utils v0.0.0-20250129095730-ad5c02719e53 h1:n15gnclfTrJg/JuZWrcif+AqDfoeXExi1BOh44wc+eA=
 github.com/indexdata/go-utils v0.0.0-20250129095730-ad5c02719e53/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
+github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72 h1:/ssOlpKK1EOeWMCOUrxCOCZP+0Z1LD58Xg1nrU01TAQ=
+github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.1.0/go.mod h1:8sXNGyaUfpRCgSCamB5p9GQNLyPHF5N2MYBrhWSss8Y=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/testcontainers/testcontainers-go v0.34.0/go.mod h1:6P/kMkQe8yqPHfPWNulFGdFHTD8HB2vLq/231xY2iPQ=

@@ -96,6 +96,7 @@ type MockApp struct {
 	server     *http.Server
 	requester  Requester
 	supplier   Supplier
+	flowsApi   *FlowsApi
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -113,21 +114,13 @@ func validateHeader(header *iso18626.Header) error {
 	return nil
 }
 
-func writeHttpResponse(w http.ResponseWriter, buf []byte) {
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(buf)
-	if err != nil {
-		log.Warn("writeResponse", "error", err.Error())
-	}
-}
-
-func writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role Role, header *iso18626.Header) {
+func (app *MockApp) writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role Role, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
 		http.Error(w, "marshal failed", http.StatusInternalServerError)
 		return
 	}
-	logOutgoingRes(role, header, resmsg)
+	app.logOutgoingRes(role, header, resmsg)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 	writeHttpResponse(w, buf)
 }
@@ -163,7 +156,7 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 }
 
 func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(requestHeader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
@@ -174,20 +167,20 @@ func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso1862
 }
 
 func createRequest() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.Request = &iso18626.Request{}
 	return msg
 }
 
-func handleRequestError(requestHeader *iso18626.Header, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func (app *MockApp) handleRequestError(requestHeader *iso18626.Header, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestResponse(requestHeader, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeIso18626Response(resmsg, w, role, requestHeader)
+	app.writeIso18626Response(resmsg, w, role, requestHeader)
 }
 
-func handleRequestingAgencyMessageError(request *iso18626.RequestingAgencyMessage, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func (app *MockApp) handleRequestingAgencyMessageError(request *iso18626.RequestingAgencyMessage, role Role, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createRequestingAgencyConfirmation(&request.Header, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &request.Action
-	writeIso18626Response(resmsg, w, role, &request.Header)
+	app.writeIso18626Response(resmsg, w, role, &request.Header)
 }
 
 func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, role Role, header *iso18626.Header) (*iso18626.Iso18626MessageNS, error) {
@@ -199,14 +192,14 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 		return nil, fmt.Errorf("marshal failed")
 	}
 	url = url + "/iso18626"
-	logOutgoingReq(role, header, msg, url)
+	app.logOutgoingReq(role, header, msg, url)
 	resp, err := httpclient.SendReceiveXml(http.DefaultClient, url, buf)
 	if err != nil {
 		status := 0
 		if httpErr, ok := err.(*httpclient.HttpError); ok {
 			status = httpErr.StatusCode
 		}
-		logOutgoingErr(role, header, msg, url, status, err.Error())
+		app.logOutgoingErr(role, header, url, status, err.Error())
 		return nil, err
 	}
 	var response iso18626.Iso18626MessageNS
@@ -214,7 +207,7 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	if err != nil {
 		return nil, err
 	}
-	logIncomingRes(role, header, &response, url)
+	app.logIncomingRes(role, header, &response, url)
 	return &response, nil
 }
 
@@ -257,30 +250,30 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	responseMsg, err := app.sendReceive(requesterInfo.supplierUrl, msg, RoleRequester, header)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
-		handleRequestError(&patronReqHeader, RoleRequester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		app.handleRequestError(&patronReqHeader, RoleRequester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
-		handleRequestError(&patronReqHeader, RoleRequester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		app.handleRequestError(&patronReqHeader, RoleRequester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requester.store(header, requesterInfo)
 
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
-	writeIso18626Response(resmsg, w, RoleRequester, header)
+	app.writeIso18626Response(resmsg, w, RoleRequester, header)
 }
 
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
 	err := validateHeader(&illRequest.Header)
 	if err != nil {
-		handleRequestError(&illRequest.Header, RoleSupplier, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleRequestError(&illRequest.Header, RoleSupplier, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	v := supplier.load(&illRequest.Header)
 	if v != nil {
-		handleRequestError(&illRequest.Header, RoleSupplier, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleRequestError(&illRequest.Header, RoleSupplier, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	var status []iso18626.TypeStatus
@@ -315,44 +308,50 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	supplier.store(&illRequest.Header, supplierInfo)
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
-	writeIso18626Response(resmsg, w, RoleSupplier, &illRequest.Header)
+	app.writeIso18626Response(resmsg, w, RoleSupplier, &illRequest.Header)
 	go app.sendSupplyingAgencyMessage(&illRequest.Header)
 }
 
-func logMessage(lead string, illMessage *iso18626.Iso18626MessageNS) {
+func logMessage(lead string, illMessage *iso18626.Iso18626MessageNS) bool {
 	buf := utils.Must(xml.MarshalIndent(illMessage, "  ", "  "))
 	if buf == nil {
-		return
+		return false
 	}
 	log.Info(fmt.Sprintf("%s\n%s", lead, buf))
+	return true
 }
 
-func logIncomingReq(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
-	logMessage(fmt.Sprintf("incoming-request role:%s id:%s req:%s sup:%s", role, header.RequestingAgencyRequestId,
-		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue), illMessage)
+func (app *MockApp) logIso18626Message(role Role, kind string, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS, extra string) {
+	logmsg := fmt.Sprintf("%s role:%s id:%s req:%s sup:%s%s", kind, role, header.RequestingAgencyRequestId,
+		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, extra)
+	if logMessage(logmsg, illMessage) {
+		flowMessage := FlowMessage{Kind: kind, Timestamp: header.Timestamp, Message: *illMessage}
+		app.flowsApi.addFlow(Flow{Message: []FlowMessage{flowMessage}, Id: header.RequestingAgencyRequestId, Role: role,
+			Supplier: header.SupplyingAgencyId.AgencyIdValue, Requester: header.RequestingAgencyId.AgencyIdValue})
+	}
 }
 
-func logOutgoingReq(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
+func (app *MockApp) logIncomingReq(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+	app.logIso18626Message(role, "incoming-request", header, illMessage, "")
+}
+
+func (app *MockApp) logOutgoingReq(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
 	url string) {
-	logMessage(fmt.Sprintf("outgoing-request role:%s id:%s req:%s sup:%s url:%s", role, header.RequestingAgencyRequestId,
-		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, url), illMessage)
+	app.logIso18626Message(role, "outgoing-request", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
 
-func logOutgoingErr(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
-	url string, status int, error string) {
+func (app *MockApp) logOutgoingErr(role Role, header *iso18626.Header, url string, status int, error string) {
 	log.Info(fmt.Sprintf("outgoing-error role:%s id:%s req:%s sup:%s url:%s status:%d error:%s", role, header.RequestingAgencyRequestId,
 		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, url, status, error))
 }
 
-func logIncomingRes(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
+func (app *MockApp) logIncomingRes(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
 	url string) {
-	logMessage(fmt.Sprintf("incoming-response role:%s id:%s req:%s sup:%s url:%s", role, header.RequestingAgencyRequestId,
-		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, url), illMessage)
+	app.logIso18626Message(role, "incoming-request", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
 
-func logOutgoingRes(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
-	logMessage(fmt.Sprintf("outgoing-response role:%s id:%s req:%s sup:%s", role, header.RequestingAgencyRequestId,
-		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue), illMessage)
+func (app *MockApp) logOutgoingRes(role Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+	app.logIso18626Message(role, "outgoing-response", header, illMessage, "")
 }
 
 func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
@@ -361,17 +360,17 @@ func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS
 	if illRequest.ServiceInfo != nil {
 		subtypes := illRequest.ServiceInfo.RequestSubType
 		if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-			logIncomingReq(RoleRequester, &illRequest.Header, illMessage)
+			app.logIncomingReq(RoleRequester, &illRequest.Header, illMessage)
 			app.handlePatronRequest(illRequest, w)
 			return
 		}
 	}
-	logIncomingReq(RoleSupplier, &illRequest.Header, illMessage)
+	app.logIncomingReq(RoleSupplier, &illRequest.Header, illMessage)
 	app.handleSupplierRequest(illRequest, w)
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	return msg
 }
@@ -409,7 +408,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 }
 
 func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(iheader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
@@ -421,15 +420,15 @@ func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus 
 
 func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	requestingAgencyMessage := illMessage.RequestingAgencyMessage
-	logIncomingReq(RoleSupplier, &requestingAgencyMessage.Header, illMessage)
+	app.logIncomingReq(RoleSupplier, &requestingAgencyMessage.Header, illMessage)
 	err := validateHeader(&requestingAgencyMessage.Header)
 	if err != nil {
-		handleRequestingAgencyMessageError(requestingAgencyMessage, RoleSupplier, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleRequestingAgencyMessageError(requestingAgencyMessage, RoleSupplier, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	var resmsg = createRequestingAgencyConfirmation(&requestingAgencyMessage.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
-	writeIso18626Response(resmsg, w, RoleSupplier, &requestingAgencyMessage.Header)
+	app.writeIso18626Response(resmsg, w, RoleSupplier, &requestingAgencyMessage.Header)
 
 	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
 		return
@@ -450,7 +449,7 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 }
 
 func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
@@ -460,13 +459,13 @@ func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAge
 	return resmsg
 }
 
-func handleSupplyingAgencyError(illMessage *iso18626.SupplyingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
+func (app *MockApp) handleSupplyingAgencyError(illMessage *iso18626.SupplyingAgencyMessage, errorMessage string, errorType iso18626.TypeErrorType, w http.ResponseWriter) {
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorMessage, &errorType)
-	writeIso18626Response(resmsg, w, RoleRequester, &illMessage.Header)
+	app.writeIso18626Response(resmsg, w, RoleRequester, &illMessage.Header)
 }
 
 func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{}
 	return msg
 }
@@ -475,21 +474,21 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	requester := &app.requester
 	supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
 	header := &supplyingAgencyMessage.Header
-	logIncomingReq(RoleRequester, header, illMessage)
+	app.logIncomingReq(RoleRequester, header, illMessage)
 	err := validateHeader(header)
 	if err != nil {
-		handleSupplyingAgencyError(supplyingAgencyMessage, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleSupplyingAgencyError(supplyingAgencyMessage, err.Error(), iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	v := requester.load(header)
 	if v == nil {
-		handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	reason := iso18626.TypeReasonForMessageRequestResponse
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
-	writeIso18626Response(resmsg, w, RoleRequester, header)
+	app.writeIso18626Response(resmsg, w, RoleRequester, header)
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
 	}
@@ -617,11 +616,13 @@ func (app *MockApp) Run() error {
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
+	app.flowsApi = createFlowsApi()
+
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
 	mux.HandleFunc("/health", healthHandler())
+	mux.HandleFunc("/api/flows", app.flowsApi.flowsHandler())
 	app.server = &http.Server{Addr: addr, Handler: mux}
-	// both requester and responder serves HTTP
 	return app.server.ListenAndServe()
 }
