@@ -12,7 +12,7 @@ import (
 
 func TestWriteHttpResponseWriteFailed(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeHttpResponse(w, []byte(strings.Repeat("S1", 160000)))
+		writeHttpResponse(w, []byte(strings.Repeat("S1", 1_000_000)))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
