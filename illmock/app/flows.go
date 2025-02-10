@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/xml"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
@@ -49,6 +50,27 @@ func (api *FlowsApi) init() {
 	api.flows.Clear()
 }
 
+func (api *FlowsApi) cmpFlow(i, j Flow) int {
+	// there may be multiple timestamps in the message, but we only care about the first one
+	i_empty := len(i.Message) == 0
+	j_empty := len(j.Message) == 0
+	if !i_empty && !j_empty {
+		if x := i.Message[0].Timestamp.After(j.Message[0].Timestamp.Time); x {
+			return 1
+		} else if x := i.Message[0].Timestamp.Before(j.Message[0].Timestamp.Time); x {
+			return -1
+		}
+		return 0
+	}
+	if !i_empty {
+		return 1
+	}
+	if !j_empty {
+		return -1
+	}
+	return 0
+}
+
 func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -59,10 +81,10 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		api.flows.Range(func(key, value interface{}) bool {
 			flow := value.(Flow)
 			// TODO filter the list of flows
-			// TODO sort the list of flows
 			flowsList.Flows = append(flowsList.Flows, flow)
 			return true
 		})
+		slices.SortFunc(flowsList.Flows, api.cmpFlow)
 		// flowsList is not a pointer so MarshalIndent will always work
 		buf := utils.Must(xml.MarshalIndent(flowsList, "  ", "  "))
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)

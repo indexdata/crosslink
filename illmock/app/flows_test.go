@@ -85,7 +85,7 @@ func runRequest(t *testing.T, server *httptest.Server) Flows {
 	return flows
 }
 
-func TestGetTwoFlows(t *testing.T) {
+func TestGetThreeFlows(t *testing.T) {
 	api := createFlowsApi()
 	server := httptest.NewServer(api.flowsHandler())
 	defer server.Close()
@@ -95,11 +95,8 @@ func TestGetTwoFlows(t *testing.T) {
 	assert.Equal(t, 0, len(flows.Flows))
 
 	illMessage1 := iso18626.NewIso18626MessageNS()
-	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Add(time.Duration(1) * time.Second).Round(time.Millisecond)}, Message: *illMessage1}
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
-
-	//ensure order
-	time.Sleep(2 * time.Millisecond)
 	api.addFlow(flow1)
 
 	flows1R := runRequest(t, server)
@@ -114,6 +111,15 @@ func TestGetTwoFlows(t *testing.T) {
 
 	flows2R := runRequest(t, server)
 	assert.Len(t, flows2R.Flows, 2)
-	assert.Equal(t, []Flow{flow1, flow2}, flows2R.Flows)
+	assert.Equal(t, []Flow{flow2, flow1}, flows2R.Flows)
 	assert.Len(t, flows2R.Flows[0].Message, 1)
+
+	illMessage3 := iso18626.NewIso18626MessageNS()
+	flowMessage = FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Add(time.Duration(2) * time.Second).Round(time.Millisecond)}, Message: *illMessage3}
+	flow3 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid2", Role: RoleSupplier, Supplier: "S3", Requester: "R3"}
+	api.addFlow(flow3)
+
+	flows3R := runRequest(t, server)
+	assert.Len(t, flows3R.Flows, 3)
+	assert.Equal(t, []Flow{flow2, flow1, flow3}, flows3R.Flows)
 }
