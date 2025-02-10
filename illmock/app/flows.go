@@ -50,7 +50,7 @@ func (api *FlowsApi) init() {
 	api.flows.Clear()
 }
 
-func (api *FlowsApi) cmpFlow(i, j Flow) int {
+func cmpFlow(i, j Flow) int {
 	// there may be multiple timestamps in the message, but we only care about the first one
 	i_empty := len(i.Message) == 0
 	j_empty := len(j.Message) == 0
@@ -84,7 +84,7 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			flowsList.Flows = append(flowsList.Flows, flow)
 			return true
 		})
-		slices.SortFunc(flowsList.Flows, api.cmpFlow)
+		slices.SortFunc(flowsList.Flows, cmpFlow)
 		// flowsList is not a pointer so MarshalIndent will always work
 		buf := utils.Must(xml.MarshalIndent(flowsList, "  ", "  "))
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)

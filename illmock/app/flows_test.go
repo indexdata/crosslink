@@ -85,6 +85,26 @@ func runRequest(t *testing.T, server *httptest.Server) Flows {
 	return flows
 }
 
+func TestCmpFlow(t *testing.T) {
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}}
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+
+	flowMessage = FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Add(time.Duration(1) * time.Second).Round(time.Millisecond)}}
+	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+
+	flowNoMessage := Flow{Message: []FlowMessage{}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+
+	assert.Equal(t, 0, cmpFlow(flow1, flow1))
+	assert.Equal(t, 0, cmpFlow(flow1, flow1))
+	assert.Equal(t, 0, cmpFlow(flowNoMessage, flowNoMessage))
+
+	assert.Equal(t, -1, cmpFlow(flow1, flow2))
+	assert.Equal(t, 1, cmpFlow(flow2, flow1))
+
+	assert.Equal(t, 1, cmpFlow(flow1, flowNoMessage))
+	assert.Equal(t, -1, cmpFlow(flowNoMessage, flow1))
+}
+
 func TestGetThreeFlows(t *testing.T) {
 	api := createFlowsApi()
 	server := httptest.NewServer(api.flowsHandler())
