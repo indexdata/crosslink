@@ -114,14 +114,6 @@ func validateHeader(header *iso18626.Header) error {
 	return nil
 }
 
-func writeHttpResponse(w http.ResponseWriter, buf []byte) {
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(buf)
-	if err != nil {
-		log.Warn("writeResponse", "error", err.Error())
-	}
-}
-
 func (app *MockApp) writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role Role, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
