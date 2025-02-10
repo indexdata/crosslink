@@ -21,7 +21,7 @@ func TestWriteHttpResponseWriteFailed(t *testing.T) {
 	assert.Nil(t, err)
 	n, err := conn.Write([]byte("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/xml\r\n" +
 		"Content-Length: 0\r\n\r\n"))
-	conn.Close()
+	conn.Close() // close ASAP to trigger write failure
 	assert.Nil(t, err)
 	assert.Greater(t, n, 20)
 }
