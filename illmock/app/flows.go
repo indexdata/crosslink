@@ -77,10 +77,27 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		parms := r.URL.Query()
+		role := parms.Get("role")
+		supplier := parms.Get("supplier")
+		requester := parms.Get("requester")
+		id := parms.Get("id")
+
 		flowsList := Flows{}
 		api.flows.Range(func(key, value interface{}) bool {
 			flow := value.(Flow)
-			// TODO filter the list of flows
+			if role != "" && role != string(flow.Role) {
+				return true
+			}
+			if supplier != "" && supplier != flow.Supplier {
+				return true
+			}
+			if requester != "" && requester != flow.Requester {
+				return true
+			}
+			if id != "" && id != flow.Id {
+				return true
+			}
 			flowsList.Flows = append(flowsList.Flows, flow)
 			return true
 		})

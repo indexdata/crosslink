@@ -70,21 +70,6 @@ func TestMarshalError(t *testing.T) {
 	assert.Equal(t, flow, flowR)
 }
 
-func runRequest(t *testing.T, server *httptest.Server) Flows {
-	resp, err := http.Get(server.URL)
-	assert.Nil(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-	buf, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	assert.Nil(t, err)
-	var flows Flows
-	err = xml.Unmarshal(buf, &flows)
-	assert.Nil(t, err)
-	assert.NotNil(t, flows)
-	return flows
-}
-
 func TestCmpFlow(t *testing.T) {
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}}
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
@@ -105,12 +90,27 @@ func TestCmpFlow(t *testing.T) {
 	assert.Equal(t, -1, cmpFlow(flowNoMessage, flow1))
 }
 
-func TestGetThreeFlows(t *testing.T) {
+func runRequest(t *testing.T, server *httptest.Server, params string) Flows {
+	resp, err := http.Get(server.URL + params)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+	buf, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.Nil(t, err)
+	var flows Flows
+	err = xml.Unmarshal(buf, &flows)
+	assert.Nil(t, err)
+	assert.NotNil(t, flows)
+	return flows
+}
+
+func TestGetFlows(t *testing.T) {
 	api := createFlowsApi()
 	server := httptest.NewServer(api.flowsHandler())
 	defer server.Close()
 
-	flows := runRequest(t, server)
+	flows := runRequest(t, server, "")
 	assert.NotNil(t, flows)
 	assert.Equal(t, 0, len(flows.Flows))
 
@@ -119,27 +119,49 @@ func TestGetThreeFlows(t *testing.T) {
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
 	api.addFlow(flow1)
 
-	flows1R := runRequest(t, server)
-	assert.Len(t, flows1R.Flows, 1)
-	assert.Equal(t, []Flow{flow1}, flows1R.Flows)
-	assert.Len(t, flows1R.Flows[0].Message, 1)
+	flowsR := runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 1)
+	assert.Equal(t, []Flow{flow1}, flowsR.Flows)
+	assert.Len(t, flowsR.Flows[0].Message, 1)
 
 	illMessage2 := iso18626.NewIso18626MessageNS()
 	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage2}
 	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
 	api.addFlow(flow2)
 
-	flows2R := runRequest(t, server)
-	assert.Len(t, flows2R.Flows, 2)
-	assert.Equal(t, []Flow{flow2, flow1}, flows2R.Flows)
-	assert.Len(t, flows2R.Flows[0].Message, 1)
+	flowsR = runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 2)
+	assert.Equal(t, []Flow{flow2, flow1}, flowsR.Flows)
+	assert.Len(t, flowsR.Flows[0].Message, 1)
 
 	illMessage3 := iso18626.NewIso18626MessageNS()
 	flowMessage = FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Add(time.Duration(2) * time.Second).Round(time.Millisecond)}, Message: *illMessage3}
 	flow3 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid2", Role: RoleSupplier, Supplier: "S3", Requester: "R3"}
 	api.addFlow(flow3)
 
-	flows3R := runRequest(t, server)
-	assert.Len(t, flows3R.Flows, 3)
-	assert.Equal(t, []Flow{flow2, flow1, flow3}, flows3R.Flows)
+	flowsR = runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 3)
+	assert.Equal(t, []Flow{flow2, flow1, flow3}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?id=rid")
+	assert.Equal(t, []Flow{flow2, flow1}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?id=rid2")
+	assert.Equal(t, []Flow{flow3}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?role=requester")
+	assert.Equal(t, []Flow{flow1}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?role=supplier")
+	assert.Equal(t, []Flow{flow2, flow3}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?supplier=S1")
+	assert.Equal(t, []Flow{flow1}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?requester=R2")
+	assert.Equal(t, []Flow{flow2}, flowsR.Flows)
+
+	flowsR = runRequest(t, server, "?requester=other")
+	assert.Equal(t, []Flow(nil), flowsR.Flows)
+
 }
