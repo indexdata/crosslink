@@ -104,7 +104,7 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	defer server.Close()
 
 	app.peerUrl = server.URL
-	msg := &iso18626.Iso18626MessageNS{}
+	msg := iso18626.NewIso18626MessageNS()
 	msg.Request = &iso18626.Request{Header: iso18626.Header{
 		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1"},
 		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
@@ -258,7 +258,7 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("iso18626 handler: Invalid message", func(t *testing.T) {
-		var msg = &iso18626.Iso18626MessageNS{}
+		var msg = iso18626.NewIso18626MessageNS()
 		msg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{}
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
@@ -554,7 +554,7 @@ func TestService(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/xml")
 			w.WriteHeader(http.StatusOK)
-			output, _ := xml.Marshal(&iso18626.Iso18626MessageNS{})
+			output, _ := xml.Marshal(iso18626.NewIso18626MessageNS())
 			_, err := w.Write(output)
 			assert.Nil(t, err)
 		})
@@ -637,7 +637,7 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 	var app MockApp
 	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var resmsg = &iso18626.Iso18626MessageNS{}
+		var resmsg = iso18626.NewIso18626MessageNS()
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()
 		header.SupplyingAgencyId.AgencyIdValue = "S1"
@@ -661,7 +661,7 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 	var app MockApp
 	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var resmsg = &iso18626.Iso18626MessageNS{}
+		var resmsg = iso18626.NewIso18626MessageNS()
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
 		act := iso18626.TypeActionReceived
 		resmsg.RequestingAgencyMessageConfirmation.Action = &act
@@ -688,7 +688,7 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 	var app MockApp
 	app.flowsApi = createFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var resmsg = &iso18626.Iso18626MessageNS{}
+		var resmsg = iso18626.NewIso18626MessageNS()
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()

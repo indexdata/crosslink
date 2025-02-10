@@ -164,7 +164,7 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 }
 
 func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(requestHeader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
@@ -175,7 +175,7 @@ func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso1862
 }
 
 func createRequest() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.Request = &iso18626.Request{}
 	return msg
 }
@@ -378,7 +378,7 @@ func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	return msg
 }
@@ -416,7 +416,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 }
 
 func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(iheader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
@@ -457,7 +457,7 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 }
 
 func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = &iso18626.Iso18626MessageNS{}
+	var resmsg = iso18626.NewIso18626MessageNS()
 	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
@@ -473,7 +473,7 @@ func (app *MockApp) handleSupplyingAgencyError(illMessage *iso18626.SupplyingAge
 }
 
 func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = &iso18626.Iso18626MessageNS{}
+	var msg = iso18626.NewIso18626MessageNS()
 	msg.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{}
 	return msg
 }
