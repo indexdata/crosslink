@@ -1,7 +1,6 @@
 package iso18626
 
 import (
-	"encoding/xml"
 	"fmt"
 
 	utils "github.com/indexdata/go-utils/utils"
@@ -32,14 +31,9 @@ func NewIso18626MessageNS() *Iso18626MessageNS {
 	InitNs()
 	msg := Iso18626MessageNS{}
 	msg.Namespace = utils.NewPrefixAttr("xmlns", IllNs)
-	msg.NsIllPx = NewPrefixAttrNS("xmlns", "ill", IllNs)
-	msg.NsXsiPx = NewPrefixAttrNS("xmlns", "xsi", XsiNs)
-	msg.XsiSchemaLoc = NewPrefixAttrNS(XsiNs, "schemaLocation", fmt.Sprintln(IllNs, IllSl))
-	msg.ISO18626Message.Version = *NewPrefixAttrNS(IllNs, "version", IllV1_2)
+	msg.NsIllPx = utils.NewPrefixAttrNS("xmlns", "ill", IllNs)
+	msg.NsXsiPx = utils.NewPrefixAttrNS("xmlns", "xsi", XsiNs)
+	msg.XsiSchemaLoc = utils.NewPrefixAttrNS(XsiNs, "schemaLocation", fmt.Sprintln(IllNs, IllSl))
+	msg.ISO18626Message.Version = *utils.NewPrefixAttrNS(IllNs, "version", IllV1_2)
 	return &msg
-}
-
-// TODO move to go-utils
-func NewPrefixAttrNS(ns string, name string, value string) *utils.PrefixAttr {
-	return &utils.PrefixAttr{Attr: xml.Attr{Name: xml.Name{Space: ns, Local: name}, Value: value}}
 }
