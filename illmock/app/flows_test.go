@@ -70,11 +70,7 @@ func TestMarshalError(t *testing.T) {
 	assert.Equal(t, flow, flowR)
 }
 
-func TestGetTwoFlows(t *testing.T) {
-	api := createFlowsApi()
-	server := httptest.NewServer(api.flowsHandler())
-	defer server.Close()
-
+func runRequest(t *testing.T, server *httptest.Server) Flows {
 	resp, err := http.Get(server.URL)
 	assert.Nil(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -86,6 +82,16 @@ func TestGetTwoFlows(t *testing.T) {
 	err = xml.Unmarshal(buf, &flows)
 	assert.Nil(t, err)
 	assert.NotNil(t, flows)
+	return flows
+}
+
+func TestGetTwoFlows(t *testing.T) {
+	api := createFlowsApi()
+	server := httptest.NewServer(api.flowsHandler())
+	defer server.Close()
+
+	flows := runRequest(t, server)
+	assert.NotNil(t, flows)
 	assert.Equal(t, 0, len(flows.Flows))
 
 	illMessage1 := iso18626.NewIso18626MessageNS()
@@ -95,19 +101,8 @@ func TestGetTwoFlows(t *testing.T) {
 	//ensure order
 	time.Sleep(2 * time.Millisecond)
 	api.addFlow(flow1)
-	resp, err = http.Get(server.URL)
-	assert.Nil(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-	buf, err = io.ReadAll(resp.Body)
-	resp.Body.Close()
-	assert.Nil(t, err)
-	assert.Contains(t, string(buf), "xmlns=\"http://illtransactions.org/2013/iso18626\"")
 
-	var flows1R Flows
-	err = xml.Unmarshal(buf, &flows1R)
-	assert.Nil(t, err)
-
+	flows1R := runRequest(t, server)
 	assert.Len(t, flows1R.Flows, 1)
 	assert.Equal(t, []Flow{flow1}, flows1R.Flows)
 	assert.Len(t, flows1R.Flows[0].Message, 1)
@@ -117,17 +112,8 @@ func TestGetTwoFlows(t *testing.T) {
 	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
 	api.addFlow(flow2)
 
-	resp, err = http.Get(server.URL)
-	assert.Nil(t, err)
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-	buf, err = io.ReadAll(resp.Body)
-	resp.Body.Close()
-	assert.Nil(t, err)
-	var flows2R Flows
-	log.Info(string(buf))
-	err = xml.Unmarshal(buf, &flows2R)
-	assert.Nil(t, err)
+	flows2R := runRequest(t, server)
 	assert.Len(t, flows2R.Flows, 2)
 	assert.Equal(t, []Flow{flow1, flow2}, flows2R.Flows)
+	assert.Len(t, flows2R.Flows[0].Message, 1)
 }

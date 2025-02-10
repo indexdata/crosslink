@@ -59,6 +59,7 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		api.flows.Range(func(key, value interface{}) bool {
 			flow := value.(Flow)
 			// TODO filter the list of flows
+			// TODO sort the list of flows
 			flowsList.Flows = append(flowsList.Flows, flow)
 			return true
 		})
