@@ -17,7 +17,7 @@ func TestWriteHttpResponseWriteFailed(t *testing.T) {
 	waitClosed.Add(1)
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		waitClosed.Wait()
-		writeHttpResponse(w, []byte(strings.Repeat("S1", 100_000)))
+		writeHttpResponse(w, []byte(strings.Repeat("S1", 1_000_000)))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
