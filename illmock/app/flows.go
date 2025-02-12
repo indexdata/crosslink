@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
@@ -33,6 +34,7 @@ type Flow struct {
 	Requester string        `xml:"requester,attr"`
 	Message   []FlowMessage `xml:"message,omitempty"`
 	Error     *FlowError    `xml:"error,omitempty"`
+	Modified  time.Time     `xml:"-"`
 }
 
 type Flows struct {
@@ -51,21 +53,10 @@ func (api *FlowsApi) init() {
 }
 
 func cmpFlow(i, j Flow) int {
-	// there may be multiple timestamps in the message, but we only care about the first one
-	i_empty := len(i.Message) == 0
-	j_empty := len(j.Message) == 0
-	if !i_empty && !j_empty {
-		if x := i.Message[0].Timestamp.After(j.Message[0].Timestamp.Time); x {
-			return 1
-		} else if x := i.Message[0].Timestamp.Before(j.Message[0].Timestamp.Time); x {
-			return -1
-		}
-		return 0
-	}
-	if !i_empty {
+	if i.Modified.After(j.Modified) {
 		return 1
 	}
-	if !j_empty {
+	if i.Modified.Before(j.Modified) {
 		return -1
 	}
 	return 0
@@ -83,9 +74,9 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		requester := parms.Get("requester")
 		id := parms.Get("id")
 
-		flowsList := Flows{}
+		var flowsList Flows
 		api.flows.Range(func(key, value interface{}) bool {
-			flow := value.(Flow)
+			flow := value.(*Flow)
 			if role != "" && role != string(flow.Role) {
 				return true
 			}
@@ -98,7 +89,7 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			if id != "" && id != flow.Id {
 				return true
 			}
-			flowsList.Flows = append(flowsList.Flows, flow)
+			flowsList.Flows = append(flowsList.Flows, *flow)
 			return true
 		})
 		slices.SortFunc(flowsList.Flows, cmpFlow)
@@ -113,9 +104,11 @@ func (api *FlowsApi) addFlow(flow Flow) {
 	key := string(flow.Role) + "/" + flow.Id
 	v, ok := api.flows.Load(key)
 	if ok {
-		eFlow := v.(Flow)
+		eFlow := v.(*Flow)
+		eFlow.Modified = time.Now()
 		eFlow.Message = append(eFlow.Message, flow.Message...)
 	} else {
-		api.flows.Store(key, flow)
+		flow.Modified = time.Now()
+		api.flows.Store(key, &flow)
 	}
 }
