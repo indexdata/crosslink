@@ -136,6 +136,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '404':
+          description: Entry not found
+          content:
+            text/plain:
+              schema:
+                type: string
     delete:
       summary: Delete directory entry by ID
       operationId: deleteEntry
@@ -333,6 +339,7 @@ components:
     SymbolRequired:
       required:
         - symbol
+        - authority
     Symbol:
       allOf:
         - $ref: '#/components/schemas/Id'

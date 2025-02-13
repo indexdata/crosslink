@@ -39,7 +39,7 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 		*entry.Symbols = append(*entry.Symbols, Symbol{
 			Id:        symid,
 			Symbol:    *row.Entrysymbol.Symbol,
-			Authority: row.SymbolAuthority,
+			Authority: *row.SymbolAuthority,
 		})
 	}
 }
@@ -76,7 +76,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 }
 
 func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{})
+	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -119,12 +119,11 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
 		for _, symbol := range request.Body.Symbols.MustGet() {
-			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(*symbol.Authority))
+			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(symbol.Authority))
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					log.Println("Unrecognized authority")
+					return AddEntry400TextResponse("Unrecognized authority"), nil
 				}
-				log.Fatal(err)
 			}
 
 			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
@@ -158,7 +157,9 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
 	var orig db.Entry
 	orig, err := a.queries.EntryById(ctx, request.Id)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateEntry404TextResponse("Entry not found"), nil
+	} else if err != nil {
 		log.Fatal(err)
 	}
 
@@ -196,12 +197,11 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 
 		// Update/create symbols
 		for _, symbol := range reqsyms {
-			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(*symbol.Authority))
+			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(symbol.Authority))
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					log.Println("Unrecognized authority")
+					return UpdateEntry400TextResponse("Unrecognized authority"), nil
 				}
-				log.Fatal(err)
 			}
 
 			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
@@ -215,7 +215,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
-						log.Println("Duplicate symbol")
+						return UpdateEntry400TextResponse("Duplicate symbol"), nil
 					}
 				}
 				log.Fatal(err)
@@ -234,8 +234,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 }
 
 func (ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
-	var resp DeleteEntryResponseObject
-	return resp, nil
+	return DeleteEntry204Response{}, nil
 }
 
 func (a ApiImpl) AddAuthority(ctx context.Context, request AddAuthorityRequestObject) (AddAuthorityResponseObject, error) {

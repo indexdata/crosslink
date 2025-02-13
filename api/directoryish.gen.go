@@ -138,7 +138,7 @@ type NewEntry struct {
 // NewSymbol defines model for NewSymbol.
 type NewSymbol struct {
 	// Authority Uppercase string
-	Authority *string `json:"authority,omitempty"`
+	Authority string `json:"authority"`
 
 	// Symbol Uppercase string
 	Symbol string `json:"symbol"`
@@ -147,7 +147,7 @@ type NewSymbol struct {
 // Symbol defines model for Symbol.
 type Symbol struct {
 	// Authority Uppercase string
-	Authority *string `json:"authority,omitempty"`
+	Authority string `json:"authority"`
 
 	// Id Unique id
 	Id openapi_types.UUID `json:"id"`
@@ -159,7 +159,7 @@ type Symbol struct {
 // SymbolPatch defines model for SymbolPatch.
 type SymbolPatch struct {
 	// Authority Uppercase string
-	Authority *string `json:"authority,omitempty"`
+	Authority string `json:"authority"`
 
 	// Id Unique id
 	Id nullable.Nullable[openapi_types.UUID] `json:"id,omitempty"`
@@ -793,6 +793,16 @@ func (response UpdateEntry400TextResponse) VisitUpdateEntryResponse(w http.Respo
 	return err
 }
 
+type UpdateEntry404TextResponse string
+
+func (response UpdateEntry404TextResponse) VisitUpdateEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Returns all authorities
@@ -1050,7 +1060,7 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 var swaggerSpec = []string{
 
 	"H4sIAAAAAAAC/+xZTW/bOBD9KwS7RyFO22APvqXrYGFgmy1a5FQEC1oc2WwlUiFHdQRD/31BUpL1acuN",
-	"03QXvZnix7x5M3wzknc0VEmqJEg0dL6jJtxAwtzP6ww3SgvM7YDF8d8RnX/e0d80RHROX832G2flrtmS",
+	"03SLvZnix7x5M3wzknc0VEmqJEg0dL6jJtxAwtzP6ww3SgvM7YDF8d8RnX/e0d80RHROX832G2flrtmS",
 	"0yI4vKQ+9YNWKWgUYKbv+QgPmdDAaXFfBHToqPmOpq2RyZOViu0vDibUIkWhJJ3TuzQFHTIDxKAWck0D",
 	"inkKdE7LcVE0TdSW5zuq69+fq+MtnBuJ+rxcuRNP4Mmt33MUDHNh+mR88hOEGaNCwRA42QrcENwIQ8D5",
 	"FVCBkLi9hyD4k2hRs8m0Zjkt9g/U6guE6CPoHWQYbvqBC5VEFuI/kiVgx4mQf4Fc44bOXwdUZnHMVjHQ",
@@ -1059,18 +1069,18 @@ var swaggerSpec = []string{
 	"GZZ3hwsNISqde+C1Q+aYC6NBHBMiB9PdKa2VHgowH3DDLSZuLqCR0glDOqdC4ts3e0EUEmEN2kJIwBi2",
 	"Hj2omh5ypwm2NFgtt7CXvI9Z8AHdluIhAyJ4E3CWufFho4LT+wFW37N8BeewfkQchiJ6C9vvqLJnLKG3",
 	"sD2xbP0Ha9ItbPdl6VTtLFn6VLcR02gqFXs6T35DOzqnGp3QUpwRV123p4Gr7tmPRHig4LHmvTu1NQye",
-	"2FZ2II/1lHapkJGyC1CgTVq6qCqKMBty/WFJA/oNtPHWX19cXlxaeCoFyVJB5/StexTQlOHGOT6rPC+J",
-	"WAP23fgImGlpCItj0lhPIq0SV/NMbhDsT4ZunBnQZMMMYWEIxhBUF9TB0MweafWV/gl43bBtMWmWAII2",
-	"LnvaEL5CvlWa26NIJGIETVbuytvJhwzc/ffFmT7QoHxzcVT1goW5484qtkuntqWEPYokS4jMkhVoW9U1",
-	"mCxGZ1o7JkbsxiIR2LJ9tIYW97YqmVRJ4/l/c3lZNWAgXShYmsYidLzNvhjfOu0tTJK8fVXpd+Ldvmz/",
-	"kkNiYZBU6OzWqx44hEecpTETHVgDWd5NqYcMDJJvLBbcOUfAtSpuZcSyGE/i4WDR8Qf3QWQSHlMIbTEp",
-	"jdv0yJKE2Ro4lvYWYqrMwD35QwNDMIQRCVuy15Ru6l9zft2Y1J6Ld4rnZ/O51UscjDIqwjinze7I1sLi",
-	"iYl5rDL1IS0X9rJZ5lr5+qJJ992mjqTWWKbYVTPbzkyV43Ltk6X4prT5S4afT4Z9bz1Bgt3CF5LfUQWs",
-	"snKi+lU9eU/5bsqJZ1K9kuQxUn8atfNw6vAGNBbyq7Nd3sb8Xb5c2HGbwXVztn1b/UuqxeIPvVgpnr+a",
-	"Ce6iepdyhlC/37VPzRqT0w8tXiQph/KsqZuzneCFT88YEPrOLtzzIWd7eudrElSpU55Y6o5toveyI/pZ",
-	"NahBI18n+gp01b9i1Wcji4L/b4ujj0/va9kqJ8uFRVMWxcEaNnQvjkU1Avvq+mOCej5ZOSJ0L9C3X/mU",
-	"PYcZ74NUSCKVSf5TvhWMJ2hafQvpfg2wIkuYHCmOd6MifCyDvXw/Xwqfv1I3/usZCIFngpNIQMzNhGo9",
-	"qpWeGf4y7VM34LZi/hsAAP//kFv8jWMdAAA=",
+	"2FZ2IA/3lEED473bJmSk7GIUaBOYLqrqIsyGXH9Y0oB+A208ktcXlxeXFqpKQbJU0Dl96x4FNGW4cSTM",
+	"KgslKWvAvksfATMtDWFxTBrrSaRV4uqfyQ2C/cnQjTMDmmyYISwMwRiC6oI6GJrZI63W0j8Brxu2LSbN",
+	"EkDQxmVSG8JXyLdKc3sUiUSMoMnKXX87+ZCB0wJfqOkDDcq3GEdVL3CYO+6servUaltK2KNIsoTILFmB",
+	"thVeg8lidKa1Y2LEbiwSgS3bR+tpcW8rlEmVNJ7/N5eXVTMG0oWCpWksQsfb7IvxbdTewiT521eYflfe",
+	"7dH2LzwkFgZJhc5uveqBQ3jEWRoz0YE1kPHdlHrIwCD5xmLBnXMEXNviVkYsi/EkHg4WIH9wH0Qm4TGF",
+	"0BaW0rhNjyxJmK2HY2lvIabKDNyTPzQwBEMYkbAl+7vbTf1rzq8bk9pz8U7x/Gw+t/qKg1FGRRjntNkp",
+	"2bpYPDExj1WpPqTlwl42y1wrX1806b7b1JHUGssUu2pmW5upclyufbIU35Q2/5fh55Nh32dPkGC38IXk",
+	"d1QBq6ycqH5Vf95Tvpty4plUryR5jNSfRu08nDq8AY2F/Opsl7cxf5cvF3bcZnDdnG3fVv/CarH4Qy9W",
+	"iuevZoK7qN6lnCHU73rtU7PG5PRDixdJyqE8a+rmbCd44dMzBoS+swv3fMjZnt75mgRV6pQnlrpjm+i9",
+	"7Ih+Vg1q0MiXir4CXfWvWPUJyaLgv2xx9PHpfTlb5WS5sGjKojhYw4buxbGoRmBfY39MUM8nK0eE7gX6",
+	"9iufsucw432QCkmkMsl/yreC8QRNq+8i3S8DVmQJkyPF8W5UhI9lsJfv50vh81fqxv8+AyHwTHASCYi5",
+	"mVCtR7XSM8N/kVvQSsRuOtl6/G8AAAD//wT5pK3NHQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
