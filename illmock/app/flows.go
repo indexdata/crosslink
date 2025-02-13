@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
@@ -12,7 +15,11 @@ import (
 )
 
 type FlowsApi struct {
-	flows sync.Map
+	flows         sync.Map
+	cleanInterval time.Duration
+	cleanTimeout  time.Duration
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 type FlowMessage struct {
@@ -33,6 +40,7 @@ type Flow struct {
 	Requester string        `xml:"requester,attr"`
 	Message   []FlowMessage `xml:"message,omitempty"`
 	Error     *FlowError    `xml:"error,omitempty"`
+	Modified  time.Time     `xml:"-"`
 }
 
 type Flows struct {
@@ -48,24 +56,36 @@ func createFlowsApi() *FlowsApi {
 
 func (api *FlowsApi) init() {
 	api.flows.Clear()
+	api.cleanInterval = 1 * time.Minute
+	api.cleanTimeout = 5 * time.Minute
+	api.ctx, api.cancel = context.WithCancel(context.Background())
+}
+
+func (api *FlowsApi) ParseEnv() error {
+	v := utils.GetEnv("CLEAN_TIMEOUT", "10m")
+	if v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return err
+		}
+		if d == 0 {
+			return errors.New("CLEAN_TIMEOUT must be greater than 0")
+		}
+		api.cleanTimeout = d
+		api.cleanInterval = d / 10
+	}
+	return nil
+}
+
+func (api *FlowsApi) Run() {
+	go api.cleaner()
 }
 
 func cmpFlow(i, j Flow) int {
-	// there may be multiple timestamps in the message, but we only care about the first one
-	i_empty := len(i.Message) == 0
-	j_empty := len(j.Message) == 0
-	if !i_empty && !j_empty {
-		if x := i.Message[0].Timestamp.After(j.Message[0].Timestamp.Time); x {
-			return 1
-		} else if x := i.Message[0].Timestamp.Before(j.Message[0].Timestamp.Time); x {
-			return -1
-		}
-		return 0
-	}
-	if !i_empty {
+	if i.Modified.After(j.Modified) {
 		return 1
 	}
-	if !j_empty {
+	if i.Modified.Before(j.Modified) {
 		return -1
 	}
 	return 0
@@ -83,9 +103,9 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		requester := parms.Get("requester")
 		id := parms.Get("id")
 
-		flowsList := Flows{}
+		var flowsList Flows
 		api.flows.Range(func(key, value interface{}) bool {
-			flow := value.(Flow)
+			flow := value.(*Flow)
 			if role != "" && role != string(flow.Role) {
 				return true
 			}
@@ -98,7 +118,7 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 			if id != "" && id != flow.Id {
 				return true
 			}
-			flowsList.Flows = append(flowsList.Flows, flow)
+			flowsList.Flows = append(flowsList.Flows, *flow)
 			return true
 		})
 		slices.SortFunc(flowsList.Flows, cmpFlow)
@@ -109,13 +129,44 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 	}
 }
 
+func (api *FlowsApi) cleaner() {
+	ticker := time.NewTicker(api.cleanInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			api.clean()
+		case <-api.ctx.Done():
+			return
+		}
+	}
+}
+
+func (api *FlowsApi) clean() {
+	api.flows.Range(func(key, value interface{}) bool {
+		flow := value.(*Flow)
+		if time.Since(flow.Modified) > api.cleanTimeout {
+			api.flows.Delete(key)
+		}
+		return true
+	})
+}
+
+func (api *FlowsApi) Shutdown() {
+	api.cancel()
+	api.flows.Clear()
+}
+
 func (api *FlowsApi) addFlow(flow Flow) {
 	key := string(flow.Role) + "/" + flow.Id
 	v, ok := api.flows.Load(key)
 	if ok {
-		eFlow := v.(Flow)
+		eFlow := v.(*Flow)
+		eFlow.Modified = time.Now()
 		eFlow.Message = append(eFlow.Message, flow.Message...)
 	} else {
-		api.flows.Store(key, flow)
+		flow.Modified = time.Now()
+		api.flows.Store(key, &flow)
 	}
 }
