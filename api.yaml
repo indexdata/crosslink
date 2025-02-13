@@ -38,12 +38,6 @@ paths:
             text/plain:
               schema:
                 type: string
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
     post:
       summary: Creates a new entry
       description: Creates a new entry
@@ -77,12 +71,6 @@ paths:
             text/plain:
               schema:
                 type: string
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /entries/{id}:
     get:
       summary: Returns a directory entry by ID
@@ -144,12 +132,6 @@ paths:
           description: entry updated
         '400':
           description: Request validation error
-          content:
-            text/plain:
-              schema:
-                type: string
-        default:
-          description: unexpected error
           content:
             text/plain:
               schema:
@@ -256,12 +238,14 @@ components:
     Id:
       required:
         - id
+      type: object
       properties:
         id:
           type: string
           format: uuid
           description: Unique id
     MaybeId:
+      type: object
       properties:
         id:
           type: string
@@ -272,25 +256,22 @@ components:
       required:
         - name
     EntryProperties:
+      type: object
       properties:
         name:
           type: string
-          nullable: true
           description: Name of the institution or branch this directory entry describes
           minLength: 1
         description:
           type: string
-          nullable: true
           description: Detailed description of the entity described by this entry
           minLength: 1
         contact_name:
           type: string
-          nullable: true
           description: Name of contact person
           minLength: 1
         email:
           type: string
-          nullable: true
           description: Main contact email
           minLength: 6
     Entry: 
@@ -298,7 +279,8 @@ components:
         - $ref: '#/components/schemas/Id'
         - $ref: '#/components/schemas/EntryProperties'
         - $ref: '#/components/schemas/EntryRequired'
-        - properties:
+        - type: object
+          properties:
             symbols:
               type: array
               description: Symbols associated with this entry
@@ -308,7 +290,8 @@ components:
       allOf: 
         - $ref: '#/components/schemas/EntryProperties'
         - $ref: '#/components/schemas/EntryRequired'
-        - properties:
+        - type: object
+          properties:
             symbols:
               type: array
               nullable: true
@@ -316,15 +299,28 @@ components:
               items:
                 $ref: '#/components/schemas/NewSymbol'
     EntryPatch: 
-      allOf: 
-        - $ref: '#/components/schemas/EntryProperties'
-        - properties:
-            symbols:
-              type: array
-              nullable: true
-              description: Symbols associated with this entry
-              items:
-                $ref: '#/components/schemas/SymbolPatch'
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+          minLength: 1
+        contact_name:
+          type: string
+          nullable: true
+          minLength: 1
+        email:
+          type: string
+          nullable: true
+          minLength: 6
+        symbols:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/SymbolPatch'
 
     SymbolProperties:
       properties:

@@ -45,19 +45,19 @@ type AuthorityRequired = interface{}
 // Entry defines model for Entry.
 type Entry struct {
 	// ContactName Name of contact person
-	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
+	ContactName *string `json:"contact_name,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
-	Description nullable.Nullable[string] `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// Email Main contact email
-	Email nullable.Nullable[string] `json:"email,omitempty"`
+	Email *string `json:"email,omitempty"`
 
 	// Id Unique id
 	Id openapi_types.UUID `json:"id"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name nullable.Nullable[string] `json:"name"`
+	Name string `json:"name"`
 
 	// Symbols Symbols associated with this entry
 	Symbols *[]Symbol `json:"symbols,omitempty"`
@@ -65,35 +65,26 @@ type Entry struct {
 
 // EntryPatch defines model for EntryPatch.
 type EntryPatch struct {
-	// ContactName Name of contact person
-	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
-
-	// Description Detailed description of the entity described by this entry
-	Description nullable.Nullable[string] `json:"description,omitempty"`
-
-	// Email Main contact email
-	Email nullable.Nullable[string] `json:"email,omitempty"`
-
-	// Name Name of the institution or branch this directory entry describes
-	Name nullable.Nullable[string] `json:"name,omitempty"`
-
-	// Symbols Symbols associated with this entry
-	Symbols nullable.Nullable[[]SymbolPatch] `json:"symbols,omitempty"`
+	ContactName nullable.Nullable[string]        `json:"contact_name,omitempty"`
+	Description nullable.Nullable[string]        `json:"description,omitempty"`
+	Email       nullable.Nullable[string]        `json:"email,omitempty"`
+	Name        *string                          `json:"name,omitempty"`
+	Symbols     nullable.Nullable[[]SymbolPatch] `json:"symbols,omitempty"`
 }
 
 // EntryProperties defines model for EntryProperties.
 type EntryProperties struct {
 	// ContactName Name of contact person
-	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
+	ContactName *string `json:"contact_name,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
-	Description nullable.Nullable[string] `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// Email Main contact email
-	Email nullable.Nullable[string] `json:"email,omitempty"`
+	Email *string `json:"email,omitempty"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name nullable.Nullable[string] `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
 }
 
 // EntryRequired defines model for EntryRequired.
@@ -129,16 +120,16 @@ type NewAuthority struct {
 // NewEntry defines model for NewEntry.
 type NewEntry struct {
 	// ContactName Name of contact person
-	ContactName nullable.Nullable[string] `json:"contact_name,omitempty"`
+	ContactName *string `json:"contact_name,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
-	Description nullable.Nullable[string] `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// Email Main contact email
-	Email nullable.Nullable[string] `json:"email,omitempty"`
+	Email *string `json:"email,omitempty"`
 
 	// Name Name of the institution or branch this directory entry describes
-	Name nullable.Nullable[string] `json:"name"`
+	Name string `json:"name"`
 
 	// Symbols Symbols associated with this entry
 	Symbols nullable.Nullable[[]NewSymbol] `json:"symbols,omitempty"`
@@ -660,18 +651,6 @@ func (response GetEntries400TextResponse) VisitGetEntriesResponse(w http.Respons
 	return err
 }
 
-type GetEntriesdefaultJSONResponse struct {
-	Body       Error
-	StatusCode int
-}
-
-func (response GetEntriesdefaultJSONResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-
-	return json.NewEncoder(w).Encode(response.Body)
-}
-
 type AddEntryRequestObject struct {
 	Body *AddEntryJSONRequestBody
 }
@@ -697,18 +676,6 @@ func (response AddEntry400TextResponse) VisitAddEntryResponse(w http.ResponseWri
 
 	_, err := w.Write([]byte(response))
 	return err
-}
-
-type AddEntrydefaultJSONResponse struct {
-	Body       Error
-	StatusCode int
-}
-
-func (response AddEntrydefaultJSONResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-
-	return json.NewEncoder(w).Encode(response.Body)
 }
 
 type DeleteEntryRequestObject struct {
@@ -823,19 +790,6 @@ func (response UpdateEntry400TextResponse) VisitUpdateEntryResponse(w http.Respo
 	w.WriteHeader(400)
 
 	_, err := w.Write([]byte(response))
-	return err
-}
-
-type UpdateEntrydefaultTextResponse struct {
-	Body       string
-	StatusCode int
-}
-
-func (response UpdateEntrydefaultTextResponse) VisitUpdateEntryResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(response.StatusCode)
-
-	_, err := w.Write([]byte(response.Body))
 	return err
 }
 
@@ -1095,27 +1049,28 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"qpWeGf4y7VM34LZi/hsAAP//kFv8jWMdAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

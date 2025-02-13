@@ -51,8 +51,8 @@ RETURNING id, parent, name, description, lms_location_code, contact_name, email,
 
 type CreateEntryParams struct {
 	Name        string
-	ContactName pgtype.Text
-	Email       pgtype.Text
+	ContactName *string
+	Email       *string
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
@@ -167,7 +167,7 @@ func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.id, a.symbol
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.symbol as symbol_authority
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority
@@ -176,9 +176,9 @@ ORDER BY e.name, e.id
 `
 
 type ListEntriesRow struct {
-	Entry       Entry
-	Entrysymbol Entrysymbol
-	Authority   Authority
+	Entry           Entry
+	Entrysymbol     Entrysymbol
+	SymbolAuthority *string
 }
 
 func (q *Queries) ListEntries(ctx context.Context, id pgtype.UUID) ([]ListEntriesRow, error) {
@@ -203,8 +203,7 @@ func (q *Queries) ListEntries(ctx context.Context, id pgtype.UUID) ([]ListEntrie
 			&i.Entrysymbol.Owner,
 			&i.Entrysymbol.Authority,
 			&i.Entrysymbol.Symbol,
-			&i.Authority.ID,
-			&i.Authority.Symbol,
+			&i.SymbolAuthority,
 		); err != nil {
 			return nil, err
 		}
@@ -227,8 +226,8 @@ WHERE id = $4
 
 type UpdateEntryParams struct {
 	Name        string
-	ContactName pgtype.Text
-	Email       pgtype.Text
+	ContactName *string
+	Email       *string
 	ID          uuid.UUID
 }
 

@@ -6,22 +6,22 @@ import (
 	"github.com/oapi-codegen/nullable"
 )
 
-func maybeUpdateTxtCol[X pgtype.Text | string](cur X, patch nullable.Nullable[string]) X {
+func maybeUpdateTxtCol(cur *string, patch nullable.Nullable[string]) *string {
 	if !patch.IsSpecified() {
 		return cur
 	}
-	switch any(cur).(type) {
-	case pgtype.Text:
-		if patch.IsNull() || !patch.IsSpecified() {
-			return any(pgtype.Text{String: "", Valid: false}).(X)
-		}
-		return any(pgtype.Text{String: patch.MustGet(), Valid: true}).(X)
-	default:
-		if patch.IsNull() || !patch.IsSpecified() {
-			return any("").(X)
-		}
-		return any(patch.MustGet()).(X)
+	if patch.IsNull() {
+		return nil
 	}
+	patchStr := patch.MustGet()
+	return &patchStr
+}
+
+func derefOrDefault[T any](ptr *T, defaultValue T) T {
+	if ptr != nil {
+		return *ptr
+	}
+	return defaultValue
 }
 
 func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {

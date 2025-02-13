@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/oapi-codegen/nullable"
 
 	"indexdata/directoryish/db"
 )
@@ -39,8 +38,8 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 
 		*entry.Symbols = append(*entry.Symbols, Symbol{
 			Id:        symid,
-			Symbol:    row.Entrysymbol.Symbol.String,
-			Authority: &row.Authority.Symbol,
+			Symbol:    *row.Entrysymbol.Symbol,
+			Authority: row.SymbolAuthority,
 		})
 	}
 }
@@ -63,9 +62,9 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		if last < 0 || resp[last].Id != row.Entry.ID {
 			resp = append(resp, Entry{
 				Id:          row.Entry.ID,
-				Name:        nullable.NewNullableWithValue(row.Entry.Name),
-				ContactName: PGTxtToNlbl(row.Entry.ContactName),
-				Email:       PGTxtToNlbl(row.Entry.Email),
+				Name:        row.Entry.Name,
+				ContactName: row.Entry.ContactName,
+				Email:       row.Entry.Email,
 			})
 			last++
 		}
@@ -88,9 +87,9 @@ func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestOb
 
 	var resp = Entry{
 		Id:          rows[0].Entry.ID,
-		Name:        nullable.NewNullableWithValue(rows[0].Entry.Name),
-		ContactName: PGTxtToNlbl(rows[0].Entry.ContactName),
-		Email:       PGTxtToNlbl(rows[0].Entry.Email),
+		Name:        rows[0].Entry.Name,
+		ContactName: rows[0].Entry.ContactName,
+		Email:       rows[0].Entry.Email,
 	}
 
 	for _, row := range rows {
@@ -109,9 +108,9 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
-		Name:        request.Body.Name.MustGet(),
-		ContactName: NlblToPGTxt(request.Body.ContactName),
-		Email:       NlblToPGTxt(request.Body.Email),
+		Name:        request.Body.Name,
+		ContactName: request.Body.ContactName,
+		Email:       request.Body.Email,
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
@@ -171,7 +170,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	qtx := a.queries.WithTx(tx)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:        maybeUpdateTxtCol(orig.Name, request.Body.Name),
+		Name:        derefOrDefault(request.Body.Name, orig.Name),
 		ContactName: maybeUpdateTxtCol(orig.ContactName, request.Body.ContactName),
 		Email:       maybeUpdateTxtCol(orig.Email, request.Body.Email),
 		ID:          request.Id,

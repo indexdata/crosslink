@@ -3,7 +3,7 @@ SELECT * FROM entries
 WHERE id = $1 LIMIT 1;
 
 -- name: ListEntries :many
-SELECT sqlc.embed(e), sqlc.embed(s), sqlc.embed(a)
+SELECT sqlc.embed(e), sqlc.embed(s), a.symbol as symbol_authority
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority

@@ -17,25 +17,25 @@ type Authority struct {
 type Consortium struct {
 	ID             uuid.UUID
 	DirectoryEntry pgtype.UUID
-	Name           pgtype.Text
+	Name           *string
 }
 
 type Entry struct {
 	ID              uuid.UUID
 	Parent          pgtype.UUID
 	Name            string
-	Description     pgtype.Text
-	LmsLocationCode pgtype.Text
-	ContactName     pgtype.Text
-	Email           pgtype.Text
-	Phone           pgtype.Text
+	Description     *string
+	LmsLocationCode *string
+	ContactName     *string
+	Email           *string
+	Phone           *string
 }
 
 type Entrysymbol struct {
 	ID        pgtype.UUID
 	Owner     pgtype.UUID
 	Authority pgtype.UUID
-	Symbol    pgtype.Text
+	Symbol    *string
 }
 
 type Membership struct {
@@ -58,7 +58,7 @@ type MembershipTier struct {
 
 type Network struct {
 	ID   uuid.UUID
-	Name pgtype.Text
+	Name *string
 }
 
 type Symbol struct {
@@ -70,5 +70,5 @@ type Symbol struct {
 
 type Tier struct {
 	ID   uuid.UUID
-	Name pgtype.Text
+	Name *string
 }
