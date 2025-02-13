@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -171,4 +172,74 @@ func TestGetFlows(t *testing.T) {
 	flow1.Message = append(flow1.Message, flowMessage) // merge flow4 into flow1
 	assert.Equal(t, []Flow{flow2, flow3, flow1}, flowsR.Flows)
 	assert.Len(t, flowsR.Flows[2].Message, 2)
+}
+
+func TestCleanerExpire(t *testing.T) {
+	api := createFlowsApi()
+	api.cleanTimeout = 1 * time.Microsecond
+	api.cleanInterval = 1 * time.Millisecond
+	api.Run()
+	server := httptest.NewServer(api.flowsHandler())
+	defer server.Close()
+
+	illMessage1 := iso18626.NewIso18626MessageNS()
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	api.addFlow(flow1)
+
+	flowsR := runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 1)
+
+	time.Sleep(1 * time.Millisecond)
+	flowsR = runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 0)
+
+	api.Shutdown()
+
+	api.addFlow(flow1)
+
+	time.Sleep(1 * time.Millisecond)
+
+	flowsR = runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 1)
+}
+
+func TestCleanerKeep(t *testing.T) {
+	api := createFlowsApi()
+	api.cleanInterval = 1 * time.Millisecond
+	api.cleanTimeout = 1 * time.Second
+	api.Run()
+	defer api.Shutdown()
+	server := httptest.NewServer(api.flowsHandler())
+	defer server.Close()
+
+	illMessage1 := iso18626.NewIso18626MessageNS()
+	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	api.addFlow(flow1)
+
+	flowsR := runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 1)
+
+	time.Sleep(2 * time.Millisecond)
+	flowsR = runRequest(t, server, "")
+	assert.Len(t, flowsR.Flows, 1)
+}
+
+func TestFlowsParseEnv(t *testing.T) {
+	os.Setenv("CLEAN_TIMEOUT", "8m")
+	api := createFlowsApi()
+	err := api.ParseEnv()
+	assert.Nil(t, err)
+	assert.Equal(t, "8m0s", api.cleanTimeout.String())
+	assert.Equal(t, "48s", api.cleanInterval.String())
+
+	os.Setenv("CLEAN_TIMEOUT", "x")
+	err = api.ParseEnv()
+	assert.NotNil(t, err)
+
+	os.Setenv("CLEAN_TIMEOUT", "0")
+	err = api.ParseEnv()
+	assert.NotNil(t, err)
+	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
 }

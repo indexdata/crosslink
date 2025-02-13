@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"encoding/xml"
+	"errors"
 	"net/http"
 	"slices"
 	"sync"
@@ -13,7 +15,11 @@ import (
 )
 
 type FlowsApi struct {
-	flows sync.Map
+	flows         sync.Map
+	cleanInterval time.Duration
+	cleanTimeout  time.Duration
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 type FlowMessage struct {
@@ -50,6 +56,29 @@ func createFlowsApi() *FlowsApi {
 
 func (api *FlowsApi) init() {
 	api.flows.Clear()
+	api.cleanInterval = 1 * time.Minute
+	api.cleanTimeout = 5 * time.Minute
+	api.ctx, api.cancel = context.WithCancel(context.Background())
+}
+
+func (api *FlowsApi) ParseEnv() error {
+	v := utils.GetEnv("CLEAN_TIMEOUT", "10m")
+	if v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return err
+		}
+		if d == 0 {
+			return errors.New("CLEAN_TIMEOUT must be greater than 0")
+		}
+		api.cleanTimeout = d
+		api.cleanInterval = d / 10
+	}
+	return nil
+}
+
+func (api *FlowsApi) Run() {
+	go api.cleaner()
 }
 
 func cmpFlow(i, j Flow) int {
@@ -98,6 +127,35 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
 		writeHttpResponse(w, buf)
 	}
+}
+
+func (api *FlowsApi) cleaner() {
+	ticker := time.NewTicker(api.cleanInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			api.clean()
+		case <-api.ctx.Done():
+			return
+		}
+	}
+}
+
+func (api *FlowsApi) clean() {
+	api.flows.Range(func(key, value interface{}) bool {
+		flow := value.(*Flow)
+		if time.Since(flow.Modified) > api.cleanTimeout {
+			api.flows.Delete(key)
+		}
+		return true
+	})
+}
+
+func (api *FlowsApi) Shutdown() {
+	api.cancel()
+	api.flows.Clear()
 }
 
 func (api *FlowsApi) addFlow(flow Flow) {

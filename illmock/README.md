@@ -54,6 +54,10 @@ If omitted or empty, a value of `SUP` is used.
 
 If omitted or empty, a value of `REQ` is used.
 
+### CLEAN_TIMEOUT
+
+Flow WS API: Specifies how long a flow is kept in memory before being removed. Default value is `10m`.
+
 # Deploy on Kubernetes
 
 Use the Helm chart published from this repo. You will need a GitHub __classic__
