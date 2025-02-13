@@ -573,7 +573,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func (app *MockApp) parseConfig() {
+func (app *MockApp) parseEnv() {
 	if app.httpPort == "" {
 		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
@@ -592,6 +592,9 @@ func (app *MockApp) parseConfig() {
 }
 
 func (app *MockApp) Shutdown() error {
+	if app.flowsApi != nil {
+		app.flowsApi.Shutdown()
+	}
 	if app.server != nil {
 		return app.server.Shutdown(context.Background())
 	}
@@ -599,7 +602,7 @@ func (app *MockApp) Shutdown() error {
 }
 
 func (app *MockApp) Run() error {
-	app.parseConfig()
+	app.parseEnv()
 	iso18626.InitNs()
 	log.Info("Mock starting")
 	if app.agencyType == "" {
@@ -616,13 +619,19 @@ func (app *MockApp) Run() error {
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
-	app.flowsApi = createFlowsApi()
-
+	if app.flowsApi == nil {
+		app.flowsApi = createFlowsApi()
+		err := app.flowsApi.ParseEnv()
+		if err != nil {
+			return err
+		}
+	}
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
 	mux.HandleFunc("/health", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.flowsHandler())
 	app.server = &http.Server{Addr: addr, Handler: mux}
+	app.flowsApi.Run()
 	return app.server.ListenAndServe()
 }

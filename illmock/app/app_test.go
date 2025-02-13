@@ -31,14 +31,14 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func TestParseConfig(t *testing.T) {
+func TestParseEnv(t *testing.T) {
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
 	os.Setenv("AGENCY_TYPE", "ABC")
 	os.Setenv("SUPPLYING_AGENCY_ID", "S1")
 	os.Setenv("REQUESTING_AGENCY_ID", "R1")
 	var app MockApp
-	app.parseConfig()
+	app.parseEnv()
 	assert.Equal(t, "8082", app.httpPort)
 	assert.Equal(t, "ABC", app.agencyType)
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
@@ -163,8 +163,17 @@ func TestWriteResponseNil(t *testing.T) {
 	assert.Contains(t, string(buf), "marshal failed")
 }
 
+func TestFlowsApiParseEnvFailed(t *testing.T) {
+	os.Setenv("CLEAN_TIMEOUT", "0")
+	var app MockApp
+	err := app.Run()
+	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
+	os.Unsetenv("CLEAN_TIMEOUT")
+}
+
 func TestService(t *testing.T) {
 	var app MockApp
+	app.flowsApi = createFlowsApi() // FlowsApi.ParseEnv is not called
 	dynPort := getFreePortTest(t)
 	app.httpPort = dynPort
 	url := "http://localhost:" + dynPort
@@ -172,6 +181,7 @@ func TestService(t *testing.T) {
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
 	healthUrl := url + "/health"
+	app.agencyType = "ABC"
 	go func() {
 		err := app.Run()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
