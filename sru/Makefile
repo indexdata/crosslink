@@ -3,7 +3,7 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 XSLT ?= xsltproc
-GEN_FILES = sruResponse.go diagnostic.go scan.go searchResultAnalysis.go sruResponse.go xcql.go facetedResults.go
+GEN_FILES = sruSimpleResponse.go diagnostic.go
 .PHONY: all generate generate-schema lint check clean
 
 all: generate
