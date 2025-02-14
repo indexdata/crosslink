@@ -48,7 +48,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewEntry'
+              $ref: '#/components/schemas/Entry'
       responses:
         '200':
           description: Entry response
@@ -219,7 +219,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NewAuthority'
+              $ref: '#/components/schemas/Authority'
       responses:
         '200':
           description: ID of new Authority
@@ -250,20 +250,17 @@ components:
           type: string
           format: uuid
           description: Unique id
-    MaybeId:
+    Entry:
       type: object
+      required:
+        - id
+        - name
       properties:
         id:
+          readOnly: true
           type: string
-          nullable: true
           format: uuid
           description: Unique id
-    EntryRequired:
-      required:
-        - name
-    EntryProperties:
-      type: object
-      properties:
         name:
           type: string
           description: Name of the institution or branch this directory entry describes
@@ -280,30 +277,11 @@ components:
           type: string
           description: Main contact email
           minLength: 6
-    Entry: 
-      allOf: 
-        - $ref: '#/components/schemas/Id'
-        - $ref: '#/components/schemas/EntryProperties'
-        - $ref: '#/components/schemas/EntryRequired'
-        - type: object
-          properties:
-            symbols:
-              type: array
-              description: Symbols associated with this entry
-              items:
-                $ref: '#/components/schemas/Symbol'
-    NewEntry: 
-      allOf: 
-        - $ref: '#/components/schemas/EntryProperties'
-        - $ref: '#/components/schemas/EntryRequired'
-        - type: object
-          properties:
-            symbols:
-              type: array
-              nullable: true
-              description: Symbols associated with this entry
-              items:
-                $ref: '#/components/schemas/NewSymbol'
+        symbols:
+          type: array
+          description: Symbols associated with this entry
+          items:
+            $ref: '#/components/schemas/Symbol'
     EntryPatch: 
       type: object
       properties:
@@ -329,6 +307,9 @@ components:
             $ref: '#/components/schemas/SymbolPatch'
 
     SymbolProperties:
+      required:
+        - symbol
+        - authority
       properties:
         symbol:
           type: string
@@ -336,42 +317,39 @@ components:
         authority:
           type: string
           description: Uppercase string
-    SymbolRequired:
-      required:
-        - symbol
-        - authority
     Symbol:
       allOf:
-        - $ref: '#/components/schemas/Id'
+        - required:
+          - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
         - $ref: '#/components/schemas/SymbolProperties'
-        - $ref: '#/components/schemas/SymbolRequired'
-    NewSymbol:
-      allOf:
-        - $ref: '#/components/schemas/SymbolProperties'
-        - $ref: '#/components/schemas/SymbolRequired'
     SymbolPatch:
       allOf:
-        - $ref: '#/components/schemas/MaybeId'
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
         - $ref: '#/components/schemas/SymbolProperties'
-        - $ref: '#/components/schemas/SymbolRequired'
 
-    AuthorityProperties:
+    Authority:
+      required:
+        - id
+        - symbol
       properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
         symbol:
           type: string
           description: Uppercase string
-    AuthorityRequired:
-      required:
-        - symbol
-    Authority:
-      allOf:
-        - $ref: '#/components/schemas/Id'
-        - $ref: '#/components/schemas/AuthorityProperties'
-        - $ref: '#/components/schemas/AuthorityRequired'
-    NewAuthority:
-      allOf:
-        - $ref: '#/components/schemas/AuthorityProperties'
-        - $ref: '#/components/schemas/AuthorityRequired'
 
     Error:
       required:

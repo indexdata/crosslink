@@ -37,7 +37,7 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 		symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
 
 		*entry.Symbols = append(*entry.Symbols, Symbol{
-			Id:        symid,
+			Id:        &symid,
 			Symbol:    *row.Entrysymbol.Symbol,
 			Authority: *row.SymbolAuthority,
 		})
@@ -59,9 +59,9 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	for _, row := range rows {
 		last := len(resp) - 1
 
-		if last < 0 || resp[last].Id != row.Entry.ID {
+		if last < 0 || resp[last].Id != &row.Entry.ID {
 			resp = append(resp, Entry{
-				Id:          row.Entry.ID,
+				Id:          &row.Entry.ID,
 				Name:        row.Entry.Name,
 				ContactName: row.Entry.ContactName,
 				Email:       row.Entry.Email,
@@ -86,7 +86,7 @@ func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestOb
 	}
 
 	var resp = Entry{
-		Id:          rows[0].Entry.ID,
+		Id:          &rows[0].Entry.ID,
 		Name:        rows[0].Entry.Name,
 		ContactName: rows[0].Entry.ContactName,
 		Email:       rows[0].Entry.Email,
@@ -117,8 +117,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		log.Fatal(err)
 	}
 
-	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
-		for _, symbol := range request.Body.Symbols.MustGet() {
+	if request.Body.Symbols != nil {
+		for _, symbol := range *request.Body.Symbols {
 			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(symbol.Authority))
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
@@ -185,8 +185,8 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		// Delete existing symbols not present
 		var patchedSymbols []uuid.UUID
 		for _, symbol := range reqsyms {
-			if symbol.Id.IsSpecified() && !symbol.Id.IsNull() {
-				patchedSymbols = append(patchedSymbols, symbol.Id.MustGet())
+			if symbol.Id != nil {
+				patchedSymbols = append(patchedSymbols, *symbol.Id)
 			}
 		}
 		if len(patchedSymbols) > 0 {
@@ -205,7 +205,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 
 			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
-				ID:        NlblToPGUUID(symbol.Id),
+				ID:        symbol.Id,
 				Owner:     request.Id,
 				Symbol:    strings.ToUpper(symbol.Symbol),
 				Authority: auth.ID,
@@ -272,7 +272,7 @@ func (a ApiImpl) GetAuthorities(ctx context.Context, request GetAuthoritiesReque
 
 	for _, row := range rows {
 		resp = append(resp, Authority{
-			Id:     row.ID,
+			Id:     &row.ID,
 			Symbol: row.Symbol,
 		})
 	}
