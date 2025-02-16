@@ -63,10 +63,10 @@ func StartApp(ctx context.Context) {
 	workflowManager := service.CreateWorkflowManager(eventBus)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
-	StartServer(illRepo, eventBus)
+	StartServer(illRepo, eventRepo, eventBus)
 }
 
-func StartServer(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) {
 	if strings.EqualFold(INIT_DATA, "true") {
 		initData(illRepo)
 	}
@@ -77,6 +77,13 @@ func StartServer(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 	mux.HandleFunc("/healthz", HandleHealthz)
 
 	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
+	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		http.ServeFile(w, r, "handler/open-api.yaml")
+	})
+
+	apiHandler := handler.NewApiHandler(eventRepo, illRepo)
+	handler.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
@@ -156,7 +163,7 @@ func initData(illRepo ill_db.IllRepo) {
 	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
+			utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 				ID:     uuid.New().String(),
 				Name:   "Requester",
 				Symbol: "isil:req",
@@ -164,6 +171,7 @@ func initData(illRepo ill_db.IllRepo) {
 					String: adapter.MOCK_CLIENT_URL,
 					Valid:  true,
 				},
+				RefreshPolicy: ill_db.RefreshPolicyNever,
 			}))
 		} else {
 			panic(err.Error())

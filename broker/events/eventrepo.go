@@ -14,6 +14,8 @@ type EventRepo interface {
 	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error
 	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
 	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
+	GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]Event, error)
+	ListEvent(ctx extctx.ExtendedContext) ([]Event, error)
 }
 
 type PgEventRepo struct {
@@ -56,4 +58,26 @@ func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal 
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)
 	_, err := r.GetConnOrTx().Exec(ctx, sql)
 	return err
+}
+
+func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]Event, error) {
+	rows, err := r.queries.GetIllTransactionEvents(ctx, r.GetConnOrTx(), illTransactionId)
+	var events []Event
+	if err == nil {
+		for _, r := range rows {
+			events = append(events, r.Event)
+		}
+	}
+	return events, err
+}
+
+func (r *PgEventRepo) ListEvent(ctx extctx.ExtendedContext) ([]Event, error) {
+	rows, err := r.queries.ListEvent(ctx, r.GetConnOrTx())
+	var events []Event
+	if err == nil {
+		for _, r := range rows {
+			events = append(events, r.Event)
+		}
+	}
+	return events, err
 }

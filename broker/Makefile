@@ -14,6 +14,7 @@ MAIN_PACKAGE=cmd/broker
 MODULE=broker
 COMMIT_ID=cmd/broker/commit.txt
 COVERAGE=coverage.out
+HANDLER_PACKAGE=handler
 
 # Directories
 SQLC ?= sqlc
@@ -30,11 +31,14 @@ all: $(BINARY)
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc
+generate: generate-commit-id generate-sqlc generate-api
 
 generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
+
+generate-api:
+	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(HANDLER_PACKAGE)/cfg.yaml ./$(HANDLER_PACKAGE)/open-api.yaml
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
@@ -71,3 +75,4 @@ clean:
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
 	rm -f $(SQL_GEN_OUT)
+	rm -f $(HANDLER_PACKAGE)/openapi-gen.go

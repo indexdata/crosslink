@@ -1,0 +1,366 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"github.com/google/uuid"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5"
+	"net/http"
+	"strings"
+)
+
+type ApiHandler struct {
+	eventRepo events.EventRepo
+	illRepo   ill_db.IllRepo
+}
+
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo) ApiHandler {
+	return ApiHandler{
+		eventRepo: eventRepo,
+		illRepo:   illRepo,
+	}
+}
+
+func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams) {
+	logParams := map[string]string{"method": "GetEvents"}
+	if params.IllTransactionId != nil {
+		logParams["IllTransactionId"] = *params.IllTransactionId
+	}
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: logParams,
+	})
+	resp := []Event{}
+	var events []events.Event
+	var err error
+	if params.IllTransactionId != nil {
+		events, err = a.eventRepo.GetIllTransactionEvents(ctx, *params.IllTransactionId)
+	} else {
+		events, err = a.eventRepo.ListEvent(ctx)
+	}
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	for _, event := range events {
+		resp = append(resp, toApiEvent(event))
+	}
+	writeJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "GetIllTransactions"},
+	})
+	resp := []IllTransaction{}
+	trans, err := a.illRepo.ListIllTransaction(ctx)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	for _, t := range trans {
+		resp = append(resp, toApiIllTransaction(t))
+	}
+	writeJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
+	})
+	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		} else {
+			addInternalError(ctx, w, err)
+			return
+		}
+	}
+	writeJsonResponse(w, toApiIllTransaction(trans))
+}
+
+func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "GetPeers"},
+	})
+	resp := []Peer{}
+	peers, err := a.illRepo.ListPeer(ctx)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	for _, p := range peers {
+		resp = append(resp, toApiPeer(p))
+	}
+	writeJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "PostPeers"},
+	})
+	var newPeer Peer
+	err := json.NewDecoder(r.Body).Decode(&newPeer)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	if newPeer.Symbol == "" || !strings.Contains(newPeer.Symbol, ":") {
+		resp := ErrorMessage{
+			Error: "Symbol should be in format \"isil:sym\" but got " + newPeer.Symbol,
+		}
+		ctx.Logger().Error("error serving api request", "error", err.Error())
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(resp)
+		return
+	}
+	peer, err := a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(toDbPeer(newPeer)))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(toApiPeer(peer))
+}
+
+func (a *ApiHandler) DeletePeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "DeletePeersSymbol", "symbol": symbol},
+	})
+	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		} else {
+			addInternalError(ctx, w, err)
+			return
+		}
+	}
+	err = a.illRepo.DeletePeer(ctx, peer.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *ApiHandler) GetPeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "GetPeersSymbol", "symbol": symbol},
+	})
+	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		} else {
+			addInternalError(ctx, w, err)
+			return
+		}
+	}
+	writeJsonResponse(w, toApiPeer(peer))
+}
+
+func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "PutPeersSymbol", "symbol": symbol},
+	})
+	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		} else {
+			addInternalError(ctx, w, err)
+			return
+		}
+	}
+	var update Peer
+	err = json.NewDecoder(r.Body).Decode(&update)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	if update.Name != "" {
+		peer.Name = update.Name
+	}
+	if update.Address != "" {
+		peer.Address = createPgText(update.Address)
+	}
+	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
+	peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	writeJsonResponse(w, toApiPeer(peer))
+}
+
+func writeJsonResponse(w http.ResponseWriter, resp any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+type ErrorMessage struct {
+	Error string `json:"error"`
+}
+
+func addInternalError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
+	resp := ErrorMessage{
+		Error: err.Error(),
+	}
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func addNotFoundError(w http.ResponseWriter) {
+	resp := ErrorMessage{
+		Error: "not found",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func toApiEvent(event events.Event) Event {
+	api := Event{
+		ID:               event.ID,
+		Timestamp:        event.Timestamp.Time,
+		IllTransactionID: event.IllTransactionID,
+		EventType:        string(event.EventType),
+		EventName:        string(event.EventName),
+		EventStatus:      string(event.EventStatus),
+	}
+	eventData := make(map[string]interface{})
+	eventData["Timestamp"] = event.EventData.Timestamp.Time
+	if event.EventData.ISO18626Message != nil {
+		eventData["ISO18626Message"] = event.EventData.ISO18626Message
+	}
+	api.EventData = &eventData
+	resultData := make(map[string]interface{})
+	for key, value := range event.ResultData.Data {
+		resultData[key] = value
+	}
+	api.ResultData = &resultData
+	return api
+}
+
+func toApiIllTransaction(trans ill_db.IllTransaction) IllTransaction {
+	api := IllTransaction{
+		ID:        trans.ID,
+		Timestamp: trans.Timestamp.Time,
+	}
+	if trans.RequesterSymbol.Valid {
+		api.RequesterSymbol = trans.RequesterSymbol.String
+	}
+	if trans.RequesterID.Valid {
+		api.RequesterID = trans.RequesterID.String
+	}
+	if trans.LastRequesterAction.Valid {
+		api.LastRequesterAction = trans.LastRequesterAction.String
+	}
+	if trans.PrevRequesterAction.Valid {
+		api.PrevRequesterAction = trans.PrevRequesterAction.String
+	}
+	if trans.SupplierSymbol.Valid {
+		api.SupplierSymbol = trans.SupplierSymbol.String
+	}
+	if trans.RequesterRequestID.Valid {
+		api.RequesterRequestID = trans.RequesterRequestID.String
+	}
+	if trans.SupplierRequestID.Valid {
+		api.SupplierRequestID = trans.SupplierRequestID.String
+	}
+	if trans.LastSupplierStatus.Valid {
+		api.LastSupplierStatus = trans.LastSupplierStatus.String
+	}
+	if trans.PrevSupplierStatus.Valid {
+		api.PrevSupplierStatus = trans.PrevSupplierStatus.String
+	}
+	api.IllTransactionData = toApiIllTransactionData(trans.IllTransactionData)
+	return api
+}
+
+func toApiIllTransactionData(trans ill_db.IllTransactionData) map[string]interface{} {
+	api := make(map[string]interface{})
+	api["BibliographicInfo"] = trans.BibliographicInfo
+	if trans.PublicationInfo != nil {
+		api["PublicationInfo"] = trans.PublicationInfo
+	}
+	if trans.ServiceInfo != nil {
+		api["ServiceInfo"] = trans.ServiceInfo
+	}
+	if trans.SupplierInfo != nil {
+		api["SupplierInfo"] = trans.SupplierInfo
+	}
+	if trans.RequestedDeliveryInfo != nil {
+		api["RequestedDeliveryInfo"] = trans.RequestedDeliveryInfo
+	}
+	if trans.RequestingAgencyInfo != nil {
+		api["RequestingAgencyInfo"] = trans.RequestingAgencyInfo
+	}
+	if trans.PatronInfo != nil {
+		api["PatronInfo"] = trans.PatronInfo
+	}
+	if trans.BillingInfo != nil {
+		api["BillingInfo"] = trans.BillingInfo
+	}
+	if trans.DeliveryInfo != nil {
+		api["DeliveryInfo"] = trans.DeliveryInfo
+	}
+	if trans.ReturnInfo != nil {
+		api["ReturnInfo"] = trans.ReturnInfo
+	}
+	return api
+}
+
+func toApiPeer(peer ill_db.Peer) Peer {
+	return Peer{
+		ID:            peer.ID,
+		Symbol:        peer.Symbol,
+		Name:          peer.Name,
+		Address:       peer.Address.String,
+		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
+	}
+}
+
+func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) PeerRefreshPolicy {
+	if policy == ill_db.RefreshPolicyNever {
+		return Never
+	} else {
+		return Transaction
+	}
+}
+
+func toDbPeer(peer Peer) ill_db.Peer {
+	db := ill_db.Peer{
+		ID:            peer.ID,
+		Symbol:        peer.Symbol,
+		Name:          peer.Name,
+		Address:       createPgText(peer.Address),
+		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
+	}
+	if db.ID == "" {
+		db.ID = uuid.New().String()
+	}
+	return db
+}
+
+func toDbRefreshPolicy(policy PeerRefreshPolicy) ill_db.RefreshPolicy {
+	if policy == Never {
+		return ill_db.RefreshPolicyNever
+	} else {
+		return ill_db.RefreshPolicyTransaction
+	}
+}

@@ -65,7 +65,7 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 		app.StartEventBus(ctx, eventBus)
 		wg.Done()
-		app.StartServer(illRepo, eventBus)
+		app.StartServer(illRepo, eventRepo, eventBus)
 	}()
 	wg.Wait()
 	return eventBus, illRepo, eventRepo, iso18626Client
@@ -102,7 +102,7 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 }
 
 func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, address string) ill_db.Peer {
-	peer, err := illRepo.CreatePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreatePeerParams{
+	peer, err := illRepo.SavePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:     uuid.New().String(),
 		Symbol: symbol,
 		Name:   symbol,

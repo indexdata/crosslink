@@ -20,7 +20,7 @@ func (r *MockIllRepositorySuccess) GetIllTransactionById(ctx extctx.ExtendedCont
 	}, nil
 }
 
-func (r *MockIllRepositorySuccess) CreatePeer(ctx extctx.ExtendedContext, params ill_db.CreatePeerParams) (ill_db.Peer, error) {
+func (r *MockIllRepositorySuccess) SavePeer(ctx extctx.ExtendedContext, params ill_db.SavePeerParams) (ill_db.Peer, error) {
 	var peer = (ill_db.Peer)(params)
 	return peer, nil
 }
@@ -79,6 +79,19 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx ext
 		RequesterRequestID: requesterRequestID,
 	}, nil
 }
+func (r *MockIllRepositorySuccess) ListIllTransaction(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
+	return []ill_db.IllTransaction{{
+		ID: "id",
+	}}, nil
+}
+func (r *MockIllRepositorySuccess) ListPeer(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
+	return []ill_db.Peer{{
+		ID: uuid.New().String(),
+	}}, nil
+}
+func (r *MockIllRepositorySuccess) DeletePeer(ctx extctx.ExtendedContext, id string) error {
+	return nil
+}
 
 type MockIllRepositoryError struct {
 	mock.Mock
@@ -88,7 +101,7 @@ func (r *MockIllRepositoryError) GetIllTransactionById(ctx extctx.ExtendedContex
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) CreatePeer(ctx extctx.ExtendedContext, params ill_db.CreatePeerParams) (ill_db.Peer, error) {
+func (r *MockIllRepositoryError) SavePeer(ctx extctx.ExtendedContext, params ill_db.SavePeerParams) (ill_db.Peer, error) {
 	return ill_db.Peer{}, errors.New("DB error")
 }
 
@@ -122,4 +135,13 @@ func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, 
 
 func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) ListIllTransaction(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
+	return []ill_db.IllTransaction{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) ListPeer(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
+	return []ill_db.Peer{{}}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id string) error {
+	return errors.New("DB error")
 }

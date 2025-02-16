@@ -1,0 +1,5 @@
+package: handler
+output: handler/openapi-gen.go
+generate:
+  models: true
+  std-http-server: true

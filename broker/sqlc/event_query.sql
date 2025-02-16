@@ -27,6 +27,11 @@ WHERE id = $1 LIMIT 1;
 SELECT sqlc.embed(event) FROM event
 ORDER BY timestamp;
 
+-- name: GetIllTransactionEvents :many
+SELECT sqlc.embed(event) FROM event
+WHERE ill_transaction_id = $1
+ORDER BY timestamp;
+
 -- name: SaveEvent :one
 INSERT INTO event (
     id, timestamp, ill_transaction_id, event_type, event_name, event_status, event_data, result_data

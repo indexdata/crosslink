@@ -7,6 +7,7 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 )
@@ -111,15 +112,16 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32, symLocalIdMapping map[string]string) (*ill_db.LocatedSupplier, error) {
 	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
-			peer, err = s.illRepo.CreatePeer(ctx, ill_db.CreatePeerParams{
+		if errors.Is(err, pgx.ErrNoRows) {
+			peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams{
 				ID:     uuid.New().String(),
 				Symbol: dir.Symbol,
 				Address: pgtype.Text{
 					String: dir.URL,
 					Valid:  true,
 				},
-				Name: dir.Symbol,
+				Name:          dir.Symbol,
+				RefreshPolicy: ill_db.RefreshPolicyNever,
 			})
 		}
 		if err != nil {
