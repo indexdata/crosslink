@@ -26,7 +26,7 @@ func TestApiNoInit(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 }
 
-func TestApiBadMethod(t *testing.T) {
+func TestFlowApiBadMethod(t *testing.T) {
 	api := createFlowsApi()
 	server := httptest.NewServer(api.flowsHandler())
 	defer server.Close()
