@@ -5,8 +5,7 @@ OS ?= $(shell uname)
 XSLT ?= xsltproc
 GEN_FILES = sruSimpleResponse.go diagnostic.go
 .PHONY: all generate generate-schema lint check clean
-#XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.1.0
-XSD2GO = ../../xsd2goxsl/xsd2goxsl
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@ba8833e
 
 all: generate
 
@@ -19,7 +18,6 @@ generate-schema: $(GEN_FILES)
 		'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 		package=sru \
 		json=yes
-#	sed -i -E 's/(VersionDefinition[0-9])\./\1_/g' $@  // until we fix the xsd2goxsl
 	$(GO) fmt $@
 
 clean:
