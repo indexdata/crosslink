@@ -196,6 +196,8 @@ func TestCleanerExpire(t *testing.T) {
 
 	api.Shutdown()
 
+	time.Sleep(1 * time.Millisecond)
+
 	api.addFlow(flow1)
 
 	time.Sleep(1 * time.Millisecond)
