@@ -80,23 +80,38 @@ func (api *SruApi) getMarcxmlRecords(id string) ([]byte, error) {
 	return xml.MarshalIndent(record, "  ", "  ")
 }
 
+func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string) *sru.RecordDefinition {
+	diagnostic := sru.Diagnostic{
+		DiagnosticComplexType: sru.DiagnosticComplexType{
+			Uri:     "info:srw/diagnostic/1/63",
+			Message: message,
+		},
+	}
+	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
+	return &sru.RecordDefinition{
+		RecordSchema:   "info::srw/schema/1/diagnostics-v1.1",
+		RecordPacking:  "xml",
+		RecordPosition: pos,
+		RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+	}
+}
+
 func (api *SruApi) getMockRecords(id string, pos uint64) *sru.RecordsDefinition {
 	records := sru.RecordsDefinition{}
 	buf, err := api.getMarcxmlRecords(id)
-	if err != nil {
-		record := sru.RecordDefinition{
-			RecordPacking:  "xml",
-			RecordPosition: pos,
-			RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: []byte(err.Error())},
-		}
-		records.Record = append(records.Record, record)
-	} else {
-		record := sru.RecordDefinition{
+	var record *sru.RecordDefinition
+	if err == nil {
+		record = &sru.RecordDefinition{
+			RecordSchema:   "info:srw/schema/1/marcxml-v1.1",
 			RecordPacking:  "xml",
 			RecordPosition: pos,
 			RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
 		}
-		records.Record = append(records.Record, record)
+	} else {
+		record = api.produceSurrogateDiagnostic(pos, err.Error())
+	}
+	if record != nil {
+		records.Record = append(records.Record, *record)
 	}
 	return &records
 }

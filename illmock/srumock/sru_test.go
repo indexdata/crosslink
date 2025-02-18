@@ -13,6 +13,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestProduceSurrogateDiagnostic(t *testing.T) {
+	var api SruApi
+	record := api.produceSurrogateDiagnostic(1, "message")
+	assert.NotNil(t, record)
+	assert.Equal(t, "info::srw/schema/1/diagnostics-v1.1", record.RecordSchema)
+	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/63</uri>")
+}
+
 func TestSruService(t *testing.T) {
 	api := createSruApi()
 	server := httptest.NewServer(api.sruHandler())
