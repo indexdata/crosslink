@@ -36,7 +36,7 @@ type Authority struct {
 // Entry defines model for Entry.
 type Entry struct {
 	// ContactName Name of contact person
-	ContactName *string `json:"contact_name,omitempty"`
+	ContactName *string `json:"contactName,omitempty"`
 
 	// Description Detailed description of the entity described by this entry
 	Description *string `json:"description,omitempty"`
@@ -56,20 +56,11 @@ type Entry struct {
 
 // EntryPatch defines model for EntryPatch.
 type EntryPatch struct {
-	ContactName nullable.Nullable[string]        `json:"contact_name,omitempty"`
+	ContactName nullable.Nullable[string]        `json:"contactName,omitempty"`
 	Description nullable.Nullable[string]        `json:"description,omitempty"`
 	Email       nullable.Nullable[string]        `json:"email,omitempty"`
 	Name        *string                          `json:"name,omitempty"`
 	Symbols     nullable.Nullable[[]SymbolPatch] `json:"symbols,omitempty"`
-}
-
-// Error defines model for Error.
-type Error struct {
-	// Code Error code
-	Code int32 `json:"code"`
-
-	// Message Error message
-	Message string `json:"message"`
 }
 
 // Id defines model for Id.
@@ -153,14 +144,17 @@ type ServerInterface interface {
 	// (POST /entries)
 	AddEntry(w http.ResponseWriter, r *http.Request)
 	// Delete directory entry by ID
-	// (DELETE /entries/{id})
+	// (DELETE /entries/by-id/{id})
 	DeleteEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Returns a directory entry by ID
-	// (GET /entries/{id})
+	// (GET /entries/by-id/{id})
 	GetEntryByID(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Update an entry
-	// (PATCH /entries/{id})
+	// (PATCH /entries/by-id/{id})
 	UpdateEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a directory entry by symbol
+	// (GET /entries/by-symbol/{symbol})
+	GetEntryBySymbol(w http.ResponseWriter, r *http.Request, symbol string)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -345,6 +339,31 @@ func (siw *ServerInterfaceWrapper) UpdateEntry(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetEntryBySymbol operation middleware
+func (siw *ServerInterfaceWrapper) GetEntryBySymbol(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "symbol" -------------
+	var symbol string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "symbol", r.PathValue("symbol"), &symbol, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "symbol", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetEntryBySymbol(w, r, symbol)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -469,9 +488,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/authorities", wrapper.AddAuthority)
 	m.HandleFunc("GET "+options.BaseURL+"/entries", wrapper.GetEntries)
 	m.HandleFunc("POST "+options.BaseURL+"/entries", wrapper.AddEntry)
-	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{id}", wrapper.DeleteEntry)
-	m.HandleFunc("GET "+options.BaseURL+"/entries/{id}", wrapper.GetEntryByID)
-	m.HandleFunc("PATCH "+options.BaseURL+"/entries/{id}", wrapper.UpdateEntry)
+	m.HandleFunc("DELETE "+options.BaseURL+"/entries/by-id/{id}", wrapper.DeleteEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/entries/by-id/{id}", wrapper.GetEntryByID)
+	m.HandleFunc("PATCH "+options.BaseURL+"/entries/by-id/{id}", wrapper.UpdateEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/entries/by-symbol/{symbol}", wrapper.GetEntryBySymbol)
 
 	return m
 }
@@ -504,7 +524,7 @@ func (response GetAuthorities400TextResponse) VisitGetAuthoritiesResponse(w http
 }
 
 type GetAuthoritiesdefaultJSONResponse struct {
-	Body       Error
+	Body       string
 	StatusCode int
 }
 
@@ -686,7 +706,7 @@ func (response GetEntryByID404TextResponse) VisitGetEntryByIDResponse(w http.Res
 }
 
 type GetEntryByIDdefaultJSONResponse struct {
-	Body       Error
+	Body       string
 	StatusCode int
 }
 
@@ -734,6 +754,55 @@ func (response UpdateEntry404TextResponse) VisitUpdateEntryResponse(w http.Respo
 	return err
 }
 
+type GetEntryBySymbolRequestObject struct {
+	Symbol string `json:"symbol"`
+}
+
+type GetEntryBySymbolResponseObject interface {
+	VisitGetEntryBySymbolResponse(w http.ResponseWriter) error
+}
+
+type GetEntryBySymbol200JSONResponse Entry
+
+func (response GetEntryBySymbol200JSONResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetEntryBySymbol400TextResponse string
+
+func (response GetEntryBySymbol400TextResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetEntryBySymbol404TextResponse string
+
+func (response GetEntryBySymbol404TextResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetEntryBySymboldefaultJSONResponse struct {
+	Body       string
+	StatusCode int
+}
+
+func (response GetEntryBySymboldefaultJSONResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Returns all authorities
@@ -749,14 +818,17 @@ type StrictServerInterface interface {
 	// (POST /entries)
 	AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error)
 	// Delete directory entry by ID
-	// (DELETE /entries/{id})
+	// (DELETE /entries/by-id/{id})
 	DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error)
 	// Returns a directory entry by ID
-	// (GET /entries/{id})
+	// (GET /entries/by-id/{id})
 	GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error)
 	// Update an entry
-	// (PATCH /entries/{id})
+	// (PATCH /entries/by-id/{id})
 	UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error)
+	// Returns a directory entry by symbol
+	// (GET /entries/by-symbol/{symbol})
+	GetEntryBySymbol(ctx context.Context, request GetEntryBySymbolRequestObject) (GetEntryBySymbolResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -987,30 +1059,56 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 	}
 }
 
+// GetEntryBySymbol operation middleware
+func (sh *strictHandler) GetEntryBySymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+	var request GetEntryBySymbolRequestObject
+
+	request.Symbol = symbol
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetEntryBySymbol(ctx, request.(GetEntryBySymbolRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetEntryBySymbol")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetEntryBySymbolResponseObject); ok {
+		if err := validResponse.VisitGetEntryBySymbolResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+xY32/bNhD+Vwh2j0ac/sAe/JbOwWBgW4sVeSqCgRZPFluKVMhTEyHw/z4cKdmSJUXO",
-	"EjdFsZcgMqn78d1331G854nNC2vAoOeLe+6TDHIR/r0oMbNOYUUPhbMFOFQQlpSkvxJ84lSByhq+4FdG",
-	"3ZTAlOQznlqXC+QLXpbh2YGQH4yu+AJdCTOOVQF8wT06ZTZ8O+O+ytdWDxgtCnCJ8MDqvb13t2T9plQO",
-	"JF985sFdbe16O+OXBt1AAok1KBL8x4gc+l7/Ejkwm7J6FyvAeWv4jOfK/AFmgxlfvB7IomPl0OgSUCgN",
-	"krV+JieYAQODCqt6ZQ2SrSuGmfK04Kppx5ALNYDen0KZXRJxT8fUrwOmnr20D0NM2SvjUWEZAXFs7YRJ",
-	"spi/VA4StK6KSOwQ8tOYRBL4vutPcYEJ722iBIJktwqzLuAKIQ/v/uIg5Qv+ar7vk3ndJPNoiZzV3oVz",
-	"ohrmZIDherfTrr9Agrxh6EeBSTZN027KptRarDWMQn/Ax0e+vSNVlzGT7w0H+1B9HgF2BGo7Gsa+An2g",
-	"nbNuCGM5wM+wmYW1FueVwbdv9hqkDMIGHBnPwXuxGTXULE/JV+2w2U4KtpJP199JzRwi5qedJgutP6R8",
-	"8fnEY2AgrO3sKFLso9pe7yLf9dRzhX8Y7pOC60TSjUu0B+9j5+EzztLa0KwV0DVlzZVJLdlHhdSAfNmo",
-	"tPIZu/i44jP+DZyPbl+fnZ+dU1y2ACMKxRf8bfhpxguBWch43nioEdgA9uP/G7B0xjOhNWvtZ6mzeZgj",
-	"vvII9K/A8Fx6cCwTnokkAe8Z2jMewnCCTFJj8d8BL1q+KSYnckBwPjCmG8JXqG6tk2SKpUojOLYO04IW",
-	"b0oIoyPqH7+hg0hgQoCqVyWsAnZEMk5M6nrKxZ3Ky5yZMl+Do0npwJcag2sXkBjxq1WusON7Ur6211R4",
-	"X1jjI/5vzs+b8QMmlEIUhVZJwG3+xcd5svdwlIDvz5P9gXk4rPaHT6aVR9ZER6++6wWHcIfzQgt1EFa/",
-	"YXuUuinBI/smtJIhOQZhSoSdqSg1PgqHh9KP42cgiNLAXQEJnUNq50SPMs8FnVzHaE8hFtYP9MlvDgSC",
-	"Z4IZuGX73j2k/oWUF61FF7F4b2X1bDm3Sv5QidEyISVvqw8NiO0TWflQZCs5FNJqSZ1GsHXI+qKM+8+u",
-	"Jng1RhPaNadj8LFaXO99sg5f1j7/1+DTaXD8HD5Cf8PGF9LeUflrWHmk9DXfcj3Zu6wXTiF5NcJjiP4w",
-	"UhfD2dV2xrUyX4PvuhWr99VqSc9d+Dbt1W6rxhM1xRKNnq2trF7NlQwlvSqkQNjdx3Stlq3F441uX4SR",
-	"QyRri+b8Xslt5KYGhH6yy/D7ULI9sYsDCRrq1BZr0aHj815zVJ9VgwI08jHTl593/f5qLmEoCvnTTsZY",
-	"n97d07piqyVFU0/EwQE21BdTVU2BPlS/T1HPv5fQvcCJ/V2k7HO4iTkYiyy1pZE/5PfAOEGL5ubj8AKA",
-	"RJYJMzIZr0ZFeIrBUb5PR+ETjen6MrFfgoiEZKkCLf0R03pUKyMy8ifpgg4RD+lE8/jfAAAA///c/Zgd",
-	"TxoAAA==",
+	"H4sIAAAAAAAC/+xYX2+cuBf9Kpb7e5xfSNtoH3hLd6LVSLvbaqM8VXkw+BLcGpvYlyYo4ruvbAMDA2Qm",
+	"m6Sz6vYlGbC5f849Ptf2A011UWoFCi2NH6hNcyiY/3leYa6NwNo9lEaXYFCAHxLc/eVgUyNKFFrRmF4p",
+	"cVsBEZyuaKZNwZDGtKr8swHGPypZ0xhNBSuKdQk0phaNUDe0WVFbF4mWM0bLEkzKLJB27uTbxlm/rYQB",
+	"TuPP1LtrrV03K3qh0MwkkGqFLMU/WQFTp+4t0RlpJ5ESjNWKrmgh1O+gbjCn8duZJEZWdo2uAZmQwMng",
+	"tXOCORBQKLBuRxLgJKkJ5sK6AVPvdwwFEzPg/cGE6pMIc0amfpkx9eKVVY9C7LIXyqLAKgBiSGKYSvOQ",
+	"PxcGUtSmDkj0CNn9mAQO2KnryzBAmLU6FQyBkzuB+RhwgVD4b/9nIKMxfRNtl0nUrpEoWHLOWu/MGFbP",
+	"U9LDcN3P1MkXSJF2BP3EMM33snScsaqkZImEReR36PjEr3tOjQmz9zs1G+xj5XkC1gGnZjGMbQEmOG/4",
+	"82Vsr/TMFfiylzYm5ceMxp9fWU1nwmpWB6G7jaq57iPvuflS4e+G+6zgRpGM42LD/vXUtvKCLak1tBoE",
+	"dO2ypkJl2tlHgY7JdN2pnbA5Of+0oSv6DYwNbt+enJ6curh0CYqVgsb0vX+1oiXD3GccdR5aBG4Ap/H/",
+	"BVgZZQmTkgzmk8zowuuxrS2C+8nQP1cWDMmZJSxNwVqC+oT6MAxzJt3Cor8Bng98u5gMKwDBWM+YcQhf",
+	"ob7ThjtTJBMSwZDEq64bvK3AS3AQEnrr+rlngodqUiWsPXaOZNQxaeypYPeiqAqiqiIB4zqOAVtJ9K6N",
+	"R2LBrxSFwJHvnsdC4ft327ILhXADhjbNtSu8LbWyAf93p6edjIPypWBlKUXqcYu+2CDMWw8HKeF2WzZt",
+	"PLuqv93DESkski469+nZJDiEe4xKycROWNMFO6HUbQUWyTcmBffJETBGm9CFMlZJfBIOex1WCu5LSF3v",
+	"bh05KlRFwdxmb4niLpxS25k18asBhmAJIwruyHad7tL8nPPzwaAJeX/QvH5SfgeW97FyoiaMczpUGtcM",
+	"mmcy8LHINnwupM3arSoH24iYR2XXP3a1h1dLNHGzIrd1PFR327nP1tyL1udPvX09vQ0nyAO01k88ks4u",
+	"yl/HygOlrzv/TGTvoh14DclrEV5C9F8jdSGcvrYrKoX66n23S7H+UG/W7nkM381wdLxUw+7ZxRKMniSa",
+	"128iwX1Jr0rOEPorjLHVajB4uNHmKIycI9lQNKOk/r/g0YPgTWCoBIRpymv/fi7lieSFtgQdgVqLrfS4",
+	"DfNWecSUW7MytHB8mYrQ2XSVddcXLgr+w/bHUJ/JrU1Sk83aRdP2xdk2Nrc69lU1A3c0/T5FPf1ecneE",
+	"PfpZoOxLuAk5KI0k05XiRz8BLJOx7O41do/3TlYJUwu98GpRdvexNQj269H1lRpze+c2LUFAgpNMgOT2",
+	"gP68qIsBGf6DMH5ExF067Xa9cDkUPYT/zeD0sKSSl9110qPcC7MOVcv+imqZgj8V8j+kkC0f3Hbx7wAA",
+	"AP//vhNhLCEcAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

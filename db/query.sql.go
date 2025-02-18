@@ -171,9 +171,22 @@ SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_nam
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority
-WHERE e.id = $1 OR $1 IS NULL
+WHERE
+  (e.id = $1 OR $1 IS NULL)
+  AND (
+    (e.id = (
+      SELECT owner FROM symbols s2, authorities a2 WHERE a2.symbol = $2 AND s2.symbol = $3
+    ))
+    OR ($2 IS NULL AND $3 IS NULL)
+  )
 ORDER BY e.name, e.id
 `
+
+type ListEntriesParams struct {
+	ID        pgtype.UUID
+	Authority *string
+	Symbol    *string
+}
 
 type ListEntriesRow struct {
 	Entry           Entry
@@ -181,8 +194,8 @@ type ListEntriesRow struct {
 	SymbolAuthority *string
 }
 
-func (q *Queries) ListEntries(ctx context.Context, id pgtype.UUID) ([]ListEntriesRow, error) {
-	rows, err := q.db.Query(ctx, listEntries, id)
+func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]ListEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listEntries, arg.ID, arg.Authority, arg.Symbol)
 	if err != nil {
 		return nil, err
 	}

@@ -71,7 +71,7 @@ paths:
             text/plain:
               schema:
                 type: string
-  /entries/{id}:
+  /entries/by-id/{id}:
     get:
       summary: Returns a directory entry by ID
       operationId: getEntryByID
@@ -107,7 +107,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                type: string
     patch:
       summary: Update an entry
       description: Update an entry
@@ -168,6 +168,42 @@ paths:
             text/plain:
               schema:
                 type: string
+  /entries/by-symbol/{symbol}:
+    get:
+      summary: Returns a directory entry by symbol
+      operationId: getEntryBySymbol
+      parameters:
+        - name: symbol
+          in: path
+          description: Symbol of entry to fetch
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Entry not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                type: string
   /authorities:
     get:
       summary: Returns all authorities
@@ -208,7 +244,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                type: string
     post:
       summary: Creates a new authority
       description: Creates a new authority
@@ -269,7 +305,7 @@ components:
           type: string
           description: Detailed description of the entity described by this entry
           minLength: 1
-        contact_name:
+        contactName:
           type: string
           description: Name of contact person
           minLength: 1
@@ -292,7 +328,7 @@ components:
           type: string
           nullable: true
           minLength: 1
-        contact_name:
+        contactName:
           type: string
           nullable: true
           minLength: 1
@@ -350,16 +386,3 @@ components:
         symbol:
           type: string
           description: Uppercase string
-
-    Error:
-      required:
-        - code
-        - message
-      properties:
-        code:
-          type: integer
-          format: int32
-          description: Error code
-        message:
-          type: string
-          description: Error message

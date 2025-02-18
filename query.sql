@@ -7,7 +7,14 @@ SELECT sqlc.embed(e), sqlc.embed(s), a.symbol as symbol_authority
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority
-WHERE e.id = sqlc.narg(id) OR sqlc.narg(id) IS NULL
+WHERE
+  (e.id = sqlc.narg(id) OR sqlc.narg(id) IS NULL)
+  AND (
+    (e.id = (
+      SELECT owner FROM symbols s2, authorities a2 WHERE a2.symbol = sqlc.narg(authority) AND s2.symbol = sqlc.narg(symbol)
+    ))
+    OR (sqlc.narg(authority) IS NULL AND sqlc.narg(symbol) IS NULL)
+  )
 ORDER BY e.name, e.id;
 
 -- name: CreateEntry :one

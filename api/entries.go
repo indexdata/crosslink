@@ -32,7 +32,7 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 }
 
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{})
+	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -62,16 +62,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	return GetEntries200JSONResponse(resp), nil
 }
 
-func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(rows) == 0 {
-		return GetEntryByID404TextResponse("Entry not found"), nil
-	}
-
+func getOneEntryFromRows(rows []db.ListEntriesRow) Entry {
 	var resp = Entry{
 		Id:          &rows[0].Entry.ID,
 		Name:        rows[0].Entry.Name,
@@ -83,7 +74,38 @@ func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestOb
 		addRowToEntry(row, &resp)
 	}
 
-	return GetEntryByID200JSONResponse(resp), nil
+	return resp
+}
+
+func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
+	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{ID: pgtype.UUID{Bytes: request.Id, Valid: true}})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(rows) == 0 {
+		return GetEntryByID404TextResponse("Entry not found"), nil
+	}
+
+	return GetEntryByID200JSONResponse(getOneEntryFromRows(rows)), nil
+}
+
+func (a ApiImpl) GetEntryBySymbol(ctx context.Context, request GetEntryBySymbolRequestObject) (GetEntryBySymbolResponseObject, error) {
+	authority, symbol, err := resolveCombinedSymbol(request.Symbol)
+	if err != nil {
+		return GetEntryBySymbol400TextResponse("No delimiter found in symbol"), nil
+	}
+
+	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{Authority: &authority, Symbol: &symbol})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(rows) == 0 {
+		return GetEntryBySymbol404TextResponse("Entry not found"), nil
+	}
+
+	return GetEntryBySymbol200JSONResponse(getOneEntryFromRows(rows)), nil
 }
 
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {

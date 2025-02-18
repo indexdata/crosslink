@@ -20,3 +20,13 @@ func TestMaybeUpdateTxtCol(t *testing.T) {
 		t.Error("failed on string input when replacement unspecified")
 	}
 }
+
+func TestResolveCombinedSymbol(t *testing.T) {
+	a, s, e := resolveCombinedSymbol("AUTH:SYM:🤔:BOL")
+	if e != nil {
+		t.Error("Unexpected error resolving symbol")
+	}
+	if a != "AUTH" || s != "SYM:🤔:BOL" {
+		t.Errorf("failed to resolve symbol, expected authority symbol got authority %s symbol %s", a, s)
+	}
+}

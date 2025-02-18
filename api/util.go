@@ -1,6 +1,9 @@
 package api
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oapi-codegen/nullable"
@@ -15,6 +18,16 @@ func maybeUpdateTxtCol(cur *string, patch nullable.Nullable[string]) *string {
 	}
 	patchStr := patch.MustGet()
 	return &patchStr
+}
+
+func resolveCombinedSymbol(combined string) (authority, symbol string, err error) {
+	colonIndex := strings.IndexByte(combined, ':')
+	if colonIndex == -1 {
+		return "", "", errors.New("Symbol delimeter not found")
+	}
+	authority = combined[:colonIndex]
+	symbol = combined[colonIndex+1:]
+	return
 }
 
 func derefOrDefault[T any](ptr *T, defaultValue T) T {

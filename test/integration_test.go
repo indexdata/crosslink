@@ -107,7 +107,7 @@ func TestEntryRoundtrip(t *testing.T) {
 	// POST
 	body = `{
 		"name": "Some Inst",
-		"contact_name": "Bob",
+		"contactName": "Bob",
 		"symbols": [
 			{
 				"symbol": "NWINST",
@@ -141,8 +141,8 @@ func TestEntryRoundtrip(t *testing.T) {
 		t.Errorf("Did not find a 36 character ID property, instead got: %v", postedId)
 	}
 
-	// GET
-	req = httptest.NewRequest(http.MethodGet, "/entries/"+postedId, nil)
+	// GET by symbol
+	req = httptest.NewRequest(http.MethodGet, "/entries/by-symbol/RESHARE:NWINST", nil)
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	res = w.Result()
@@ -158,7 +158,7 @@ func TestEntryRoundtrip(t *testing.T) {
 	{
 		"id": "%s",
 		"name": "Some Inst",
-		"contact_name": "Bob",
+		"contactName": "Bob",
 		"symbols": [
       "<<UNORDERED>>",
 			{
@@ -184,7 +184,7 @@ func TestEntryRoundtrip(t *testing.T) {
 	// PATCH
 	filteredSymbols := filterAnyMapSlice(&gotSymbols, "symbol", "NWINST")
 	body = fmt.Sprintf(`{
-		"contact_name": null,
+		"contactName": null,
 		"email": "info@someinst.edu",
 		"symbols": [
 			{
@@ -194,7 +194,7 @@ func TestEntryRoundtrip(t *testing.T) {
 			}
 		]
 	}`, filteredSymbols[0].(map[string]any)["id"])
-	req = httptest.NewRequest(http.MethodPatch, "/entries/"+postedId, bytes.NewBufferString(body))
+	req = httptest.NewRequest(http.MethodPatch, "/entries/by-id/"+postedId, bytes.NewBufferString(body))
 	req.Header.Add("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
@@ -208,8 +208,8 @@ func TestEntryRoundtrip(t *testing.T) {
 		t.Fatalf("Expected response status of 204, got %d and body of %s", res.StatusCode, data)
 	}
 
-	// GET again to confirm PATCH
-	req = httptest.NewRequest(http.MethodGet, "/entries/"+postedId, nil)
+	// GET again to confirm PATCH, this time by id
+	req = httptest.NewRequest(http.MethodGet, "/entries/by-id/"+postedId, nil)
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	res = w.Result()
