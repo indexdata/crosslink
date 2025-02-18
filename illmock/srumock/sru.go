@@ -1,12 +1,14 @@
-package app
+package srumock
 
 import (
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -14,9 +16,19 @@ import (
 type SruApi struct {
 }
 
+var log *slog.Logger = slogwrap.SlogWrap()
+
 func createSruApi() *SruApi {
 	api := &SruApi{}
 	return api
+}
+
+func writeHttpResponse(w http.ResponseWriter, buf []byte) {
+	w.WriteHeader(http.StatusOK)
+	_, err := w.Write(buf)
+	if err != nil {
+		log.Warn("writeResponse", "error", err.Error())
+	}
 }
 
 func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic) {

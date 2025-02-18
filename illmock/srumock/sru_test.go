@@ -1,4 +1,4 @@
-package app
+package srumock
 
 import (
 	"encoding/xml"
