@@ -75,30 +75,41 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	symbols := make([]string, 0, len(holdings))
 	symLocalIdMapping := make(map[string]string, len(holdings))
-	for _, holding := range holdings {
-		symbols = append(symbols, holding.Symbol)
-		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
-	}
-
-	directories, err := s.dirAdapter.Lookup(adapter.DirectoryLookupParams{
-		Symbols: symbols,
-	})
-
-	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to lookup directories: "+strings.Join(symbols, ","), err)
-	}
-
-	if len(directories) == 0 {
-		return logProblemAndReturnResult(ctx, "could not find directories: "+strings.Join(symbols, ","))
-	}
-
 	count := int32(0)
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	for _, dir := range directories {
-		sup, err := s.addLocatedSupplier(ctx, dir, illTrans.ID, count, symLocalIdMapping)
-		if err == nil {
-			count++
-			locatedSuppliers = append(locatedSuppliers, sup)
+	for _, holding := range holdings {
+		peer, e := s.illRepo.GetPeerBySymbol(ctx, holding.Symbol)
+		if e != nil || peer.RefreshPolicy == ill_db.RefreshPolicyTransaction {
+			symbols = append(symbols, holding.Symbol)
+			symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
+		} else {
+			sup, err := s.addLocatedSupplier(ctx, illTrans.ID, count, holding.LocalIdentifier, peer)
+			if err == nil {
+				count++
+				locatedSuppliers = append(locatedSuppliers, sup)
+			}
+		}
+	}
+
+	if len(symbols) > 0 {
+		directories, err := s.dirAdapter.Lookup(adapter.DirectoryLookupParams{
+			Symbols: symbols,
+		})
+
+		if err != nil {
+			return logErrorAndReturnResult(ctx, "failed to lookup directories: "+strings.Join(symbols, ","), err)
+		}
+
+		if len(directories) == 0 {
+			return logProblemAndReturnResult(ctx, "could not find directories: "+strings.Join(symbols, ","))
+		}
+
+		for _, dir := range directories {
+			sup, err := s.findSymbolAndAddLocatedSupplier(ctx, dir, illTrans.ID, count, symLocalIdMapping)
+			if err == nil {
+				count++
+				locatedSuppliers = append(locatedSuppliers, sup)
+			}
 		}
 	}
 
@@ -109,21 +120,26 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
 }
 
-func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32, symLocalIdMapping map[string]string) (*ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) findSymbolAndAddLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32, symLocalIdMapping map[string]string) (*ill_db.LocatedSupplier, error) {
 	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams{
-				ID:     uuid.New().String(),
-				Symbol: dir.Symbol,
-				Address: pgtype.Text{
-					String: dir.URL,
-					Valid:  true,
-				},
+				ID:            uuid.New().String(),
+				Symbol:        dir.Symbol,
+				Url:           dir.URL,
 				Name:          dir.Symbol,
-				RefreshPolicy: ill_db.RefreshPolicyNever,
+				RefreshPolicy: ill_db.RefreshPolicyTransaction,
 			})
 		}
+		if err != nil {
+			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
+			return nil, err
+		}
+	}
+	if peer.RefreshPolicy != ill_db.RefreshPolicyNever {
+		peer.Url = dir.URL
+		peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
 			return nil, err
@@ -135,6 +151,10 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, dir ada
 		return nil, errors.New("could not get local id for symbol")
 	}
 
+	return s.addLocatedSupplier(ctx, transId, ordinal, locId, peer)
+}
+
+func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
 	supplier, err := s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: transId,

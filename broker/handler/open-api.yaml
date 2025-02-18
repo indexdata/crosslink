@@ -109,9 +109,9 @@ components:
         Name:
           type: string
           description: Name of the peer
-        Address:
+        Url:
           type: string
-          description: Network address of the peer
+          description: Network URL of the peer
         RefreshPolicy:
           type: string
           enum: [never, transaction]
@@ -120,7 +120,7 @@ components:
         - ID
         - Symbol
         - Name
-        - Address
+        - Url
         - RefreshPolicy
 
 paths:

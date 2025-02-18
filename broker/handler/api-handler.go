@@ -39,7 +39,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params Ge
 	if params.IllTransactionId != nil {
 		events, err = a.eventRepo.GetIllTransactionEvents(ctx, *params.IllTransactionId)
 	} else {
-		events, err = a.eventRepo.ListEvent(ctx)
+		events, err = a.eventRepo.ListEvents(ctx)
 	}
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -56,7 +56,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request) 
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	resp := []IllTransaction{}
-	trans, err := a.illRepo.ListIllTransaction(ctx)
+	trans, err := a.illRepo.ListIllTransactions(ctx)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -89,7 +89,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
 		Other: map[string]string{"method": "GetPeers"},
 	})
 	resp := []Peer{}
-	peers, err := a.illRepo.ListPeer(ctx)
+	peers, err := a.illRepo.ListPeers(ctx)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -192,8 +192,8 @@ func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 	if update.Name != "" {
 		peer.Name = update.Name
 	}
-	if update.Address != "" {
-		peer.Address = createPgText(update.Address)
+	if update.Url != "" {
+		peer.Url = update.Url
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
@@ -330,7 +330,7 @@ func toApiPeer(peer ill_db.Peer) Peer {
 		ID:            peer.ID,
 		Symbol:        peer.Symbol,
 		Name:          peer.Name,
-		Address:       peer.Address.String,
+		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
 	}
 }
@@ -348,7 +348,7 @@ func toDbPeer(peer Peer) ill_db.Peer {
 		ID:            peer.ID,
 		Symbol:        peer.Symbol,
 		Name:          peer.Name,
-		Address:       createPgText(peer.Address),
+		Url:           peer.Url,
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
 	}
 	if db.ID == "" {

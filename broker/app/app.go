@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
 	"os"
@@ -164,13 +163,10 @@ func initData(illRepo ill_db.IllRepo) {
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
-				ID:     uuid.New().String(),
-				Name:   "Requester",
-				Symbol: "isil:req",
-				Address: pgtype.Text{
-					String: adapter.MOCK_CLIENT_URL,
-					Valid:  true,
-				},
+				ID:            uuid.New().String(),
+				Name:          "Requester",
+				Symbol:        "isil:req",
+				Url:           adapter.MOCK_CLIENT_URL,
 				RefreshPolicy: ill_db.RefreshPolicyNever,
 			}))
 		} else {

@@ -79,12 +79,12 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx ext
 		RequesterRequestID: requesterRequestID,
 	}, nil
 }
-func (r *MockIllRepositorySuccess) ListIllTransaction(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
+func (r *MockIllRepositorySuccess) ListIllTransactions(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
 	return []ill_db.IllTransaction{{
 		ID: "id",
 	}}, nil
 }
-func (r *MockIllRepositorySuccess) ListPeer(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
+func (r *MockIllRepositorySuccess) ListPeers(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
 	return []ill_db.Peer{{
 		ID: uuid.New().String(),
 	}}, nil
@@ -136,10 +136,10 @@ func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, 
 func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
-func (r *MockIllRepositoryError) ListIllTransaction(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
+func (r *MockIllRepositoryError) ListIllTransactions(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
 	return []ill_db.IllTransaction{}, errors.New("DB error")
 }
-func (r *MockIllRepositoryError) ListPeer(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
+func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext) ([]ill_db.Peer, error) {
 	return []ill_db.Peer{{}}, errors.New("DB error")
 }
 func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id string) error {

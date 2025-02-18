@@ -2,7 +2,7 @@
 SELECT sqlc.embed(event_config) FROM event_config
 WHERE event_name = $1 LIMIT 1;
 
--- name: ListEventConfig :many
+-- name: ListEventConfigs :many
 SELECT sqlc.embed(event_config) FROM event_config
 ORDER BY event_name;
 
@@ -23,7 +23,7 @@ WHERE event_name = $1;
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
 
--- name: ListEvent :many
+-- name: ListEvents :many
 SELECT sqlc.embed(event) FROM event
 ORDER BY timestamp;
 

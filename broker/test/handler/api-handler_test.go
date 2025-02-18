@@ -119,7 +119,7 @@ func TestPeersCRUD(t *testing.T) {
 	toCreate := handler.Peer{
 		ID:            uuid.New().String(),
 		Name:          "Peer",
-		Address:       "https://url.com",
+		Url:           "https://url.com",
 		Symbol:        "isil:peer",
 		RefreshPolicy: handler.Transaction,
 	}
@@ -313,7 +313,7 @@ func TestPostPeersDbError(t *testing.T) {
 	toCreate := handler.Peer{
 		ID:            uuid.New().String(),
 		Name:          "Peer",
-		Address:       "https://url.com",
+		Url:           "https://url.com",
 		Symbol:        "isil:peer",
 		RefreshPolicy: handler.Transaction,
 	}

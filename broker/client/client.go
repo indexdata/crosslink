@@ -114,7 +114,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("Failed to get requester", "error", err)
 		status = events.EventStatusError
 	} else {
-		response, err := c.SendHttpPost(requester.Address.String, message, "")
+		response, err := c.SendHttpPost(requester.Url, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -175,7 +175,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		resultData["message"] = message
 
-		response, err := c.SendHttpPost(peer.Address.String, message, "")
+		response, err := c.SendHttpPost(peer.Url, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}

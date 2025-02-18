@@ -10,17 +10,17 @@ FROM peer
 WHERE symbol = $1
 LIMIT 1;
 
--- name: ListPeer :many
+-- name: ListPeers :many
 SELECT sqlc.embed(peer)
 FROM peer
 ORDER BY name;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, symbol, name, refresh_policy, address)
+INSERT INTO peer (id, symbol, name, refresh_policy, url)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
-        address        = EXCLUDED.address,
+        url            = EXCLUDED.url,
         refresh_policy = EXCLUDED.refresh_policy
 RETURNING sqlc.embed(peer);
 
@@ -41,7 +41,7 @@ FROM ill_transaction
 WHERE requester_request_id = $1
 LIMIT 1;
 
--- name: ListIllTransaction :many
+-- name: ListIllTransactions :many
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
 ORDER BY timestamp;

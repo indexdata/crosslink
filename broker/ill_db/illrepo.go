@@ -10,11 +10,11 @@ type IllRepo interface {
 	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransaction(ctx extctx.ExtendedContext) ([]IllTransaction, error)
+	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeer(ctx extctx.ExtendedContext) ([]Peer, error)
+	ListPeers(ctx extctx.ExtendedContext) ([]Peer, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -41,8 +41,8 @@ func (r *PgIllRepo) GetIllTransactionById(ctx extctx.ExtendedContext, id string)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransaction(ctx extctx.ExtendedContext) ([]IllTransaction, error) {
-	rows, err := r.queries.ListIllTransaction(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error) {
+	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx())
 	var transactions []IllTransaction
 	if err == nil {
 		for _, r := range rows {
@@ -62,8 +62,8 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeer(ctx extctx.ExtendedContext) ([]Peer, error) {
-	rows, err := r.queries.ListPeer(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext) ([]Peer, error) {
+	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx())
 	var peers []Peer
 	if err == nil {
 		for _, r := range rows {

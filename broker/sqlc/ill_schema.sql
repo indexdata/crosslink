@@ -4,7 +4,7 @@ CREATE TABLE peer
     symbol         VARCHAR NOT NULL,
     name           VARCHAR NOT NULL,
     refresh_policy VARCHAR NOT NULL,
-    address        VARCHAR
+    url            VARCHAR NOT NULL
 );
 
 CREATE TABLE ill_transaction
