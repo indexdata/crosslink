@@ -1,5 +1,7 @@
 github.com/golang-migrate/migrate/v4 v4.18.1/go.mod h1:HAX6m3sQgcdO81tdjn5exv20+3Kb13cmGli1hrD6hks=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/indexdata/cql-go v0.0.0-20250129100111-0a16b211ae9c h1:tBdol8VY8V0ovYd25A4eBFoCLkamUJVXx2MY12pv1qA=
+github.com/indexdata/cql-go v0.0.0-20250129100111-0a16b211ae9c/go.mod h1:OLbbfbTpWvwQvSnrF+syMkf9ta2ANGVkLYz/GrRGJJk=
 github.com/indexdata/go-utils v0.0.0-20250124183827-a1262e54d033 h1:3ED+3nJWcagPpinnRWkwZj/GbvoDPUViNbxlPvmBC28=
 github.com/indexdata/go-utils v0.0.0-20250124183827-a1262e54d033/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/go-utils v0.0.0-20250127123754-eb6364e9770b h1:AEZ5+Di1EMSoyMb1Bxv4TZughLTzKzSLu0eaPYd6e6Q=

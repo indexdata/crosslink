@@ -24,10 +24,34 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, "1", res)
 	})
 
-	t.Run("cql err", func(t *testing.T) {
+	t.Run("cql ok", func(t *testing.T) {
+		res, err := api.getIdFromQuery("id==1")
+		assert.Nil(t, err)
+		assert.Equal(t, "1", res)
+	})
+
+	t.Run("cql syntax error 1", func(t *testing.T) {
 		_, err := api.getIdFromQuery("id=")
 		assert.NotNil(t, err)
-		assert.Equal(t, "syntax error", err.Error())
+		assert.Equal(t, "search term expected at position 3: id=̰", err.Error())
+	})
+
+	t.Run("cql bool", func(t *testing.T) {
+		_, err := api.getIdFromQuery("a and b")
+		assert.NotNil(t, err)
+		assert.Equal(t, "missing search clause", err.Error())
+	})
+
+	t.Run("cql bad index", func(t *testing.T) {
+		_, err := api.getIdFromQuery("title = a")
+		assert.NotNil(t, err)
+		assert.Equal(t, "unknown index: title", err.Error())
+	})
+
+	t.Run("cql bad relation", func(t *testing.T) {
+		_, err := api.getIdFromQuery("id > a")
+		assert.NotNil(t, err)
+		assert.Equal(t, "unsupported relation: >", err.Error())
 	})
 
 	t.Run("bad method", func(t *testing.T) {

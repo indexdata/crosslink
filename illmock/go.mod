@@ -1,6 +1,8 @@
 module github.com/indexdata/crosslink/illmock
 
-go 1.23.3
+go 1.23.4
+
+toolchain go1.23.5
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
@@ -11,3 +13,5 @@ require (
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.34.0
 )
+
+require github.com/indexdata/cql-go v0.0.0-20250129100111-0a16b211ae9c // indirect

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/go-utils/utils"
@@ -30,14 +31,23 @@ func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefiniti
 	writeHttpResponse(w, buf)
 }
 
-// TODO: use cql-go for parsing the query
 func (api *SruApi) getIdFromQuery(query string) (string, error) {
-	var id string
-	n, err := fmt.Sscanf(query, "id=%s", &id)
-	if err != nil || n != 1 {
-		return "", fmt.Errorf("syntax error")
+	var p cql.Parser
+	res, err := p.Parse(query)
+	if err != nil {
+		return "", err
 	}
-	return id, nil
+	sc := res.Clause.SearchClause
+	if sc == nil {
+		return "", fmt.Errorf("missing search clause")
+	}
+	if sc.Index != "id" {
+		return "", fmt.Errorf("unknown index: %s", sc.Index)
+	}
+	if sc.Relation != cql.EQ && sc.Relation != "==" {
+		return "", fmt.Errorf("unsupported relation: %s", sc.Relation)
+	}
+	return sc.Term, nil
 }
 
 func (api *SruApi) getMockRecords(id string, pos uint64) *sru.RecordsDefinition {
