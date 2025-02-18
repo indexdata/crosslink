@@ -87,7 +87,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<record><id>1</id><title>Mock record</title></record>")
+		assert.Contains(t, string(buf), "<subfield code=\"i\">1</subfield>")
 		var sruResp sru.SearchRetrieveResponse
 		err = xml.Unmarshal(buf, &sruResp)
 		assert.Nil(t, err)
@@ -97,7 +97,7 @@ func TestSruService(t *testing.T) {
 		assert.NotNil(t, sruResp.Records)
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Equal(t, "xml", sruResp.Records.Record[0].RecordPacking)
-		assert.Equal(t, "<record><id>1</id><title>Mock record</title></record>", string(sruResp.Records.Record[0].RecordData.StringOrXmlFragmentDefinition))
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.StringOrXmlFragmentDefinition), "<subfield code=\"i\">1</subfield>")
 	})
 
 	t.Run("sr2.0", func(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
+	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -62,14 +63,41 @@ func (api *SruApi) getIdFromQuery(query string) (string, error) {
 	return sc.Term, nil
 }
 
+func (api *SruApi) getMarcxmlRecords(id string) ([]byte, error) {
+	var record marcxml.Record
+
+	record.Id = id
+	record.Type = string(marcxml.RecordTypeTypeBibliographic)
+	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
+	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
+	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
+		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock record from SRU"}}})
+	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "0",
+		Subfield: []marcxml.SubfieldatafieldType{{Code: "i", Text: marcxml.SubfieldDataType(id)}}})
+	// TODO: from mod-reservoir
+	// <p>999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
+	// match value; Multiple $l, $s pairs for local identifier and source identifiers.
+	return xml.MarshalIndent(record, "  ", "  ")
+}
+
 func (api *SruApi) getMockRecords(id string, pos uint64) *sru.RecordsDefinition {
 	records := sru.RecordsDefinition{}
-	record := sru.RecordDefinition{
-		RecordPacking:  "xml",
-		RecordPosition: pos,
-		RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: []byte("<record><id>" + id + "</id><title>Mock record</title></record>")},
+	buf, err := api.getMarcxmlRecords(id)
+	if err != nil {
+		record := sru.RecordDefinition{
+			RecordPacking:  "xml",
+			RecordPosition: pos,
+			RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: []byte(err.Error())},
+		}
+		records.Record = append(records.Record, record)
+	} else {
+		record := sru.RecordDefinition{
+			RecordPacking:  "xml",
+			RecordPosition: pos,
+			RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+		}
+		records.Record = append(records.Record, record)
 	}
-	records.Record = append(records.Record, record)
 	return &records
 }
 
