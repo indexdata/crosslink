@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/jackc/pgx/v5"
 	"log/slog"
 	"net/http"
@@ -81,8 +83,8 @@ func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus ev
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := handler.NewApiHandler(eventRepo, illRepo)
-	handler.HandlerFromMux(&apiHandler, mux)
+	apiHandler := api.NewApiHandler(eventRepo, illRepo)
+	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)

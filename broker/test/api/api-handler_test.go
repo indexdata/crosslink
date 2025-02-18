@@ -1,14 +1,15 @@
-package handler
+package api
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/indexdata/crosslink/broker/test"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/testcontainers/testcontainers-go"
@@ -26,7 +27,9 @@ import (
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
-var handlerMock = handler.NewApiHandler(mockEventRepoError, mockIllRepoError)
+var mockIllRepoError = new(test.MockIllRepositoryError)
+var mockEventRepoError = new(test.MockEventRepositoryError)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -63,7 +66,7 @@ func TestGetEvents(t *testing.T) {
 	illId := test.GetIllTransId(t, illRepo)
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 	body := getResponseBody(t, "/events")
-	var resp []handler.Event
+	var resp []oapi.Event
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -91,7 +94,7 @@ func TestGetEvents(t *testing.T) {
 func TestGetIllTransactions(t *testing.T) {
 	test.GetIllTransId(t, illRepo)
 	body := getResponseBody(t, "/ill_transactions")
-	var resp []handler.IllTransaction
+	var resp []oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -104,7 +107,7 @@ func TestGetIllTransactions(t *testing.T) {
 func TestGetIllTransactionsId(t *testing.T) {
 	illId := test.GetIllTransId(t, illRepo)
 	body := getResponseBody(t, "/ill_transactions/"+illId)
-	var resp handler.IllTransaction
+	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -116,12 +119,12 @@ func TestGetIllTransactionsId(t *testing.T) {
 
 func TestPeersCRUD(t *testing.T) {
 	// Create peer
-	toCreate := handler.Peer{
+	toCreate := oapi.Peer{
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
 		Symbol:        "isil:peer",
-		RefreshPolicy: handler.Transaction,
+		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	if err != nil {
@@ -144,7 +147,7 @@ func TestPeersCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("Expected response 201 got %d", resp.StatusCode)
 	}
-	var respPeer handler.Peer
+	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -276,7 +279,7 @@ func TestNotFound(t *testing.T) {
 func TestGetEventsDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetEvents(rr, req, handler.GetEventsParams{})
+	handlerMock.GetEvents(rr, req, oapi.GetEventsParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -310,12 +313,12 @@ func TestGetPeersDbError(t *testing.T) {
 	}
 }
 func TestPostPeersDbError(t *testing.T) {
-	toCreate := handler.Peer{
+	toCreate := oapi.Peer{
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
 		Symbol:        "isil:peer",
-		RefreshPolicy: handler.Transaction,
+		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	if err != nil {
@@ -367,9 +370,9 @@ func TestPutPeersSymbolDbError(t *testing.T) {
 	}
 }
 
-func getPeers(t *testing.T) []handler.Peer {
+func getPeers(t *testing.T) []oapi.Peer {
 	body := getResponseBody(t, "/peers")
-	var respPeers []handler.Peer
+	var respPeers []oapi.Peer
 	err := json.Unmarshal(body, &respPeers)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -377,9 +380,9 @@ func getPeers(t *testing.T) []handler.Peer {
 	return respPeers
 }
 
-func getPeerBySymbol(t *testing.T, symbol string) handler.Peer {
+func getPeerBySymbol(t *testing.T, symbol string) oapi.Peer {
 	body := getResponseBody(t, "/peers/"+symbol)
-	var resp handler.Peer
+	var resp oapi.Peer
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)

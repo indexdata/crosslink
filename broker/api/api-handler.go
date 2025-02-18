@@ -1,4 +1,4 @@
-package handler
+package api
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/jackc/pgx/v5"
 	"net/http"
 	"strings"
@@ -25,7 +26,7 @@ func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo) ApiHandle
 	}
 }
 
-func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams) {
+func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
 	logParams := map[string]string{"method": "GetEvents"}
 	if params.IllTransactionId != nil {
 		logParams["IllTransactionId"] = *params.IllTransactionId
@@ -33,7 +34,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params Ge
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	resp := []Event{}
+	resp := []oapi.Event{}
 	var events []events.Event
 	var err error
 	if params.IllTransactionId != nil {
@@ -55,7 +56,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request) 
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
-	resp := []IllTransaction{}
+	resp := []oapi.IllTransaction{}
 	trans, err := a.illRepo.ListIllTransactions(ctx)
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -88,7 +89,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
-	resp := []Peer{}
+	resp := []oapi.Peer{}
 	peers, err := a.illRepo.ListPeers(ctx)
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -104,7 +105,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "PostPeers"},
 	})
-	var newPeer Peer
+	var newPeer oapi.Peer
 	err := json.NewDecoder(r.Body).Decode(&newPeer)
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -183,7 +184,7 @@ func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 			return
 		}
 	}
-	var update Peer
+	var update oapi.Peer
 	err = json.NewDecoder(r.Body).Decode(&update)
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -233,8 +234,8 @@ func addNotFoundError(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func toApiEvent(event events.Event) Event {
-	api := Event{
+func toApiEvent(event events.Event) oapi.Event {
+	api := oapi.Event{
 		ID:               event.ID,
 		Timestamp:        event.Timestamp.Time,
 		IllTransactionID: event.IllTransactionID,
@@ -256,8 +257,8 @@ func toApiEvent(event events.Event) Event {
 	return api
 }
 
-func toApiIllTransaction(trans ill_db.IllTransaction) IllTransaction {
-	api := IllTransaction{
+func toApiIllTransaction(trans ill_db.IllTransaction) oapi.IllTransaction {
+	api := oapi.IllTransaction{
 		ID:        trans.ID,
 		Timestamp: trans.Timestamp.Time,
 	}
@@ -325,8 +326,8 @@ func toApiIllTransactionData(trans ill_db.IllTransactionData) map[string]interfa
 	return api
 }
 
-func toApiPeer(peer ill_db.Peer) Peer {
-	return Peer{
+func toApiPeer(peer ill_db.Peer) oapi.Peer {
+	return oapi.Peer{
 		ID:            peer.ID,
 		Symbol:        peer.Symbol,
 		Name:          peer.Name,
@@ -335,15 +336,15 @@ func toApiPeer(peer ill_db.Peer) Peer {
 	}
 }
 
-func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) PeerRefreshPolicy {
+func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) oapi.PeerRefreshPolicy {
 	if policy == ill_db.RefreshPolicyNever {
-		return Never
+		return oapi.Never
 	} else {
-		return Transaction
+		return oapi.Transaction
 	}
 }
 
-func toDbPeer(peer Peer) ill_db.Peer {
+func toDbPeer(peer oapi.Peer) ill_db.Peer {
 	db := ill_db.Peer{
 		ID:            peer.ID,
 		Symbol:        peer.Symbol,
@@ -357,8 +358,8 @@ func toDbPeer(peer Peer) ill_db.Peer {
 	return db
 }
 
-func toDbRefreshPolicy(policy PeerRefreshPolicy) ill_db.RefreshPolicy {
-	if policy == Never {
+func toDbRefreshPolicy(policy oapi.PeerRefreshPolicy) ill_db.RefreshPolicy {
+	if policy == oapi.Never {
 		return ill_db.RefreshPolicyNever
 	} else {
 		return ill_db.RefreshPolicyTransaction

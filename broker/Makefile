@@ -25,7 +25,7 @@ SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT)
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
-OAPI_DIR=handler
+OAPI_DIR=oapi
 OAPI_CFG = $(OAPI_DIR)/cfg.yaml
 OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
 OAPI_GEN = $(OAPI_DIR)/openapi-gen.go
