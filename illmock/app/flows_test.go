@@ -190,7 +190,7 @@ func TestCleanerExpire(t *testing.T) {
 	flowsR := runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 1)
 
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 	flowsR = runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 0)
 
