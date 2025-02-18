@@ -10,3 +10,4 @@ broker/*/*db-gen.go
 broker/*/*.sql-gen.go
 broker/broker
 illmock/illmock
+broker/handler/*-gen.go
