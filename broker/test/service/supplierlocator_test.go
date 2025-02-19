@@ -80,9 +80,20 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		completedSelect = append(completedSelect, event)
 	})
 
+	toChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
+		ID:            uuid.New().String(),
+		Symbol:        "isil:sup1",
+		Name:          "isil:sup1",
+		RefreshPolicy: ill_db.RefreshPolicyTransaction,
+		Url:           "http://should-change.com",
+	},
+	)
+	if err != nil {
+		t.Error("Failed to create peer " + err.Error())
+	}
 	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
@@ -111,6 +122,76 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	supplierId, ok := event.ResultData.Data["supplierId"]
 	if !ok || supplierId.(string) == "" {
 		t.Error("Expected to have supplierId")
+	}
+	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
+	if err != nil {
+		t.Error("Failed to get selected peer " + err.Error())
+	}
+	if selectedPeer.Url == toChange.Url {
+		t.Error("Peer entry should be updated")
+	}
+}
+
+func TestLocateSuppliersNoUpdate(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+	var completedSelect []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedSelect = append(completedSelect, event)
+	})
+
+	noChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
+		ID:            uuid.New().String(),
+		Symbol:        "isil:nochange",
+		Name:          "No Change",
+		RefreshPolicy: ill_db.RefreshPolicyNever,
+		Url:           "http://no-change.com",
+	},
+	)
+	if err != nil {
+		t.Error("Failed to create peer " + err.Error())
+	}
+	illTrId := getIllTransId(t, illRepo, "return-isil:nochange")
+	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedSelect) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+
+	supplierId, ok := event.ResultData.Data["supplierId"]
+	if !ok || supplierId.(string) == "" {
+		t.Error("Expected to have supplierId")
+	}
+	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
+	if err != nil {
+		t.Error("Failed to get selected peer " + err.Error())
+	}
+	if selectedPeer.Url != noChange.Url {
+		t.Error("Peer entry should not be updated")
 	}
 }
 

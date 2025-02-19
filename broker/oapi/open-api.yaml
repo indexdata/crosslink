@@ -1,0 +1,322 @@
+openapi: 3.0.0
+info:
+  title: Broker API
+  version: 1.0.0
+  description: API for retrieving broker data
+
+components:
+  schemas:
+    Event:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Unique identifier of the event
+        Timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the event
+        IllTransactionID:
+          type: string
+          description: ID of the ill transaction (if applicable)
+        EventType:
+          type: string
+          description: Type of the event
+        EventName:
+          type: string
+          description: Name of the event
+        EventStatus:
+          type: string
+          description: Status of the event
+        EventData:
+          type: object
+          description: Data associated with the event
+          additionalProperties: true
+        ResultData:
+          type: object
+          description: Result data of the event
+          additionalProperties: true
+      required:  # List required fields if any
+        - ID
+        - IllTransactionID
+        - Timestamp
+        - EventType
+        - EventName
+        - EventStatus
+    IllTransaction:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Unique identifier for the ILL transaction
+        Timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the transaction
+        RequesterSymbol:
+          type: string
+          description: Symbol of the requesting institution
+        RequesterID:
+          type: string
+          description: ID of the requesting institution
+        LastRequesterAction:
+          type: string
+          description: Last action performed by the requester
+        PrevRequesterAction:
+          type: string
+          description: Previous action performed by the requester
+        SupplierSymbol:
+          type: string
+          description: Symbol of the supplying institution
+        RequesterRequestID:
+          type: string
+          description: ID of the request from the requester's side
+        SupplierRequestID:
+          type: string
+          description: ID of the request from the supplier's side
+        LastSupplierStatus:
+          type: string
+          description: Last status update from the supplier
+        PrevSupplierStatus:
+          type: string
+          description: Previous status update from the supplier
+        IllTransactionData:
+          type: object
+          description: Result data of the event
+          additionalProperties: true
+      required:
+        - ID
+        - Timestamp
+        - RequesterSymbol
+        - RequesterID
+        - LastRequesterAction
+        - PrevRequesterAction
+        - SupplierSymbol
+        - RequesterRequestID
+        - SupplierRequestID
+        - LastSupplierStatus
+        - PrevSupplierStatus
+        - IllTransactionData
+    Peer:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Unique identifier for the peer
+        Symbol:
+          type: string
+          description: Unique symbol representing the peer
+        Name:
+          type: string
+          description: Name of the peer
+        Url:
+          type: string
+          description: Network URL of the peer
+        RefreshPolicy:
+          type: string
+          enum: [never, transaction]
+          description: Policy for refreshing peer information (never, transaction)
+      required:
+        - ID
+        - Symbol
+        - Name
+        - Url
+        - RefreshPolicy
+
+paths:
+  /events:
+    get:
+      summary: Retrieve events
+      parameters:
+        - in: query
+          name: ill_transaction_id
+          schema:
+            type: string
+          description: Filter events by ill transaction ID
+      responses:
+        '200':
+          description: Successful retrieval of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+        '400': # Example error response
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '500': # Example error response
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+  /ill_transactions/{id}:
+    get:
+      summary: Get an ILL transaction by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the ILL transaction to retrieve
+      responses:
+        '200':
+          description: Successful retrieval of the ILL transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IllTransaction'
+        '400': # Example error response
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '500': # Example error response
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+  /ill_transactions:
+    get:
+      summary: Get all ILL transactions
+      responses:
+        '200':
+          description: Successful retrieval of the ILL transaction
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IllTransaction'
+        '400': # Example error response
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '500': # Example error response
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+  /peers:
+    get:
+      summary: Get all peers
+      responses:
+        '200':
+          description: Successful retrieval of peers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Peer'
+    post:
+      summary: Create a new peer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Peer'
+      responses:
+        '201':
+          description: Peer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Peer'
+        '400':
+          description: Bad request (e.g., invalid data)
+        '500':
+          description: Internal server error
+
+  /peers/{symbol}:
+    get:
+      summary: Get a peer by symbol
+      parameters:
+        - in: path
+          name: symbol
+          schema:
+            type: string
+          required: true
+          description: Symbol of the peer to retrieve
+      responses:
+        '200':
+          description: Successful retrieval of the peer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Peer'
+        '404':
+          description: Peer not found
+    put:
+      summary: Update a peer
+      parameters:
+        - in: path
+          name: symbol
+          schema:
+            type: string
+          required: true
+          description: Symbol of the peer to update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Peer'
+      responses:
+        '200':
+          description: Peer updated successfully
+        '400':
+          description: Bad request (e.g., invalid data)
+        '404':
+          description: Peer not found
+        '500':
+          description: Internal server error
+    delete:
+      summary: Delete a peer
+      parameters:
+        - in: path
+          name: symbol
+          schema:
+            type: string
+          required: true
+          description: Symbol of the peer to delete
+      responses:
+        '204':
+          description: Peer deleted successfully (No Content)
+        '404':
+          description: Peer not found
+        '500':
+          description: Internal server error

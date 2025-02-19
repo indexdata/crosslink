@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
 	"os"
@@ -63,10 +64,10 @@ func StartApp(ctx context.Context) {
 	workflowManager := service.CreateWorkflowManager(eventBus)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
-	StartServer(illRepo, eventBus)
+	StartServer(illRepo, eventRepo, eventBus)
 }
 
-func StartServer(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) {
 	if strings.EqualFold(INIT_DATA, "true") {
 		initData(illRepo)
 	}
@@ -77,6 +78,13 @@ func StartServer(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 	mux.HandleFunc("/healthz", HandleHealthz)
 
 	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
+	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		http.ServeFile(w, r, "handler/open-api.yaml")
+	})
+
+	apiHandler := api.NewApiHandler(eventRepo, illRepo)
+	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
@@ -156,14 +164,12 @@ func initData(illRepo ill_db.IllRepo) {
 	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			utils.Warn(illRepo.CreatePeer(appCtx, ill_db.CreatePeerParams{
-				ID:     uuid.New().String(),
-				Name:   "Requester",
-				Symbol: "isil:req",
-				Address: pgtype.Text{
-					String: adapter.MOCK_CLIENT_URL,
-					Valid:  true,
-				},
+			utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
+				ID:            uuid.New().String(),
+				Name:          "Requester",
+				Symbol:        "isil:req",
+				Url:           adapter.MOCK_CLIENT_URL,
+				RefreshPolicy: ill_db.RefreshPolicyNever,
 			}))
 		} else {
 			panic(err.Error())

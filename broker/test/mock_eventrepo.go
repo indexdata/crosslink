@@ -2,12 +2,9 @@ package test
 
 import (
 	"errors"
-	"time"
-
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -33,7 +30,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        getNow(),
+			Timestamp:        GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusNew,
@@ -42,7 +39,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        getNow(),
+			Timestamp:        GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusProcessing,
@@ -51,7 +48,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        getNow(),
+			Timestamp:        GetNow(),
 			EventType:        events.EventTypeNotice,
 			EventName:        events.EventNameRequesterMsgReceived,
 			EventStatus:      events.EventStatusSuccess,
@@ -61,6 +58,17 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 
 func (r *MockEventRepositorySuccess) Notify(ctx extctx.ExtendedContext, eventId string, signal events.Signal) error {
 	return nil
+}
+
+func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]events.Event, error) {
+	return []events.Event{{
+		ID: uuid.New().String(),
+	}}, nil
+}
+func (r *MockEventRepositorySuccess) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
+	return []events.Event{{
+		ID: uuid.New().String(),
+	}}, nil
 }
 
 type MockEventRepositoryError struct {
@@ -87,9 +95,9 @@ func (r *MockEventRepositoryError) Notify(ctx extctx.ExtendedContext, eventId st
 	return errors.New("DB error")
 }
 
-func getNow() pgtype.Timestamp {
-	return pgtype.Timestamp{
-		Time:  time.Now(),
-		Valid: true,
-	}
+func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]events.Event, error) {
+	return []events.Event{}, errors.New("DB error")
+}
+func (r *MockEventRepositoryError) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
+	return []events.Event{}, errors.New("DB error")
 }
