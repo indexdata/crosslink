@@ -1,4 +1,4 @@
-package app
+package netutil
 
 import (
 	"errors"
@@ -32,7 +32,7 @@ func TestWriteHttpResponseWriteFailed(t *testing.T) {
 	mockWriter := &MockResponseWriter{}
 	buf := []byte("test response")
 
-	writeHttpResponse(mockWriter, buf)
+	WriteHttpResponse(mockWriter, buf)
 
 	// TODO: check if the log contains the expected error message
 	assert.NotNil(t, mockWriter)

@@ -1,14 +1,13 @@
-package srumock
+package sruapi
 
 import (
 	"encoding/xml"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
-	"github.com/indexdata/crosslink/illmock/slogwrap"
+	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/go-utils/utils"
@@ -17,19 +16,8 @@ import (
 type SruApi struct {
 }
 
-var log *slog.Logger = slogwrap.SlogWrap()
-
-func createSruApi() *SruApi {
-	api := &SruApi{}
-	return api
-}
-
-func writeHttpResponse(w http.ResponseWriter, buf []byte) {
-	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(buf)
-	if err != nil {
-		log.Warn("writeResponse", "error", err.Error())
-	}
+func CreateSruApi() *SruApi {
+	return &SruApi{}
 }
 
 func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic) {
@@ -41,7 +29,7 @@ func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefiniti
 	}
 	buf := utils.Must(xml.MarshalIndent(er, "  ", "  "))
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-	writeHttpResponse(w, buf)
+	netutil.WriteHttpResponse(w, buf)
 }
 
 func (api *SruApi) getIdFromQuery(query string) (string, error) {
@@ -142,10 +130,10 @@ func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionD
 
 	buf := utils.Must(xml.MarshalIndent(sr, "  ", "  "))
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-	writeHttpResponse(w, buf)
+	netutil.WriteHttpResponse(w, buf)
 }
 
-func (api *SruApi) sruHandler() http.HandlerFunc {
+func (api *SruApi) HttpHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)

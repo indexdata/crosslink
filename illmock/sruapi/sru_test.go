@@ -1,4 +1,4 @@
-package srumock
+package sruapi
 
 import (
 	"encoding/xml"
@@ -22,9 +22,11 @@ func TestProduceSurrogateDiagnostic(t *testing.T) {
 }
 
 func TestSruService(t *testing.T) {
-	api := createSruApi()
-	server := httptest.NewServer(api.sruHandler())
+
+	api := CreateSruApi()
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
+	url := server.URL
 
 	t.Run("cql ok", func(t *testing.T) {
 		res, err := api.getIdFromQuery("id=1")
@@ -63,13 +65,13 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("bad method", func(t *testing.T) {
-		resp, err := http.Post(server.URL, "text/plain", strings.NewReader("hello"))
+		resp, err := http.Post(url, "text/plain", strings.NewReader("hello"))
 		assert.Nil(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
 	t.Run("sr1.1", func(t *testing.T) {
-		sruUrl := server.URL + "?version=1.1&query=id%3D1"
+		sruUrl := url + "?version=1.1&query=id%3D1"
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -88,7 +90,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.2", func(t *testing.T) {
-		sruUrl := server.URL + "?version=1.2&query=id%3D1"
+		sruUrl := url + "?version=1.2&query=id%3D1"
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -109,7 +111,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0", func(t *testing.T) {
-		sruUrl := server.URL + "?version=2.0&query=id%3D1"
+		sruUrl := url + "?version=2.0&query=id%3D1"
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -125,7 +127,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr syntaxerror", func(t *testing.T) {
-		sruUrl := server.URL + "?version=2.0&query=id"
+		sruUrl := url + "?version=2.0&query=id"
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -143,7 +145,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("exp1.1", func(t *testing.T) {
-		sruUrl := server.URL + "?version=1.1"
+		sruUrl := url + "?version=1.1"
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -162,7 +164,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("exp2.0", func(t *testing.T) {
-		sruUrl := server.URL
+		sruUrl := url
 		resp, err := http.Get(sruUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
