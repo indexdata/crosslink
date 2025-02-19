@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/indexdata/crosslink/illmock/netutil"
+	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -90,9 +90,7 @@ func TestServerTextXml(t *testing.T) {
 }
 
 func TestServerBrokenPipe(t *testing.T) {
-	l, err := netutil.GetFreeListener()
-	assert.Nil(t, err)
-	defer l.Close()
+	l := testutil.GetFreeListener(t)
 	url := "http://localhost:" + strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	go func() {
 		conn, err := l.Accept()
@@ -108,16 +106,7 @@ func TestServerBrokenPipe(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Greater(t, n, 20)
 	}()
-	_, err = SendReceiveXml(http.DefaultClient, url, nil)
+	_, err := SendReceiveXml(http.DefaultClient, url, nil)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
-}
-
-// getFreePortTest returns a free port as a string for testing.
-func GetFreePortTest(t *testing.T) string {
-	port, err := netutil.GetFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get a free port: %v", err)
-	}
-	return strconv.Itoa(port)
 }

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,7 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/httpclient"
-	"github.com/indexdata/crosslink/illmock/netutil"
+	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -46,15 +45,6 @@ func TestParseEnv(t *testing.T) {
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
-}
-
-// getFreePortTest returns a free port as a string for testing.
-func getFreePortTest(t *testing.T) string {
-	port, err := netutil.GetFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get a free port: %v", err)
-	}
-	return strconv.Itoa(port)
 }
 
 func TestAppShutdown(t *testing.T) {
@@ -159,7 +149,7 @@ func TestFlowsApiParseEnvFailed(t *testing.T) {
 func TestService(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi() // FlowsApi.ParseEnv is not called
-	dynPort := getFreePortTest(t)
+	dynPort := testutil.GetFreePortTest(t)
 	app.httpPort = dynPort
 	url := "http://localhost:" + dynPort
 	app.peerUrl = url
@@ -491,7 +481,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
 		// connect to port with no listening server
-		port := getFreePortTest(t)
+		port := testutil.GetFreePortTest(t)
 		// when we can set peer URL per request, this will be easier
 		app.peerUrl = "http://localhost:" + port
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
@@ -515,7 +505,7 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request, supplier URL", func(t *testing.T) {
-		port := getFreePortTest(t)
+		port := testutil.GetFreePortTest(t)
 		app.peerUrl = "http://localhost:" + port // nothing listening here now!
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
 		msg := createPatronRequest()
