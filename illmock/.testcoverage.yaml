@@ -46,6 +46,7 @@ exclude:
     - \_test\.go$            # test files
     - \-gen\.go$              # all sqlc generated files
     - /iso18626/schema.go$    # generated schema
+    - testutil/.*\.go     # testing utilities
     # - ^pkg/bar     # exclude package `pkg/bar`
 
 # File name of go-test-coverage breakdown file, which can be used to
