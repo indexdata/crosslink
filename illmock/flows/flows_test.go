@@ -176,7 +176,7 @@ func TestGetFlows(t *testing.T) {
 }
 
 func TestCleanerExpire(t *testing.T) {
-	api := CreateFlowsApi()
+	api := createFlowsApi()
 	api.cleanTimeout = 5 * time.Microsecond
 	api.cleanInterval = 1 * time.Millisecond
 	api.Run()

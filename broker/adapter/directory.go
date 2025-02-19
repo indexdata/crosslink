@@ -31,6 +31,12 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	if strings.Contains(params.Symbols[0], "d-not-found") {
 		return []DirectoryEntry{}, nil
 	}
+	if strings.Contains(params.Symbols[0], "isil:nochange") {
+		return []DirectoryEntry{{
+			Symbol: "isil:nochange",
+			URL:    MOCK_CLIENT_URL,
+		}}, nil
+	}
 
 	var dirs []DirectoryEntry
 	for _, value := range params.Symbols {

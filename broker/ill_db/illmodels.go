@@ -16,3 +16,10 @@ type IllTransactionData struct {
 	DeliveryInfo          *iso18626.DeliveryInfo           `json:"deliveryInfo,omitempty"`
 	ReturnInfo            *iso18626.ReturnInfo             `json:"returnInfo,omitempty"`
 }
+
+type RefreshPolicy string
+
+const (
+	RefreshPolicyNever       RefreshPolicy = "never"
+	RefreshPolicyTransaction RefreshPolicy = "transaction"
+)

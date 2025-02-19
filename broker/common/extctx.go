@@ -22,6 +22,7 @@ type LoggerArgs struct {
 	RequestId     string
 	TransactionId string
 	EventId       string
+	Other         map[string]string
 }
 
 type _ExtCtxImpl struct {
@@ -61,6 +62,9 @@ func createChildLoggerWithArgs(logger *slog.Logger, args *LoggerArgs) *slog.Logg
 		}
 		if args.EventId != "" {
 			loggerWithArgs = loggerWithArgs.With("eventId", args.EventId)
+		}
+		for k, v := range args.Other {
+			loggerWithArgs = loggerWithArgs.With(k, v)
 		}
 	}
 	return loggerWithArgs

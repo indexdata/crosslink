@@ -1,9 +1,10 @@
 CREATE TABLE peer
 (
-    id      VARCHAR PRIMARY KEY,
-    symbol  VARCHAR NOT NULL,
-    name    VARCHAR NOT NULL,
-    address VARCHAR
+    id             VARCHAR PRIMARY KEY,
+    symbol         VARCHAR NOT NULL,
+    name           VARCHAR NOT NULL,
+    refresh_policy VARCHAR NOT NULL,
+    url            VARCHAR NOT NULL
 );
 
 CREATE TABLE ill_transaction
