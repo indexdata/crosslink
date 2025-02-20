@@ -1,8 +1,12 @@
 # Intro
 
-The `illmock` program is a mocking ISO18626 client / server utility.
+The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS searchRetrive services.
 
-`illmock` can function as both a requester and a supplier, depending on the type of ISO18626 message it processes.
+# ILL service
+
+The ILL protocol handling is triggered by requests to URI path `/iso18626`.
+
+`illmock` can operate as both an ILL requester and an ILL supplier, depending on the type of ISO18626 message it processes.
 
 Example of launching two `illmock` instances that will send messages to each other:
 
@@ -18,8 +22,6 @@ to the former with:
 
 The `supplierUniqueRecordId` value is used to invoke a particular scenario on the supplier.
 
-## Scenarios
-
 The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
 
     WILLSUPPLY_LOANED
@@ -29,32 +31,45 @@ The scenario is used by the supplier to perform a particular workflow. The follo
 
 The scenario is inspected in the supplier request `<bibliographicInfo><supplierUniqueRecordId>` field.
 
-## Environment variables
+# ILL flows
 
-### HTTP_PORT
+History of ILL messages can be retrieved at the `/api/flows` endpoint. For example:
+
+    curl http://localhost:8081/api/flows
+
+# SRU service
+
+The program offers an SRU service at URI path `/sru`. The service produces a MARC XML record if a query
+of format "id = value" is used. For example to get a MARCXML with identifier 123, use:
+
+    curl 'http://localhost:8081/sru?query=id%3D123'
+
+# Environment variables
+
+## HTTP_PORT
 
 Listen address + port. If empty or omitted, the program will listen on any interface, port `8081`.
 
 If the value includes a colon, it is assumed to be listening address and port, for example: `127.0.0.1:8090`.
 Without colon, it translates to `:`value which will bind on any interface and port given.
 
-### PEER_URL
+## PEER_URL
 
 The default value is `http://localhost:8081`.
 
-### AGENCY_TYPE
+## AGENCY_TYPE
 
 If omitted or empty, a value of `MOCK` is used.
 
-### SUPPLYING_AGENCY_ID
+## SUPPLYING_AGENCY_ID
 
 If omitted or empty, a value of `SUP` is used.
 
-### REQUESTING_AGENCY_ID
+## REQUESTING_AGENCY_ID
 
 If omitted or empty, a value of `REQ` is used.
 
-### CLEAN_TIMEOUT
+## CLEAN_TIMEOUT
 
 Flow WS API: Specifies how long a flow is kept in memory before being removed. Default value is `10m`.
 
