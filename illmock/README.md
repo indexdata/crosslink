@@ -1,6 +1,7 @@
 # Intro
 
-The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS searchRetrive services.
+The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS
+searchRetrive services.
 
 # ILL service
 
