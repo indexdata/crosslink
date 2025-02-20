@@ -4,6 +4,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
@@ -54,6 +56,9 @@ func (api *SruApi) getIdFromQuery(query string) (string, error) {
 func (api *SruApi) getMarcxmlRecords(id string) ([]byte, error) {
 	var record marcxml.Record
 
+	if id == "sd" {
+		return nil, fmt.Errorf("mock error")
+	}
 	record.Id = id
 	record.Type = string(marcxml.RecordTypeTypeBibliographic)
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
@@ -76,24 +81,29 @@ func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string) *sru.R
 		},
 	}
 	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
+	var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
 	return &sru.RecordDefinition{
-		RecordSchema:   "info::srw/schema/1/diagnostics-v1.1",
-		RecordPacking:  "xml",
-		RecordPosition: pos,
-		RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+		RecordSchema:      "info::srw/schema/1/diagnostics-v1.1",
+		RecordXMLEscaping: &v,
+		RecordPosition:    pos,
+		RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
 	}
 }
 
-func (api *SruApi) getMockRecords(id string, pos uint64) *sru.RecordsDefinition {
+func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) *sru.RecordsDefinition {
 	records := sru.RecordsDefinition{}
+	if pos != 1 || maximumRecords == 0 {
+		return &records
+	}
 	buf, err := api.getMarcxmlRecords(id)
 	var record *sru.RecordDefinition
 	if err == nil {
+		var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
 		record = &sru.RecordDefinition{
-			RecordSchema:   "info:srw/schema/1/marcxml-v1.1",
-			RecordPacking:  "xml",
-			RecordPosition: pos,
-			RecordData:     sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+			RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+			RecordXMLEscaping: &v,
+			RecordPosition:    pos,
+			RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
 		}
 	} else {
 		record = api.produceSurrogateDiagnostic(pos, err.Error())
@@ -104,7 +114,35 @@ func (api *SruApi) getMockRecords(id string, pos uint64) *sru.RecordsDefinition 
 	return &records
 }
 
-func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic, query string) {
+func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic, parms url.Values, query string) {
+	var maximumRecords uint64 = 0
+	var err error
+	v := parms.Get("maximumRecords")
+	if v != "" {
+		maximumRecords, err = strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			diagnostics = append(diagnostics, sru.Diagnostic{
+				DiagnosticComplexType: sru.DiagnosticComplexType{
+					Uri:     "info:srw/diagnostic/1/6", // Unsupported parameter value
+					Message: "maximumRecords",
+					Details: err.Error(),
+				}})
+		}
+	}
+	var startRecord uint64 = 1
+	v = parms.Get("startRecord")
+	if v != "" {
+		startRecord, err = strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			diagnostics = append(diagnostics, sru.Diagnostic{
+				DiagnosticComplexType: sru.DiagnosticComplexType{
+					Uri:     "info:srw/diagnostic/1/6", // Unsupported parameter value
+					Message: "startRecord",
+					Details: err.Error(),
+				}})
+		}
+	}
+
 	id, err := api.getIdFromQuery(query)
 	var records *sru.RecordsDefinition
 	var NumberOfRecords uint64
@@ -116,7 +154,7 @@ func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionD
 				Details: err.Error(),
 			}})
 	} else {
-		records = api.getMockRecords(id, 1)
+		records = api.getMockRecords(id, startRecord, maximumRecords)
 		NumberOfRecords = 1
 	}
 	sr := sru.SearchRetrieveResponse{
@@ -147,8 +185,6 @@ func (api *SruApi) HttpHandler() http.HandlerFunc {
 		fmt.Printf("SRU version: %s query: %s\n", version, query)
 		if version == "" || version == string(sru.VersionDefinition2_0) {
 			retVersion = sru.VersionDefinition2_0
-		} else if version == string(sru.VersionDefinition1_2) {
-			retVersion = sru.VersionDefinition1_2
 		} else {
 			diagnostics = append(diagnostics, sru.Diagnostic{
 				DiagnosticComplexType: sru.DiagnosticComplexType{
@@ -159,8 +195,8 @@ func (api *SruApi) HttpHandler() http.HandlerFunc {
 		}
 		if query == "" {
 			api.explain(w, retVersion, diagnostics)
-		} else {
-			api.searchRetrieve(w, retVersion, diagnostics, query)
+			return
 		}
+		api.searchRetrieve(w, retVersion, diagnostics, parms, query)
 	}
 }
