@@ -45,6 +45,11 @@ components:
           format: uuid
         name:
           type: string
+        services:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/TierService'
     TierService:
       type: object
       required:
@@ -161,6 +166,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ServiceEndpoint'
+        networks:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+        tiers:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
     Symbol:
       required:
         - id
