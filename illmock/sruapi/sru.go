@@ -86,7 +86,7 @@ func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string) *sru.R
 		RecordSchema:      "info::srw/schema/1/diagnostics-v1.1",
 		RecordXMLEscaping: &v,
 		RecordPosition:    pos,
-		RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+		RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},
 	}
 }
 
@@ -103,7 +103,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 			RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
 			RecordXMLEscaping: &v,
 			RecordPosition:    pos,
-			RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+			RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},
 		}
 	} else {
 		record = api.produceSurrogateDiagnostic(pos, err.Error())
