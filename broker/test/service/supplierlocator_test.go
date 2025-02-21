@@ -231,6 +231,9 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	if supId := getSupplierId(1, event.ResultData.Data); supId != sup1.ID {
 		t.Error("Expected to sup1 be second supplier")
 	}
+	// Clean
+	getOrCreatePeer(t, illRepo, "isil:sup1", 0, 0)
+	getOrCreatePeer(t, illRepo, "isil:sup2", 0, 0)
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
