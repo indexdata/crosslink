@@ -23,6 +23,10 @@ func CreateSruApi() *SruApi {
 	return &SruApi{}
 }
 
+// See:
+// https://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/os/part3-sru2.0/searchRetrieve-v1.0-os-part3-sru2.0.html#_Toc324162491
+// https://github.com/indexdata/yaz/blob/master/src/srw.csv
+// TODO: should have a mapping fro no to message
 func getSruDiag(no string, message string, details string) *sru.Diagnostic {
 	return &sru.Diagnostic{
 		DiagnosticComplexType: sru.DiagnosticComplexType{
