@@ -16,6 +16,7 @@ type IllRepo interface {
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
 	ListPeers(ctx extctx.ExtendedContext) ([]Peer, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
+	UpdatePeerBorrowAndLoanCounts(ctx extctx.ExtendedContext, params UpdatePeerBorrowAndLoanCountsParams) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error)
@@ -101,4 +102,8 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveL
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplier(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) UpdatePeerBorrowAndLoanCounts(ctx extctx.ExtendedContext, params UpdatePeerBorrowAndLoanCountsParams) error {
+	return r.queries.UpdatePeerBorrowAndLoanCounts(ctx, r.GetConnOrTx(), params)
 }

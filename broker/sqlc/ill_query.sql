@@ -31,6 +31,12 @@ DELETE
 FROM peer
 WHERE id = $1;
 
+-- name: UpdatePeerBorrowAndLoanCounts :exec
+UPDATE peer AS p SET borrows_count = borrows_count + 1,
+                     loans_count = loans_count + CASE WHEN p.id = $2 THEN 1 ELSE 0 END
+FROM located_supplier l WHERE p.id = l.supplier_id AND l.ill_transaction_id = $1;
+
+
 -- name: GetIllTransactionById :one
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
