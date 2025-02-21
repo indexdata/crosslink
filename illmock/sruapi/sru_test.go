@@ -15,10 +15,10 @@ import (
 
 func TestProduceSurrogateDiagnostic(t *testing.T) {
 	var api SruApi
-	record := api.produceSurrogateDiagnostic(1, "message")
+	record := api.produceSurrogateDiagnostic(1, "message", "info:srw/diagnostic/1/60")
 	assert.NotNil(t, record)
 	assert.Equal(t, "info::srw/schema/1/diagnostics-v1.1", record.RecordSchema)
-	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/63</uri>")
+	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/60</uri>")
 }
 
 func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {

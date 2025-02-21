@@ -81,10 +81,10 @@ func (api *SruApi) getMarcBuf(id string) ([]byte, error) {
 	return xml.MarshalIndent(api.getMarcXmlRecord(id), "  ", "  ")
 }
 
-func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string) *sru.RecordDefinition {
+func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string, uri string) *sru.RecordDefinition {
 	diagnostic := sru.Diagnostic{
 		DiagnosticComplexType: sru.DiagnosticComplexType{
-			Uri:     "info:srw/diagnostic/1/63",
+			Uri:     uri,
 			Message: message,
 		},
 	}
@@ -114,7 +114,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 			RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
 		}
 	} else {
-		record = api.produceSurrogateDiagnostic(pos, err.Error())
+		record = api.produceSurrogateDiagnostic(pos, err.Error(), "info:srw/diagnostic/1/63")
 	}
 	if record != nil {
 		records.Record = append(records.Record, *record)
