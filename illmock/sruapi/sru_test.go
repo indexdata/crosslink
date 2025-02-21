@@ -18,7 +18,7 @@ func TestGetSurrogateDiagnostic(t *testing.T) {
 	record := api.getSurrogateDiagnostic(1, "64", "Record temporarily unavailable", "x")
 	assert.NotNil(t, record)
 	assert.Equal(t, "info::srw/schema/1/diagnostics-v1.1", record.RecordSchema)
-	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/64</uri>")
+	assert.Contains(t, string(record.RecordData.XMLContent), "<uri>info:srw/diagnostic/1/64</uri>")
 }
 
 func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
@@ -50,7 +50,6 @@ func getExplain(t *testing.T, uri string) *sru.ExplainResponse {
 	assert.NotNil(t, expResp.Version)
 	return &expResp
 }
-
 func TestSruService(t *testing.T) {
 
 	api := CreateSruApi()
@@ -150,7 +149,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.StringOrXmlFragmentDefinition), "<subfield code=\"i\">1</subfield>")
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"i\">1</subfield>")
 	})
 
 	t.Run("sr2.0 with surrogate diagnostic record", func(t *testing.T) {
@@ -160,7 +159,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.StringOrXmlFragmentDefinition), "mock error")
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "mock error")
 	})
 
 	t.Run("sr unsupported index", func(t *testing.T) {

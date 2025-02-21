@@ -102,7 +102,7 @@ func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message st
 		RecordSchema:      "info::srw/schema/1/diagnostics-v1.1",
 		RecordXMLEscaping: &v,
 		RecordPosition:    pos,
-		RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+		RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},
 	}
 }
 
@@ -119,7 +119,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 			RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
 			RecordXMLEscaping: &v,
 			RecordPosition:    pos,
-			RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
+			RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},
 		}
 	} else {
 		record = api.getSurrogateDiagnostic(pos, "63", "System error in retrieving records", err.Error())
