@@ -13,6 +13,7 @@ import (
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
+	"github.com/indexdata/crosslink/sru/diagnostic"
 	"github.com/indexdata/go-utils/utils"
 )
 
@@ -27,16 +28,16 @@ func CreateSruApi() *SruApi {
 // https://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/os/part3-sru2.0/searchRetrieve-v1.0-os-part3-sru2.0.html#_Toc324162491
 // https://github.com/indexdata/yaz/blob/master/src/srw.csv
 // TODO: should have a mapping fro no to message
-func getSruDiag(no string, message string, details string) *sru.Diagnostic {
-	return &sru.Diagnostic{
-		DiagnosticComplexType: sru.DiagnosticComplexType{
+func getSruDiag(no string, message string, details string) *diagnostic.Diagnostic {
+	return &diagnostic.Diagnostic{
+		DiagnosticComplexType: diagnostic.DiagnosticComplexType{
 			Uri:     fmt.Sprintf("info:srw/diagnostic/1/%s", no),
 			Message: message,
 			Details: details,
 		}}
 }
 
-func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic) {
+func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []diagnostic.Diagnostic) {
 	er := sru.ExplainResponse{
 		ExplainResponseDefinition: sru.ExplainResponseDefinition{
 			Version:     &retVersion,
@@ -48,7 +49,7 @@ func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefiniti
 	netutil.WriteHttpResponse(w, buf)
 }
 
-func (api *SruApi) getIdFromQuery(query string) (string, *sru.Diagnostic) {
+func (api *SruApi) getIdFromQuery(query string) (string, *diagnostic.Diagnostic) {
 	var p cql.Parser
 	res, err := p.Parse(query)
 	if err != nil {
@@ -130,7 +131,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 	return &records
 }
 
-func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic, parms url.Values, query string) {
+func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []diagnostic.Diagnostic, parms url.Values, query string) {
 	var maximumRecords uint64 = 0
 	var err error
 	v := parms.Get("maximumRecords")
@@ -178,7 +179,7 @@ func (api *SruApi) HttpHandler() http.HandlerFunc {
 			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		diagnostics := []sru.Diagnostic{}
+		diagnostics := []diagnostic.Diagnostic{}
 		parms := r.URL.Query()
 		version := parms.Get("version")
 		query := parms.Get("query")
