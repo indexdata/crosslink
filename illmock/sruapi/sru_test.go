@@ -13,12 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProduceSurrogateDiagnostic(t *testing.T) {
+func TestGetSurrogateDiagnostic(t *testing.T) {
 	var api SruApi
-	record := api.produceSurrogateDiagnostic(1, "message", "info:srw/diagnostic/1/60")
+	record := api.getSurrogateDiagnostic(1, "64", "Record temporarily unavailable", "x")
 	assert.NotNil(t, record)
 	assert.Equal(t, "info::srw/schema/1/diagnostics-v1.1", record.RecordSchema)
-	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/60</uri>")
+	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/64</uri>")
 }
 
 func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
@@ -65,33 +65,36 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("cql ok", func(t *testing.T) {
-		res, err := api.getIdFromQuery("id==1")
-		assert.Nil(t, err)
+		res, diag := api.getIdFromQuery("id==1")
+		assert.Nil(t, diag)
 		assert.Equal(t, "1", res)
 	})
 
 	t.Run("cql syntax error 1", func(t *testing.T) {
-		_, err := api.getIdFromQuery("id=")
-		assert.NotNil(t, err)
-		assert.Equal(t, "search term expected at position 3: id=̰", err.Error())
+		_, diag := api.getIdFromQuery("id=")
+		assert.NotNil(t, diag)
+		assert.Equal(t, "Query syntax error", diag.Message)
+		assert.Equal(t, "search term expected at position 3: id=̰", diag.Details)
 	})
 
 	t.Run("cql bool", func(t *testing.T) {
-		_, err := api.getIdFromQuery("a and b")
-		assert.NotNil(t, err)
-		assert.Equal(t, "missing search clause", err.Error())
+		id, diag := api.getIdFromQuery("a and b")
+		assert.Nil(t, diag)
+		assert.Equal(t, "", id)
 	})
 
 	t.Run("cql bad index", func(t *testing.T) {
-		_, err := api.getIdFromQuery("title = a")
-		assert.NotNil(t, err)
-		assert.Equal(t, "unknown index: title", err.Error())
+		_, diag := api.getIdFromQuery("title = a")
+		assert.NotNil(t, diag)
+		assert.Equal(t, "Unsupported index", diag.Message)
+		assert.Equal(t, "title", diag.Details)
 	})
 
-	t.Run("cql bad relation", func(t *testing.T) {
-		_, err := api.getIdFromQuery("id > a")
-		assert.NotNil(t, err)
-		assert.Equal(t, "unsupported relation: >", err.Error())
+	t.Run("cql unsupported relation", func(t *testing.T) {
+		_, diag := api.getIdFromQuery("id > a")
+		assert.NotNil(t, diag)
+		assert.Equal(t, "Unsupported relation", diag.Message)
+		assert.Equal(t, ">", diag.Details)
 	})
 
 	t.Run("bad method", func(t *testing.T) {
@@ -103,7 +106,7 @@ func TestSruService(t *testing.T) {
 	t.Run("sr1.1", func(t *testing.T) {
 		sruResp := getSr(t, url+"?version=1.1&query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
-		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
+		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
 		assert.Equal(t, "Unsupported version", sruResp.Diagnostics.Diagnostic[0].Message)
 	})
@@ -111,7 +114,7 @@ func TestSruService(t *testing.T) {
 	t.Run("sr1.2", func(t *testing.T) {
 		sruResp := getSr(t, url+"?version=1.2&query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
-		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
+		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
 		assert.Equal(t, "Unsupported version", sruResp.Diagnostics.Diagnostic[0].Message)
 	})
@@ -119,7 +122,7 @@ func TestSruService(t *testing.T) {
 	t.Run("sr2.0 no records", func(t *testing.T) {
 		sruResp := getSr(t, url+"?query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
-		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
+		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 0)
 	})
@@ -129,7 +132,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
-		assert.Equal(t, "maximumRecords", sruResp.Diagnostics.Diagnostic[0].Message)
+		assert.Equal(t, "maximumRecords", sruResp.Diagnostics.Diagnostic[0].Details)
 	})
 
 	t.Run("sr2.0 bad startRecord", func(t *testing.T) {
@@ -137,7 +140,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
-		assert.Equal(t, "startRecord", sruResp.Diagnostics.Diagnostic[0].Message)
+		assert.Equal(t, "startRecord", sruResp.Diagnostics.Diagnostic[0].Details)
 	})
 
 	t.Run("sr2.0 with records", func(t *testing.T) {
@@ -160,12 +163,12 @@ func TestSruService(t *testing.T) {
 		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.StringOrXmlFragmentDefinition), "mock error")
 	})
 
-	t.Run("sr syntaxerror", func(t *testing.T) {
+	t.Run("sr unsupported index", func(t *testing.T) {
 		sruResp := getSr(t, url+"?version=2.0&query=id")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
-		assert.Equal(t, "info:srw/diagnostic/1/10", sruResp.Diagnostics.Diagnostic[0].Uri)
-		assert.Equal(t, "Query syntax error", sruResp.Diagnostics.Diagnostic[0].Message)
+		assert.Equal(t, "info:srw/diagnostic/1/16", sruResp.Diagnostics.Diagnostic[0].Uri)
+		assert.Equal(t, "Unsupported index", sruResp.Diagnostics.Diagnostic[0].Message)
 	})
 
 	t.Run("exp1.1", func(t *testing.T) {

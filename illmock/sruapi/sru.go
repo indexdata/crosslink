@@ -23,6 +23,15 @@ func CreateSruApi() *SruApi {
 	return &SruApi{}
 }
 
+func getSruDiag(no string, message string, details string) *sru.Diagnostic {
+	return &sru.Diagnostic{
+		DiagnosticComplexType: sru.DiagnosticComplexType{
+			Uri:     fmt.Sprintf("info:srw/diagnostic/1/%s", no),
+			Message: message,
+			Details: details,
+		}}
+}
+
 func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefinition, diagnostics []sru.Diagnostic) {
 	er := sru.ExplainResponse{
 		ExplainResponseDefinition: sru.ExplainResponseDefinition{
@@ -35,21 +44,21 @@ func (api *SruApi) explain(w http.ResponseWriter, retVersion sru.VersionDefiniti
 	netutil.WriteHttpResponse(w, buf)
 }
 
-func (api *SruApi) getIdFromQuery(query string) (string, error) {
+func (api *SruApi) getIdFromQuery(query string) (string, *sru.Diagnostic) {
 	var p cql.Parser
 	res, err := p.Parse(query)
 	if err != nil {
-		return "", err
+		return "", getSruDiag("10", "Query syntax error", err.Error())
 	}
 	sc := res.Clause.SearchClause
 	if sc == nil {
-		return "", fmt.Errorf("missing search clause")
+		return "", nil
 	}
 	if sc.Index != "id" {
-		return "", fmt.Errorf("unknown index: %s", sc.Index)
+		return "", getSruDiag("16", "Unsupported index", sc.Index)
 	}
 	if sc.Relation != cql.EQ && sc.Relation != "==" {
-		return "", fmt.Errorf("unsupported relation: %s", sc.Relation)
+		return "", getSruDiag("19", "Unsupported relation", string(sc.Relation))
 	}
 	return sc.Term, nil
 }
@@ -74,20 +83,15 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	return &record
 }
 
-func (api *SruApi) getMarcBuf(id string) ([]byte, error) {
+func (api *SruApi) getMarcXmlBuf(id string) ([]byte, error) {
 	if id == "sd" {
 		return nil, fmt.Errorf("mock error")
 	}
 	return xml.MarshalIndent(api.getMarcXmlRecord(id), "  ", "  ")
 }
 
-func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string, uri string) *sru.RecordDefinition {
-	diagnostic := sru.Diagnostic{
-		DiagnosticComplexType: sru.DiagnosticComplexType{
-			Uri:     uri,
-			Message: message,
-		},
-	}
+func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message string, details string) *sru.RecordDefinition {
+	diagnostic := getSruDiag(errorId, message, details)
 	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
 	var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
 	return &sru.RecordDefinition{
@@ -103,7 +107,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 	if pos != 1 || maximumRecords == 0 {
 		return &records
 	}
-	buf, err := api.getMarcBuf(id)
+	buf, err := api.getMarcXmlBuf(id)
 	var record *sru.RecordDefinition
 	if err == nil {
 		var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
@@ -114,7 +118,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 			RecordData:        sru.StringOrXmlFragmentDefinition{StringOrXmlFragmentDefinition: buf},
 		}
 	} else {
-		record = api.produceSurrogateDiagnostic(pos, err.Error(), "info:srw/diagnostic/1/63")
+		record = api.getSurrogateDiagnostic(pos, "63", "System error in retrieving records", err.Error())
 	}
 	if record != nil {
 		records.Record = append(records.Record, *record)
@@ -129,12 +133,7 @@ func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionD
 	if v != "" {
 		maximumRecords, err = strconv.ParseUint(v, 10, 64)
 		if err != nil {
-			diagnostics = append(diagnostics, sru.Diagnostic{
-				DiagnosticComplexType: sru.DiagnosticComplexType{
-					Uri:     "info:srw/diagnostic/1/6", // Unsupported parameter value
-					Message: "maximumRecords",
-					Details: err.Error(),
-				}})
+			diagnostics = append(diagnostics, *getSruDiag("6", "Unsupported parameter value", "maximumRecords"))
 		}
 	}
 	var startRecord uint64 = 1
@@ -142,25 +141,15 @@ func (api *SruApi) searchRetrieve(w http.ResponseWriter, retVersion sru.VersionD
 	if v != "" {
 		startRecord, err = strconv.ParseUint(v, 10, 64)
 		if err != nil {
-			diagnostics = append(diagnostics, sru.Diagnostic{
-				DiagnosticComplexType: sru.DiagnosticComplexType{
-					Uri:     "info:srw/diagnostic/1/6", // Unsupported parameter value
-					Message: "startRecord",
-					Details: err.Error(),
-				}})
+			diagnostics = append(diagnostics, *getSruDiag("6", "Unsupported parameter value", "startRecord"))
 		}
 	}
 
-	id, err := api.getIdFromQuery(query)
+	id, qDiag := api.getIdFromQuery(query)
 	var records *sru.RecordsDefinition
 	var NumberOfRecords uint64
-	if err != nil {
-		diagnostics = append(diagnostics, sru.Diagnostic{
-			DiagnosticComplexType: sru.DiagnosticComplexType{
-				Uri:     "info:srw/diagnostic/1/10",
-				Message: "Query syntax error",
-				Details: err.Error(),
-			}})
+	if qDiag != nil {
+		diagnostics = append(diagnostics, *qDiag)
 	} else {
 		records = api.getMockRecords(id, startRecord, maximumRecords)
 		NumberOfRecords = 1
@@ -194,12 +183,7 @@ func (api *SruApi) HttpHandler() http.HandlerFunc {
 		if version == "" || version == string(sru.VersionDefinition2_0) {
 			retVersion = sru.VersionDefinition2_0
 		} else {
-			diagnostics = append(diagnostics, sru.Diagnostic{
-				DiagnosticComplexType: sru.DiagnosticComplexType{
-					Uri:     "info:srw/diagnostic/1/5",
-					Message: "Unsupported version",
-					Details: "2.0",
-				}})
+			diagnostics = append(diagnostics, *getSruDiag("5", "Unsupported version", version))
 		}
 		if query == "" {
 			api.explain(w, retVersion, diagnostics)
