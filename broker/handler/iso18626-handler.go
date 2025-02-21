@@ -272,12 +272,12 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
-	updateLocatedSupplierStatus(ctx, repo, illTrans.ID, symbol, string(status))
+	updateLocatedSupplierStatus(ctx, repo, illTrans.ID, symbol, status)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
 }
 
-func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illId string, symbol string, status string) {
+func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illId string, symbol string, status iso18626.TypeStatus) {
 	peer, err := repo.GetPeerBySymbol(ctx, symbol)
 	if err != nil {
 		ctx.Logger().Error("failed to locate peer for symbol: "+symbol, "error", err)
@@ -292,11 +292,21 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 		return
 	}
 	locSup.PrevStatus = locSup.LastStatus
-	locSup.LastStatus = createPgText(status)
+	locSup.LastStatus = createPgText(string(status))
 	_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err)
 		return
+	}
+	if status == iso18626.TypeStatusLoaned {
+		err = repo.UpdatePeerBorrowAndLoanCounts(ctx, ill_db.UpdatePeerBorrowAndLoanCountsParams{
+			IllTransactionID: illId,
+			ID:               peer.ID,
+		})
+		if err != nil {
+			ctx.Logger().Error("failed to update located supplier borrows and loans counters", "error", err)
+			return
+		}
 	}
 }
 

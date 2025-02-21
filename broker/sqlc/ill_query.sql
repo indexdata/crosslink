@@ -16,18 +16,26 @@ FROM peer
 ORDER BY name;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, symbol, name, refresh_policy, url)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO peer (id, symbol, name, refresh_policy, url, loans_count, borrows_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
         url            = EXCLUDED.url,
-        refresh_policy = EXCLUDED.refresh_policy
+        refresh_policy = EXCLUDED.refresh_policy,
+        loans_count    = EXCLUDED.loans_count,
+        borrows_count  = EXCLUDED.borrows_count
 RETURNING sqlc.embed(peer);
 
 -- name: DeletePeer :exec
 DELETE
 FROM peer
 WHERE id = $1;
+
+-- name: UpdatePeerBorrowAndLoanCounts :exec
+UPDATE peer AS p SET borrows_count = borrows_count + 1,
+                     loans_count = loans_count + CASE WHEN p.id = $2 THEN 1 ELSE 0 END
+FROM located_supplier l WHERE p.id = l.supplier_id AND l.ill_transaction_id = $1;
+
 
 -- name: GetIllTransactionById :one
 SELECT sqlc.embed(ill_transaction)
