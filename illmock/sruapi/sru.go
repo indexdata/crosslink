@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/httpclient"
@@ -53,24 +54,31 @@ func (api *SruApi) getIdFromQuery(query string) (string, error) {
 	return sc.Term, nil
 }
 
-func (api *SruApi) getMarcxmlRecords(id string) ([]byte, error) {
+func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	var record marcxml.Record
 
-	if id == "sd" {
-		return nil, fmt.Errorf("mock error")
-	}
 	record.Id = id
 	record.Type = string(marcxml.RecordTypeTypeBibliographic)
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
 		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock record from SRU"}}})
+	subFields := []marcxml.SubfieldatafieldType{{Code: "i", Text: marcxml.SubfieldDataType(id)}}
+	localIds := strings.Split(id, ";")
+	for _, localId := range localIds {
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(localId)})
+	}
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "0",
-		Subfield: []marcxml.SubfieldatafieldType{{Code: "i", Text: marcxml.SubfieldDataType(id)}}})
-	// TODO: from mod-reservoir
-	// <p>999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
-	// match value; Multiple $l, $s pairs for local identifier and source identifiers.
-	return xml.MarshalIndent(record, "  ", "  ")
+		Subfield: subFields})
+	return &record
+}
+
+func (api *SruApi) getMarcBuf(id string) ([]byte, error) {
+	if id == "sd" {
+		return nil, fmt.Errorf("mock error")
+	}
+	return xml.MarshalIndent(api.getMarcXmlRecord(id), "  ", "  ")
 }
 
 func (api *SruApi) produceSurrogateDiagnostic(pos uint64, message string) *sru.RecordDefinition {
@@ -95,7 +103,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 	if pos != 1 || maximumRecords == 0 {
 		return &records
 	}
-	buf, err := api.getMarcxmlRecords(id)
+	buf, err := api.getMarcBuf(id)
 	var record *sru.RecordDefinition
 	if err == nil {
 		var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml

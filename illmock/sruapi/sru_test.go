@@ -21,6 +21,36 @@ func TestProduceSurrogateDiagnostic(t *testing.T) {
 	assert.Contains(t, string(record.RecordData.StringOrXmlFragmentDefinition), "<uri>info:srw/diagnostic/1/63</uri>")
 }
 
+func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
+	resp, err := http.Get(uri)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+	buf, err := io.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	assert.Contains(t, string(buf), "<searchRetrieveResponse")
+	var sruResp sru.SearchRetrieveResponse
+	err = xml.Unmarshal(buf, &sruResp)
+	assert.Nil(t, err)
+	assert.NotNil(t, sruResp.Version)
+	return &sruResp
+}
+
+func getExplain(t *testing.T, uri string) *sru.ExplainResponse {
+	resp, err := http.Get(uri)
+	assert.Nil(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+	buf, err := io.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	assert.Contains(t, string(buf), "<explainResponse")
+	var expResp sru.ExplainResponse
+	err = xml.Unmarshal(buf, &expResp)
+	assert.Nil(t, err)
+	assert.NotNil(t, expResp.Version)
+	return &expResp
+}
+
 func TestSruService(t *testing.T) {
 
 	api := CreateSruApi()
@@ -71,18 +101,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.1", func(t *testing.T) {
-		sruUrl := url + "?version=1.1&query=id%3D1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<searchRetrieveResponse")
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=1.1&query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -90,18 +109,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.2", func(t *testing.T) {
-		sruUrl := url + "?version=1.2&query=id%3D1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<searchRetrieveResponse")
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=1.2&query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -109,17 +117,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 no records", func(t *testing.T) {
-		sruUrl := url + "?query=id%3D1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?query=id%3D1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
@@ -127,17 +125,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad maximumRecords", func(t *testing.T) {
-		sruUrl := url + "?version=2.0&query=id%3D1&maximumRecords=x"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&maximumRecords=x")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -145,17 +133,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad startRecord", func(t *testing.T) {
-		sruUrl := url + "?version=2.0&query=id%3D1&startRecord=x"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&startRecord=x")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -163,19 +141,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with records", func(t *testing.T) {
-		sruUrl := url + "?version=2.0&query=id%3D1&maximumRecords=1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Contains(t, string(buf), "<subfield code=\"i\">1</subfield>")
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&maximumRecords=1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
@@ -185,18 +151,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with surrogate diagnostic record", func(t *testing.T) {
-		sruUrl := url + "?version=2.0&query=id%3Dsd&maximumRecords=1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=2.0&query=id%3Dsd&maximumRecords=1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
@@ -206,17 +161,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr syntaxerror", func(t *testing.T) {
-		sruUrl := url + "?version=2.0&query=id"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		var sruResp sru.SearchRetrieveResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getSr(t, url+"?version=2.0&query=id")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, "info:srw/diagnostic/1/10", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -224,18 +169,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("exp1.1", func(t *testing.T) {
-		sruUrl := url + "?version=1.1"
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<explainResponse")
-		var sruResp sru.ExplainResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getExplain(t, url+"?version=1.1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -243,18 +177,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("exp2.0", func(t *testing.T) {
-		sruUrl := url
-		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<explainResponse")
-		var sruResp sru.ExplainResponse
-		err = xml.Unmarshal(buf, &sruResp)
-		assert.Nil(t, err)
-		assert.NotNil(t, sruResp.Version)
+		sruResp := getExplain(t, url+"?version=2.0")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 	})
