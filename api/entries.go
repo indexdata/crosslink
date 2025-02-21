@@ -23,11 +23,31 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 
 		symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
 
-		*entry.Symbols = append(*entry.Symbols, Symbol{
-			Id:        &symid,
-			Symbol:    *row.Entrysymbol.Symbol,
-			Authority: *row.SymbolAuthority,
-		})
+		if !elementHasProperty(*entry.Symbols, "Id", symid) {
+			*entry.Symbols = append(*entry.Symbols, Symbol{
+				Id:        &symid,
+				Symbol:    *row.Entrysymbol.Symbol,
+				Authority: *row.SymbolAuthority,
+			})
+		}
+	}
+
+	if row.Entryendpoint.ID.Valid {
+		if entry.Endpoints == nil {
+			s := []ServiceEndpoint{}
+			entry.Endpoints = &s
+		}
+
+		epid, _ := uuid.FromBytes(row.Entryendpoint.ID.Bytes[:])
+
+		if !elementHasProperty(*entry.Endpoints, "Id", epid) {
+			*entry.Endpoints = append(*entry.Endpoints, ServiceEndpoint{
+				Id:      &epid,
+				Name:    *row.Entryendpoint.Name,
+				Type:    *row.Entryendpoint.Type,
+				Address: *row.Entryendpoint.Address,
+			})
+		}
 	}
 }
 
@@ -135,7 +155,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				}
 			}
 
-			_, err = qtx.CreateSymbol(ctx, db.CreateSymbolParams{
+			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
 				Owner:     insertedEntry.ID,
 				Symbol:    strings.ToUpper(symbol.Symbol),
 				Authority: auth.ID,
@@ -147,6 +167,20 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 						log.Println("Duplicate symbol")
 					}
 				}
+				log.Fatal(err)
+			}
+		}
+	}
+
+	if request.Body.Endpoints != nil {
+		for _, endpoint := range *request.Body.Endpoints {
+			_, err = qtx.UpsertServiceEndpoint(ctx, db.UpsertServiceEndpointParams{
+				Entry:   insertedEntry.ID,
+				Name:    endpoint.Name,
+				Type:    endpoint.Type,
+				Address: endpoint.Address,
+			})
+			if err != nil {
 				log.Fatal(err)
 			}
 		}
@@ -232,6 +266,38 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	} else if request.Body.Symbols.IsNull() {
 		qtx.DeleteAllOwnedSymbols(ctx, request.Id)
+	}
+
+	if request.Body.Endpoints.IsSpecified() && !request.Body.Endpoints.IsNull() {
+		reqeps := request.Body.Endpoints.MustGet()
+		// Delete existing endpoints not present
+		var patchedEndpoints []uuid.UUID
+		for _, endpoint := range reqeps {
+			if endpoint.Id != nil {
+				patchedEndpoints = append(patchedEndpoints, *endpoint.Id)
+			}
+		}
+		if len(patchedEndpoints) > 0 {
+			qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: request.Id, Ids: patchedEndpoints})
+		} else {
+			qtx.DeleteAllOwnedServiceEndpoints(ctx, request.Id)
+		}
+
+		// Update/create endpoints
+		for _, endpoint := range reqeps {
+			_, err = qtx.UpsertServiceEndpoint(ctx, db.UpsertServiceEndpointParams{
+				ID:      endpoint.Id,
+				Entry:   request.Id,
+				Name:    endpoint.Name,
+				Type:    endpoint.Type,
+				Address: endpoint.Address,
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+	} else if request.Body.Endpoints.IsNull() {
+		qtx.DeleteAllOwnedServiceEndpoints(ctx, request.Id)
 	}
 
 	err = tx.Commit(ctx)

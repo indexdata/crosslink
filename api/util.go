@@ -2,10 +2,9 @@ package api
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/oapi-codegen/nullable"
 )
 
@@ -37,32 +36,58 @@ func derefOrDefault[T any](ptr *T, defaultValue T) T {
 	return defaultValue
 }
 
-func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
-	if nlbl.IsNull() || !nlbl.IsSpecified() {
-		return pgtype.Text{String: "", Valid: false}
+// Returns true if there is a struct in slice that has a prop with the given name
+// that either is equal to value or is a point to it
+// TODO: we could avoid reflection if we could somehow add a method to generated types
+// fulfilling an interface like identifiedBy() and that's probably possible via custom
+// templating https://github.com/oapi-codegen/oapi-codegen?tab=readme-ov-file#custom-code-generation
+func elementHasProperty[T any, V comparable](s []T, propName string, value V) bool {
+	if reflect.ValueOf(s).Type().Elem().Kind() != reflect.Struct {
+		return false
 	}
-	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
+
+	for _, item := range s {
+		field := reflect.ValueOf(item).FieldByName(propName)
+		vVal := reflect.ValueOf(value)
+		if field.IsValid() && field.Kind() == vVal.Kind() {
+			if field.Interface() == value {
+				return true
+			}
+		} else if field.Kind() == reflect.Pointer && !field.IsNil() && field.Elem().Kind() == vVal.Kind() {
+			if field.Elem().Interface() == value {
+				return true
+			}
+		}
+	}
+	return false
 }
 
-func NlblToPGUUID(nlbl nullable.Nullable[uuid.UUID]) pgtype.UUID {
-	if nlbl.IsNull() || !nlbl.IsSpecified() {
-		return pgtype.UUID{Bytes: [16]byte{}, Valid: false}
-	}
-	return pgtype.UUID{Bytes: nlbl.MustGet(), Valid: true}
-}
+// func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
+// 	if nlbl.IsNull() || !nlbl.IsSpecified() {
+// 		return pgtype.Text{String: "", Valid: false}
+// 	}
+// 	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
+// }
 
-func PtrToPGTxt(ptr *string) pgtype.Text {
-	if ptr == nil {
-		return pgtype.Text{String: "", Valid: false}
-	}
-	return pgtype.Text{String: *ptr, Valid: true}
-}
+// func NlblToPGUUID(nlbl nullable.Nullable[uuid.UUID]) pgtype.UUID {
+// 	if nlbl.IsNull() || !nlbl.IsSpecified() {
+// 		return pgtype.UUID{Bytes: [16]byte{}, Valid: false}
+// 	}
+// 	return pgtype.UUID{Bytes: nlbl.MustGet(), Valid: true}
+// }
 
-func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
-	if !pgtxt.Valid {
-		nlbl := nullable.NewNullNullable[string]()
-		nlbl.SetUnspecified() // We don't store explicitly null strings
-		return nlbl
-	}
-	return nullable.NewNullableWithValue(pgtxt.String)
-}
+// func PtrToPGTxt(ptr *string) pgtype.Text {
+// 	if ptr == nil {
+// 		return pgtype.Text{String: "", Valid: false}
+// 	}
+// 	return pgtype.Text{String: *ptr, Valid: true}
+// }
+
+// func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
+// 	if !pgtxt.Valid {
+// 		nlbl := nullable.NewNullNullable[string]()
+// 		nlbl.SetUnspecified() // We don't store explicitly null strings
+// 		return nlbl
+// 	}
+// 	return nullable.NewNullableWithValue(pgtxt.String)
+// }

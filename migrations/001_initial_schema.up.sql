@@ -23,12 +23,15 @@ CREATE TABLE IF NOT EXISTS symbols (
 	UNIQUE (authority, symbol)
 );
 
--- Workaround for sqlc's poor left join handling https://github.com/sqlc-dev/sqlc/issues/2997
-CREATE OR REPLACE VIEW entrysymbols AS (
-  SELECT symbols.* FROM entries LEFT JOIN symbols ON entries.id = symbols.owner
-);
-
 CREATE INDEX symbols_authority_symbol_idx ON symbols (symbol, authority);
+
+CREATE TABLE IF NOT EXISTS service_endpoints (
+	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	entry uuid NOT NULL REFERENCES entries (id),
+	name varchar(255) NOT NULL,
+	type varchar(255) NOT NULL,
+	address varchar(255) NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS consortia (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -62,4 +65,12 @@ CREATE TABLE IF NOT EXISTS membership_networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	membership uuid NOT NULL REFERENCES memberships (id),
 	network uuid NOT NULL REFERENCES networks (id)
+);
+
+-- Workaround for sqlc's poor left join handling https://github.com/sqlc-dev/sqlc/issues/2997
+CREATE OR REPLACE VIEW entrysymbols AS (
+  SELECT symbols.* FROM entries LEFT JOIN symbols ON entries.id = symbols.owner
+);
+CREATE OR REPLACE VIEW entryendpoints AS (
+  SELECT service_endpoints.* FROM entries LEFT JOIN service_endpoints ON entries.id = service_endpoints.entry
 );

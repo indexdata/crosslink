@@ -3,10 +3,11 @@ SELECT * FROM entries
 WHERE id = $1 LIMIT 1;
 
 -- name: ListEntries :many
-SELECT sqlc.embed(e), sqlc.embed(s), a.symbol as symbol_authority
+SELECT sqlc.embed(e), sqlc.embed(s), a.symbol as symbol_authority, sqlc.embed(ep)
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority
+LEFT JOIN entryendpoints ep ON e.id = ep.entry
 WHERE
   (e.id = sqlc.narg(id) OR sqlc.narg(id) IS NULL)
   AND (
@@ -37,14 +38,6 @@ WHERE id = @id;
 -- name: AuthorityBySymbol :one
 SELECT * FROM authorities
 WHERE symbol = $1 LIMIT 1;
-
--- name: CreateSymbol :one
-INSERT INTO symbols (
-  owner, symbol, authority
-) VALUES (
-  $1, $2, $3
-)
-RETURNING *;
 
 -- name: UpsertSymbol :one
 INSERT INTO symbols (
@@ -79,3 +72,28 @@ INSERT INTO authorities (
   @symbol
 )
 RETURNING *;
+
+
+-- name: UpsertServiceEndpoint :one
+INSERT INTO service_endpoints (
+  id, entry, name, type, address
+) VALUES (
+  coalesce(sqlc.narg('id'), gen_random_uuid()),
+  @entry,
+  @name,
+  @type,
+  @address
+)
+ON CONFLICT (id) DO UPDATE SET
+  entry = @entry,
+  name = @name,
+  type = @type,
+  address = @address
+WHERE service_endpoints.id = sqlc.narg('id')
+RETURNING *;
+
+-- name: DeleteOtherOwnedServiceEndpoints :exec
+DELETE FROM service_endpoints WHERE entry = @entry AND ID <> ALL(@ids::uuid[]);
+
+-- name: DeleteAllOwnedServiceEndpoints :exec
+DELETE FROM service_endpoints WHERE entry = @entry;

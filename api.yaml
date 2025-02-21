@@ -318,6 +318,11 @@ components:
           description: Symbols associated with this entry
           items:
             $ref: '#/components/schemas/Symbol'
+        endpoints:
+          type: array
+          description: Service endpoints associated with this entry
+          items:
+            $ref: '#/components/schemas/ServiceEndpoint'
     EntryPatch: 
       type: object
       properties:
@@ -341,6 +346,11 @@ components:
           nullable: true
           items:
             $ref: '#/components/schemas/SymbolPatch'
+        endpoints:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ServiceEndpointPatch'
 
     SymbolProperties:
       required:
@@ -386,3 +396,36 @@ components:
         symbol:
           type: string
           description: Uppercase string
+
+    ServiceEndpointProperties:
+      type: object
+      required:
+        - name 
+        - type
+        - address
+      properties: 
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+    ServiceEndpoint:
+      allOf:
+        - required:
+          - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/ServiceEndpointProperties'
+    ServiceEndpointPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/ServiceEndpointProperties'

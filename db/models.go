@@ -31,6 +31,14 @@ type Entry struct {
 	Phone           *string
 }
 
+type Entryendpoint struct {
+	ID      pgtype.UUID
+	Entry   pgtype.UUID
+	Name    *string
+	Type    *string
+	Address *string
+}
+
 type Entrysymbol struct {
 	ID        pgtype.UUID
 	Owner     pgtype.UUID
@@ -59,6 +67,14 @@ type MembershipTier struct {
 type Network struct {
 	ID   uuid.UUID
 	Name *string
+}
+
+type ServiceEndpoint struct {
+	ID      uuid.UUID
+	Entry   uuid.UUID
+	Name    string
+	Type    string
+	Address string
 }
 
 type Symbol struct {

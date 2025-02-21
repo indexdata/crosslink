@@ -71,31 +71,13 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 	return i, err
 }
 
-const createSymbol = `-- name: CreateSymbol :one
-INSERT INTO symbols (
-  owner, symbol, authority
-) VALUES (
-  $1, $2, $3
-)
-RETURNING id, owner, authority, symbol
+const deleteAllOwnedServiceEndpoints = `-- name: DeleteAllOwnedServiceEndpoints :exec
+DELETE FROM service_endpoints WHERE entry = $1
 `
 
-type CreateSymbolParams struct {
-	Owner     uuid.UUID
-	Symbol    string
-	Authority uuid.UUID
-}
-
-func (q *Queries) CreateSymbol(ctx context.Context, arg CreateSymbolParams) (Symbol, error) {
-	row := q.db.QueryRow(ctx, createSymbol, arg.Owner, arg.Symbol, arg.Authority)
-	var i Symbol
-	err := row.Scan(
-		&i.ID,
-		&i.Owner,
-		&i.Authority,
-		&i.Symbol,
-	)
-	return i, err
+func (q *Queries) DeleteAllOwnedServiceEndpoints(ctx context.Context, entry uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllOwnedServiceEndpoints, entry)
+	return err
 }
 
 const deleteAllOwnedSymbols = `-- name: DeleteAllOwnedSymbols :exec
@@ -104,6 +86,20 @@ DELETE FROM symbols WHERE owner = $1
 
 func (q *Queries) DeleteAllOwnedSymbols(ctx context.Context, owner uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteAllOwnedSymbols, owner)
+	return err
+}
+
+const deleteOtherOwnedServiceEndpoints = `-- name: DeleteOtherOwnedServiceEndpoints :exec
+DELETE FROM service_endpoints WHERE entry = $1 AND ID <> ALL($2::uuid[])
+`
+
+type DeleteOtherOwnedServiceEndpointsParams struct {
+	Entry uuid.UUID
+	Ids   []uuid.UUID
+}
+
+func (q *Queries) DeleteOtherOwnedServiceEndpoints(ctx context.Context, arg DeleteOtherOwnedServiceEndpointsParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherOwnedServiceEndpoints, arg.Entry, arg.Ids)
 	return err
 }
 
@@ -167,10 +163,11 @@ func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.symbol as symbol_authority
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.symbol as symbol_authority, ep.id, ep.entry, ep.name, ep.type, ep.address
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
 LEFT JOIN authorities a ON a.id = s.authority
+LEFT JOIN entryendpoints ep ON e.id = ep.entry
 WHERE
   (e.id = $1 OR $1 IS NULL)
   AND (
@@ -192,6 +189,7 @@ type ListEntriesRow struct {
 	Entry           Entry
 	Entrysymbol     Entrysymbol
 	SymbolAuthority *string
+	Entryendpoint   Entryendpoint
 }
 
 func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]ListEntriesRow, error) {
@@ -217,6 +215,11 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 			&i.Entrysymbol.Authority,
 			&i.Entrysymbol.Symbol,
 			&i.SymbolAuthority,
+			&i.Entryendpoint.ID,
+			&i.Entryendpoint.Entry,
+			&i.Entryendpoint.Name,
+			&i.Entryendpoint.Type,
+			&i.Entryendpoint.Address,
 		); err != nil {
 			return nil, err
 		}
@@ -252,6 +255,52 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.ID,
 	)
 	return err
+}
+
+const upsertServiceEndpoint = `-- name: UpsertServiceEndpoint :one
+INSERT INTO service_endpoints (
+  id, entry, name, type, address
+) VALUES (
+  coalesce($1, gen_random_uuid()),
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT (id) DO UPDATE SET
+  entry = $2,
+  name = $3,
+  type = $4,
+  address = $5
+WHERE service_endpoints.id = $1
+RETURNING id, entry, name, type, address
+`
+
+type UpsertServiceEndpointParams struct {
+	ID      interface{}
+	Entry   uuid.UUID
+	Name    string
+	Type    string
+	Address string
+}
+
+func (q *Queries) UpsertServiceEndpoint(ctx context.Context, arg UpsertServiceEndpointParams) (ServiceEndpoint, error) {
+	row := q.db.QueryRow(ctx, upsertServiceEndpoint,
+		arg.ID,
+		arg.Entry,
+		arg.Name,
+		arg.Type,
+		arg.Address,
+	)
+	var i ServiceEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.Name,
+		&i.Type,
+		&i.Address,
+	)
+	return i, err
 }
 
 const upsertSymbol = `-- name: UpsertSymbol :one

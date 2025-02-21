@@ -44,6 +44,9 @@ type Entry struct {
 	// Email Main contact email
 	Email *string `json:"email,omitempty"`
 
+	// Endpoints Service endpoints associated with this entry
+	Endpoints *[]ServiceEndpoint `json:"endpoints,omitempty"`
+
 	// Id Unique id
 	Id *openapi_types.UUID `json:"id,omitempty"`
 
@@ -56,17 +59,45 @@ type Entry struct {
 
 // EntryPatch defines model for EntryPatch.
 type EntryPatch struct {
-	ContactName nullable.Nullable[string]        `json:"contactName,omitempty"`
-	Description nullable.Nullable[string]        `json:"description,omitempty"`
-	Email       nullable.Nullable[string]        `json:"email,omitempty"`
-	Name        *string                          `json:"name,omitempty"`
-	Symbols     nullable.Nullable[[]SymbolPatch] `json:"symbols,omitempty"`
+	ContactName nullable.Nullable[string]                 `json:"contactName,omitempty"`
+	Description nullable.Nullable[string]                 `json:"description,omitempty"`
+	Email       nullable.Nullable[string]                 `json:"email,omitempty"`
+	Endpoints   nullable.Nullable[[]ServiceEndpointPatch] `json:"endpoints,omitempty"`
+	Name        *string                                   `json:"name,omitempty"`
+	Symbols     nullable.Nullable[[]SymbolPatch]          `json:"symbols,omitempty"`
 }
 
 // Id defines model for Id.
 type Id struct {
 	// Id Unique id
 	Id openapi_types.UUID `json:"id"`
+}
+
+// ServiceEndpoint defines model for ServiceEndpoint.
+type ServiceEndpoint struct {
+	Address string `json:"address"`
+
+	// Id Unique id
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Name string              `json:"name"`
+	Type string              `json:"type"`
+}
+
+// ServiceEndpointPatch defines model for ServiceEndpointPatch.
+type ServiceEndpointPatch struct {
+	Address string `json:"address"`
+
+	// Id Unique id
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Name string              `json:"name"`
+	Type string              `json:"type"`
+}
+
+// ServiceEndpointProperties defines model for ServiceEndpointProperties.
+type ServiceEndpointProperties struct {
+	Address string `json:"address"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
 }
 
 // Symbol defines model for Symbol.
@@ -1088,27 +1119,28 @@ func (sh *strictHandler) GetEntryBySymbol(w http.ResponseWriter, r *http.Request
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+xYX2+cuBf9Kpb7e5xfSNtoH3hLd6LVSLvbaqM8VXkw+BLcGpvYlyYo4ruvbAMDA2Qm",
-	"m6Sz6vYlGbC5f849Ptf2A011UWoFCi2NH6hNcyiY/3leYa6NwNo9lEaXYFCAHxLc/eVgUyNKFFrRmF4p",
-	"cVsBEZyuaKZNwZDGtKr8swHGPypZ0xhNBSuKdQk0phaNUDe0WVFbF4mWM0bLEkzKLJB27uTbxlm/rYQB",
-	"TuPP1LtrrV03K3qh0MwkkGqFLMU/WQFTp+4t0RlpJ5ESjNWKrmgh1O+gbjCn8duZJEZWdo2uAZmQwMng",
-	"tXOCORBQKLBuRxLgJKkJ5sK6AVPvdwwFEzPg/cGE6pMIc0amfpkx9eKVVY9C7LIXyqLAKgBiSGKYSvOQ",
-	"PxcGUtSmDkj0CNn9mAQO2KnryzBAmLU6FQyBkzuB+RhwgVD4b/9nIKMxfRNtl0nUrpEoWHLOWu/MGFbP",
-	"U9LDcN3P1MkXSJF2BP3EMM33snScsaqkZImEReR36PjEr3tOjQmz9zs1G+xj5XkC1gGnZjGMbQEmOG/4",
-	"82Vsr/TMFfiylzYm5ceMxp9fWU1nwmpWB6G7jaq57iPvuflS4e+G+6zgRpGM42LD/vXUtvKCLak1tBoE",
-	"dO2ypkJl2tlHgY7JdN2pnbA5Of+0oSv6DYwNbt+enJ6curh0CYqVgsb0vX+1oiXD3GccdR5aBG4Ap/H/",
-	"BVgZZQmTkgzmk8zowuuxrS2C+8nQP1cWDMmZJSxNwVqC+oT6MAxzJt3Cor8Bng98u5gMKwDBWM+YcQhf",
-	"ob7ThjtTJBMSwZDEq64bvK3AS3AQEnrr+rlngodqUiWsPXaOZNQxaeypYPeiqAqiqiIB4zqOAVtJ9K6N",
-	"R2LBrxSFwJHvnsdC4ft327ILhXADhjbNtSu8LbWyAf93p6edjIPypWBlKUXqcYu+2CDMWw8HKeF2WzZt",
-	"PLuqv93DESkski469+nZJDiEe4xKycROWNMFO6HUbQUWyTcmBffJETBGm9CFMlZJfBIOex1WCu5LSF3v",
-	"bh05KlRFwdxmb4niLpxS25k18asBhmAJIwruyHad7tL8nPPzwaAJeX/QvH5SfgeW97FyoiaMczpUGtcM",
-	"mmcy8LHINnwupM3arSoH24iYR2XXP3a1h1dLNHGzIrd1PFR327nP1tyL1udPvX09vQ0nyAO01k88ks4u",
-	"yl/HygOlrzv/TGTvoh14DclrEV5C9F8jdSGcvrYrKoX66n23S7H+UG/W7nkM381wdLxUw+7ZxRKMniSa",
-	"128iwX1Jr0rOEPorjLHVajB4uNHmKIycI9lQNKOk/r/g0YPgTWCoBIRpymv/fi7lieSFtgQdgVqLrfS4",
-	"DfNWecSUW7MytHB8mYrQ2XSVddcXLgr+w/bHUJ/JrU1Sk83aRdP2xdk2Nrc69lU1A3c0/T5FPf1ecneE",
-	"PfpZoOxLuAk5KI0k05XiRz8BLJOx7O41do/3TlYJUwu98GpRdvexNQj269H1lRpze+c2LUFAgpNMgOT2",
-	"gP68qIsBGf6DMH5ExF067Xa9cDkUPYT/zeD0sKSSl9110qPcC7MOVcv+imqZgj8V8j+kkC0f3Hbx7wAA",
-	"AP//vhNhLCEcAAA=",
+	"H4sIAAAAAAAC/+xYS2/buBP/KgT7P/ofpw/sQbd0HSwM7G6LLXIqcqDEUcxWIhVylEQw9N0XfFjW04/G",
+	"qYtuL4klUvP8zW+GXNNE5YWSINHQaE1NsoKcuZ9XJa6UFljZh0KrAjQKcEuC278cTKJFgUJJGtEbKe5L",
+	"IILTGU2VzhnSiJale9bA+AeZVTRCXcKMYlUAjahBLeQdrWfUVHmsshGhRQE6YQZI2Dv4trbS70uhgdPo",
+	"M3XqgrTbekavJeoRBxIlkSX4N8thqNS+JSolYRMpQBsl6YzmQv4J8g5XNHo94kRHSl/oApCJDDhpvbZK",
+	"cAUEJAqswkoMnMQVwZUwdkFX+xVDzsRI8P5iQjZO+D0dUb+NiZK8UCKAoSvuE+gHkVhrwxbCjFGJYAic",
+	"PApcdW0WCLmT8j8NKY3oq/kWafMAs3mQeR1EWguCSUxrVtnnk2NN7ky6zYeQBgWWPkWaxJrJJHjHhYYE",
+	"la68n03OzP4seVSOBdYvnCKcHviDKI4ViQvDbbNTxV8gcQlwJfORYbLaWzddj2WZZSzOYDLyvQI58usG",
+	"5V0I7/+uDelvQaWPRT2pqoGqHA3LLiAckdUDrahHMrrkz6fwvbQ7BqV+eUdryrLsQ0qjzy/cUkbsq2fH",
+	"ZX1rXn079KUpkFM51HfgxOZ2bOtayjjXYNzPSbIcLPgX6z1xd5+HzbNG0ShUmgngB0aIL8R+pFvleU48",
+	"7DJuV/bbY96x09cJJ7cgaNYy6NZ6TYVMlUOaQEt6dLFpwcKsyNXHJZ3RB9DGq319cXlxae1SBUhWCBrR",
+	"t+7VjBYMV87j+UZDiMAd4ND+fwBLLQ1hWUZa+0mqVe6GBFMZBPuToXsuDWiyYoawJAFjCKoL6szQzIq0",
+	"HEz/ALxq6bY2aZYDgjYOMV0TvkL1qDS3okgqMgRNYjcK2MX7Etxc4AuU3tux1yFhtFoNVi52FmTUIqmr",
+	"KWdPIi9zIss8Bm3HIA2mzNCp1i4SE3ozkQvs6G5wLCS+fbNNu5AId6BpXd/axJtCSePj/+bycjNbQGgS",
+	"RZGJxMVt/sX4aWGr4aCmuT29DKeh/iiyPeqQTBgkG+vsp+8GxiE84bzImOiZNSzYAaTuSzBIHlgmuHOO",
+	"gNZK+9EoZWWGR8Vhr8JSwlMBiR0ogyILhTLPmT0TTUHcmlMoM1ITv2tgCIYwIuGRbOu0D/Mrzq9ai9r7",
+	"/V7x6ij/DkzvrnSiIoxz2mYa2wzqZyJwl2VLPmbScmGryoatA8yzouubVe3B1RRM7K65Pc8cyrth77M5",
+	"9zro/MW3L8e3/qLlAK51G8/Es5P0t0HlgdS3OZQPaO86LLwE5YUIT0X0h6E6b06T2xnNhPzqdIdSrN5X",
+	"y4V97obvrr3aLVU/PVtbvNCLWPHq1Vxwl9KbgjOE5qavK7VsLR4utD4LIsdA1ibNeVz9X/D5WvDaIzQD",
+	"hKHLC/d+zOUB5fm2BBsABYmBeuzAvGUeMcTWKA1NHF+GJPRuWGWbOzVrBf9p+6PPz+AqMa7IcmGtCX1x",
+	"tI2NVce+rKZgj6bfJ6mX34vuzjCjv/OQPYUa74NUSFJVSn72E8A0GIvNvUb/eG9plTA50QtvJml3H1o9",
+	"Yb8cXF+oMYfr2WEKfCQ4SQVk3BzQnyd50UeG/ySI7wCxD6d+1/OXQ/O1/1+3Tg9TLPlpc520E3t+16Fs",
+	"2VxRTUPwF0P+hxgy4MGOi/8GAAD//7pLzyVIHwAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

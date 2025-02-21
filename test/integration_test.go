@@ -117,6 +117,13 @@ func TestEntryRoundtrip(t *testing.T) {
 				"symbol": "ALSO",
 				"authority": "RESHARE"
 			}
+		],
+		"endpoints": [
+			{
+				"name":"primary",
+				"type":"ISO18626",
+				"address":"https://some.sort.of.url/path"
+			}
 		]
 	}`
 	req = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewBufferString(body))
@@ -171,6 +178,15 @@ func TestEntryRoundtrip(t *testing.T) {
 				"symbol": "ALSO",
 				"authority": "RESHARE"
 			}
+		],
+		"endpoints": [
+      "<<UNORDERED>>",
+			{
+				"id": "<<PRESENCE>>",
+				"name":"primary",
+				"type":"ISO18626",
+				"address":"https://some.sort.of.url/path"
+			}
 		]
 	}
 	`, postedId)
@@ -180,9 +196,11 @@ func TestEntryRoundtrip(t *testing.T) {
 		t.Errorf("expected error to be nil got %v", err)
 	}
 	gotSymbols := getResult["symbols"].([]any)
+	gotEndpoints := getResult["endpoints"].([]any)
 
 	// PATCH
 	filteredSymbols := filterAnyMapSlice(&gotSymbols, "symbol", "NWINST")
+	filteredEndpoints := filterAnyMapSlice(&gotEndpoints, "name", "primary")
 	body = fmt.Sprintf(`{
 		"contactName": null,
 		"email": "info@someinst.edu",
@@ -192,8 +210,16 @@ func TestEntryRoundtrip(t *testing.T) {
 				"symbol": "NEWINST",
 				"authority": "RESHARE"
 			}
+		],
+		"endpoints": [
+			{
+				"id": "%s",
+				"name":"primary",
+				"type":"ISO18626",
+				"address":"https://another.sort.of.url/path"
+			}
 		]
-	}`, filteredSymbols[0].(map[string]any)["id"])
+	}`, filteredSymbols[0].(map[string]any)["id"], filteredEndpoints[0].(map[string]any)["id"])
 	req = httptest.NewRequest(http.MethodPatch, "/entries/by-id/"+postedId, bytes.NewBufferString(body))
 	req.Header.Add("Content-Type", "application/json")
 	w = httptest.NewRecorder()
@@ -232,6 +258,15 @@ func TestEntryRoundtrip(t *testing.T) {
 				"id": "<<PRESENCE>>",
 				"symbol": "NEWINST",
 				"authority": "RESHARE"
+			}
+		],
+		"endpoints": [
+      "<<UNORDERED>>",
+			{
+				"id": "<<PRESENCE>>",
+				"name":"primary",
+				"type":"ISO18626",
+				"address":"https://another.sort.of.url/path"
 			}
 		]
 	}
