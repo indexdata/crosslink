@@ -30,25 +30,31 @@ generate-schema: $(GEN_FILES)
 diag/diag.go: xsd/diagnostic.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(GO) fmt $@
 
 facet/facet.go: xsd/facetedResults.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(GO) fmt $@
 
 sra/sra.go: xsd/searchResultAnalysis.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(GO) fmt $@
 
 xcql/xcql.go: xsd/xcql.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(GO) fmt $@
 
 scan/scan.go: xsd/scan.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(GO) fmt $@
 
 sru.go: xsd/sruResponse.xsd
 	$(XSD2GO) $< $@ "$(nsImports)" package=sru
+	$(GO) fmt $@
 
 clean:
 	rm -f $(GEN_FILES)
