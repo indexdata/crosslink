@@ -24,7 +24,7 @@ generate-commit-id: $(COMMIT_ID)
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(PROGRAMS): generate $(GOFILES)
+$(PROGRAMS): $(GOFILES) $(COMMIT_ID)
 	$(GO) build -v -o $@ ./cmd/$@
 
 check: generate

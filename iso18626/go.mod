@@ -1,4 +1,4 @@
 module github.com/indexdata/crosslink/iso18626
 
-go 1.23.3
+go 1.24
 

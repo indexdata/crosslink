@@ -10,6 +10,8 @@ COPY broker/go.mod ./broker/go.mod
 # copy common sources
 COPY common/ ./common
 COPY iso18626/ ./iso18626
+COPY marcxml/ ./marcxml
+COPY sru/ ./sru
 
 # Set destination for COPY
 WORKDIR /app/illmock

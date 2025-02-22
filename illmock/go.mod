@@ -11,3 +11,5 @@ require (
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.34.0
 )
+
+require github.com/indexdata/cql-go v1.0.0 // indirect

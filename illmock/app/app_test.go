@@ -9,13 +9,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -46,32 +47,6 @@ func TestParseEnv(t *testing.T) {
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
 }
 
-// getFreePort asks the kernel for a free open port that is ready to use.
-func getFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	// release for now so it can be bound by the actual server
-	// a more robust solution would be to bind the server to the port and close it here
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// getFreePortTest returns a free port as a string for testing.
-func getFreePortTest(t *testing.T) string {
-	port, err := getFreePort()
-	if err != nil {
-		t.Fatalf("Failed to get a free port: %v", err)
-	}
-	return strconv.Itoa(port)
-}
-
 func TestAppShutdown(t *testing.T) {
 	var app MockApp
 	err := app.Shutdown() // no server running
@@ -92,7 +67,7 @@ func TestSendReceiveMarshalFailed(t *testing.T) {
 
 func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
@@ -173,14 +148,15 @@ func TestFlowsApiParseEnvFailed(t *testing.T) {
 
 func TestService(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi() // FlowsApi.ParseEnv is not called
-	dynPort := getFreePortTest(t)
+	app.flowsApi = flows.CreateFlowsApi() // FlowsApi.ParseEnv is not called
+	dynPort := testutil.GetFreePortTest(t)
 	app.httpPort = dynPort
 	url := "http://localhost:" + dynPort
 	app.peerUrl = url
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
 	healthUrl := url + "/health"
+	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
 	go func() {
 		err := app.Run()
@@ -208,7 +184,7 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
-	t.Run("api handler: ok", func(t *testing.T) {
+	t.Run("flows handler: ok", func(t *testing.T) {
 		resp, err := http.Get(apiUrl)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -218,10 +194,20 @@ func TestService(t *testing.T) {
 		assert.Contains(t, string(buf), "<flows")
 	})
 
-	t.Run("api handler: Bad method", func(t *testing.T) {
+	t.Run("flows handler: Bad method", func(t *testing.T) {
 		resp, err := http.Post(apiUrl, "text/plain", strings.NewReader("hello"))
 		assert.Nil(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
+	})
+
+	t.Run("sru handler: ok", func(t *testing.T) {
+		resp, err := http.Get(sruUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		assert.Contains(t, string(buf), "<explainResponse")
 	})
 
 	t.Run("iso18626 handler: Bad method", func(t *testing.T) {
@@ -279,7 +265,7 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("request: Empty SupplyingAgencyId", func(t *testing.T) {
-		app.flowsApi.init() // clear flows, so only this request is present
+		app.flowsApi.Init() // clear flows, so only this request is present
 
 		msg := createRequest()
 		msg.Request.Header.RequestingAgencyRequestId = uuid.NewString()
@@ -495,10 +481,9 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
 		// connect to port with no listening server
-		port, err := getFreePort()
-		assert.Nil(t, err)
+		port := testutil.GetFreePortTest(t)
 		// when we can set peer URL per request, this will be easier
-		app.peerUrl = "http://localhost:" + strconv.Itoa(port)
+		app.peerUrl = "http://localhost:" + port
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
@@ -520,9 +505,8 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request, supplier URL", func(t *testing.T) {
-		port, err := getFreePort()
-		assert.Nil(t, err)
-		app.peerUrl = "http://localhost:" + strconv.Itoa(port) // nothing listening here now!
+		port := testutil.GetFreePortTest(t)
+		app.peerUrl = "http://localhost:" + port // nothing listening here now!
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
@@ -616,7 +600,7 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 
 	var app MockApp
 	app.peerUrl = server.URL
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
@@ -629,7 +613,7 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 
 func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = iso18626.NewIso18626MessageNS()
 		header := &iso18626.Header{}
@@ -653,7 +637,7 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 
 func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = iso18626.NewIso18626MessageNS()
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
@@ -680,7 +664,7 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 
 func TestSendRequestingAgencyActionNil(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var resmsg = iso18626.NewIso18626MessageNS()
 		resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{}
@@ -705,7 +689,7 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 
 func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
@@ -722,7 +706,7 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 
 	var app MockApp
 	app.peerUrl = server.URL
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
@@ -736,7 +720,7 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 
 func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	var app MockApp
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := &iso18626.Header{}
 		header.RequestingAgencyRequestId = uuid.NewString()
@@ -749,7 +733,7 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	defer server.Close()
 
 	app.peerUrl = server.URL
-	app.flowsApi = createFlowsApi()
+	app.flowsApi = flows.CreateFlowsApi()
 
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()

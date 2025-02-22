@@ -1,4 +1,4 @@
-package app
+package flows
 
 import (
 	"encoding/xml"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -18,7 +19,7 @@ import (
 
 func TestApiNoInit(t *testing.T) {
 	api := &FlowsApi{}
-	server := httptest.NewServer(api.flowsHandler())
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
 	resp, err := http.Get(server.URL)
@@ -27,8 +28,8 @@ func TestApiNoInit(t *testing.T) {
 }
 
 func TestFlowApiBadMethod(t *testing.T) {
-	api := createFlowsApi()
-	server := httptest.NewServer(api.flowsHandler())
+	api := CreateFlowsApi()
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
 	resp, err := http.Post(server.URL, "text/plain", strings.NewReader("hello"))
@@ -41,7 +42,7 @@ func TestMarshalRequest(t *testing.T) {
 	illMessage.Request = &iso18626.Request{}
 	illMessage.Request.Header.RequestingAgencyRequestId = "rid"
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage}
-	flow := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	flow := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	buf, err := xml.MarshalIndent(&flow, "  ", "  ")
 	assert.Nil(t, err)
 	assert.Contains(t, string(buf), "xmlns=\"http://illtransactions.org/2013/iso18626\"")         // namespace declaration
@@ -59,7 +60,7 @@ func TestMarshalRequest(t *testing.T) {
 
 func TestMarshalError(t *testing.T) {
 	flowError := &FlowError{Message: "error message", Kind: "outgoing-error"}
-	flow := Flow{Error: flowError, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
+	flow := Flow{Error: flowError, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	buf, err := xml.MarshalIndent(&flow, "  ", "  ")
 	assert.Nil(t, err)
 	log.Info(string(buf))
@@ -100,8 +101,8 @@ func runRequest(t *testing.T, server *httptest.Server, params string) Flows {
 }
 
 func TestGetFlows(t *testing.T) {
-	api := createFlowsApi()
-	server := httptest.NewServer(api.flowsHandler())
+	api := CreateFlowsApi()
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
 	flows := runRequest(t, server, "")
@@ -110,8 +111,8 @@ func TestGetFlows(t *testing.T) {
 
 	illMessage1 := iso18626.NewIso18626MessageNS()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
-	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
-	api.addFlow(flow1)
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
+	api.AddFlow(flow1)
 
 	flowsR := runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 1)
@@ -120,8 +121,8 @@ func TestGetFlows(t *testing.T) {
 
 	illMessage2 := iso18626.NewIso18626MessageNS()
 	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage2}
-	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleSupplier, Supplier: "S2", Requester: "R2"}
-	api.addFlow(flow2)
+	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Supplier, Supplier: "S2", Requester: "R2"}
+	api.AddFlow(flow2)
 
 	flowsR = runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 2)
@@ -130,8 +131,8 @@ func TestGetFlows(t *testing.T) {
 
 	illMessage3 := iso18626.NewIso18626MessageNS()
 	flowMessage = FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage3}
-	flow3 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid2", Role: RoleSupplier, Supplier: "S3", Requester: "R3"}
-	api.addFlow(flow3)
+	flow3 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid2", Role: role.Supplier, Supplier: "S3", Requester: "R3"}
+	api.AddFlow(flow3)
 
 	flowsR = runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 3)
@@ -161,8 +162,8 @@ func TestGetFlows(t *testing.T) {
 	// merged with flow1
 	illMessage4 := iso18626.NewIso18626MessageNS()
 	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage4}
-	flow4 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
-	api.addFlow(flow4)
+	flow4 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
+	api.AddFlow(flow4)
 
 	flowsR = runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 3)
@@ -175,17 +176,17 @@ func TestGetFlows(t *testing.T) {
 }
 
 func TestCleanerExpire(t *testing.T) {
-	api := createFlowsApi()
+	api := CreateFlowsApi()
 	api.cleanTimeout = 5 * time.Microsecond
 	api.cleanInterval = 1 * time.Millisecond
 	api.Run()
-	server := httptest.NewServer(api.flowsHandler())
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
 	illMessage1 := iso18626.NewIso18626MessageNS()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
-	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
-	api.addFlow(flow1)
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
+	api.AddFlow(flow1)
 
 	flowsR := runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 1)
@@ -198,7 +199,7 @@ func TestCleanerExpire(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond)
 
-	api.addFlow(flow1)
+	api.AddFlow(flow1)
 
 	time.Sleep(1 * time.Millisecond)
 
@@ -207,18 +208,18 @@ func TestCleanerExpire(t *testing.T) {
 }
 
 func TestCleanerKeep(t *testing.T) {
-	api := createFlowsApi()
+	api := CreateFlowsApi()
 	api.cleanInterval = 1 * time.Millisecond
 	api.cleanTimeout = 1 * time.Second
 	api.Run()
 	defer api.Shutdown()
-	server := httptest.NewServer(api.flowsHandler())
+	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
 	illMessage1 := iso18626.NewIso18626MessageNS()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
-	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: RoleRequester, Supplier: "S1", Requester: "R1"}
-	api.addFlow(flow1)
+	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
+	api.AddFlow(flow1)
 
 	flowsR := runRequest(t, server, "")
 	assert.Len(t, flowsR.Flows, 1)
@@ -230,7 +231,7 @@ func TestCleanerKeep(t *testing.T) {
 
 func TestFlowsParseEnv(t *testing.T) {
 	os.Setenv("CLEAN_TIMEOUT", "8m")
-	api := createFlowsApi()
+	api := CreateFlowsApi()
 	err := api.ParseEnv()
 	assert.Nil(t, err)
 	assert.Equal(t, "8m0s", api.cleanTimeout.String())

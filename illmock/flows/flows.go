@@ -1,15 +1,19 @@
-package app
+package flows
 
 import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/illmock/netutil"
+	"github.com/indexdata/crosslink/illmock/role"
+	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -35,7 +39,7 @@ type FlowError struct {
 
 type Flow struct {
 	Id        string        `xml:"id,attr"`
-	Role      Role          `xml:"role,attr"`
+	Role      role.Role     `xml:"role,attr"`
 	Supplier  string        `xml:"supplier,attr"`
 	Requester string        `xml:"requester,attr"`
 	Message   []FlowMessage `xml:"message,omitempty"`
@@ -48,13 +52,15 @@ type Flows struct {
 	Flows   []Flow   `xml:"flow"`
 }
 
-func createFlowsApi() *FlowsApi {
+func CreateFlowsApi() *FlowsApi {
 	api := &FlowsApi{}
-	api.init()
+	api.Init()
 	return api
 }
 
-func (api *FlowsApi) init() {
+var log *slog.Logger = slogwrap.SlogWrap()
+
+func (api *FlowsApi) Init() {
 	api.flows.Clear()
 	api.cleanInterval = 1 * time.Minute
 	api.cleanTimeout = 5 * time.Minute
@@ -91,7 +97,7 @@ func cmpFlow(i, j Flow) int {
 	return 0
 }
 
-func (api *FlowsApi) flowsHandler() http.HandlerFunc {
+func (api *FlowsApi) HttpHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "only GET allowed", http.StatusMethodNotAllowed)
@@ -125,7 +131,7 @@ func (api *FlowsApi) flowsHandler() http.HandlerFunc {
 		// flowsList is not a pointer so MarshalIndent will always work
 		buf := utils.Must(xml.MarshalIndent(flowsList, "  ", "  "))
 		w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
-		writeHttpResponse(w, buf)
+		netutil.WriteHttpResponse(w, buf)
 	}
 }
 
@@ -158,7 +164,7 @@ func (api *FlowsApi) Shutdown() {
 	api.flows.Clear()
 }
 
-func (api *FlowsApi) addFlow(flow Flow) {
+func (api *FlowsApi) AddFlow(flow Flow) {
 	key := string(flow.Role) + "/" + flow.Id
 	v, ok := api.flows.Load(key)
 	if ok {
