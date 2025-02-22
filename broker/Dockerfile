@@ -1,5 +1,8 @@
 FROM golang:1.24 AS build
 
+# create go cache dirs in case they are mounted
+RUN mkdir -p /root/.cache/go-build /go/pkg/mod
+
 # Builds from the workspace root dir
 WORKDIR /app
 COPY go.work go.work.sum ./

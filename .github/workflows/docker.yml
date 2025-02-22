@@ -20,6 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        modules: [broker, illmock]
         include:
           - dockerfile: ./broker/Dockerfile
             image: ghcr.io/${{ github.repository }}-broker
@@ -37,6 +38,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+          cache-dependency-path: |
+            go.work.sum
+            ${{ matrix.modules }}/go.sum
 
       - name: Install xsltproc
         run: sudo apt-get install -y xsltproc
@@ -81,5 +85,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+          cache-from: |
+            type=local,src=/tmp/.buildx-cache
+            type=local,src=$HOME/go/pkg/mod
+            type=local,src=$HOME/.cache/go-build
+          cache-to: |
+            type=local,dest=/tmp/.buildx-cache,mode=max
+            type=local,dest=$HOME/.cache/go-build,mode=max
+            type=local,dest=$HOME/go/pkg/mod,mode=max
+          build-args: |
+            GOCACHE=/root/.cache/go-build
+            GOMODCACHE=/go/pkg/mod
