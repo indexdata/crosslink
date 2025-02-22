@@ -27,19 +27,19 @@ attributeFormDefault="unqualified">
 	<!--
 imports -->
 <xs:import namespace="http://docs.oasis-open.org/ns/search-ws/diagnostic"
-schemaLocation="http://docs.oasis-open.org/search-ws/ searchRetrieve/v1.0/csd01/schemas/diagnostic.xsd"/>
+schemaLocation="http://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/csd01/schemas/diagnostic.xsd"/>
 	<!-- -->
 <xs:import namespace="http://docs.oasis-open.org/ns/search-ws/facetedResults"
-schemaLocation="http://docs.oasis-open.org/search-ws/ searchRetrieve/v1.0/csd01/schemas/facetedResults.xsd"/>
+schemaLocation="http://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/csd01/schemas/facetedResults.xsd"/>
 	<!-- -->
 <xs:import namespace="http://docs.oasis-open.org/ns/search-ws/searchResultAnalysis"
-schemaLocation="http://docs.oasis-open.org/search-ws/ searchRetrieve/v1.0/csd01/schemas/searchResultAnalysis.xsd"/>
+schemaLocation="http://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/csd01/schemas/searchResultAnalysis.xsd"/>
 	<!-- -->
 <xs:import namespace="http://docs.oasis-open.org/ns/search-ws/xcql"
-schemaLocation="http://docs.oasis-open.org/search-ws/ searchRetrieve/v1.0/csd01/schemas/xcql.xsd"/>
+schemaLocation="http://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/csd01/schemas/xcql.xsd"/>
 	<!-- -->
 <xs:import namespace="http://docs.oasis-open.org/ns/search-ws/scan"
-schemaLocation="http://docs.oasis-open.org/search-ws/ searchRetrieve/v1.0/csd01/schemas/scan.xsd"/>
+schemaLocation="http://docs.oasis-open.org/search-ws/searchRetrieve/v1.0/csd01/schemas/scan.xsd"/>
 
 	<!--
 ***************************************************************************************************************
