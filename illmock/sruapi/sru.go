@@ -184,7 +184,6 @@ func (api *SruApi) HttpHandler() http.HandlerFunc {
 		version := parms.Get("version")
 		query := parms.Get("query")
 		retVersion := sru.VersionDefinition2_0
-		fmt.Printf("SRU version: %s query: %s\n", version, query)
 		if version == "" || version == string(sru.VersionDefinition2_0) {
 			retVersion = sru.VersionDefinition2_0
 		} else {

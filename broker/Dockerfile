@@ -8,8 +8,10 @@ COPY go.work go.work.sum ./
 COPY illmock/go.mod ./illmock/go.mod
 
 # copy common sources
-COPY common/ ./common
-COPY iso18626/ ./iso18626
+COPY common/ common
+COPY marcxml/ marcxml
+COPY sru/ sru
+COPY iso18626/ iso18626
 
 # Set destination for COPY
 WORKDIR /app/broker

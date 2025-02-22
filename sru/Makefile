@@ -14,11 +14,12 @@ GEN_FILES = sru.go \
 XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
 
 define nsImports
-namespaceImports=http://docs.oasis-open.org/ns/search-ws/diagnostic=github.com/indexdata/crosslink/sru/diag,\
+namespaced=yes \
+"namespaceImports=http://docs.oasis-open.org/ns/search-ws/diagnostic=github.com/indexdata/crosslink/sru/diag,\
 http://docs.oasis-open.org/ns/search-ws/facetedResults=github.com/indexdata/crosslink/sru/facet,\
 http://docs.oasis-open.org/ns/search-ws/searchResultAnalysis=github.com/indexdata/crosslink/sru/sra,\
 http://docs.oasis-open.org/ns/search-ws/xcql=github.com/indexdata/crosslink/sru/xcql,\
-http://docs.oasis-open.org/ns/search-ws/scan=github.com/indexdata/crosslink/sru/scan
+http://docs.oasis-open.org/ns/search-ws/scan=github.com/indexdata/crosslink/sru/scan"
 endef
 
 all: generate
@@ -29,31 +30,31 @@ generate-schema: $(GEN_FILES)
 
 diag/diag.go: xsd/diagnostic.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
 	$(GO) fmt $@
 
 facet/facet.go: xsd/facetedResults.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
 	$(GO) fmt $@
 
 sra/sra.go: xsd/searchResultAnalysis.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
 	$(GO) fmt $@
 
 xcql/xcql.go: xsd/xcql.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
 	$(GO) fmt $@
 
 scan/scan.go: xsd/scan.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
 	$(GO) fmt $@
 
 sru.go: xsd/sruResponse.xsd
-	$(XSD2GO) $< $@ "$(nsImports)" package=sru
+	$(XSD2GO) $< $@ $(nsImports) package=sru
 	$(GO) fmt $@
 
 clean:
