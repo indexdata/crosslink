@@ -6,7 +6,7 @@ XSLT ?= xsltproc
 GEN_FILES = sru.go \
 	diag/diag.go \
 	facet/facet.go \
-	analysis/analysis.go \
+	sra/sra.go \
 	xcql/xcql.go \
 	scan/scan.go
 
@@ -16,7 +16,7 @@ XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
 define nsImports
 namespaceImports=http://docs.oasis-open.org/ns/search-ws/diagnostic=github.com/indexdata/crosslink/sru/diag,\
 http://docs.oasis-open.org/ns/search-ws/facetedResults=github.com/indexdata/crosslink/sru/facet,\
-http://docs.oasis-open.org/ns/search-ws/searchResultAnalysis=github.com/indexdata/crosslink/sru/analysis,\
+http://docs.oasis-open.org/ns/search-ws/searchResultAnalysis=github.com/indexdata/crosslink/sru/sra,\
 http://docs.oasis-open.org/ns/search-ws/xcql=github.com/indexdata/crosslink/sru/xcql,\
 http://docs.oasis-open.org/ns/search-ws/scan=github.com/indexdata/crosslink/sru/scan
 endef
@@ -35,7 +35,7 @@ facet/facet.go: xsd/facetedResults.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
 
-analysis/analysis.go: xsd/searchResultAnalysis.xsd
+sra/sra.go: xsd/searchResultAnalysis.xsd
 	mkdir -p $(dir $@)
 	$(XSD2GO) $< $@ "$(nsImports)" package=$(basename $(notdir $@))
 
