@@ -1,8 +1,6 @@
 module github.com/indexdata/crosslink/illmock
 
-go 1.23.4
-
-toolchain go1.23.5
+go 1.24
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
