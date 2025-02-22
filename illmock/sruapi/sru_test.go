@@ -29,6 +29,7 @@ func getSr(t *testing.T, uri string) *sru.SearchRetrieveResponse {
 	buf, err := io.ReadAll(resp.Body)
 	assert.Nil(t, err)
 	assert.Contains(t, string(buf), "<searchRetrieveResponse")
+	assert.Contains(t, string(buf), " xmlns=\"http://docs.oasis-open.org")
 	var sruResp sru.SearchRetrieveResponse
 	err = xml.Unmarshal(buf, &sruResp)
 	assert.Nil(t, err)
