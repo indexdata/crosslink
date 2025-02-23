@@ -22,11 +22,11 @@ WORKDIR /app/broker
 # see .dockerignore for what is getting copied
 COPY broker/ ./
 
-# download go deps
+# download go deps, caches GOMODPATH
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
   go mod download
 
-# Build
+# Build, caches GOCACHE
 RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
   CGO_ENABLED=0 \
   GOOS=linux \
