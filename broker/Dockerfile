@@ -23,10 +23,14 @@ WORKDIR /app/broker
 COPY broker/ ./
 
 # download go deps
-RUN go mod download
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  go mod download
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /broker ./cmd/broker
+RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+  CGO_ENABLED=0 \
+  GOOS=linux \
+  go build -o /broker ./cmd/broker
 
 # create runtime user
 RUN adduser \
