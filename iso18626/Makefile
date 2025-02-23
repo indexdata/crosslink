@@ -4,7 +4,7 @@ GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 XSLT ?= xsltproc
 GEN_SCHEMA_IN=xsd/ISO-18626-v1_2.xsd
-GEN_SCHEMA_OUT=schema.go
+GEN_SCHEMA_OUT=ill_gen.go
 
 .PHONY: all generate generate-schema lint check clean
 

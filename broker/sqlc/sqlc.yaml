@@ -7,9 +7,9 @@ sql:
       go:
         package: "ill_db"
         out: "../ill_db"
-        output_db_file_name: "ill_db-gen.go"
-        output_models_file_name: "ill_models-gen.go"
-        output_files_suffix: "-gen"
+        output_db_file_name: "ill_db_gen.go"
+        output_models_file_name: "ill_models_gen.go"
+        output_files_suffix: "_gen"
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
         overrides:
@@ -26,9 +26,9 @@ sql:
       go:
         package: "events"
         out: "../events"
-        output_db_file_name: "event_db-gen.go"
-        output_models_file_name: "event_models-gen.go"
-        output_files_suffix: "-gen"
+        output_db_file_name: "event_db_gen.go"
+        output_models_file_name: "event_models_gen.go"
+        output_files_suffix: "_gen"
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
         overrides:
