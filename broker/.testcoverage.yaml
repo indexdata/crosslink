@@ -43,8 +43,7 @@ exclude:
   # Exclude files or packages matching their paths
   paths:
     - test/.*go              # test packages
-    - \-gen\.go$              # all sqlc generated files
-    - /iso18626/schema.go$    # generated schema
+    - \_gen\.go$              # all sqlc generated files
     # - ^pkg/bar     # exclude package `pkg/bar`
 
 # File name of go-test-coverage breakdown file, which can be used to
