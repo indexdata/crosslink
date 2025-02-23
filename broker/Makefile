@@ -19,8 +19,8 @@ COVERAGE=coverage.out
 # SQLC
 SQLC ?= sqlc
 SQLC_CONFIG = sqlc/sqlc.yaml
-SQL_GEN_OUT_ILL_DB = ill_db/*-gen.go
-SQL_GEN_OUT_EVENT = events/*-gen.go
+SQL_GEN_OUT_ILL_DB = ill_db/*_gen.go
+SQL_GEN_OUT_EVENT = events/*_gen.go
 SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT)
 SQL_GEN_IN = sqlc/*.sql
 
@@ -28,7 +28,7 @@ SQL_GEN_IN = sqlc/*.sql
 OAPI_DIR=oapi
 OAPI_CFG = $(OAPI_DIR)/cfg.yaml
 OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
-OAPI_GEN = $(OAPI_DIR)/openapi-gen.go
+OAPI_GEN = $(OAPI_DIR)/openapi_gen.go
 
 .PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
 

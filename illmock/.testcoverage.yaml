@@ -44,8 +44,7 @@ exclude:
   paths:
     - test/.*go              # test packages
     - \_test\.go$            # test files
-    - \-gen\.go$              # all sqlc generated files
-    - /iso18626/schema.go$    # generated schema
+    - \_gen\.go$              # all sqlc generated files
     - testutil/.*\.go     # testing utilities
     # - ^pkg/bar     # exclude package `pkg/bar`
 

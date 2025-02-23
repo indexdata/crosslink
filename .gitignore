@@ -5,8 +5,4 @@
 commit.txt
 schema.go
 coverage.out
-broker/*/*models-gen.go
-broker/*/*db-gen.go
-broker/*/*.sql-gen.go
-broker/broker
-broker/handler/*-gen.go
+*_gen.go

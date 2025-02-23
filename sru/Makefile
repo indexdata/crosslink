@@ -3,12 +3,12 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 XSLT ?= xsltproc
-GEN_FILES = sru.go \
-	diag/diag.go \
-	facet/facet.go \
-	sra/sra.go \
-	xcql/xcql.go \
-	scan/scan.go
+GEN_FILES = sru_gen.go \
+	diag/diag_gen.go \
+	facet/facet_gen.go \
+	sra/sra_gen.go \
+	xcql/xcql_gen.go \
+	scan/scan_gen.go
 
 .PHONY: all generate generate-schema lint check clean
 XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
@@ -28,32 +28,32 @@ generate: generate-schema
 
 generate-schema: $(GEN_FILES)
 
-diag/diag.go: xsd/diagnostic.xsd
+diag/diag_gen.go: xsd/diagnostic.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=diag
 	$(GO) fmt $@
 
-facet/facet.go: xsd/facetedResults.xsd
+facet/facet_gen.go: xsd/facetedResults.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=facet
 	$(GO) fmt $@
 
-sra/sra.go: xsd/searchResultAnalysis.xsd
+sra/sra_gen.go: xsd/searchResultAnalysis.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=sra
 	$(GO) fmt $@
 
-xcql/xcql.go: xsd/xcql.xsd
+xcql/xcql_gen.go: xsd/xcql.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=xcql
 	$(GO) fmt $@
 
-scan/scan.go: xsd/scan.xsd
+scan/scan_gen.go: xsd/scan.xsd
 	mkdir -p $(dir $@)
-	$(XSD2GO) $< $@ $(nsImports) package=$(basename $(notdir $@))
+	$(XSD2GO) $< $@ $(nsImports) package=scan
 	$(GO) fmt $@
 
-sru.go: xsd/sruResponse.xsd
+sru_gen.go: xsd/sruResponse.xsd
 	$(XSD2GO) $< $@ $(nsImports) package=sru
 	$(GO) fmt $@
 

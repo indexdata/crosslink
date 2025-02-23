@@ -3,7 +3,7 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 XSLT ?= xsltproc
-GEN_FILES = MARC21slim.go
+GEN_FILES = MARC21slim_gen.go
 .PHONY: all generate generate-schema lint check clean
 XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.2.0
 
@@ -13,7 +13,7 @@ generate: generate-schema
 
 generate-schema: $(GEN_FILES)
 
-%.go : xsd/%.xsd
+%_gen.go : xsd/%.xsd
 	$(XSD2GO) $< $@ \
 		namespaced=yes \
 		package=marcxml \
