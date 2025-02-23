@@ -1,8 +1,5 @@
 FROM golang:1.24 AS build
 
-# create go cache dirs in case they are mounted
-RUN mkdir -p /root/.cache/go-build /go/pkg/mod
-
 # Builds from the workspace root dir
 WORKDIR /app
 COPY go.work go.work.sum ./
@@ -26,10 +23,14 @@ WORKDIR /app/illmock
 COPY illmock/ ./
 
 # download go deps
-RUN go mod download
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  go mod download
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /illmock ./cmd/illmock
+RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+  CGO_ENABLED=0 \
+  GOOS=linux \
+  go build -o /illmock ./cmd/illmock
 
 # create runtime user
 RUN adduser \
