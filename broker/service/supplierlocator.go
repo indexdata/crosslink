@@ -2,6 +2,8 @@ package service
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -9,7 +11,6 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"strings"
 )
 
 type SupplierLocator struct {

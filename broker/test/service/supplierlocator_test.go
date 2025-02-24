@@ -3,14 +3,15 @@ package service
 import (
 	"bytes"
 	"context"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"net/http"
 	"os"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/indexdata/go-utils/utils"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -59,8 +60,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
-
+	eventBus, illRepo, eventRepo = test.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/indexdata/go-utils/utils"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/indexdata/go-utils/utils"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
@@ -56,7 +57,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
+	eventBus, illRepo, eventRepo = test.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

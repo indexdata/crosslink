@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/api"
-	"github.com/indexdata/crosslink/broker/oapi"
-	"github.com/jackc/pgx/v5"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/indexdata/crosslink/broker/client"
 	"github.com/indexdata/crosslink/broker/service"
@@ -53,21 +54,34 @@ func configLog() slog.Handler {
 	}
 }
 
-func StartApp(ctx context.Context) {
+func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, error) {
 	RunMigrateScripts()
 	pool := InitDbPool()
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+
+	holdingsAdapter, err := adapter.CreateHoldings()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
-	StartServer(illRepo, eventRepo, eventBus)
+	return eventBus, illRepo, eventRepo, nil
 }
 
-func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) {
+func Run(ctx context.Context) error {
+	eventBus, illRepo, eventRepo, err := Init(ctx)
+	if err != nil {
+		return err
+	}
+	return StartServer(illRepo, eventRepo, eventBus)
+}
+
+func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) error {
 	if strings.EqualFold(INIT_DATA, "true") {
 		initData(illRepo)
 	}
@@ -87,7 +101,7 @@ func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus ev
 	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
-	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
+	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
 }
 
 func RunMigrateScripts() {

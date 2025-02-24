@@ -2,8 +2,9 @@ package adapter
 
 import (
 	"errors"
-	"github.com/indexdata/go-utils/utils"
 	"strings"
+
+	"github.com/indexdata/go-utils/utils"
 )
 
 var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/iso18626")

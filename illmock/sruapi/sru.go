@@ -100,7 +100,7 @@ func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message st
 	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
 	var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
 	return &sru.RecordDefinition{
-		RecordSchema:      "info::srw/schema/1/diagnostics-v1.1",
+		RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
 		RecordXMLEscaping: &v,
 		RecordPosition:    pos,
 		RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},
