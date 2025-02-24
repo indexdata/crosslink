@@ -44,8 +44,8 @@ exclude:
   paths:
     - test/.*go              # test packages
     - \_test\.go$            # test files
-    - \_gen\.go$              # all sqlc generated files
-    - testutil/.*\.go     # testing utilities
+    - \_gen\.go$             # generated files
+    - testutil/.*\.go        # testing utilities
     # - ^pkg/bar     # exclude package `pkg/bar`
 
 # File name of go-test-coverage breakdown file, which can be used to
