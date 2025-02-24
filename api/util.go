@@ -49,13 +49,15 @@ func elementHasProperty[T any, V comparable](s []T, propName string, value V) bo
 	for _, item := range s {
 		field := reflect.ValueOf(item).FieldByName(propName)
 		vVal := reflect.ValueOf(value)
-		if field.IsValid() && field.Kind() == vVal.Kind() {
-			if field.Interface() == value {
-				return true
-			}
-		} else if field.Kind() == reflect.Pointer && !field.IsNil() && field.Elem().Kind() == vVal.Kind() {
-			if field.Elem().Interface() == value {
-				return true
+		if field.IsValid() {
+			if field.Kind() == vVal.Kind() {
+				if field.Interface() == value {
+					return true
+				}
+			} else if field.Kind() == reflect.Pointer && field.Elem().Kind() == vVal.Kind() {
+				if field.Elem().Interface() == value {
+					return true
+				}
 			}
 		}
 	}
