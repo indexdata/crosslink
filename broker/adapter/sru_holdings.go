@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/indexdata/crosslink/broker/httpclient"
+	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 )
 
@@ -36,22 +37,39 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 	if sruResponse.Diagnostics != nil {
 		diags := sruResponse.Diagnostics.Diagnostic
 		if len(diags) > 0 {
-			return nil, errors.New(diags[0].Message + " " + diags[0].Details)
+			return nil, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
 	var holdings []Holding
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
 			if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
-				continue
+				continue // skipped and ignored.. Fail completely?
 			}
 			if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
-				continue
+				continue // skipped and ignored.. Fail completely?
 			}
-			holdings = append(holdings, Holding{
-				Symbol:          "isil:sup1", // TODO: source from record
-				LocalIdentifier: "isil:sup1", // TODO: local identifier from record"
-			})
+			var rec marcxml.Record
+			err = xml.Unmarshal(record.RecordData.XMLContent, &rec)
+			if err != nil {
+				return nil, fmt.Errorf("decoding marcxml failed: %s", err.Error())
+			}
+			// skipped and ignored if there is no 999, which suggets that something is wrong with the record
+			for _, df := range rec.Datafield {
+				if df.Tag != "999" {
+					continue
+				}
+				var holding Holding
+				for _, sf := range df.Subfield {
+					if sf.Code == "l" {
+						holding.LocalIdentifier = string(sf.Text)
+					}
+					if sf.Code == "s" {
+						holding.Symbol = string(sf.Text)
+						holdings = append(holdings, holding)
+					}
+				}
+			}
 		}
 	}
 	return holdings, nil

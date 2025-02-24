@@ -68,6 +68,11 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	return sc.Term, nil
 }
 
+// 999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
+// match value; Multiple $l, $s pairs for local identifier and source identifiers.
+//
+// 999 ind1=0 ind2=0 has holding information. Not complete yet.
+
 func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	var record marcxml.Record
 
