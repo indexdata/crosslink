@@ -2,7 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/jackc/pgx/v5"
 	"log/slog"
 	"net/http"
 	"os"
@@ -33,6 +39,7 @@ var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
+var INIT_DATA = utils.GetEnv("INIT_DATA", "true")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -46,7 +53,24 @@ func configLog() slog.Handler {
 	}
 }
 
-func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
+func StartApp(ctx context.Context) {
+	RunMigrateScripts()
+	pool := InitDbPool()
+	eventRepo := CreateEventRepo(pool)
+	eventBus := CreateEventBus(eventRepo)
+	illRepo := CreateIllRepo(pool)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+	workflowManager := service.CreateWorkflowManager(eventBus)
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
+	StartEventBus(ctx, eventBus)
+	StartServer(illRepo, eventRepo, eventBus)
+}
+
+func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) {
+	if strings.EqualFold(INIT_DATA, "true") {
+		initData(illRepo)
+	}
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
@@ -54,6 +78,13 @@ func StartApp(illRepo ill_db.IllRepo, eventBus events.EventBus) {
 	mux.HandleFunc("/healthz", HandleHealthz)
 
 	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
+	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		http.ServeFile(w, r, "handler/open-api.yaml")
+	})
+
+	apiHandler := api.NewApiHandler(eventRepo, illRepo)
+	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
@@ -94,10 +125,18 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 	return eventBus
 }
 
-func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator) {
+func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
+
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
+	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)
+
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, workflowManager.RequestReceived)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, workflowManager.SupplierMessageReceived)
+	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, workflowManager.RequesterMessageReceived)
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
@@ -119,4 +158,21 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func initData(illRepo ill_db.IllRepo) {
+	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
+				ID:            uuid.New().String(),
+				Name:          "Requester",
+				Symbol:        "isil:req",
+				Url:           adapter.MOCK_CLIENT_URL,
+				RefreshPolicy: ill_db.RefreshPolicyNever,
+			}))
+		} else {
+			panic(err.Error())
+		}
+	}
 }

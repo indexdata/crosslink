@@ -1,13 +1,15 @@
 module github.com/indexdata/crosslink/illmock
 
-go 1.23.3
+go 1.24
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.18.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/go-utils v0.0.0-20250129095730-ad5c02719e53
+	github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72
 	github.com/indexdata/xsd2goxsl v1.1.0
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.34.0
 )
+
+require github.com/indexdata/cql-go v1.0.0 // indirect

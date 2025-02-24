@@ -1,8 +1,10 @@
-go 1.23.3
+go 1.24
 
 use (
 	./broker
 	./common
 	./illmock
 	./iso18626
+	./sru
+	./marcxml
 )

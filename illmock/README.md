@@ -1,58 +1,101 @@
 # Intro
 
-The `illmock` program is a mocking ISO18626 client / server utility.
+The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS
+searchRetrive services.
 
-`illmock` can function as both a requester and a supplier, depending on the type of ISO18626 message it processes.
+# ILL service
 
-Example of launching two `illmock` instances that will send messages to each other:
+The ILL protocol handling is triggered by requests to URI path `/iso18626`.
+
+`illmock` can operate as both an ILL requester and an ILL supplier, depending
+on the type of ISO18626 message it processes.
+
+Example of launching two `illmock` instances that will send messages to each
+other:
 
     HTTP_PORT=8082 PEER_URL=http://localhost:8081 ./illmock
     HTTP_PORT=8081 PEER_URL=http://localhost:8082 ./illmock
 
-We will use the former as a requester and the latter as a supplier, by sending a Patron Request
-to the former with:
+We will use the former as a requester and the latter as a supplier, by sending
+a Patron Request to the former with:
 
     curl -XPOST -HContent-Type:text/xml \ -d'<ISO18626Message><request><bibliographicInfo><supplierUniqueRecordId>WILLSUPPLY_LOANED</supplierUniqueRecordId>
      </bibliographicInfo><serviceInfo><requestType>New</requestType><requestSubType>PatronRequest</requestSubType><serviceType>
      </serviceType></serviceInfo></request></ISO18626Message>' http://localhost:8081/iso18626
 
-The `supplierUniqueRecordId` value is used to invoke a particular scenario on the supplier.
+The `supplierUniqueRecordId` value is used to invoke a particular scenario on
+the supplier.
 
-## Scenarios
-
-The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
+The scenario is used by the supplier to perform a particular workflow. The
+following values are recognized:
 
     WILLSUPPLY_LOANED
     WILLSUPPLY_UNFILLED
     UNFILLED
     LOANED
 
-The scenario is inspected in the supplier request `<bibliographicInfo><supplierUniqueRecordId>` field.
+The scenario is inspected in the supplier request
+`<bibliographicInfo><supplierUniqueRecordId>` field.
 
-## Environment variables
+# ILL flows
 
-### HTTP_PORT
+History of ILL messages can be retrieved at the `/api/flows` endpoint.
+For example:
+
+    curl http://localhost:8081/api/flows
+
+# SRU service
+
+The program offers an SRU service at URI path `/sru`. Only version 2.0
+is supported. It is substantially different from version 1.1, 1.2 -
+for example different namespace and different semantics for recordPacking.
+
+The service produces a MARCXML record if a query of format "id = value" is
+used. For example to get a MARCXML with identifier 123, use:
+
+    curl 'http://localhost:8081/sru?query=id%3D123'
+
+With yaz-client:
+
+    yaz-client http://localhost:8081/sru
+    Z> sru get 2.0
+    Z> f id=123
+    Z> s
+
+With zoomsh:
+
+    zoomsh "set sru_version 2.0" "set sru get" \
+        "connect http://localhost:8081/sru" \
+        "search cql:id=123" "show 0 1" "quit"
+
+# Environment variables
+
+## HTTP_PORT
 
 Listen address + port. If empty or omitted, the program will listen on any interface, port `8081`.
 
 If the value includes a colon, it is assumed to be listening address and port, for example: `127.0.0.1:8090`.
 Without colon, it translates to `:`value which will bind on any interface and port given.
 
-### PEER_URL
+## PEER_URL
 
 The default value is `http://localhost:8081`.
 
-### AGENCY_TYPE
+## AGENCY_TYPE
 
 If omitted or empty, a value of `MOCK` is used.
 
-### SUPPLYING_AGENCY_ID
+## SUPPLYING_AGENCY_ID
 
 If omitted or empty, a value of `SUP` is used.
 
-### REQUESTING_AGENCY_ID
+## REQUESTING_AGENCY_ID
 
 If omitted or empty, a value of `REQ` is used.
+
+## CLEAN_TIMEOUT
+
+Flow WS API: Specifies how long a flow is kept in memory before being removed. Default value is `10m`.
 
 # Deploy on Kubernetes
 

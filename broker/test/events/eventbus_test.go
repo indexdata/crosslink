@@ -2,7 +2,7 @@ package events
 
 import (
 	"context"
-	"fmt"
+	"github.com/indexdata/go-utils/utils"
 	"os"
 	"strings"
 	"sync"
@@ -37,28 +37,23 @@ func TestMain(m *testing.M) {
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
 	)
-	if err != nil {
-		panic(fmt.Sprintf("failed to start db container: %s", err))
-	}
+	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get conn string: %s", err))
-	}
+	test.Expect(err, "failed to get conn string")
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = 19082
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
-	time.Sleep(1 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
+	test.WaitForServiceUp(app.HTTP_PORT)
+
 	defer cancel()
 	code := m.Run()
 
-	if err := pgContainer.Terminate(ctx); err != nil {
-		panic(fmt.Sprintf("failed to stop db container: %s", err))
-	}
+	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -82,6 +77,42 @@ func TestCreateTask(t *testing.T) {
 
 	if requestReceived[0].IllTransactionID != illId {
 		t.Errorf("Ill transaction id does not match, expected %s, got %s", illId, requestReceived[0].IllTransactionID)
+	}
+}
+func TestTransactionRollback(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	eventId := uuid.New().String()
+	illId := test.GetIllTransId(t, illRepo)
+	err := eventRepo.WithTxFunc(appCtx, func(eventRepo events.EventRepo) error {
+		_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+			ID:               eventId,
+			IllTransactionID: illId,
+			Timestamp:        test.GetNow(),
+			EventType:        events.EventTypeTask,
+			EventName:        events.EventNameMessageRequester,
+			EventStatus:      events.EventStatusNew,
+			EventData:        events.EventData{},
+		})
+		if err != nil {
+			t.Error("Should not be error")
+		}
+		_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams{
+			ID:               uuid.New().String(),
+			IllTransactionID: uuid.New().String(),
+			Timestamp:        test.GetNow(),
+			EventType:        events.EventTypeTask,
+			EventName:        events.EventNameMessageRequester,
+			EventStatus:      events.EventStatusNew,
+			EventData:        events.EventData{},
+		})
+		return err
+	})
+	if err == nil {
+		t.Error("should be sql error")
+	}
+	_, err = eventRepo.GetEvent(appCtx, eventId)
+	if err == nil {
+		t.Error("should not find event")
 	}
 }
 

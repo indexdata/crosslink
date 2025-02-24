@@ -10,7 +10,7 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc
+.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage
 
 all: $(PROGRAMS)
 
@@ -24,14 +24,17 @@ generate-commit-id: $(COMMIT_ID)
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(PROGRAMS): generate $(GOFILES)
+$(PROGRAMS): $(GOFILES) $(COMMIT_ID)
 	$(GO) build -v -o $@ ./cmd/$@
 
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
-coverage: check
+view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
+
+check-coverage: check
+	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 fmt:
 	$(GOFMT) -w $(GOFILES)

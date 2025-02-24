@@ -13,3 +13,5 @@ linters-settings:
       - net/http.ListenAndServe
       - (net.Listener).Close
       - (net/http.ResponseWriter).Write
+run:
+  timeout: "5m"

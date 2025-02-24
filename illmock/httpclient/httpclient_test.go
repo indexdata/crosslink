@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +24,10 @@ func TestBadUrlChar(t *testing.T) {
 func TestBadConnectionRefused(t *testing.T) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 	assert.Nil(t, err)
-	port := strconv.Itoa(addr.Port)
+	l, err := net.ListenTCP("tcp", addr)
+	assert.Nil(t, err)
+	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+	l.Close()
 	_, err = SendReceiveXml(http.DefaultClient, "http://localhost:"+port, nil)
 	assert.ErrorContains(t, err, "connection refused")
 }
@@ -86,11 +90,7 @@ func TestServerTextXml(t *testing.T) {
 }
 
 func TestServerBrokenPipe(t *testing.T) {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	assert.Nil(t, err)
-	l, err := net.ListenTCP("tcp", addr)
-	assert.Nil(t, err)
-	defer l.Close()
+	l := testutil.GetFreeListener(t)
 	url := "http://localhost:" + strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	go func() {
 		conn, err := l.Accept()
@@ -106,7 +106,7 @@ func TestServerBrokenPipe(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Greater(t, n, 20)
 	}()
-	_, err = SendReceiveXml(http.DefaultClient, url, nil)
+	_, err := SendReceiveXml(http.DefaultClient, url, nil)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
 }

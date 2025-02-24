@@ -1,4 +1,4 @@
-FROM golang:1.23 AS build
+FROM golang:1.24 AS build
 
 # Builds from the workspace root dir
 WORKDIR /app
@@ -8,8 +8,10 @@ COPY go.work go.work.sum ./
 COPY illmock/go.mod ./illmock/go.mod
 
 # copy common sources
-COPY common/ ./common
-COPY iso18626/ ./iso18626
+COPY common/ common
+COPY marcxml/ marcxml
+COPY sru/ sru
+COPY iso18626/ iso18626
 
 # Set destination for COPY
 WORKDIR /app/broker
@@ -20,11 +22,15 @@ WORKDIR /app/broker
 # see .dockerignore for what is getting copied
 COPY broker/ ./
 
-# download go deps
-RUN go mod download
+# download go deps, caches GOMODPATH
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  go mod download
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /broker ./cmd/broker
+# Build, caches GOCACHE
+RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+  CGO_ENABLED=0 \
+  GOOS=linux \
+  go build -o /broker ./cmd/broker
 
 # create runtime user
 RUN adduser \

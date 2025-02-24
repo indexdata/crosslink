@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/indexdata/go-utils/utils"
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +28,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var LocalAddress = "http://localhost:19082/iso18626"
+var LocalAddress = ""
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
@@ -42,29 +44,24 @@ func TestMain(m *testing.M) {
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
 	)
-	if err != nil {
-		panic(fmt.Sprintf("failed to start db container: %s", err))
-	}
+	test.Expect(err, "failed to start db container")
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		panic(fmt.Sprintf("failed to get conn string: %s", err))
-	}
+	test.Expect(err, "failed to get conn string")
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = 19082
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 
-	time.Sleep(1 * time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
+	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
 
-	if err := pgContainer.Terminate(ctx); err != nil {
-		panic(fmt.Sprintf("failed to stop db container: %s", err))
-	}
+	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -418,7 +415,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string) stri
 		}
 	}
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:          illId,
 		Timestamp:   test.GetNow(),
 		RequesterID: requesterId,

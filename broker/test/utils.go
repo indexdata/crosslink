@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -11,6 +12,10 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/jackc/pgx/v5/pgtype"
+	"net"
+	"net/http"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -46,6 +51,8 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 	var illRepo ill_db.IllRepo
 	var eventRepo events.EventRepo
 	var iso18626Client client.Iso18626Client
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
 		app.RunMigrateScripts()
 		pool := app.InitDbPool()
@@ -54,17 +61,19 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 		illRepo = app.CreateIllRepo(pool)
 		iso18626Client = client.CreateIso18626Client(eventBus, illRepo)
 		supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
-		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator)
+		workflowManager := service.CreateWorkflowManager(eventBus)
+		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 		app.StartEventBus(ctx, eventBus)
-		app.StartApp(illRepo, eventBus)
+		wg.Done()
+		app.StartServer(illRepo, eventRepo, eventBus)
 	}()
-	time.Sleep(100 * time.Millisecond)
+	wg.Wait()
 	return eventBus, illRepo, eventRepo, iso18626Client
 }
 
 func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
 	illId := uuid.New().String()
-	_, err := illRepo.CreateIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:        illId,
 		Timestamp: GetNow(),
 	})
@@ -92,15 +101,12 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 	return eventId
 }
 
-func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, address string) ill_db.Peer {
-	peer, err := illRepo.CreatePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreatePeerParams{
+func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string) ill_db.Peer {
+	peer, err := illRepo.SavePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:     uuid.New().String(),
 		Symbol: symbol,
 		Name:   symbol,
-		Address: pgtype.Text{
-			String: address,
-			Valid:  true,
-		},
+		Url:    url,
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)
@@ -109,7 +115,7 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, address str
 }
 
 func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId string, supplierId string) ill_db.LocatedSupplier {
-	supplier, err := illRepo.CreateLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.CreateLocatedSupplierParams{
+	supplier, err := illRepo.SaveLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: illTransId,
 		SupplierID:       supplierId,
@@ -123,4 +129,41 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 		t.Errorf("Failed to create peer: %s", err)
 	}
 	return supplier
+}
+
+func Expect(err error, message string) {
+	if err != nil {
+		panic(fmt.Sprintf(message+" Errror : %s", err))
+	}
+}
+
+// GetFreePort asks the kernel for a free open port that is ready to use.
+func GetFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	// release for now so it can be bound by the actual server
+	// a more robust solution would be to bind the server to the port and close it here
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+func WaitForServiceUp(port int) {
+	if !WaitForPredicateToBeTrue(func() bool {
+		resp, err := http.Get("http://localhost:" + strconv.Itoa(port) + "/healthz")
+		if err != nil {
+			return false
+		}
+		return resp.StatusCode == http.StatusOK
+	}) {
+		panic("failed to start broker")
+	} else {
+		fmt.Println("Service up")
+	}
 }

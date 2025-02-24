@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"errors"
+	"github.com/indexdata/go-utils/utils"
 	"strings"
 )
+
+var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/iso18626")
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error)
@@ -28,18 +31,18 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	if strings.Contains(params.Symbols[0], "d-not-found") {
 		return []DirectoryEntry{}, nil
 	}
+	if strings.Contains(params.Symbols[0], "isil:nochange") {
+		return []DirectoryEntry{{
+			Symbol: "isil:nochange",
+			URL:    MOCK_CLIENT_URL,
+		}}, nil
+	}
 
 	var dirs []DirectoryEntry
 	for _, value := range params.Symbols {
 		dirs = append(dirs, DirectoryEntry{
 			Symbol: value,
-			URL:    "http://localhost:19082/iso18626",
-		})
-	}
-	if len(dirs) == 0 {
-		dirs = append(dirs, DirectoryEntry{
-			Symbol: "isil:resp",
-			URL:    "http://localhost:19082/iso18626",
+			URL:    MOCK_CLIENT_URL,
 		})
 	}
 	return dirs, nil
