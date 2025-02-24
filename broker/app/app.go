@@ -41,6 +41,8 @@ var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYP
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var INIT_DATA = utils.GetEnv("INIT_DATA", "true")
+var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
+var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -62,7 +64,7 @@ func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRep
 	illRepo := CreateIllRepo(pool)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
 
-	holdingsAdapter, err := adapter.CreateHoldings()
+	holdingsAdapter, err := adapter.CreateHoldings(HOLDINGS_ADAPTER, SRU_URL)
 	if err != nil {
 		return nil, nil, nil, err
 	}

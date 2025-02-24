@@ -3,14 +3,11 @@ package adapter
 import (
 	"errors"
 	"net/http"
-
-	"github.com/indexdata/go-utils/utils"
 )
 
-func CreateHoldings() (HoldingsLookupAdapter, error) {
-	holdingsType := utils.GetEnv("HOLDINGS_ADAPTER", "mock")
+func CreateHoldings(holdingsType string, sruUrl string) (HoldingsLookupAdapter, error) {
 	if holdingsType == "sru" {
-		adaptor := createSruHoldingsLookupAdapter(http.DefaultClient, utils.GetEnv("SRU_URL", "http://localhost:8081/sru"))
+		adaptor := CreateSruHoldingsLookupAdapter(http.DefaultClient, sruUrl)
 		return adaptor, nil
 	}
 	if holdingsType == "mock" {

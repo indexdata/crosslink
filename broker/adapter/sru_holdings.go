@@ -16,8 +16,8 @@ type SruHoldingsLookupAdapter struct {
 	client *http.Client
 }
 
-func createSruHoldingsLookupAdapter(client *http.Client, sruUrl string) *SruHoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{sruUrl: sruUrl}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) *SruHoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
 }
 
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
@@ -40,17 +40,19 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 		}
 	}
 	var holdings []Holding
-	for _, record := range sruResponse.Records.Record {
-		if record.RecordXMLEscaping != nil || *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
-			continue
+	if sruResponse.Records != nil {
+		for _, record := range sruResponse.Records.Record {
+			if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
+				continue
+			}
+			if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
+				continue
+			}
+			holdings = append(holdings, Holding{
+				Symbol:          "isil:sup1", // TODO: source from record
+				LocalIdentifier: "isil:sup1", // TODO: local identifier from record"
+			})
 		}
-		if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
-			continue
-		}
-		holdings = append(holdings, Holding{
-			Symbol:          "isil:sup", // TODO: source from record
-			LocalIdentifier: "1",        // TODO: local identifier from record"
-		})
 	}
 	return holdings, nil
 }

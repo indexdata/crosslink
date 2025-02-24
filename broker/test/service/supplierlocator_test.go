@@ -121,7 +121,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 
 	supplierId, ok := event.ResultData.Data["supplierId"]
 	if !ok || supplierId.(string) == "" {
-		t.Error("Expected to have supplierId")
+		t.Fatal("Expected to have supplierId")
 	}
 	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
 	if err != nil {
