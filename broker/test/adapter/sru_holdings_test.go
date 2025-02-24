@@ -215,6 +215,58 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	assert.ErrorContains(t, err, "decoding marcxml failed")
 }
 
+func TestSruMarcxmlWithoutHoldings(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag: "245",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "a",
+							Text: "The computer",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sru_buf, _ := xml.Marshal(rec_buf)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: sru_buf,
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ = xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var ad adapter.HoldingsLookupAdapter = adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, server.URL)
+	p := adapter.HoldingLookupParams{
+		Identifier: "123",
+	}
+	holdings, err := ad.Lookup(p)
+	assert.Nil(t, err)
+	assert.Len(t, holdings, 0)
+}
+
 func TestSruMarcxmlWithHoldings(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
