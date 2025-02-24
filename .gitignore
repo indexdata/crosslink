@@ -3,6 +3,5 @@
 /scratch/
 */chart/*.tgz
 commit.txt
-schema.go
 coverage.out
 *_gen.go
