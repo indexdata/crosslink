@@ -93,10 +93,6 @@ func (r *MockIllRepositorySuccess) DeletePeer(ctx extctx.ExtendedContext, id str
 	return nil
 }
 
-func (r *MockIllRepositorySuccess) UpdatePeerBorrowAndLoanCounts(ctx extctx.ExtendedContext, params ill_db.UpdatePeerBorrowAndLoanCountsParams) error {
-	return nil
-}
-
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -147,9 +143,5 @@ func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext) ([]ill_db
 	return []ill_db.Peer{{}}, errors.New("DB error")
 }
 func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id string) error {
-	return errors.New("DB error")
-}
-
-func (r *MockIllRepositoryError) UpdatePeerBorrowAndLoanCounts(ctx extctx.ExtendedContext, params ill_db.UpdatePeerBorrowAndLoanCountsParams) error {
 	return errors.New("DB error")
 }
