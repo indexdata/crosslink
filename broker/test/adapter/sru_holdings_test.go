@@ -42,7 +42,7 @@ func TestSruBadXml(t *testing.T) {
 		Identifier: "123",
 	}
 	_, err := ad.Lookup(p)
-	assert.ErrorContains(t, err, "decoding failed")
+	assert.ErrorContains(t, err, "unexpected EOF")
 }
 
 func TestSruBadDiagnostics(t *testing.T) {

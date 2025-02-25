@@ -43,15 +43,11 @@ func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
 	cql := "id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
 	query := url.QueryEscape(cql)
+	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
-	buf, err := httpclient.GetXml(s.client, s.sruUrl+"?maximumRecords=1000&query="+query)
+	err := httpclient.GetXml(s.client, s.sruUrl+"?maximumRecords=1000&query="+query, &sruResponse)
 	if err != nil {
 		return nil, err
-	}
-	var sruResponse sru.SearchRetrieveResponse
-	err = xml.Unmarshal(buf, &sruResponse)
-	if err != nil {
-		return nil, fmt.Errorf("decoding failed: %s", err.Error())
 	}
 	if sruResponse.Diagnostics != nil {
 		diags := sruResponse.Diagnostics.Diagnostic

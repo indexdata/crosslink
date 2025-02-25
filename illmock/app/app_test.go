@@ -59,12 +59,6 @@ func TestSendReceiveUrlEmpty(t *testing.T) {
 	assert.ErrorContains(t, err, "url cannot be empty")
 }
 
-func TestSendReceiveMarshalFailed(t *testing.T) {
-	var app MockApp
-	_, err := app.sendReceive("http://localhost:8081", nil, "supplier", nil)
-	assert.ErrorContains(t, err, "marshal failed")
-}
-
 func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi()

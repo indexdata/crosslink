@@ -1,6 +1,8 @@
 package httpclient
 
 import (
+	"encoding/xml"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -11,14 +13,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type myType struct {
+	Msg string `xml:"msg"`
+}
+
 func TestBadScheme(t *testing.T) {
-	_, err := SendReceiveXml(http.DefaultClient, "xxx:/", nil)
+	var response myType
+	err := GetXml(http.DefaultClient, "xxx:/", &response)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
 func TestBadUrlChar(t *testing.T) {
-	_, err := SendReceiveXml(http.DefaultClient, "http://localhost:8081\x7f", nil)
+	var response myType
+	err := GetXml(http.DefaultClient, "http://localhost:8081\x7f", response)
 	assert.ErrorContains(t, err, "invalid control character in URL")
+}
+
+func TestPostXmlNilRequest(t *testing.T) {
+	var response myType
+	err := PostXml(http.DefaultClient, "http://localhost:8081\x7f", nil, &response)
+	assert.ErrorContains(t, err, "xml.Marshal failed")
 }
 
 func TestBadConnectionRefused(t *testing.T) {
@@ -28,7 +42,8 @@ func TestBadConnectionRefused(t *testing.T) {
 	assert.Nil(t, err)
 	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	l.Close()
-	_, err = SendReceiveXml(http.DefaultClient, "http://localhost:"+port, nil)
+	var request, response myType
+	err = PostXml(http.DefaultClient, "http://localhost:"+port, request, &response)
 	assert.ErrorContains(t, err, "connection refused")
 }
 
@@ -38,9 +53,10 @@ func TestServerForbidden(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	_, err := SendReceiveXml(http.DefaultClient, server.URL, nil)
+	var request, response myType
+	err := PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.NotNil(t, err)
-	assert.ErrorContains(t, err, "HTTP POST error: 403")
+	assert.ErrorContains(t, err, "HTTP error: 403")
 	httpErr, ok := err.(*HttpError)
 	assert.True(t, ok)
 	assert.Equal(t, http.StatusForbidden, httpErr.StatusCode)
@@ -55,53 +71,81 @@ func TestServerBadContentType(t *testing.T) {
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	_, err := SendReceiveXml(http.DefaultClient, server.URL, nil)
-	assert.ErrorContains(t, err, "application/xml or text/xml")
+	var request, response myType
+	err := PostXml(http.DefaultClient, server.URL, request, &response)
+	assert.ErrorContains(t, err, "application/xml")
+	assert.ErrorContains(t, err, "text/xml")
 }
 
-func TestServerGetXml(t *testing.T) {
+func TestPostXml(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "application/xml", r.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(r.Body)
+		assert.Nil(t, err)
+		assert.NotNil(t, buf)
+		var request myType
+		err = xml.Unmarshal(buf, &request)
+		assert.Nil(t, err)
+		assert.Equal(t, "hello", request.Msg)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
-		output := []byte("<x/>")
-		_, err := w.Write(output)
+		var response myType
+		response.Msg = "world"
+		output, err := xml.Marshal(response)
+		assert.Nil(t, err)
+		_, err = w.Write(output)
 		assert.Nil(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	msg, err := GetXml(http.DefaultClient, server.URL)
+	var request, response myType
+	request.Msg = "hello"
+	err := PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.Nil(t, err)
-	assert.NotNil(t, msg)
+	assert.Equal(t, "world", response.Msg)
 }
 
 func TestServerApplicationXml(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "application/xml", r.Header.Get("Content-Type"))
+		w.Header().Set("Content-Type", "Application/XML; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		output := []byte("<x/>")
-		_, err := w.Write(output)
+		var response myType
+		response.Msg = "world"
+		output, err := xml.Marshal(response)
+		assert.Nil(t, err)
+		_, err = w.Write(output)
 		assert.Nil(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	msg, err := SendReceiveXml(http.DefaultClient, server.URL, nil)
+	var response myType
+	err := GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
-	assert.NotNil(t, msg)
+	assert.Equal(t, "world", response.Msg)
 }
 
 func TestServerTextXml(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "application/xml", r.Header.Get("Content-Type"))
 		w.Header().Set("Content-Type", "text/xml")
 		w.WriteHeader(http.StatusOK)
-		output := []byte("<x/>")
-		_, err := w.Write(output)
+		var response myType
+		response.Msg = "world"
+		output, err := xml.Marshal(response)
+		assert.Nil(t, err)
+		_, err = w.Write(output)
 		assert.Nil(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	msg, err := SendReceiveXml(http.DefaultClient, server.URL, nil)
+	var response myType
+	err := GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
-	assert.NotNil(t, msg)
+	assert.Equal(t, "world", response.Msg)
 }
 
 func TestServerBrokenPipe(t *testing.T) {
@@ -121,7 +165,8 @@ func TestServerBrokenPipe(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Greater(t, n, 20)
 	}()
-	_, err := SendReceiveXml(http.DefaultClient, url, nil)
+	var request, response myType
+	err := PostXml(http.DefaultClient, url, request, &response)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
 }
