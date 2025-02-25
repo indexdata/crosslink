@@ -5,15 +5,20 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var PEER_REFRESH_INTERVAL = utils.Must(utils.GetEnvInt("PEER_REFRESH_INTERVAL", 300))
+var PeerRefreshInterval = time.Second * time.Duration(PEER_REFRESH_INTERVAL)
 
 type SupplierLocator struct {
 	eventBus        events.EventBus
@@ -81,7 +86,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	suppliersToAdd := make([]SupplierToAdd, 0, len(holdings))
 	for _, holding := range holdings {
 		peer, e := s.illRepo.GetPeerBySymbol(ctx, holding.Symbol)
-		if e != nil || peer.RefreshPolicy == ill_db.RefreshPolicyTransaction {
+		if e != nil || s.shouldRefreshSupplier(peer) {
 			symbols = append(symbols, holding.Symbol)
 			symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
 		} else {
@@ -99,15 +104,13 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		})
 
 		if err != nil {
-			return logErrorAndReturnResult(ctx, "failed to lookup directories: "+strings.Join(symbols, ","), err)
-		}
-
-		if len(directories) == 0 {
-			return logProblemAndReturnResult(ctx, "could not find directories: "+strings.Join(symbols, ","))
-		}
-
-		for _, dir := range directories {
-			s.findSymbolAndAddToList(ctx, dir, symLocalIdMapping, &suppliersToAdd)
+			ctx.Logger().Error("failed to lookup directories: "+strings.Join(symbols, ","), "error", err)
+		} else if len(directories) == 0 {
+			ctx.Logger().Error("could not find directories: " + strings.Join(symbols, ","))
+		} else {
+			for _, dir := range directories {
+				s.findSymbolAndAddToList(ctx, dir, symLocalIdMapping, &suppliersToAdd)
+			}
 		}
 	}
 
@@ -131,6 +134,10 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
 }
 
+func (s *SupplierLocator) shouldRefreshSupplier(peer ill_db.Peer) bool {
+	return peer.RefreshPolicy == ill_db.RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval))
+}
+
 func (s *SupplierLocator) findSymbolAndAddToList(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, symLocalIdMapping map[string]string, suppliersToAdd *[]SupplierToAdd) {
 	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
 	if err != nil {
@@ -141,6 +148,10 @@ func (s *SupplierLocator) findSymbolAndAddToList(ctx extctx.ExtendedContext, dir
 				Url:           dir.URL,
 				Name:          dir.Symbol,
 				RefreshPolicy: ill_db.RefreshPolicyTransaction,
+				RefreshTime: pgtype.Timestamp{
+					Time:  time.Now(),
+					Valid: true,
+				},
 			})
 		}
 		if err != nil {
@@ -148,11 +159,15 @@ func (s *SupplierLocator) findSymbolAndAddToList(ctx extctx.ExtendedContext, dir
 			return
 		}
 	}
-	if peer.RefreshPolicy != ill_db.RefreshPolicyNever {
+	if s.shouldRefreshSupplier(peer) {
 		peer.Url = dir.URL
+		peer.RefreshTime = pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		}
 		peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
-			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
+			ctx.Logger().Error("could not update peer", "symbol", dir.Symbol, "error", err)
 			return
 		}
 	}
