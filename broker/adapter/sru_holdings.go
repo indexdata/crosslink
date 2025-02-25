@@ -17,7 +17,7 @@ type SruHoldingsLookupAdapter struct {
 	client *http.Client
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) *SruHoldingsLookupAdapter {
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) HoldingsLookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
 }
 

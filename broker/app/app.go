@@ -64,7 +64,10 @@ func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRep
 	illRepo := CreateIllRepo(pool)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
 
-	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(HOLDINGS_ADAPTER, SRU_URL)
+	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
+		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
+		adapter.SruUrl:          SRU_URL,
+	})
 	if err != nil {
 		return nil, nil, nil, err
 	}

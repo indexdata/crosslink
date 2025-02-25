@@ -1,17 +1,29 @@
 package adapter
 
 import (
-	"errors"
+	"fmt"
 	"net/http"
 )
 
-func CreateHoldingsLookupAdapter(holdingsType string, sruUrl string) (HoldingsLookupAdapter, error) {
-	if holdingsType == "sru" {
-		adaptor := CreateSruHoldingsLookupAdapter(http.DefaultClient, sruUrl)
-		return adaptor, nil
+const (
+	HoldingsAdapter string = "HOLDINGS_ADAPTER"
+	SruUrl          string = "SRU_URL"
+)
+
+func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, error) {
+	holdingsAdapterVal, ok := cfg[HoldingsAdapter]
+	if !ok {
+		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
 	}
-	if holdingsType == "mock" {
+	if holdingsAdapterVal == "sru" {
+		sruUrlVal, ok := cfg[SruUrl]
+		if !ok {
+			return nil, fmt.Errorf("missing value for %s", SruUrl)
+		}
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, sruUrlVal), nil
+	}
+	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil
 	}
-	return nil, errors.New("bad value for HOLDINGS_ADAPTER")
+	return nil, fmt.Errorf("bad value for %s", HoldingsAdapter)
 }
