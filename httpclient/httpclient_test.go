@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -27,12 +28,6 @@ func TestBadUrlChar(t *testing.T) {
 	var response myType
 	err := GetXml(http.DefaultClient, "http://localhost:8081\x7f", response)
 	assert.ErrorContains(t, err, "invalid control character in URL")
-}
-
-func TestPostXmlNilRequest(t *testing.T) {
-	var response myType
-	err := PostXml(http.DefaultClient, "http://localhost:8081\x7f", nil, &response)
-	assert.ErrorContains(t, err, "xml.Marshal failed")
 }
 
 func TestBadConnectionRefused(t *testing.T) {
@@ -169,4 +164,13 @@ func TestServerBrokenPipe(t *testing.T) {
 	err := PostXml(http.DefaultClient, url, request, &response)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
+}
+
+func TestMarshalFailed(t *testing.T) {
+	var request, response myType
+	marshal := func(v any) ([]byte, error) {
+		return nil, fmt.Errorf("foo")
+	}
+	err := Post(http.DefaultClient, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
+	assert.ErrorContains(t, err, "marshal failed: foo")
 }
