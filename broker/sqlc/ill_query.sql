@@ -32,9 +32,12 @@ FROM peer
 WHERE id = $1;
 
 -- name: UpdatePeerBorrowAndLoanCounts :exec
-UPDATE peer AS p SET borrows_count = borrows_count + 1,
-                     loans_count = loans_count + CASE WHEN p.id = $2 THEN 1 ELSE 0 END
-FROM located_supplier l WHERE p.id = l.supplier_id AND l.ill_transaction_id = $1;
+UPDATE peer AS p
+SET borrows_count = borrows_count + CASE WHEN p.id = $2 THEN 0 ELSE 1 END,
+    loans_count = loans_count + CASE WHEN p.id = $2 THEN 1 ELSE 0 END
+WHERE
+    p.id IN (SELECT requester_id FROM ill_transaction AS i WHERE i.id = $1)
+   OR p.id = $2;
 
 
 -- name: GetIllTransactionById :one

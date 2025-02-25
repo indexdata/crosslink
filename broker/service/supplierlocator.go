@@ -256,11 +256,11 @@ type SupplierToAdd struct {
 }
 
 func getPeerRatio(peer ill_db.Peer) float32 {
-	ratio := float32(0)
 	if peer.BorrowsCount != 0 {
-		ratio = float32(peer.LoansCount) / float32(peer.BorrowsCount)
+		return float32(peer.LoansCount) / float32(peer.BorrowsCount)
+	} else {
+		return math.MaxFloat32
 	}
-	return ratio
 }
 
 func ToInt32(i int) int32 {

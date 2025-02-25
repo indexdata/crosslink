@@ -300,8 +300,8 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 	}
 	if status == iso18626.TypeStatusLoaned {
 		err = repo.UpdatePeerBorrowAndLoanCounts(ctx, ill_db.UpdatePeerBorrowAndLoanCountsParams{
-			IllTransactionID: illId,
-			ID:               peer.ID,
+			ID:   illId,
+			ID_2: peer.ID,
 		})
 		if err != nil {
 			ctx.Logger().Error("failed to update located supplier borrows and loans counters", "error", err)
