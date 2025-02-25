@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func CreateHoldings(holdingsType string, sruUrl string) (HoldingsLookupAdapter, error) {
+func CreateHoldingsLookupAdapter(holdingsType string, sruUrl string) (HoldingsLookupAdapter, error) {
 	if holdingsType == "sru" {
 		adaptor := CreateSruHoldingsLookupAdapter(http.DefaultClient, sruUrl)
 		return adaptor, nil
