@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/cql-go/cql"
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"

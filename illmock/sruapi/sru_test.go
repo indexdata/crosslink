@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/stretchr/testify/assert"

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/indexdata/crosslink/broker/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 )

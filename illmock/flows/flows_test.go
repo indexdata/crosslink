@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
