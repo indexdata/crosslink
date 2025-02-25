@@ -51,31 +51,22 @@ func Request(client *http.Client, method string, contentTypes []string, url stri
 	return nil, fmt.Errorf("header Content-Type must be one of: %s", strings.Join(contentTypes, ", "))
 }
 
-func GetXml(client *http.Client, url string, res any) error {
-	return Get(client, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, res)
-}
-
-func Get(client *http.Client, contentTypes []string, url string, res any) error {
-	resbuf, err := Request(client, http.MethodGet, contentTypes, url, nil)
+func getXmlResponse(client *http.Client, method string, url string, reader io.Reader, res any) error {
+	resbuf, err := Request(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, reader)
 	if err != nil {
 		return err
 	}
 	return xml.Unmarshal(resbuf, res)
+}
 
+func GetXml(client *http.Client, url string, res any) error {
+	return getXmlResponse(client, http.MethodGet, url, nil, res)
 }
 
 func PostXml(client *http.Client, url string, req any, res any) error {
-	return Post(client, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res)
-}
-
-func Post(client *http.Client, contentTypes []string, url string, req any, res any) error {
 	buf, err := xml.Marshal(req)
 	if err != nil || buf == nil {
 		return fmt.Errorf("xml.Marshal failed")
 	}
-	resbuf, err := Request(client, http.MethodPost, contentTypes, url, bytes.NewReader(buf))
-	if err != nil {
-		return err
-	}
-	return xml.Unmarshal(resbuf, res)
+	return getXmlResponse(client, http.MethodPost, url, bytes.NewReader(buf), res)
 }
