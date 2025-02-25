@@ -21,6 +21,25 @@ func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) *SruHold
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
 }
 
+func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
+	// skipped and ignored if there is no 999, which suggests that something is wrong with the record
+	for _, df := range rec.Datafield {
+		if df.Tag != "999" {
+			continue
+		}
+		var holding Holding
+		for _, sf := range df.Subfield {
+			if sf.Code == "l" {
+				holding.LocalIdentifier = string(sf.Text)
+			}
+			if sf.Code == "s" {
+				holding.Symbol = string(sf.Text)
+				*holdings = append(*holdings, holding)
+			}
+		}
+	}
+}
+
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
 	cql := "id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
 	query := url.QueryEscape(cql)
@@ -54,22 +73,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 			if err != nil {
 				return nil, fmt.Errorf("decoding marcxml failed: %s", err.Error())
 			}
-			// skipped and ignored if there is no 999, which suggets that something is wrong with the record
-			for _, df := range rec.Datafield {
-				if df.Tag != "999" {
-					continue
-				}
-				var holding Holding
-				for _, sf := range df.Subfield {
-					if sf.Code == "l" {
-						holding.LocalIdentifier = string(sf.Text)
-					}
-					if sf.Code == "s" {
-						holding.Symbol = string(sf.Text)
-						holdings = append(holdings, holding)
-					}
-				}
-			}
+			parseHoldings(&rec, &holdings)
 		}
 	}
 	return holdings, nil
