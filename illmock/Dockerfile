@@ -9,6 +9,7 @@ COPY broker/go.mod ./broker/go.mod
 
 # copy common sources
 COPY common/ ./common
+COPY httpclient/ ./httpclient
 COPY iso18626/ ./iso18626
 COPY marcxml/ ./marcxml
 COPY sru/ ./sru
