@@ -171,6 +171,6 @@ func TestMarshalFailed(t *testing.T) {
 	marshal := func(v any) ([]byte, error) {
 		return nil, fmt.Errorf("foo")
 	}
-	err := Post(http.DefaultClient, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
+	err := requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal failed: foo")
 }
