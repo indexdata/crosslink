@@ -2,6 +2,7 @@ name: publish-image
 
 
 on:
+  workflow_dispatch:
   # Dockerfile builds again but does not run tests so we only
   # run this workflow after successful Go build-test
   workflow_run:
@@ -15,7 +16,7 @@ env:
 
 jobs:
   build-and-push-image:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
