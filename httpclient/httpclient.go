@@ -55,11 +55,11 @@ func GetXml(client *http.Client, url string, res any) error {
 	return Get(client, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, res, xml.Unmarshal)
 }
 
-func PostXml[T any, U any](client *http.Client, url string, req T, res U) error {
+func PostXml(client *http.Client, url string, req any, res any) error {
 	return Post(client, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res, xml.Marshal, xml.Unmarshal)
 }
 
-func Get[T any](client *http.Client, contentTypes []string, url string, res T, unmarshal func([]byte, any) error) error {
+func Get(client *http.Client, contentTypes []string, url string, res any, unmarshal func([]byte, any) error) error {
 	resbuf, err := Request(client, http.MethodGet, contentTypes, url, nil)
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func Get[T any](client *http.Client, contentTypes []string, url string, res T, u
 	return unmarshal(resbuf, res)
 }
 
-func Post[T any, U any](client *http.Client, contentTypes []string, url string, req T, res U, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
+func Post(client *http.Client, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
 	buf, err := marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %v", err)
