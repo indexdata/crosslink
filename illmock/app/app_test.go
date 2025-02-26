@@ -149,7 +149,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
-	healthUrl := url + "/health"
+	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
 	go func() {

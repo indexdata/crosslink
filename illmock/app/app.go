@@ -620,7 +620,7 @@ func (app *MockApp) Run() error {
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/iso18626", iso18626Handler(app))
-	mux.HandleFunc("/health", healthHandler())
+	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
 	app.server = &http.Server{Addr: addr, Handler: mux}
