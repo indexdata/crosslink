@@ -46,7 +46,6 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 		return fmt.Errorf("unsupported RecordXMLEscapiong: %s", *record.RecordXMLEscaping)
 	}
 	if record.RecordSchema == "info:srw/schema/1/diagnostics-v1.1" { // surrogate diagnostic record
-
 		var diagnostic diag.Diagnostic
 		err := xml.Unmarshal(record.RecordData.XMLContent, &diagnostic)
 		if err != nil {
