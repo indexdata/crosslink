@@ -9,6 +9,8 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"math"
+	"sort"
 	"strings"
 )
 
@@ -75,19 +77,18 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	symbols := make([]string, 0, len(holdings))
 	symLocalIdMapping := make(map[string]string, len(holdings))
-	count := int32(0)
-	var locatedSuppliers []*ill_db.LocatedSupplier
+	suppliersToAdd := make([]SupplierToAdd, 0, len(holdings))
 	for _, holding := range holdings {
 		peer, e := s.illRepo.GetPeerBySymbol(ctx, holding.Symbol)
 		if e != nil || peer.RefreshPolicy == ill_db.RefreshPolicyTransaction {
 			symbols = append(symbols, holding.Symbol)
 			symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
 		} else {
-			sup, err := s.addLocatedSupplier(ctx, illTrans.ID, count, holding.LocalIdentifier, peer)
-			if err == nil {
-				count++
-				locatedSuppliers = append(locatedSuppliers, sup)
-			}
+			suppliersToAdd = append(suppliersToAdd, SupplierToAdd{
+				Peer:            peer,
+				LocalIdentifier: holding.LocalIdentifier,
+				Ratio:           getPeerRatio(peer),
+			})
 		}
 	}
 
@@ -105,22 +106,31 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		}
 
 		for _, dir := range directories {
-			sup, err := s.findSymbolAndAddLocatedSupplier(ctx, dir, illTrans.ID, count, symLocalIdMapping)
-			if err == nil {
-				count++
-				locatedSuppliers = append(locatedSuppliers, sup)
-			}
+			s.findSymbolAndAddToList(ctx, dir, symLocalIdMapping, &suppliersToAdd)
 		}
 	}
 
-	if count == 0 {
+	if len(suppliersToAdd) == 0 {
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(symbols, ","))
+	}
+
+	sort.Slice(suppliersToAdd, func(i, j int) bool {
+		return suppliersToAdd[i].Ratio < suppliersToAdd[j].Ratio
+	})
+	var locatedSuppliers []*ill_db.LocatedSupplier
+	for i, sup := range suppliersToAdd {
+		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Peer)
+		if loopErr == nil {
+			locatedSuppliers = append(locatedSuppliers, added)
+		} else {
+			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+		}
 	}
 
 	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
 }
 
-func (s *SupplierLocator) findSymbolAndAddLocatedSupplier(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, transId string, ordinal int32, symLocalIdMapping map[string]string) (*ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) findSymbolAndAddToList(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, symLocalIdMapping map[string]string, suppliersToAdd *[]SupplierToAdd) {
 	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -134,7 +144,7 @@ func (s *SupplierLocator) findSymbolAndAddLocatedSupplier(ctx extctx.ExtendedCon
 		}
 		if err != nil {
 			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
-			return nil, err
+			return
 		}
 	}
 	if peer.RefreshPolicy != ill_db.RefreshPolicyNever {
@@ -142,16 +152,19 @@ func (s *SupplierLocator) findSymbolAndAddLocatedSupplier(ctx extctx.ExtendedCon
 		peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
-			return nil, err
+			return
 		}
 	}
 	locId, ok := symLocalIdMapping[dir.Symbol]
 	if !ok {
 		ctx.Logger().Error("could not get local id for symbol", "symbol", dir.Symbol, "mapping", symLocalIdMapping)
-		return nil, errors.New("could not get local id for symbol")
+		return
 	}
-
-	return s.addLocatedSupplier(ctx, transId, ordinal, locId, peer)
+	*suppliersToAdd = append(*suppliersToAdd, SupplierToAdd{
+		Peer:            peer,
+		LocalIdentifier: locId,
+		Ratio:           getPeerRatio(peer),
+	})
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
@@ -233,5 +246,29 @@ func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (even
 func getEventResult(resultData map[string]any) *events.EventResult {
 	return &events.EventResult{
 		Data: resultData,
+	}
+}
+
+type SupplierToAdd struct {
+	LocalIdentifier string
+	Peer            ill_db.Peer
+	Ratio           float32
+}
+
+func getPeerRatio(peer ill_db.Peer) float32 {
+	if peer.BorrowsCount != 0 {
+		return float32(peer.LoansCount) / float32(peer.BorrowsCount)
+	} else {
+		return math.MaxFloat32
+	}
+}
+
+func ToInt32(i int) int32 {
+	if i > math.MaxInt32 {
+		return math.MaxInt32
+	} else if i < math.MinInt32 {
+		return math.MinInt32
+	} else {
+		return int32(i)
 	}
 }
