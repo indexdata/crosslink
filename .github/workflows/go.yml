@@ -45,6 +45,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: xsltproc
+        version: 1.0
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
@@ -52,9 +57,6 @@ jobs:
         cache-dependency-path: |
           go.work.sum
           ${{ matrix.modules }}/go.sum
-
-    - name: Install xsltproc
-      run: sudo apt-get install -y xsltproc
 
     - name : Ensure sqlc is installed
       uses: sqlc-dev/setup-sqlc@v4
