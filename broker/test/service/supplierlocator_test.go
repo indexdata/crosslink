@@ -9,20 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/go-utils/utils"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/test"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -193,6 +193,46 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 	if selectedPeer.Url != noChange.Url {
 		t.Error("Peer entry should not be updated")
 	}
+}
+
+func TestLocateSuppliersOrder(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+	var completedSelect []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedSelect = append(completedSelect, event)
+	})
+	sup1 := getOrCreatePeer(t, illRepo, "isil:sup1", 3, 4)
+	sup2 := getOrCreatePeer(t, illRepo, "isil:sup2", 2, 4)
+
+	illTrId := getIllTransId(t, illRepo, "LOANED,LOANED")
+	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+	if supId := getSupplierId(0, event.ResultData.Data); supId != sup2.ID {
+		t.Errorf("Expected to sup2 be first supplier, expected %s, got %s", sup2.ID, supId)
+	}
+	if supId := getSupplierId(1, event.ResultData.Data); supId != sup1.ID {
+		t.Error("Expected to sup1 be second supplier")
+	}
+	// Clean
+	getOrCreatePeer(t, illRepo, "isil:sup1", 0, 0)
+	getOrCreatePeer(t, illRepo, "isil:sup2", 0, 0)
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
@@ -453,4 +493,44 @@ func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string
 		t.Errorf("Failed to create ill transaction: %s", err)
 	}
 	return illId
+}
+
+func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans int, borrows int) ill_db.Peer {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	peer, err := illRepo.GetPeerBySymbol(ctx, symbol)
+	if err != nil {
+		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams{
+			ID:            uuid.NewString(),
+			Symbol:        symbol,
+			Name:          symbol,
+			RefreshPolicy: ill_db.RefreshPolicyTransaction,
+			Url:           adapter.MOCK_CLIENT_URL,
+			LoansCount:    service.ToInt32(loans),
+			BorrowsCount:  service.ToInt32(borrows),
+		})
+		if err != nil {
+			t.Errorf("Failed to save peer: %s", err)
+		}
+		return peer
+	} else {
+		peer.LoansCount = service.ToInt32(loans)
+		peer.BorrowsCount = service.ToInt32(borrows)
+		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+		if err != nil {
+			t.Errorf("Failed to update peer: %s", err)
+		}
+		return peer
+	}
+}
+
+func getSupplierId(i int, result map[string]interface{}) string {
+	suppliers, ok := result["suppliers"]
+	if ok {
+		record := suppliers.([]interface{})[i]
+		supId, ok := record.(map[string]interface{})["SupplierID"]
+		if ok {
+			return supId.(string)
+		}
+	}
+	return ""
 }
