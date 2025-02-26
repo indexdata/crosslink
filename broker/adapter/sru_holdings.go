@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
+	"github.com/indexdata/crosslink/sru/diag"
 )
 
 type SruHoldingsLookupAdapter struct {
@@ -40,6 +41,31 @@ func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
 	}
 }
 
+func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
+	if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
+		return fmt.Errorf("unsupported RecordXMLEscapiong: %s", *record.RecordXMLEscaping)
+	}
+	if record.RecordSchema == "info:srw/schema/1/diagnostics-v1.1" { // surrogate diagnostic record
+
+		var diagnostic diag.Diagnostic
+		err := xml.Unmarshal(record.RecordData.XMLContent, &diagnostic)
+		if err != nil {
+			return fmt.Errorf("decoding surrogate diagnostic failed: %s", err.Error())
+		}
+		return errors.New("surrogate diagnostic: " + diagnostic.Message + ": " + diagnostic.Details)
+	}
+	if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
+		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
+	}
+	var rec marcxml.Record
+	err := xml.Unmarshal(record.RecordData.XMLContent, &rec)
+	if err != nil {
+		return fmt.Errorf("decoding marcxml failed: %s", err.Error())
+	}
+	parseHoldings(&rec, holdings)
+	return nil
+}
+
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
 	cql := "id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
 	query := url.QueryEscape(cql)
@@ -50,6 +76,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 		return nil, err
 	}
 	if sruResponse.Diagnostics != nil {
+		// non-surrogate diagnostics
 		diags := sruResponse.Diagnostics.Diagnostic
 		if len(diags) > 0 {
 			return nil, errors.New(diags[0].Message + ": " + diags[0].Details)
@@ -58,18 +85,10 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 	var holdings []Holding
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
-			if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
-				continue // skipped and ignored.. Fail completely?
-			}
-			if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
-				continue // skipped and ignored.. Fail completely?
-			}
-			var rec marcxml.Record
-			err = xml.Unmarshal(record.RecordData.XMLContent, &rec)
+			err := parseRecord(&record, &holdings)
 			if err != nil {
-				return nil, fmt.Errorf("decoding marcxml failed: %s", err.Error())
+				return nil, err
 			}
-			parseHoldings(&rec, &holdings)
 		}
 	}
 	return holdings, nil

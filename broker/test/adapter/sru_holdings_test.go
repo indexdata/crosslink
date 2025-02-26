@@ -135,12 +135,11 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, err := ad.Lookup(p)
-	assert.Nil(t, err)
-	assert.Len(t, holdings, 0)
+	_, err := ad.Lookup(p)
+	assert.ErrorContains(t, err, "unsupported RecordXMLEscapiong: string")
 }
 
-func TestSruMarcxmlInvalidSchema(t *testing.T) {
+func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		retVersion := sru.VersionDefinition2_0
@@ -172,9 +171,86 @@ func TestSruMarcxmlInvalidSchema(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, err := ad.Lookup(p)
-	assert.Nil(t, err)
-	assert.Len(t, holdings, 0)
+	_, err := ad.Lookup(p)
+	assert.ErrorContains(t, err, "unsupported RecordSchema: info:srw/schema/1/dc-v1.1")
+}
+
+func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: []byte("<record></record>"),
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var ad adapter.HoldingsLookupAdapter = adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, server.URL)
+	p := adapter.HoldingLookupParams{
+		Identifier: "123",
+	}
+	_, err := ad.Lookup(p)
+	assert.ErrorContains(t, err, "decoding surrogate diagnostic failed:")
+}
+
+func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		var diagnostic diag.Diagnostic
+		diagnostic.Uri = "info:srw/diagnostic/1/1"
+		diagnostic.Message = "General system error"
+		diagnostic.Details = "Something went wrong"
+		diag_buf, err := xml.Marshal(diagnostic)
+		assert.Nil(t, err)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: diag_buf,
+							},
+						},
+					},
+				},
+			},
+		}
+		sru_buf, _ := xml.Marshal(sr)
+		w.Write(sru_buf)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var ad adapter.HoldingsLookupAdapter = adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, server.URL)
+	p := adapter.HoldingLookupParams{
+		Identifier: "123",
+	}
+	_, err := ad.Lookup(p)
+	assert.ErrorContains(t, err, "surrogate diagnostic: General system error: Something went wrong")
 }
 
 func TestSruMarcxmlBadMarc(t *testing.T) {
