@@ -3,7 +3,7 @@ name: publish-image
 
 on:
   # Dockerfile builds again but does not run tests so we only
-  # run this workflow after successful build-test
+  # run this workflow after successful Go build-test
   workflow_run:
     workflows: ['build-test']
     types: [completed]
