@@ -34,7 +34,7 @@ spec:
         - name: {{ .Chart.Name }}
           env:
             - name: HTTP_PORT
-              value: "{{ .Values.service.httpPort }}"
+              value: "{{ .Values.containerPort }}"
             {{- range $k, $v := .Values.env }}
             {{- if ne $k "HTTP_PORT" }}
             - name: {{ $k }}
@@ -56,7 +56,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.httpPort }}
+              containerPort: {{ .Values.containerPort }}
               protocol: TCP
           livenessProbe:
             httpGet:
