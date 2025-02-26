@@ -3,10 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"github.com/indexdata/crosslink/broker/service"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,10 +15,14 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/test"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
@@ -60,8 +60,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
-
+	eventBus, illRepo, eventRepo = test.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
@@ -122,7 +121,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 
 	supplierId, ok := event.ResultData.Data["supplierId"]
 	if !ok || supplierId.(string) == "" {
-		t.Error("Expected to have supplierId")
+		t.Fatal("Expected to have supplierId")
 	}
 	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
 	if err != nil {

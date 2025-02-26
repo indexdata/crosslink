@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/illmock/slogwrap"

@@ -10,7 +10,6 @@ linters-settings:
       - G114
   errcheck:
     exclude-functions:
-      - net/http.ListenAndServe
       - (net.Listener).Close
       - (net/http.ResponseWriter).Write
 run:

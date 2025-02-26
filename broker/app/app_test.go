@@ -2,9 +2,12 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHandleRequest(t *testing.T) {
@@ -37,4 +40,13 @@ func TestConfigLogger(t *testing.T) {
 	if handler == nil {
 		t.Errorf("expected to have handler")
 	}
+}
+
+func TestBadHoldingsAdapter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	HOLDINGS_ADAPTER = "bad"
+	_, _, _, err := Init(ctx)
+	assert.ErrorContains(t, err, "bad value for HOLDINGS_ADAPTER")
 }

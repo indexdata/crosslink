@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
+	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/stretchr/testify/assert"
 )
@@ -17,7 +18,7 @@ func TestGetSurrogateDiagnostic(t *testing.T) {
 	var api SruApi
 	record := api.getSurrogateDiagnostic(1, "64", "Record temporarily unavailable", "x")
 	assert.NotNil(t, record)
-	assert.Equal(t, "info::srw/schema/1/diagnostics-v1.1", record.RecordSchema)
+	assert.Equal(t, "info:srw/schema/1/diagnostics-v1.1", record.RecordSchema)
 	assert.Contains(t, string(record.RecordData.XMLContent), "<uri>info:srw/diagnostic/1/64</uri>")
 }
 
@@ -144,13 +145,19 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with records", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&maximumRecords=1")
+		sruResp := getSr(t, url+"?version=2.0&query=id%3D42&maximumRecords=1")
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"i\">1</subfield>")
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"i\">42</subfield>")
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+		assert.Equal(t, "42", marc.Id)
 	})
 
 	t.Run("sr2.0 with surrogate diagnostic record", func(t *testing.T) {
@@ -160,6 +167,7 @@ func TestSruService(t *testing.T) {
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/diagnostics-v1.1", sruResp.Records.Record[0].RecordSchema)
 		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "mock error")
 	})
 

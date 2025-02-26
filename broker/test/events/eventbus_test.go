@@ -2,12 +2,13 @@ package events
 
 import (
 	"context"
-	"github.com/indexdata/go-utils/utils"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/indexdata/go-utils/utils"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
@@ -47,7 +48,7 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo, _ = test.StartApp(ctx)
+	eventBus, illRepo, eventRepo = test.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()

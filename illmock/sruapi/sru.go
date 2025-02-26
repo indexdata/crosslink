@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/cql-go/cql"
-	"github.com/indexdata/crosslink/illmock/httpclient"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
@@ -68,6 +68,11 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	return sc.Term, nil
 }
 
+// 999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
+// match value; Multiple $l, $s pairs for local identifier and source identifiers.
+//
+// 999 ind1=0 ind2=0 has holding information. Not complete yet.
+
 func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	var record marcxml.Record
 
@@ -100,7 +105,7 @@ func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message st
 	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
 	var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
 	return &sru.RecordDefinition{
-		RecordSchema:      "info::srw/schema/1/diagnostics-v1.1",
+		RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
 		RecordXMLEscaping: &v,
 		RecordPosition:    pos,
 		RecordData:        sru.StringOrXmlFragmentDefinition{XMLContent: buf},

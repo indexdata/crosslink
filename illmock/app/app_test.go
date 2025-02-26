@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/flows"
-	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -57,12 +57,6 @@ func TestSendReceiveUrlEmpty(t *testing.T) {
 	var app MockApp
 	_, err := app.sendReceive("", nil, "supplier", nil)
 	assert.ErrorContains(t, err, "url cannot be empty")
-}
-
-func TestSendReceiveMarshalFailed(t *testing.T) {
-	var app MockApp
-	_, err := app.sendReceive("http://localhost:8081", nil, "supplier", nil)
-	assert.ErrorContains(t, err, "marshal failed")
 }
 
 func TestSendReceiveUnmarshalFailed(t *testing.T) {

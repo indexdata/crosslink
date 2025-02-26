@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/flows"
-	"github.com/indexdata/crosslink/illmock/httpclient"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
@@ -185,24 +185,16 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	if url == "" {
 		return nil, fmt.Errorf("url cannot be empty")
 	}
-	buf := utils.Must(xml.MarshalIndent(msg, "  ", "  "))
-	if buf == nil {
-		return nil, fmt.Errorf("marshal failed")
-	}
 	url = url + "/iso18626"
 	app.logOutgoingReq(role, header, msg, url)
-	resp, err := httpclient.SendReceiveXml(http.DefaultClient, url, buf)
+	var response iso18626.Iso18626MessageNS
+	err := httpclient.PostXml(http.DefaultClient, url, msg, &response)
 	if err != nil {
 		status := 0
 		if httpErr, ok := err.(*httpclient.HttpError); ok {
 			status = httpErr.StatusCode
 		}
 		app.logOutgoingErr(role, header, url, status, err.Error())
-		return nil, err
-	}
-	var response iso18626.Iso18626MessageNS
-	err = xml.Unmarshal(resp, &response)
-	if err != nil {
 		return nil, err
 	}
 	app.logIncomingRes(role, header, &response, url)

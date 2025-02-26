@@ -3,21 +3,18 @@ package test
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/app"
-	"github.com/indexdata/crosslink/broker/client"
-	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/service"
-	"github.com/jackc/pgx/v5/pgtype"
 	"net"
 	"net/http"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/app"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func GetNow() pgtype.Timestamp {
@@ -46,29 +43,14 @@ func WaitForPredicateToBeTrue(predicate func() bool) bool {
 	}
 }
 
-func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, client.Iso18626Client) {
-	var eventBus events.EventBus
-	var illRepo ill_db.IllRepo
-	var eventRepo events.EventRepo
-	var iso18626Client client.Iso18626Client
-	var wg sync.WaitGroup
-	wg.Add(1)
+func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
+	eventBus, illRepo, eventRepo, err := app.Init(ctx)
+	Expect(err, "failed to init app")
 	go func() {
-		app.RunMigrateScripts()
-		pool := app.InitDbPool()
-		eventRepo = app.CreateEventRepo(pool)
-		eventBus = app.CreateEventBus(eventRepo)
-		illRepo = app.CreateIllRepo(pool)
-		iso18626Client = client.CreateIso18626Client(eventBus, illRepo)
-		supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
-		workflowManager := service.CreateWorkflowManager(eventBus)
-		app.AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
-		app.StartEventBus(ctx, eventBus)
-		wg.Done()
-		app.StartServer(illRepo, eventRepo, eventBus)
+		err := app.StartServer(illRepo, eventRepo, eventBus)
+		Expect(err, "failed to start server")
 	}()
-	wg.Wait()
-	return eventBus, illRepo, eventRepo, iso18626Client
+	return eventBus, illRepo, eventRepo
 }
 
 func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
