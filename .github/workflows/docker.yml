@@ -42,8 +42,10 @@ jobs:
             go.work.sum
             ${{ matrix.modules }}/go.sum
 
-      - name: Install xsltproc
-        run: sudo apt-get install -y xsltproc
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: xsltproc
+          version: 1.0
 
       - name : Install sqlc
         uses: sqlc-dev/setup-sqlc@v4
