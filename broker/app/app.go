@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/oapi"
@@ -180,18 +179,19 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func initData(illRepo ill_db.IllRepo) {
-	_, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
-				ID:            uuid.New().String(),
-				Name:          "Requester",
-				Symbol:        "isil:req",
-				Url:           adapter.MOCK_CLIENT_URL,
-				RefreshPolicy: ill_db.RefreshPolicyNever,
-			}))
-		} else {
-			panic(err.Error())
+	peer, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
+	if err == nil {
+		illRepo.DeletePeer(appCtx, peer.ID)
+	} else {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			panic(err)
 		}
 	}
+	utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
+		ID:            "d3b07384-d9a0-4c1e-8f8e-4f8e4f8e4f8e",
+		Name:          "Requester",
+		Symbol:        "isil:req",
+		Url:           adapter.MOCK_CLIENT_URL,
+		RefreshPolicy: ill_db.RefreshPolicyNever,
+	}))
 }
