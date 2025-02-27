@@ -567,9 +567,6 @@ func (app *MockApp) incomingPatronRequest(byteReq []byte, w http.ResponseWriter,
 		return
 	}
 	app.handlePatronRequest(illMessage.Request, w)
-	if msg.Request.ServiceInfo == nil {
-		panic("serviceInfo should not be nil")
-	}
 }
 
 func (app *MockApp) parseEnv() {
