@@ -115,12 +115,28 @@ func RunMigrateScripts() {
 		return
 	}
 
+	// Check migration version before running
+	version, dirty, err := m.Version()
+	if err != nil && err != migrate.ErrNilVersion {
+		appCtx.Logger().Error("failed to get migration version", "error", err)
+		return
+	}
+	appCtx.Logger().Info("current migration version", "version", version, "dirty", dirty)
+
 	// Migrate up
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
 		appCtx.Logger().Error("failed to run migration", "error", err)
 		return
 	}
+
+	// Check migration version after running
+	version, dirty, err = m.Version()
+	if err != nil && err != migrate.ErrNilVersion {
+		appCtx.Logger().Error("failed to get migration version after running", "error", err)
+		return
+	}
+	appCtx.Logger().Info("migration version after running", "version", version, "dirty", dirty)
 }
 
 func InitDbPool() *pgxpool.Pool {
@@ -193,7 +209,7 @@ func initData(illRepo ill_db.IllRepo) {
 		}
 		appCtx.Logger().Error("No existing Requester peer found", "error", err)
 	}
-	appCtx.Logger().Info("Creating Requester peer")
+	appCtx.Logger().Info("Creating mock Requester peer")
 	utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            "d3b07384-d9a0-4c1e-8f8e-4f8e4f8e4f8e",
 		Name:          "Requester",
