@@ -249,14 +249,8 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 
 func (c *Iso18626Client) createMessageInfo(transaction ill_db.IllTransaction) iso18626.MessageInfo {
 	reason := iso18626.TypeReasonForMessageStatusChange
-	note := ""
-	if transaction.LastRequesterAction.String == "Request" {
-		reason = iso18626.TypeReasonForMessageNotification // TODO action to reason mapping
-		note = "Request received"
-	}
 	return iso18626.MessageInfo{
 		ReasonForMessage: reason,
-		Note:             note,
 	}
 }
 
