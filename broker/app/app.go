@@ -197,17 +197,17 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 func initData(illRepo ill_db.IllRepo) {
 	peer, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
 	if err == nil {
-		appCtx.Logger().Info("Deleting existing Requester peer")
+		appCtx.Logger().Info("Deleting existing mock Requester peer")
 		err = illRepo.DeletePeer(appCtx, peer.ID)
 		if err != nil {
-			appCtx.Logger().Error("Deleting existing Requester peer failed, probably used in a transaction", "error", err)
-			panic(err)
+			appCtx.Logger().Warn("Deleting existing mock Requester peer failed, probably used in a transaction", "error", err)
+			return
 		}
 	} else {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			panic(err)
 		}
-		appCtx.Logger().Error("No existing Requester peer found", "error", err)
+		appCtx.Logger().Info("No existing mock Requester peer found")
 	}
 	appCtx.Logger().Info("Creating mock Requester peer")
 	utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
