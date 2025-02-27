@@ -181,7 +181,10 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 func initData(illRepo ill_db.IllRepo) {
 	peer, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
 	if err == nil {
-		illRepo.DeletePeer(appCtx, peer.ID)
+		err = illRepo.DeletePeer(appCtx, peer.ID)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			panic(err)
