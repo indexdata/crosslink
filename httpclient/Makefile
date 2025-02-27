@@ -5,6 +5,8 @@ OS ?= $(shell uname)
 COVERAGE=coverage.out
 .PHONY: all generate lint check clean
 
+all:
+
 check:
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
