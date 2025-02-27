@@ -557,16 +557,19 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func (app *MockApp) incomingPatronRequest(byteReq []byte, w http.ResponseWriter, illRequest *iso18626.Request) {
+func (app *MockApp) incomingPatronRequest(byteReq []byte, w http.ResponseWriter, msg *iso18626.Iso18626MessageNS) {
+	app.logIncomingReq(role.Requester, &msg.Request.Header, msg)
 	// making a deep copy of our message as handlePatronRequest modifies it
-	var illMessageLog iso18626.Iso18626MessageNS
-	err := xml.Unmarshal(byteReq, &illMessageLog)
+	var illMessage iso18626.Iso18626MessageNS
+	err := xml.Unmarshal(byteReq, &illMessage)
 	if err != nil { // should not happen as same bytes was unmarshalled before
 		http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	app.logIncomingReq(role.Requester, &illMessageLog.Request.Header, &illMessageLog)
-	app.handlePatronRequest(illRequest, w)
+	app.handlePatronRequest(illMessage.Request, w)
+	if msg.Request.ServiceInfo == nil {
+		panic("serviceInfo should not be nil")
+	}
 }
 
 func (app *MockApp) parseEnv() {

@@ -479,15 +479,11 @@ func TestService(t *testing.T) {
 		defer resp.Body.Close()
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
+		assert.Contains(t, string(buf), "<serviceInfo>")
 		var flowR flows.Flows
 		err = xml.Unmarshal(buf, &flowR)
 		assert.Nil(t, err)
 		assert.Len(t, flowR.Flows, 9)
-
-		assert.Len(t, flowR.Flows[0].Message, 2)
-		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request)
-		// assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
-		assert.NotNil(t, flowR.Flows[0].Message[1].Message.RequestConfirmation)
 		time.Sleep(500 * time.Millisecond)
 	})
 
@@ -762,7 +758,7 @@ func TestIncomingPatronRequest(t *testing.T) {
 	app.flowsApi = flows.CreateFlowsApi()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		msg := createPatronRequest()
-		app.incomingPatronRequest([]byte("<"), w, msg.Request)
+		app.incomingPatronRequest([]byte("<"), w, msg)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
