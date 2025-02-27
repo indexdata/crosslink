@@ -337,7 +337,7 @@ func (app *MockApp) logOutgoingErr(role role.Role, header *iso18626.Header, url 
 
 func (app *MockApp) logIncomingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
 	url string) {
-	app.logIso18626Message(role, "incoming-request", header, illMessage, fmt.Sprintf(" url:%s", url))
+	app.logIso18626Message(role, "incoming-response", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
 
 func (app *MockApp) logOutgoingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
