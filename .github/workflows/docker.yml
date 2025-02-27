@@ -21,11 +21,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        modules: [broker, illmock]
         include:
-          - dockerfile: ./broker/Dockerfile
+          - module: broker
+            dockerfile: ./broker/Dockerfile
             image: ghcr.io/${{ github.repository }}-broker
-          - dockerfile: ./illmock/Dockerfile
+          - module: illmock
+            dockerfile: ./illmock/Dockerfile
             image: ghcr.io/${{ github.repository }}-illmock
     permissions:
       contents: read
@@ -41,7 +42,7 @@ jobs:
           go-version: stable
           cache-dependency-path: |
             go.work.sum
-            ${{ matrix.modules }}/go.sum
+            ${{ matrix.module }}/go.sum
 
       - uses: awalsh128/cache-apt-pkgs-action@latest
         with:
