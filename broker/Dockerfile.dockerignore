@@ -8,6 +8,9 @@ broker/*
 # Include .go files
 !broker/**/*.go
 
+# include commit id
+!broker/cmd/broker/commit.txt
+
 # Exclude tests
 broker/test
 broker/**/*_test.go
