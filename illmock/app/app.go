@@ -539,12 +539,12 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			if illRequest.ServiceInfo != nil {
 				subtypes := illRequest.ServiceInfo.RequestSubType
 				if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-					app.incomingPatronRequest(byteReq, w, illRequest)
+					app.incomingPatronRequest(byteReq, w, &illMessage)
+					return
 				}
-			} else {
-				app.logIncomingReq(role.Supplier, &illRequest.Header, &illMessage)
-				app.handleSupplierRequest(illRequest, w)
 			}
+			app.logIncomingReq(role.Supplier, &illRequest.Header, &illMessage)
+			app.handleSupplierRequest(illRequest, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
 			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
