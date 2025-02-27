@@ -453,10 +453,12 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request scenarios", func(t *testing.T) {
+		app.flowsApi.Init()
 		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {
 			msg := createPatronRequest()
 			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
-			buf := utils.Must(xml.Marshal(msg))
+			buf, err := xml.Marshal(msg)
+			assert.Nil(t, err)
 			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 			assert.Nil(t, err)
 			assert.Equal(t, 200, resp.StatusCode)
@@ -470,6 +472,18 @@ func TestService(t *testing.T) {
 			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
+		resp, err := http.Get(apiUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		defer resp.Body.Close()
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		assert.Contains(t, string(buf), "<serviceInfo>")
+		var flowR flows.Flows
+		err = xml.Unmarshal(buf, &flowR)
+		assert.Nil(t, err)
+		assert.Len(t, flowR.Flows, 9)
 		time.Sleep(500 * time.Millisecond)
 	})
 
@@ -737,4 +751,18 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
+}
+
+func TestIncomingPatronRequest(t *testing.T) {
+	var app MockApp
+	app.flowsApi = flows.CreateFlowsApi()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		msg := createPatronRequest()
+		app.incomingPatronRequest([]byte("<"), w, msg)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	resp, err := http.Get(server.URL)
+	assert.Nil(t, err)
+	assert.Equal(t, 400, resp.StatusCode)
 }

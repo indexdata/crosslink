@@ -344,21 +344,6 @@ func (app *MockApp) logOutgoingRes(role role.Role, header *iso18626.Header, illM
 	app.logIso18626Message(role, "outgoing-response", header, illMessage, "")
 }
 
-func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
-	illRequest := illMessage.Request
-
-	if illRequest.ServiceInfo != nil {
-		subtypes := illRequest.ServiceInfo.RequestSubType
-		if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-			app.logIncomingReq(role.Requester, &illRequest.Header, illMessage)
-			app.handlePatronRequest(illRequest, w)
-			return
-		}
-	}
-	app.logIncomingReq(role.Supplier, &illRequest.Header, illMessage)
-	app.handleSupplierRequest(illRequest, w)
-}
-
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 	var msg = iso18626.NewIso18626MessageNS()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
@@ -550,7 +535,16 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 		if illMessage.Request != nil {
-			app.handleIso18626Request(&illMessage, w)
+			illRequest := illMessage.Request
+			if illRequest.ServiceInfo != nil {
+				subtypes := illRequest.ServiceInfo.RequestSubType
+				if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
+					app.incomingPatronRequest(byteReq, w, &illMessage)
+					return
+				}
+			}
+			app.logIncomingReq(role.Supplier, &illRequest.Header, &illMessage)
+			app.handleSupplierRequest(illRequest, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
 			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
@@ -561,6 +555,18 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 	}
+}
+
+func (app *MockApp) incomingPatronRequest(byteReq []byte, w http.ResponseWriter, msg *iso18626.Iso18626MessageNS) {
+	app.logIncomingReq(role.Requester, &msg.Request.Header, msg)
+	// making a deep copy of our message as handlePatronRequest modifies it
+	var illMessage iso18626.Iso18626MessageNS
+	err := xml.Unmarshal(byteReq, &illMessage)
+	if err != nil { // should not happen as same bytes was unmarshalled before
+		http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	app.handlePatronRequest(illMessage.Request, w)
 }
 
 func (app *MockApp) parseEnv() {
