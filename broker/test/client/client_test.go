@@ -75,9 +75,9 @@ func TestMessageRequester(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := test.CreatePeer(t, illRepo, "isil:req", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := test.CreatePeer(t, illRepo, "isil:resp", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, string(iso18626.TypeStatusLoaned))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -108,9 +108,9 @@ func TestMessageSupplier(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := test.CreatePeer(t, illRepo, "isil:req", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := test.CreatePeer(t, illRepo, "isil:resp", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, string(iso18626.TypeStatusLoaned))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -141,9 +141,9 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := test.CreatePeer(t, illRepo, "isil:req", "invalid")
-	illId := createIllTrans(t, illRepo, req.ID)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := test.CreatePeer(t, illRepo, "isil:resp", "invalid")
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, string(iso18626.TypeStatusLoaned))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -174,9 +174,9 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := test.CreatePeer(t, illRepo, "isil:req", "invalid")
-	illId := createIllTrans(t, illRepo, req.ID)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := test.CreatePeer(t, illRepo, "isil:resp", "invalid")
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, string(iso18626.TypeStatusLoaned))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -207,7 +207,7 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := test.CreatePeer(t, illRepo, "isil:req", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -237,7 +237,7 @@ func TestMessageRequesterFailToBegin(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	illId := createIllTrans(t, illRepo, "")
+	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -263,7 +263,7 @@ func TestMessageRequesterCompleteWithError(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	illId := createIllTrans(t, illRepo, "")
+	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -278,6 +278,64 @@ func TestMessageRequesterCompleteWithError(t *testing.T) {
 		return false
 	}) {
 		t.Error("Expected to have error to send message")
+	}
+}
+
+func TestMessageRequesterInvalidStatus(t *testing.T) {
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := test.CreatePeer(t, illRepo, "isil:req", LocalAddress)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	resp := test.CreatePeer(t, illRepo, "isil:resp", LocalAddress)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "invalid")
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusError
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+}
+
+func TestMessageSupplierInvalidAction(t *testing.T) {
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := test.CreatePeer(t, illRepo, "isil:req", LocalAddress)
+	illId := createIllTrans(t, illRepo, req.ID, "invalid")
+	resp := test.CreatePeer(t, illRepo, "isil:resp", LocalAddress)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, string(iso18626.TypeStatusLoaned))
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusProblem
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
 	}
 }
 
@@ -407,7 +465,7 @@ func TestSendHttpPost(t *testing.T) {
 	}
 }
 
-func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string) string {
+func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {
 	var requesterId pgtype.Text
 	if requester != "" {
 		requesterId = pgtype.Text{
@@ -420,6 +478,10 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string) stri
 		ID:          illId,
 		Timestamp:   test.GetNow(),
 		RequesterID: requesterId,
+		LastRequesterAction: pgtype.Text{
+			String: action,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		t.Errorf("Failed to create ill transaction: %s", err)
