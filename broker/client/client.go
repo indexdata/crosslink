@@ -111,12 +111,12 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		resultData["error"] = err
+		resultData["error"] = err.Error()
 		ctx.Logger().Error("Failed to get requester", "error", err)
 		status = events.EventStatusError
 	} else if statusErr != nil {
-		resultData["error"] = statusErr
-		ctx.Logger().Error("failed to get status", "error", err)
+		resultData["error"] = statusErr.Error()
+		ctx.Logger().Error("failed to get status", "error", statusErr)
 		status = events.EventStatusError
 	} else {
 		response, err := c.SendHttpPost(requester.Url, message, "")
@@ -124,7 +124,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			resultData["response"] = response
 		}
 		if err != nil {
-			resultData["error"] = err
+			resultData["error"] = err.Error()
 			ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 			status = events.EventStatusError
 		}
