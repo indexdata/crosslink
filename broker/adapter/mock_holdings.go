@@ -10,27 +10,28 @@ type MockHoldingsLookupAdapter struct {
 }
 
 func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
-	if strings.Index(params.Identifier, "return-") == 0 {
-		value := strings.TrimPrefix(params.Identifier, "return-")
-		return []Holding{{
-			Symbol:          value,
-			LocalIdentifier: value,
-		}}, nil
-	}
-	if strings.Contains(params.Identifier, "error") {
-		return []Holding{}, errors.New("there is error")
-	}
-	if strings.Contains(params.Identifier, "h-not-found") {
-		return []Holding{}, nil
-	}
-	ids := strings.Split(params.Identifier, ",")
+	ids := strings.Split(params.Identifier, ";")
 	i := 1
 	var holdings []Holding
 	for _, id := range ids {
-		holdings = append(holdings, Holding{
-			Symbol:          "isil:sup" + strconv.Itoa(i),
-			LocalIdentifier: id,
-		})
+		if id == "error" {
+			return []Holding{}, errors.New("there is error")
+		}
+		if id == "not-found" { // we could also just not append?
+			return []Holding{}, nil
+		}
+		if strings.Index(id, "return-") == 0 {
+			value := strings.TrimPrefix(id, "return-")
+			holdings = append(holdings, Holding{
+				Symbol:          value,
+				LocalIdentifier: value,
+			})
+		} else {
+			holdings = append(holdings, Holding{
+				Symbol:          "isil:sup" + strconv.Itoa(i),
+				LocalIdentifier: id,
+			})
+		}
 		i++
 	}
 	return holdings, nil
