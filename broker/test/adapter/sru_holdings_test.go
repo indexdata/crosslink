@@ -307,8 +307,9 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 					},
 				},
 				{
-					Tag:  "999",
-					Ind1: "0", // skipped as it is not 1
+					Tag: "999",
+					// skipped as it's not 11
+					Ind1: "1",
 					Ind2: "0",
 					Subfield: []marcxml.SubfieldatafieldType{
 						{
@@ -371,12 +372,8 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 				{
 					Tag:  "999",
 					Ind1: "1",
-					Ind2: "0",
+					Ind2: "1",
 					Subfield: []marcxml.SubfieldatafieldType{
-						{
-							Code: "i", // cluster identifier
-							Text: "123",
-						},
 						{
 							Code: "l", // local identifier
 							Text: "l1",

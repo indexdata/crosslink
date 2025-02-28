@@ -65,6 +65,12 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	if sc.Relation != cql.EQ && sc.Relation != "==" {
 		return "", getSruDiag("19", "Unsupported relation", string(sc.Relation))
 	}
+	ids := strings.Split(sc.Term, ";")
+	for _, id := range ids {
+		if id == "error" {
+			return "", getSruDiag("2", "System temporarily unavailable", "error")
+		}
+	}
 	return sc.Term, nil
 }
 
@@ -76,14 +82,23 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
-		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock record from SRU"}}})
+		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Title record from SRU mock"}}})
 	subFields := []marcxml.SubfieldatafieldType{}
 
 	localIds := strings.Split(id, ";")
 	i := 1
 	for _, localId := range localIds {
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType("isil:sup" + strconv.Itoa(i))})
+		if localId == "not-found" {
+			continue
+		}
+		if strings.Index(id, "return-") == 0 {
+			value := strings.TrimPrefix(id, "return-")
+			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(value)})
+			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(value)})
+		} else {
+			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
+			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType("isil:sup" + strconv.Itoa(i))})
+		}
 		i++
 	}
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",

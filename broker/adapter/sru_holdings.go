@@ -25,7 +25,7 @@ func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) Holdings
 func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
 	// skipped and ignored if there is no 999, which suggests that something is wrong with the record
 	for _, df := range rec.Datafield {
-		if df.Tag != "999" || df.Ind1 != "1" || df.Ind2 != "0" {
+		if df.Tag != "999" || df.Ind1 != "1" || df.Ind2 != "1" {
 			continue
 		}
 		var holding Holding
