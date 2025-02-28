@@ -81,15 +81,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Inject Go cache into Docker
-        uses: reproducible-containers/buildkit-cache-dance@v3
-        with:
-          cache-map: |
-            {
-              "~/.cache/go-build": "/root/.cache/go-build",
-              "~/go/pkg/mod": "/go/pkg/mod"
-            }
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:

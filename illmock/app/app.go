@@ -206,10 +206,16 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 
 	requester := &app.requester
 	msg := createRequest()
-	msg.Request = illRequest // using same Request as received
-	header := &illRequest.Header
-
+	msg.Request.Header = illRequest.Header
+	msg.Request.BibliographicInfo = illRequest.BibliographicInfo
+	msg.Request.PublicationInfo = illRequest.PublicationInfo
 	msg.Request.ServiceInfo = nil // not a patron request any more
+	msg.Request.SupplierInfo = illRequest.SupplierInfo
+	msg.Request.RequestedDeliveryInfo = illRequest.RequestedDeliveryInfo
+	msg.Request.RequestingAgencyInfo = illRequest.RequestingAgencyInfo
+	msg.Request.PatronInfo = illRequest.PatronInfo
+	msg.Request.BillingInfo = illRequest.BillingInfo
+	header := &msg.Request.Header
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -337,26 +343,11 @@ func (app *MockApp) logOutgoingErr(role role.Role, header *iso18626.Header, url 
 
 func (app *MockApp) logIncomingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
 	url string) {
-	app.logIso18626Message(role, "incoming-request", header, illMessage, fmt.Sprintf(" url:%s", url))
+	app.logIso18626Message(role, "incoming-response", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
 
 func (app *MockApp) logOutgoingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
 	app.logIso18626Message(role, "outgoing-response", header, illMessage, "")
-}
-
-func (app *MockApp) handleIso18626Request(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
-	illRequest := illMessage.Request
-
-	if illRequest.ServiceInfo != nil {
-		subtypes := illRequest.ServiceInfo.RequestSubType
-		if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-			app.logIncomingReq(role.Requester, &illRequest.Header, illMessage)
-			app.handlePatronRequest(illRequest, w)
-			return
-		}
-	}
-	app.logIncomingReq(role.Supplier, &illRequest.Header, illMessage)
-	app.handleSupplierRequest(illRequest, w)
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
@@ -550,7 +541,17 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 		if illMessage.Request != nil {
-			app.handleIso18626Request(&illMessage, w)
+			illRequest := illMessage.Request
+			if illRequest.ServiceInfo != nil {
+				subtypes := illRequest.ServiceInfo.RequestSubType
+				if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
+					app.logIncomingReq(role.Requester, &illRequest.Header, &illMessage)
+					app.handlePatronRequest(illRequest, w)
+					return
+				}
+			}
+			app.logIncomingReq(role.Supplier, &illRequest.Header, &illMessage)
+			app.handleSupplierRequest(illRequest, w)
 		} else if illMessage.RequestingAgencyMessage != nil {
 			app.handleIso18626RequestingAgencyMessage(&illMessage, w)
 		} else if illMessage.SupplyingAgencyMessage != nil {
