@@ -127,6 +127,16 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			resultData["error"] = err.Error()
 			ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 			status = events.EventStatusError
+		} else {
+			illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
+			illTrans.LastSupplierStatus = pgtype.Text{
+				String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
+				Valid:  true,
+			}
+			_, err = c.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+			if err != nil {
+				ctx.Logger().Error("failed to update ill transaction", "error", err)
+			}
 		}
 	}
 	return status, &events.EventResult{
