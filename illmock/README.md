@@ -54,17 +54,17 @@ The service produces a MARCXML record if a query of format "id = value" is
 used. If the index (`id`) is omitted a SRU diagnostic is returned.
 
 The identifier value is split by semicolon and each substring generates a holdings record entry
-in 999_11 , $l, $s .
+in 999_11 , `$l`, `$s` .
 
 By default each substring is taken verbatim, except for some special cases:
 
-   * A value = `error` produces an SRU error (non-surrogate diagnostic)
+   * `error`: produces an SRU error (non-surrogate diagnostic).
 
-   * A prefix of `return-` produces a holdings entry with both $l, $s of the suffix.
+   * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
 
-   * A value = `record-error` produces a response with a diagnostic record
+   * `record-error`: produces SRU response with a diagnostic record.
 
-   * A value = `not-found` omits a holdings $l, $s entry.
+   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
 
 For example to get a MARCXML with identifier 123, use:
 
