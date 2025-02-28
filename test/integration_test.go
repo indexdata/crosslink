@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-testfixtures/testfixtures/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kinbiko/jsonassert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -23,12 +26,32 @@ import (
 
 var dbpool *pgxpool.Pool
 var handler http.Handler
+var fixtures *testfixtures.Loader
+
+func jsonReq(t *testing.T, method string, endpoint string, bodyStr string) (*http.Response, string) {
+	var req *http.Request
+	if bodyStr != "" {
+		req = httptest.NewRequest(method, endpoint, bytes.NewBufferString(bodyStr))
+	} else {
+		req = httptest.NewRequest(method, endpoint, nil)
+	}
+	req.Header.Add("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Errorf("Unexpected error reading response body %v", err)
+	}
+	return res, string(data)
+}
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("directoryish"),
+		postgres.WithDatabase("directoryish_test"),
 		postgres.WithUsername("directoryish"),
 		postgres.WithPassword("directoryish"),
 		testcontainers.WithWaitStrategy(
@@ -52,6 +75,27 @@ func TestMain(m *testing.M) {
 	app.RunMigrateScripts()
 	dbpool = app.InitDbPool()
 	defer dbpool.Close()
+
+	// Set up fixtures so we can initialise the db with some test data
+	// These aren't aware of pgx so we need another connection to the db
+	// with the db/sql interface
+	stdDb, err := sql.Open("pgx", connStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer stdDb.Close()
+
+	fixtures, err = testfixtures.New(
+		testfixtures.Database(stdDb),
+		testfixtures.Dialect("postgres"),
+		testfixtures.Directory("dbfixtures"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failure initialising DB fixtures: %v\n", err)
+		os.Exit(1)
+	}
+
 	handler = app.InitHandler(ctx, dbpool)
 
 	code := m.Run()
@@ -62,213 +106,226 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestEmptyGet(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/entries", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res := w.Result()
-	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
+func resetDb() {
+	if err := fixtures.Load(); err != nil {
+		fmt.Fprintf(os.Stderr, "problem loading fixtures: %v\n", err)
+	}
+}
+
+func TestEntriesEmptyGet(t *testing.T) {
+	res, data := jsonReq(t, http.MethodGet, "/entries", "")
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected response status of 200, got %d and body of %s", res.StatusCode, data)
 	}
 	if string(data) != "[]\n" {
 		t.Errorf("expected [] got %v", string(data))
 	}
 }
 
-func TestEntryRoundtrip(t *testing.T) {
+func testCase(t *testing.T, c httpTestCase) {
+	resetDb()
 	ja := jsonassert.New(t)
+	pre := "Case " + c.name + " -- "
 
-	// POST authority
-	body := `{
-		"symbol": "RESHARE"
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/authorities", bytes.NewBufferString(body))
-	req.Header.Add("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res := w.Result()
-	defer res.Body.Close()
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	var postResult map[string]any
-	err = json.Unmarshal([]byte(data), &postResult)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	postedId := postResult["id"].(string)
-	if len(postedId) != 36 {
-		t.Errorf("Did not find a 36 character ID property, instead got: %v", postedId)
+	var body string
+	var err error
+	if c.bodyTmpl != nil {
+		body, err = loadApiTmpl(c.refetchFile, c.bodyTmpl)
+		if err != nil {
+			t.Errorf(pre+"Error loading body fixture: %v", err)
+		}
+	} else if c.bodyFile != "" {
+		body, err = loadApiFixture(c.bodyFile)
+		if err != nil {
+			t.Errorf(pre+"Error loading body fixture: %v", err)
+		}
+	} else {
+		body = c.body
 	}
 
-	// POST
-	body = `{
-		"name": "Some Inst",
-		"contactName": "Bob",
-		"symbols": [
-			{
-				"symbol": "NWINST",
-				"authority": "RESHARE"
-			},
-			{
-				"symbol": "ALSO",
-				"authority": "RESHARE"
-			}
-		],
-		"endpoints": [
-			{
-				"name":"primary",
-				"type":"ISO18626",
-				"address":"https://some.sort.of.url/path"
-			}
-		]
-	}`
-	req = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewBufferString(body))
-	req.Header.Add("Content-Type", "application/json")
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res = w.Result()
-	defer res.Body.Close()
-	data, err = io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	if res.StatusCode != 200 {
-		t.Fatalf("Expected response status of 200, got %d and body of %s", res.StatusCode, data)
-	}
-	err = json.Unmarshal([]byte(data), &postResult)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	postedId = postResult["id"].(string)
-	if len(postedId) != 36 {
-		t.Errorf("Did not find a 36 character ID property, instead got: %v", postedId)
+	res, data := jsonReq(t, c.method, c.endpoint, body)
+
+	if c.status != 0 && res.StatusCode != c.status {
+		t.Errorf(pre+"Expected response status of %d, got %d and body of %s", c.status, res.StatusCode, data)
 	}
 
-	// GET by symbol
-	req = httptest.NewRequest(http.MethodGet, "/entries/by-symbol/RESHARE:NWINST", nil)
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res = w.Result()
-	defer res.Body.Close()
-	data, err = io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	if res.StatusCode != 200 {
-		t.Fatalf("Expected response status of 200, got %d and body of %s", res.StatusCode, data)
-	}
-	ja.Assertf(string(data), `
-	{
-		"id": "%s",
-		"name": "Some Inst",
-		"contactName": "Bob",
-		"symbols": [
-      "<<UNORDERED>>",
-			{
-				"id": "<<PRESENCE>>",
-				"symbol": "NWINST",
-				"authority": "RESHARE"
-			},
-			{
-				"id": "<<PRESENCE>>",
-				"symbol": "ALSO",
-				"authority": "RESHARE"
-			}
-		],
-		"endpoints": [
-      "<<UNORDERED>>",
-			{
-				"id": "<<PRESENCE>>",
-				"name":"primary",
-				"type":"ISO18626",
-				"address":"https://some.sort.of.url/path"
-			}
-		]
-	}
-	`, postedId)
-	var getResult map[string]any
-	err = json.Unmarshal([]byte(data), &getResult)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	gotSymbols := getResult["symbols"].([]any)
-	gotEndpoints := getResult["endpoints"].([]any)
-
-	// PATCH
-	filteredSymbols := filterAnyMapSlice(&gotSymbols, "symbol", "NWINST")
-	filteredEndpoints := filterAnyMapSlice(&gotEndpoints, "name", "primary")
-	body = fmt.Sprintf(`{
-		"contactName": null,
-		"email": "info@someinst.edu",
-		"symbols": [
-			{
-				"id":"%s",
-				"symbol": "NEWINST",
-				"authority": "RESHARE"
-			}
-		],
-		"endpoints": [
-			{
-				"id": "%s",
-				"name":"primary",
-				"type":"ISO18626",
-				"address":"https://another.sort.of.url/path"
-			}
-		]
-	}`, filteredSymbols[0].(map[string]any)["id"], filteredEndpoints[0].(map[string]any)["id"])
-	req = httptest.NewRequest(http.MethodPatch, "/entries/by-id/"+postedId, bytes.NewBufferString(body))
-	req.Header.Add("Content-Type", "application/json")
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res = w.Result()
-	defer res.Body.Close()
-	data, err = io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	if res.StatusCode != 204 {
-		t.Fatalf("Expected response status of 204, got %d and body of %s", res.StatusCode, data)
+	if c.resFile != "" {
+		expectedResponse, err := loadApiFixture(c.resFile)
+		if err != nil {
+			t.Errorf(pre+"expected error to be nil got %v", err)
+		}
+		ja.Assertf(data, expectedResponse)
+	} else if c.res != "" {
+		if data != c.res {
+			t.Errorf(pre+"Exprected %v got %v", c.res, data)
+		}
 	}
 
-	// GET again to confirm PATCH, this time by id
-	req = httptest.NewRequest(http.MethodGet, "/entries/by-id/"+postedId, nil)
-	w = httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	res = w.Result()
-	defer res.Body.Close()
-	data, err = io.ReadAll(res.Body)
-	if err != nil {
-		t.Errorf("expected error to be nil got %v", err)
-	}
-	if res.StatusCode != 200 {
-		t.Fatalf("Expected response status of 200, got %d and body of %s", res.StatusCode, data)
+	if c.resFunc != nil {
+		if c.resFunc(res, data) != true {
+			t.Error(pre + "resFunc returned false")
+		}
 	}
 
-	ja.Assertf(string(data), `
-	{
-		"id": "%s",
-		"name": "Some Inst",
-		"email": "info@someinst.edu",
-		"symbols": [
-			{
-				"id": "<<PRESENCE>>",
-				"symbol": "NEWINST",
-				"authority": "RESHARE"
-			}
-		],
-		"endpoints": [
-      "<<UNORDERED>>",
-			{
-				"id": "<<PRESENCE>>",
-				"name":"primary",
-				"type":"ISO18626",
-				"address":"https://another.sort.of.url/path"
-			}
-		]
+	var idOfPosted string
+	if c.method == http.MethodPost && c.refetchFile != "" {
+		var postResult map[string]any
+		err = json.Unmarshal([]byte(data), &postResult)
+		if err != nil {
+			t.Errorf(pre+"Error parsing POST response to get ID: %v", err)
+		}
+		idOfPosted = postResult["id"].(string)
+		if len(idOfPosted) != 36 {
+			t.Errorf(pre+"Did not find a 36 character ID property, instead got: %v", idOfPosted)
+		}
 	}
-	`, postedId)
+
+	if c.refetchFile != "" {
+		var refetchEndpoint string
+		if c.refetchEndpoint != "" {
+			refetchEndpoint = c.refetchEndpoint
+		} else {
+			refetchEndpoint = c.endpoint
+		}
+		if idOfPosted != "" {
+			refetchEndpoint += "/" + idOfPosted
+		}
+		reres, redata := jsonReq(t, http.MethodGet, refetchEndpoint, "")
+		if reres.StatusCode >= 400 {
+			t.Errorf(pre+"Expected response status of OK when refetching, got %d and body of %s", reres.StatusCode, redata)
+		}
+		var expectedRefetchResponse string
+		if idOfPosted != "" {
+			expectedRefetchResponse, err = loadApiTmpl(c.refetchFile, map[string]any{"id": idOfPosted})
+			if err != nil {
+				t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
+			}
+		} else {
+			expectedRefetchResponse, err = loadApiFixture(c.refetchFile)
+			if err != nil {
+				t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
+			}
+
+		}
+		ja.Assertf(redata, expectedRefetchResponse)
+	}
+}
+
+type httpTestCase struct {
+	name            string
+	method          string
+	endpoint        string
+	body            string
+	bodyFile        string         // if nonempty this file in apifixtures will be preferred
+	bodyTmpl        map[string]any // bodyFile to be treated as template with these values
+	status          int
+	res             string
+	resFile         string
+	resFunc         func(*http.Response, string) bool // if defined will need to evaluate to true when passed res
+	refetchFile     string                            // if nonempty a GET will be performed and compared to this
+	refetchEndpoint string                            // alternate endpoint prefix to id for refetch
+}
+
+func testCases(t *testing.T, cases []httpTestCase) {
+	for _, c := range cases {
+		testCase(t, c)
+	}
+}
+
+func TestEntryCases(t *testing.T) {
+	cases := []httpTestCase{
+		{
+			name:     "GET without symbols",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:   http.StatusOK,
+			resFile:  "entry-nosym.get.res.json",
+		},
+		{
+			name:     "GET",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:   http.StatusOK,
+			resFile:  "entry.get.res.json",
+		},
+		{
+			name:     "GET by symbol",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-symbol/TEST:ANINST",
+			status:   http.StatusOK,
+			resFile:  "entry.get.res.json",
+		},
+		{
+			name:     "GET by invalid symbol",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-symbol/TESTANINST",
+			status:   http.StatusBadRequest,
+		},
+		{
+			name:     "GET id not found",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-id/f0000000-0000-0000-0000-000000000002",
+			status:   http.StatusNotFound,
+		},
+		{
+			name:     "GET symbol not found",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-symbol/TEST:NOPE",
+			status:   http.StatusNotFound,
+		},
+		{
+			name:     "GET entries",
+			method:   http.MethodGet,
+			endpoint: "/entries",
+			status:   http.StatusOK,
+			resFile:  "entries.get.res.json",
+		},
+		{
+			name:            "POST entry",
+			method:          http.MethodPost,
+			endpoint:        "/entries",
+			status:          http.StatusCreated,
+			bodyFile:        "entry.post.req.json",
+			refetchEndpoint: "/entries/by-id",
+			refetchFile:     "entry.post.refetch.json",
+		},
+		{
+			name:     "POST entry dupe symbol",
+			method:   http.MethodPost,
+			endpoint: "/entries",
+			status:   http.StatusBadRequest,
+			bodyFile: "entry-dupe-sym.post.req.json",
+		},
+		{
+			name:        "PATCH entry",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:      http.StatusNoContent,
+			bodyFile:    "entry.patch.req.json",
+			refetchFile: "entry.patch.refetch.json",
+		},
+		{
+			name:        "PATCH entry differently",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:      http.StatusNoContent,
+			bodyFile:    "entry.patch2.req.json",
+			refetchFile: "entry.patch2.refetch.json",
+		},
+		{
+			name:     "PATCH id not found",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/f0000000-0000-0000-0000-000000000002",
+			bodyFile: "entry.patch.req.json",
+			status:   http.StatusNotFound,
+		},
+		{
+			name:     "PATCH entry dupe symbol",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:   http.StatusBadRequest,
+			bodyFile: "entry-dupe-sym.patch.req.json",
+		},
+	}
+	testCases(t, cases)
 }

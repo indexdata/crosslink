@@ -1,0 +1,13 @@
+{
+  "id":"00000000-0000-0000-0000-000000000002",
+  "name":"An Institution",
+  "email":"what@ever.tk",
+  "endpoints": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Alternative",
+      "type": "ISO18626",
+      "address": "https://whatever.host.tld/path"
+    }
+  ]
+}

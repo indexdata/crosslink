@@ -1,0 +1,33 @@
+[
+  "<<UNORDERED>>",
+  {
+    "id": "00000000-0000-0000-0000-000000000002",
+    "name": "An Institution",
+    "contactName":"Bob",
+    "symbols": [
+      "<<UNORDERED>>",
+      {
+        "authority": "TEST",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "symbol": "ANINST"
+      },
+      {
+        "authority": "TEST",
+        "id": "00000000-0000-0000-0000-000000000002",
+        "symbol": "ANINSTTOO"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Primary",
+        "type": "ISO18626",
+        "address": "https://whatever.host.tld/path"
+      }
+    ]
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "No Symbol"
+  }
+]

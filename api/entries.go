@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log"
@@ -66,7 +67,7 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	for _, row := range rows {
 		last := len(resp) - 1
 
-		if last < 0 || resp[last].Id != &row.Entry.ID {
+		if last < 0 || !bytes.Equal(resp[last].Id[:], (&row.Entry.ID)[:]) {
 			resp = append(resp, Entry{
 				Id:          &row.Entry.ID,
 				Name:        row.Entry.Name,
@@ -164,7 +165,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
-						log.Println("Duplicate symbol")
+						return AddEntry400TextResponse("Duplicate symbol"), nil
 					}
 				}
 				log.Fatal(err)
@@ -194,7 +195,7 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		log.Fatal(err)
 	}
 
-	return AddEntry200JSONResponse(resp), nil
+	return AddEntry201JSONResponse(resp), nil
 }
 
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {

@@ -1,0 +1,14 @@
+{
+  "name":"New Institution",
+  "symbols": [
+    {"authority":"TEST", "symbol":"ANINST"},
+    {"authority":"TEST", "symbol":"NWINSTTOO"}
+  ],
+  "endpoints": [
+    {
+      "name": "Primary",
+      "type": "ISO18626",
+      "address": "https://some.host.tld/path"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name":"Institution",
+  "contactName":null,
+  "email":"what@ever.tk",
+  "symbols": [
+    {"authority":"TEST", "symbol":"ANINST"}
+  ],
+  "endpoints": null
+}

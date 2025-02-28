@@ -50,7 +50,7 @@ paths:
             schema:
               $ref: '#/components/schemas/Entry'
       responses:
-        '200':
+        '201':
           description: Entry response
           content:
             application/json:

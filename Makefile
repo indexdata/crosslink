@@ -28,7 +28,7 @@ checkinclgen:
 
 check:
 	$(GO) test -v -coverpkg=./... -coverprofile=$(COVERAGE).tmp ./...
-	grep -v "\.gen\.go" $(COVERAGE).tmp | grep -v "/db/" > $(COVERAGE)
+	grep -v "\.gen\.go" $(COVERAGE).tmp | grep -v "/db/" | grep -v "/test/" > $(COVERAGE)
 	$(GO) tool cover -func $(COVERAGE)
 
 run: $(BINARY)
