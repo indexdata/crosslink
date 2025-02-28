@@ -105,6 +105,8 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		SupplierRequestID:   supplierRequestId,
 		IllTransactionData:  illTransactionData,
 	})
+	//TODO check error type and return iso error when transaction already exists
+	//TODO only return 500 on database connection error
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
