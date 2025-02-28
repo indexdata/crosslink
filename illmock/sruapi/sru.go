@@ -74,7 +74,7 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	return sc.Term, nil
 }
 
-func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
+func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 	var record marcxml.Record
 
 	record.Id = id
@@ -88,8 +88,11 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	localIds := strings.Split(id, ";")
 	i := 1
 	for _, localId := range localIds {
-		if localId == "not-found" {
+		if localId == "not-found" || localId == "" {
 			continue
+		}
+		if localId == "record-error" {
+			return nil, fmt.Errorf("mock record error")
 		}
 		var lValue string
 		var sValue string
@@ -107,14 +110,15 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
 		Subfield: subFields})
 
-	return &record
+	return &record, nil
 }
 
 func (api *SruApi) getMarcXmlBuf(id string) ([]byte, error) {
-	if id == "sd" {
-		return nil, fmt.Errorf("mock error")
+	buf, err := api.getMarcXmlRecord(id)
+	if err != nil {
+		return nil, err
 	}
-	return xml.MarshalIndent(api.getMarcXmlRecord(id), "  ", "  ")
+	return xml.MarshalIndent(buf, "  ", "  ")
 }
 
 func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message string, details string) *sru.RecordDefinition {
