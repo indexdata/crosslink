@@ -17,8 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var PEER_REFRESH_INTERVAL = utils.Must(utils.GetEnvInt("PEER_REFRESH_INTERVAL", 300))
-var PeerRefreshInterval = time.Second * time.Duration(PEER_REFRESH_INTERVAL)
+var PEER_REFRESH_INTERVAL = utils.GetEnv("PEER_REFRESH_INTERVAL", "5m")
+var PeerRefreshInterval = utils.Must(time.ParseDuration(PEER_REFRESH_INTERVAL))
 
 type SupplierLocator struct {
 	eventBus        events.EventBus
