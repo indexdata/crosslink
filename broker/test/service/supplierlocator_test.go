@@ -213,7 +213,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 func TestLocateSuppliersOrder(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "LOANED,LOANED")
+	illTrId := getIllTransId(t, illRepo, "LOANED;LOANED")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
@@ -301,9 +301,9 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		},
 		{
 			name:        "NoHoldingsFound",
-			supReqId:    "h-not-found",
+			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "could not find holdings for supplier request id: h-not-found",
+			message:     "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",
