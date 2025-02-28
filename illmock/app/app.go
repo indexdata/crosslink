@@ -206,10 +206,16 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 
 	requester := &app.requester
 	msg := createRequest()
-	msg.Request = illRequest // using same Request as received
-	header := &illRequest.Header
-
+	msg.Request.Header = illRequest.Header
+	msg.Request.BibliographicInfo = illRequest.BibliographicInfo
+	msg.Request.PublicationInfo = illRequest.PublicationInfo
 	msg.Request.ServiceInfo = nil // not a patron request any more
+	msg.Request.SupplierInfo = illRequest.SupplierInfo
+	msg.Request.RequestedDeliveryInfo = illRequest.RequestedDeliveryInfo
+	msg.Request.RequestingAgencyInfo = illRequest.RequestingAgencyInfo
+	msg.Request.PatronInfo = illRequest.PatronInfo
+	msg.Request.BillingInfo = illRequest.BillingInfo
+	header := &msg.Request.Header
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -539,7 +545,8 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			if illRequest.ServiceInfo != nil {
 				subtypes := illRequest.ServiceInfo.RequestSubType
 				if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-					app.incomingPatronRequest(byteReq, w, &illMessage)
+					app.logIncomingReq(role.Requester, &illRequest.Header, &illMessage)
+					app.handlePatronRequest(illRequest, w)
 					return
 				}
 			}
@@ -555,18 +562,6 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			return
 		}
 	}
-}
-
-func (app *MockApp) incomingPatronRequest(byteReq []byte, w http.ResponseWriter, msg *iso18626.Iso18626MessageNS) {
-	app.logIncomingReq(role.Requester, &msg.Request.Header, msg)
-	// making a deep copy of our message as handlePatronRequest modifies it
-	var illMessage iso18626.Iso18626MessageNS
-	err := xml.Unmarshal(byteReq, &illMessage)
-	if err != nil { // should not happen as same bytes was unmarshalled before
-		http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	app.handlePatronRequest(illMessage.Request, w)
 }
 
 func (app *MockApp) parseEnv() {

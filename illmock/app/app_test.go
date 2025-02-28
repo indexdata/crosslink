@@ -752,17 +752,3 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyMessage(header)
 }
-
-func TestIncomingPatronRequest(t *testing.T) {
-	var app MockApp
-	app.flowsApi = flows.CreateFlowsApi()
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		msg := createPatronRequest()
-		app.incomingPatronRequest([]byte("<"), w, msg)
-	})
-	server := httptest.NewServer(handler)
-	defer server.Close()
-	resp, err := http.Get(server.URL)
-	assert.Nil(t, err)
-	assert.Equal(t, 400, resp.StatusCode)
-}
