@@ -74,7 +74,7 @@ func (api *FlowsApi) ParseEnv() error {
 		if err != nil {
 			return err
 		}
-		if d == 0 {
+		if d <= 0 {
 			return errors.New("CLEAN_TIMEOUT must be greater than 0")
 		}
 		api.cleanTimeout = d
