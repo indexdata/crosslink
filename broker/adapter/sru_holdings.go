@@ -30,6 +30,7 @@ func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
 		}
 		var holding Holding
 		for _, sf := range df.Subfield {
+			// l comes before s, so append happens when s is found
 			if sf.Code == "l" {
 				holding.LocalIdentifier = string(sf.Text)
 			}

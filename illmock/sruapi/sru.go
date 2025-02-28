@@ -91,14 +91,17 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 		if localId == "not-found" {
 			continue
 		}
+		var lValue string
+		var sValue string
 		if strings.Index(id, "return-") == 0 {
-			value := strings.TrimPrefix(id, "return-")
-			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(value)})
-			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(value)})
+			lValue = strings.TrimPrefix(id, "return-")
+			sValue = lValue
 		} else {
-			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
-			subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType("isil:sup" + strconv.Itoa(i))})
+			lValue = localId
+			sValue = "isil:sup" + strconv.Itoa(i)
 		}
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)})
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(sValue)})
 		i++
 	}
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
