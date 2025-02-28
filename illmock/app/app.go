@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -87,14 +88,15 @@ func (s *Supplier) delete(header *iso18626.Header) {
 }
 
 type MockApp struct {
-	httpPort   string
-	agencyType string
-	peerUrl    string
-	server     *http.Server
-	requester  Requester
-	supplier   Supplier
-	flowsApi   *flows.FlowsApi
-	sruApi     *sruapi.SruApi
+	httpPort       string
+	agencyType     string
+	peerUrl        string
+	supplyDuration time.Duration
+	server         *http.Server
+	requester      Requester
+	supplier       Supplier
+	flowsApi       *flows.FlowsApi
+	sruApi         *sruapi.SruApi
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -357,7 +359,7 @@ func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 }
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(app.supplyDuration)
 
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
@@ -564,7 +566,18 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func (app *MockApp) parseEnv() {
+func getSupplyDuration(val string) (time.Duration, error) {
+	d, err := time.ParseDuration(val)
+	if err != nil {
+		return 0, fmt.Errorf("invalid SUPPLY_DURATION: %s", err.Error())
+	}
+	if d < 0 {
+		return 0, errors.New("SUPPLY_DURATION can not be negative")
+	}
+	return d, nil
+}
+
+func (app *MockApp) parseEnv() error {
 	if app.httpPort == "" {
 		app.httpPort = utils.GetEnv("HTTP_PORT", "8081")
 	}
@@ -580,6 +593,14 @@ func (app *MockApp) parseEnv() {
 	if app.peerUrl == "" {
 		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081")
 	}
+	if app.supplyDuration == 0 {
+		d, err := getSupplyDuration(utils.GetEnv("SUPPLY_DURATION", "100ms"))
+		if err != nil {
+			return err
+		}
+		app.supplyDuration = d
+	}
+	return nil
 }
 
 func (app *MockApp) Shutdown() error {
@@ -593,7 +614,10 @@ func (app *MockApp) Shutdown() error {
 }
 
 func (app *MockApp) Run() error {
-	app.parseEnv()
+	err := app.parseEnv()
+	if err != nil {
+		return err
+	}
 	iso18626.InitNs()
 	log.Info("Mock starting")
 	if app.agencyType == "" {
