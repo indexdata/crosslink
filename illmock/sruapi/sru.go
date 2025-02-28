@@ -65,15 +65,16 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	if sc.Relation != cql.EQ && sc.Relation != "==" {
 		return "", getSruDiag("19", "Unsupported relation", string(sc.Relation))
 	}
+	ids := strings.Split(sc.Term, ";")
+	for _, id := range ids {
+		if id == "error" {
+			return "", getSruDiag("2", "System temporarily unavailable", "error")
+		}
+	}
 	return sc.Term, nil
 }
 
-// 999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
-// match value; Multiple $l, $s pairs for local identifier and source identifiers.
-//
-// 999 ind1=0 ind2=0 has holding information. Not complete yet.
-
-func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
+func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 	var record marcxml.Record
 
 	record.Id = id
@@ -81,23 +82,43 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	record.Leader = &marcxml.LeaderFieldType{Text: "00000cam a2200000 a 4500"}
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
-		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock record from SRU"}}})
-	subFields := []marcxml.SubfieldatafieldType{{Code: "i", Text: marcxml.SubfieldDataType(id)}}
+		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Title record from SRU mock"}}})
+	subFields := []marcxml.SubfieldatafieldType{}
+
 	localIds := strings.Split(id, ";")
+	i := 1
 	for _, localId := range localIds {
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(localId)})
+		if localId == "not-found" || localId == "" {
+			continue
+		}
+		if localId == "record-error" {
+			return nil, fmt.Errorf("mock record error")
+		}
+		var lValue string
+		var sValue string
+		if strings.Index(id, "return-") == 0 {
+			lValue = strings.TrimPrefix(id, "return-")
+			sValue = lValue
+		} else {
+			lValue = localId
+			sValue = "isil:sup" + strconv.Itoa(i)
+		}
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)})
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(sValue)})
+		i++
 	}
-	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "0",
+	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
 		Subfield: subFields})
-	return &record
+
+	return &record, nil
 }
 
 func (api *SruApi) getMarcXmlBuf(id string) ([]byte, error) {
-	if id == "sd" {
-		return nil, fmt.Errorf("mock error")
+	buf, err := api.getMarcXmlRecord(id)
+	if err != nil {
+		return nil, err
 	}
-	return xml.MarshalIndent(api.getMarcXmlRecord(id), "  ", "  ")
+	return xml.MarshalIndent(buf, "  ", "  ")
 }
 
 func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message string, details string) *sru.RecordDefinition {

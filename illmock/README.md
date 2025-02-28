@@ -51,7 +51,22 @@ is supported. It is substantially different from version 1.1, 1.2 -
 for example different namespace and different semantics for recordPacking.
 
 The service produces a MARCXML record if a query of format "id = value" is
-used. For example to get a MARCXML with identifier 123, use:
+used. If the index (`id`) is omitted a SRU diagnostic is returned.
+
+The identifier value is split by semicolon and each substring generates a holdings record entry
+in 999_11 , `$l`, `$s` .
+
+By default each substring is taken verbatim, except for some special cases:
+
+   * `error`: produces an SRU error (non-surrogate diagnostic).
+
+   * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
+
+   * `record-error`: produces SRU response with a diagnostic record.
+
+   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
+
+For example to get a MARCXML with identifier 123, use:
 
     curl 'http://localhost:8081/sru?query=id%3D123'
 

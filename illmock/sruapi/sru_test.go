@@ -105,7 +105,8 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.1", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=1.1&query=id%3D1")
+		cqlQuery := "id%3D1"
+		sruResp := getSr(t, url+"?version=1.1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -113,7 +114,8 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.2", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=1.2&query=id%3D1")
+		cqlQuery := "id%3D1"
+		sruResp := getSr(t, url+"?version=1.2&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/5", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -121,7 +123,8 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 no records", func(t *testing.T) {
-		sruResp := getSr(t, url+"?query=id%3D1")
+		cqlQuery := "id%3D1"
+		sruResp := getSr(t, url+"?query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
@@ -129,7 +132,8 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad maximumRecords", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&maximumRecords=x")
+		cqlQuery := "id%3D1"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=x&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
@@ -137,38 +141,175 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad startRecord", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=2.0&query=id%3D1&startRecord=x")
+		cqlQuery := "id%3D1"
+		sruResp := getSr(t, url+"?version=2.0&startRecord=x&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
 		assert.Equal(t, "info:srw/diagnostic/1/6", sruResp.Diagnostics.Diagnostic[0].Uri)
 		assert.Equal(t, "startRecord", sruResp.Diagnostics.Diagnostic[0].Details)
 	})
 
-	t.Run("sr2.0 with records", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=2.0&query=id%3D42&maximumRecords=1")
+	t.Run("sr2.0 with one holding", func(t *testing.T) {
+		cqlQuery := "id%3D42"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
 		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"i\">42</subfield>")
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"l\">42</subfield>")
 
 		var marc marcxml.Record
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 		assert.Equal(t, "42", marc.Id)
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 2)
+				assert.Equal(t, "l", f.Subfield[0].Code)
+				assert.Equal(t, "42", string(f.Subfield[0].Text))
+				assert.Equal(t, "s", f.Subfield[1].Code)
+				assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+			}
+		}
+		assert.True(t, matched)
 	})
 
-	t.Run("sr2.0 with surrogate diagnostic record", func(t *testing.T) {
-		sruResp := getSr(t, url+"?version=2.0&query=id%3Dsd&maximumRecords=1")
+	t.Run("sr2.0 with two holdings", func(t *testing.T) {
+		cqlQuery := "id%3D42%3B43"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"l\">42</subfield>")
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+		assert.Equal(t, "42;43", marc.Id)
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 4)
+				assert.Equal(t, "l", f.Subfield[0].Code)
+				assert.Equal(t, "42", string(f.Subfield[0].Text))
+				assert.Equal(t, "s", f.Subfield[1].Code)
+				assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+				assert.Equal(t, "l", f.Subfield[2].Code)
+				assert.Equal(t, "43", string(f.Subfield[2].Text))
+				assert.Equal(t, "s", f.Subfield[3].Code)
+				assert.Equal(t, "isil:sup2", string(f.Subfield[3].Text))
+			}
+		}
+		assert.True(t, matched)
+	})
+
+	t.Run("sr2.0 magic: not found", func(t *testing.T) {
+		cqlQuery := "id%3Dnot-found"
+		sruResp := getSr(t, url+"?maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+		assert.Equal(t, "not-found", marc.Id)
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 0)
+			}
+		}
+		assert.True(t, matched)
+	})
+
+	t.Run("sr2.0 magic: empty", func(t *testing.T) {
+		cqlQuery := "id%3D%22%22"
+		sruResp := getSr(t, url+"?maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+		assert.Equal(t, "", marc.Id)
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 0)
+			}
+		}
+		assert.True(t, matched)
+	})
+
+	t.Run("sr2.0 magic: error", func(t *testing.T) {
+		cqlQuery := "id%3Derror"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
+		assert.Equal(t, uint64(0), sruResp.NumberOfRecords)
+		assert.Equal(t, "info:srw/diagnostic/1/2", sruResp.Diagnostics.Diagnostic[0].Uri)
+		assert.Equal(t, "System temporarily unavailable", sruResp.Diagnostics.Diagnostic[0].Message)
+		assert.Equal(t, "error", sruResp.Diagnostics.Diagnostic[0].Details)
+	})
+
+	t.Run("sr2.0 magic: return-foo", func(t *testing.T) {
+		cqlQuery := "id%3Dreturn-foo"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 2)
+				assert.Equal(t, "l", f.Subfield[0].Code)
+				assert.Equal(t, "foo", string(f.Subfield[0].Text))
+				assert.Equal(t, "s", f.Subfield[1].Code)
+				assert.Equal(t, "foo", string(f.Subfield[1].Text))
+			}
+		}
+		assert.True(t, matched)
+	})
+
+	t.Run("sr2.0 magic: record-error", func(t *testing.T) {
+		cqlQuery := "id%3Drecord-error"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
 		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
 		assert.Equal(t, "info:srw/schema/1/diagnostics-v1.1", sruResp.Records.Record[0].RecordSchema)
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "mock error")
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "mock record error")
 	})
 
 	t.Run("sr unsupported index", func(t *testing.T) {
