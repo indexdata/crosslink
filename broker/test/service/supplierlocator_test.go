@@ -301,9 +301,9 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		},
 		{
 			name:        "NoHoldingsFound",
-			supReqId:    "h-not-found",
+			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "could not find holdings for supplier request id: h-not-found",
+			message:     "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",

@@ -17,8 +17,7 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 		if id == "error" {
 			return []Holding{}, errors.New("there is error")
 		}
-		// is it "h-not-found" or "not-found"?
-		if id == "h-not-found" { // we could also just not append?
+		if id == "not-found" { // we could also just not append?
 			return []Holding{}, nil
 		}
 		if strings.Index(id, "return-") == 0 {
