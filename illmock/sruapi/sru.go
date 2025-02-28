@@ -68,11 +68,6 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	return sc.Term, nil
 }
 
-// 999 ind1=1 ind2=0 has identifiers for the record. $i cluster UUID; multiple $m for each
-// match value; Multiple $l, $s pairs for local identifier and source identifiers.
-//
-// 999 ind1=0 ind2=0 has holding information. Not complete yet.
-
 func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	var record marcxml.Record
 
@@ -82,14 +77,18 @@ func (api *SruApi) getMarcXmlRecord(id string) *marcxml.Record {
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
 		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Mock record from SRU"}}})
-	subFields := []marcxml.SubfieldatafieldType{{Code: "i", Text: marcxml.SubfieldDataType(id)}}
+	subFields := []marcxml.SubfieldatafieldType{}
+
 	localIds := strings.Split(id, ";")
+	i := 1
 	for _, localId := range localIds {
 		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(localId)})
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(localId)})
+		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType("isil:sup" + strconv.Itoa(i))})
+		i++
 	}
-	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "0",
+	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
 		Subfield: subFields})
+
 	return &record
 }
 

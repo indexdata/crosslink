@@ -152,12 +152,24 @@ func TestSruService(t *testing.T) {
 		assert.Len(t, sruResp.Records.Record, 1)
 		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
 		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
-		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"i\">42</subfield>")
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<subfield code=\"l\">42</subfield>")
 
 		var marc marcxml.Record
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 		assert.Equal(t, "42", marc.Id)
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 2)
+				assert.Equal(t, "l", f.Subfield[0].Code)
+				assert.Equal(t, "42", string(f.Subfield[0].Text))
+				assert.Equal(t, "s", f.Subfield[1].Code)
+				assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+			}
+		}
+		assert.True(t, matched)
 	})
 
 	t.Run("sr2.0 with surrogate diagnostic record", func(t *testing.T) {
