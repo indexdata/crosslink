@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/api"
-	"github.com/indexdata/crosslink/broker/oapi"
-	"github.com/jackc/pgx/v5"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/client"
 	"github.com/indexdata/crosslink/broker/service"
@@ -216,5 +217,9 @@ func initData(illRepo ill_db.IllRepo) {
 		Symbol:        "isil:req",
 		Url:           adapter.MOCK_CLIENT_URL,
 		RefreshPolicy: ill_db.RefreshPolicyNever,
+		RefreshTime: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
 	}))
 }

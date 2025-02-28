@@ -85,10 +85,15 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 
 func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string) ill_db.Peer {
 	peer, err := illRepo.SavePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
-		ID:     uuid.New().String(),
-		Symbol: symbol,
-		Name:   symbol,
-		Url:    url,
+		ID:            uuid.New().String(),
+		Symbol:        symbol,
+		Name:          symbol,
+		Url:           url,
+		RefreshPolicy: ill_db.RefreshPolicyTransaction,
+		RefreshTime: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)

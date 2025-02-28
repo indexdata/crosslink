@@ -16,12 +16,13 @@ FROM peer
 ORDER BY name;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, symbol, name, refresh_policy, url, loans_count, borrows_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO peer (id, symbol, name, refresh_policy, refresh_time, url, loans_count, borrows_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
         url            = EXCLUDED.url,
         refresh_policy = EXCLUDED.refresh_policy,
+        refresh_time   = EXCLUDED.refresh_time,
         loans_count    = EXCLUDED.loans_count,
         borrows_count  = EXCLUDED.borrows_count
 RETURNING sqlc.embed(peer);

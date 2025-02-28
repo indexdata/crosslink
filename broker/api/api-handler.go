@@ -10,8 +10,10 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type ApiHandler struct {
@@ -35,18 +37,18 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		Other: logParams,
 	})
 	resp := []oapi.Event{}
-	var events []events.Event
+	var eventList []events.Event
 	var err error
 	if params.IllTransactionId != nil {
-		events, err = a.eventRepo.GetIllTransactionEvents(ctx, *params.IllTransactionId)
+		eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, *params.IllTransactionId)
 	} else {
-		events, err = a.eventRepo.ListEvents(ctx)
+		eventList, err = a.eventRepo.ListEvents(ctx)
 	}
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
-	for _, event := range events {
+	for _, event := range eventList {
 		resp = append(resp, toApiEvent(event))
 	}
 	writeJsonResponse(w, resp)
@@ -351,6 +353,10 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		Name:          peer.Name,
 		Url:           peer.Url,
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
+		RefreshTime: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()

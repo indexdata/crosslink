@@ -11,18 +11,19 @@ Crosslink broker manages inter-library loan (ILL) transactions, specifically:
 
 Configuration is provided via environment variables:
 
-| Name            | Description                                | Default value                   |
-|-----------------|--------------------------------------------|---------------------------------|
-| HTTP_PORT       | Server port                                | 8081                            |
-| DB_TYPE         | Database type                              | postgres                        |
-| DB_USER         | Database user                              | crosslink                       |
-| DB_PASSWORD     | Database password                          | crosslink                       |
-| DB_HOST         | Database host                              | localhost                       |
-| DB_DATABASE     | Database name                              | crosslink                       |
-| DB_PORT         | Database port                              | 25432                           |
-| ENABLE_JSON_LOG | Should JSON log format be enabled          | false                           |
-| INIT_DATA       | Should init test data                      | true                            |
-| MOCK_CLIENT_URL | Mock client URL used for directory entries | http://localhost:19083/iso18626 |
+| Name                  | Description                                | Default value                   |
+|-----------------------|--------------------------------------------|---------------------------------|
+| HTTP_PORT             | Server port                                | 8081                            |
+| DB_TYPE               | Database type                              | postgres                        |
+| DB_USER               | Database user                              | crosslink                       |
+| DB_PASSWORD           | Database password                          | crosslink                       |
+| DB_HOST               | Database host                              | localhost                       |
+| DB_DATABASE           | Database name                              | crosslink                       |
+| DB_PORT               | Database port                              | 25432                           |
+| ENABLE_JSON_LOG       | Should JSON log format be enabled          | false                           |
+| INIT_DATA             | Should init test data                      | true                            |
+| MOCK_CLIENT_URL       | Mock client URL used for directory entries | http://localhost:19083/iso18626 |
+| PEER_REFRESH_INTERVAL | Peer refresh interval in seconds           | 300                             |
 
 # Deploy on Kubernetes
 

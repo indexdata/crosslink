@@ -71,27 +71,35 @@ func TestMain(m *testing.M) {
 
 func TestLocateSuppliersAndSelect(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
+		if illTrId == event.IllTransactionID {
+			completedTask = append(completedTask, event)
+		}
 	})
 	var completedSelect []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedSelect = append(completedSelect, event)
+		if illTrId == event.IllTransactionID {
+			completedSelect = append(completedSelect, event)
+		}
 	})
-
+	yesterday := time.Now().Add(-24 * time.Hour)
 	toChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Symbol:        "isil:sup1",
 		Name:          "isil:sup1",
 		RefreshPolicy: ill_db.RefreshPolicyTransaction,
-		Url:           "http://should-change.com",
+		RefreshTime: pgtype.Timestamp{
+			Time:  yesterday,
+			Valid: true,
+		},
+		Url: "http://should-change.com",
 	},
 	)
 	if err != nil {
 		t.Error("Failed to create peer " + err.Error())
 	}
-	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -135,12 +143,17 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 func TestLocateSuppliersNoUpdate(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	var completedTask []events.Event
+	illTrId := getIllTransId(t, illRepo, "return-isil:nochange")
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
+		if event.IllTransactionID == illTrId {
+			completedTask = append(completedTask, event)
+		}
 	})
 	var completedSelect []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedSelect = append(completedSelect, event)
+		if event.IllTransactionID == illTrId {
+			completedSelect = append(completedSelect, event)
+		}
 	})
 
 	noChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
@@ -148,13 +161,16 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		Symbol:        "isil:nochange",
 		Name:          "No Change",
 		RefreshPolicy: ill_db.RefreshPolicyNever,
-		Url:           "http://no-change.com",
+		RefreshTime: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		Url: "http://no-change.com",
 	},
 	)
 	if err != nil {
 		t.Error("Failed to create peer " + err.Error())
 	}
-	illTrId := getIllTransId(t, illRepo, "return-isil:nochange")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -197,18 +213,22 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 func TestLocateSuppliersOrder(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := getIllTransId(t, illRepo, "LOANED,LOANED")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
+		if illTrId == event.IllTransactionID {
+			completedTask = append(completedTask, event)
+		}
 	})
 	var completedSelect []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedSelect = append(completedSelect, event)
+		if illTrId == event.IllTransactionID {
+			completedSelect = append(completedSelect, event)
+		}
 	})
 	sup1 := getOrCreatePeer(t, illRepo, "isil:sup1", 3, 4)
 	sup2 := getOrCreatePeer(t, illRepo, "isil:sup2", 2, 4)
 
-	illTrId := getIllTransId(t, illRepo, "LOANED,LOANED")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -237,12 +257,14 @@ func TestLocateSuppliersOrder(t *testing.T) {
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
+		if illTrId == event.IllTransactionID {
+			completedTask = append(completedTask, event)
+		}
 	})
 
-	illTrId := getIllTransId(t, illRepo, "sup-test-1")
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusProcessing, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -286,26 +308,28 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
-			eventStatus: events.EventStatusError,
-			message:     "failed to lookup directories: error",
+			eventStatus: events.EventStatusProblem,
+			message:     "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "could not find directories: d-not-found",
+			message:     "failed to add any supplier from: d-not-found",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+			illTrId := getIllTransId(t, illRepo, tt.supReqId)
 			var completedTask []events.Event
 			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-				completedTask = append(completedTask, event)
+				if illTrId == event.IllTransactionID {
+					completedTask = append(completedTask, event)
+				}
 			})
 
-			illTrId := getIllTransId(t, illRepo, tt.supReqId)
 			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
@@ -347,12 +371,14 @@ func TestSelectSupplierErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+			illTrId := test.GetIllTransId(t, illRepo)
 			var completedTask []events.Event
 			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-				completedTask = append(completedTask, event)
+				if illTrId == event.IllTransactionID {
+					completedTask = append(completedTask, event)
+				}
 			})
 
-			illTrId := test.GetIllTransId(t, illRepo)
 			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
@@ -378,35 +404,83 @@ func TestSelectSupplierErrors(t *testing.T) {
 	}
 }
 
+func TestCreatePeerFromDirectoryResponse(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	supSymbol := "isil:newSupplier" + uuid.NewString()
+	illTrId := getIllTransId(t, illRepo, "return-"+supSymbol)
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			completedTask = append(completedTask, event)
+		}
+	})
+
+	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("failed to notify with error " + err.Error())
+	}
+
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("expected to have request event received and processed")
+	}
+
+	_, err = illRepo.GetPeerBySymbol(appCtx, supSymbol)
+	if err != nil {
+		t.Error("expected to have new peer created")
+	}
+}
+
 func TestSuccessfulFlow(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := ""
 	var reqNotice []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		reqNotice = append(reqNotice, event)
+		illTrId = event.IllTransactionID
 	})
 	var supMsgNotice []events.Event
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		supMsgNotice = append(supMsgNotice, event)
+		if illTrId == event.IllTransactionID {
+			supMsgNotice = append(supMsgNotice, event)
+		}
 	})
 	var reqMsgNotice []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		reqMsgNotice = append(reqMsgNotice, event)
+		if illTrId == event.IllTransactionID {
+			reqMsgNotice = append(reqMsgNotice, event)
+		}
 	})
 	var locateTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		locateTask = append(locateTask, event)
+		if illTrId == event.IllTransactionID {
+			locateTask = append(locateTask, event)
+		}
 	})
 	var selectTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		selectTask = append(selectTask, event)
+		if illTrId == event.IllTransactionID {
+			selectTask = append(selectTask, event)
+		}
 	})
 	var mesSupTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		mesSupTask = append(mesSupTask, event)
+		if illTrId == event.IllTransactionID {
+			mesSupTask = append(mesSupTask, event)
+		}
 	})
 	var mesReqTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		mesReqTask = append(mesReqTask, event)
+		if illTrId == event.IllTransactionID {
+			mesReqTask = append(mesReqTask, event)
+		}
 	})
 
 	data, _ := os.ReadFile("../testdata/request.xml")
@@ -504,9 +578,13 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 			Symbol:        symbol,
 			Name:          symbol,
 			RefreshPolicy: ill_db.RefreshPolicyTransaction,
-			Url:           adapter.MOCK_CLIENT_URL,
-			LoansCount:    service.ToInt32(loans),
-			BorrowsCount:  service.ToInt32(borrows),
+			RefreshTime: pgtype.Timestamp{
+				Time:  time.Now().Add(-24 * time.Hour),
+				Valid: true,
+			},
+			Url:          adapter.MOCK_CLIENT_URL,
+			LoansCount:   service.ToInt32(loans),
+			BorrowsCount: service.ToInt32(borrows),
 		})
 		if err != nil {
 			t.Errorf("Failed to save peer: %s", err)
