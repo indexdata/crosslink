@@ -33,9 +33,7 @@ Go to your Profile Settings > Developer Settings to get it and save it a file ca
 
 To login to the GitHub OCI registry:
 
-```
-cat TOKEN | helm registry login ghcr.io -u $ --password-stdin
-```
+    cat TOKEN | helm registry login ghcr.io -u $ --password-stdin
 
 Now you can install the chart to your current cluster context/namespace with:
 
