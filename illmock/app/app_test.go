@@ -60,7 +60,6 @@ func TestAppBadSupplyDuration(t *testing.T) {
 	os.Setenv("SUPPLY_DURATION", "x")
 	var app MockApp
 	err := app.Run()
-	defer app.Shutdown()
 	os.Unsetenv("SUPPLY_DURATION")
 	assert.ErrorContains(t, err, "invalid SUPPLY_DURATION: time: ")
 }
@@ -166,7 +165,6 @@ func TestFlowsApiParseEnvFailed(t *testing.T) {
 	os.Setenv("CLEAN_TIMEOUT", "0")
 	var app MockApp
 	err := app.Run()
-	defer app.Shutdown()
 	os.Unsetenv("CLEAN_TIMEOUT")
 	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
 }
