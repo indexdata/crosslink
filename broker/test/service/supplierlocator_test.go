@@ -213,7 +213,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 func TestLocateSuppliersOrder(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "LOANED,LOANED")
+	illTrId := getIllTransId(t, illRepo, "LOANED;LOANED")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {

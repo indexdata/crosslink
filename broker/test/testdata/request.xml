@@ -14,7 +14,7 @@
             <tag0:requestingAgencyRequestId>js-test-0155</tag0:requestingAgencyRequestId>
         </tag0:header>
         <tag0:bibliographicInfo>
-            <tag0:supplierUniqueRecordId>Unfilled,LOANED</tag0:supplierUniqueRecordId>
+            <tag0:supplierUniqueRecordId>Unfilled;LOANED</tag0:supplierUniqueRecordId>
             <tag0:title>Lord of the Rings</tag0:title>
             <tag0:author>JRR Tolkien</tag0:author>
             <tag0:bibliographicItemId>
