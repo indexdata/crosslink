@@ -112,6 +112,10 @@ If omitted or empty, a value of `REQ` is used.
 
 Flow WS API: Specifies how long a flow is kept in memory before being removed. Default value is `10m`.
 
+## SUPPLY_DURATION
+
+Time the supplier is waiting before sending each SupplyingAgencyMessage . Default value is `100ms`
+
 # Deploy on Kubernetes
 
 Use the Helm chart published from this repo. You will need a GitHub __classic__

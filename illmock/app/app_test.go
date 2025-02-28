@@ -38,13 +38,42 @@ func TestParseEnv(t *testing.T) {
 	os.Setenv("AGENCY_TYPE", "ABC")
 	os.Setenv("SUPPLYING_AGENCY_ID", "S1")
 	os.Setenv("REQUESTING_AGENCY_ID", "R1")
+	os.Setenv("SUPPLY_DURATION", "100ms")
 	var app MockApp
-	app.parseEnv()
+	err := app.parseEnv()
+	assert.Nil(t, err)
 	assert.Equal(t, "8082", app.httpPort)
 	assert.Equal(t, "ABC", app.agencyType)
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
+	assert.Equal(t, 100*time.Millisecond, app.supplyDuration)
+	os.Unsetenv("HTTP_PORT")
+	os.Unsetenv("PEER_URL")
+	os.Unsetenv("AGENCY_TYPE")
+	os.Unsetenv("SUPPLYING_AGENCY_ID")
+	os.Unsetenv("REQUESTING_AGENCY_ID")
+	os.Unsetenv("SUPPLY_DURATION")
+}
+
+func TestAppBadSupplyDuration(t *testing.T) {
+	os.Setenv("SUPPLY_DURATION", "x")
+	var app MockApp
+	err := app.Run()
+	os.Unsetenv("SUPPLY_DURATION")
+	assert.ErrorContains(t, err, "invalid SUPPLY_DURATION: time: ")
+}
+
+func TestGetSupplyDuration(t *testing.T) {
+	dur, err := getSupplyDuration("3ms")
+	assert.Nil(t, err)
+	assert.Equal(t, 3*time.Millisecond, dur)
+
+	_, err = getSupplyDuration("x")
+	assert.ErrorContains(t, err, "invalid SUPPLY_DURATION: time: ")
+
+	_, err = getSupplyDuration("-3ms")
+	assert.ErrorContains(t, err, "SUPPLY_DURATION can not be negative")
 }
 
 func TestAppShutdown(t *testing.T) {
@@ -136,8 +165,8 @@ func TestFlowsApiParseEnvFailed(t *testing.T) {
 	os.Setenv("CLEAN_TIMEOUT", "0")
 	var app MockApp
 	err := app.Run()
-	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
 	os.Unsetenv("CLEAN_TIMEOUT")
+	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
 }
 
 func TestService(t *testing.T) {
