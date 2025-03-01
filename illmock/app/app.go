@@ -375,6 +375,11 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
 		supplier.delete(header)
 	}
+	if state.index == 0 {
+		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+	} else {
+		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	}
 	state.index++
 	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
 	if err != nil {
