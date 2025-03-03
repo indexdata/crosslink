@@ -307,12 +307,9 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 		t.Error("expected to have select supplier event twice and successful")
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		for _, m := range messageSupplier {
-			if m.EventStatus == events.EventStatusProblem {
-				if p, ok := m.ResultData.Data["kindOfProblem"]; ok && p.(string) == "requestFailed" {
-					return true
-				}
-			}
+		if len(messageSupplier) > 0 {
+			event, _ = eventRepo.GetEvent(appCtx, messageSupplier[0].ID)
+			return event.EventStatus == events.EventStatusProblem
 		}
 		return false
 	}) {
@@ -628,10 +625,7 @@ func TestSuccessfulFlow(t *testing.T) {
 	}
 	suppliers, _ := illRepo.GetLocatedSupplierByIllTransactionAndStatus(appCtx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: illId,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
+		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 	})
 
 	if suppliers[0].LastStatus.String != "LoanCompleted" {

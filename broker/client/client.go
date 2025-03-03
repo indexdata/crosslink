@@ -34,7 +34,6 @@ var statusMap = map[string]iso18626.TypeStatus{
 	string(iso18626.TypeStatusCancelled):              iso18626.TypeStatusCancelled,
 }
 
-var RequestAction = "Request"
 var actionMap = map[string]iso18626.TypeAction{
 	string(iso18626.TypeActionStatusRequest):  iso18626.TypeActionStatusRequest,
 	string(iso18626.TypeActionReceived):       iso18626.TypeActionReceived,
@@ -158,7 +157,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
-	var isRequest = illTrans.LastRequesterAction.String == RequestAction
+	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
@@ -181,7 +180,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 			}
 			message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-			c.updateSelectedSupplierAction(selected, RequestAction)
+			c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
 		} else {
 			var action iso18626.TypeAction
 			found, ok := actionMap[illTrans.LastRequesterAction.String]
@@ -218,15 +217,8 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 					status = events.EventStatusProblem
 				}
 			}
-			utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 		}
-	}
-	if status != events.EventStatusSuccess {
-		if isRequest {
-			resultData["kindOfProblem"] = "requestFailed"
-		} else {
-			resultData["kindOfProblem"] = "requestingAgencyMessageFailed"
-		}
+		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 	}
 	return status, &events.EventResult{
 		Data: resultData,
@@ -244,10 +236,7 @@ func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplie
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
 	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: transaction.ID,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
+		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 	})
 	if err != nil {
 		return nil, nil, err
