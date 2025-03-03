@@ -100,7 +100,12 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
-	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier)
+	var defaultStatus *iso18626.TypeStatus
+	if locSupplier == nil {
+		dStatus := iso18626.TypeStatusUnfilled
+		defaultStatus = &dStatus
+	}
+	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier, defaultStatus)
 
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
@@ -277,17 +282,20 @@ func (c *Iso18626Client) createMessageInfo() iso18626.MessageInfo {
 	}
 }
 
-func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier) (iso18626.StatusInfo, error) {
-	var status = iso18626.TypeStatusUnfilled
+func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier, defaultStatus *iso18626.TypeStatus) (iso18626.StatusInfo, error) {
+	var status *iso18626.TypeStatus
 	if supplier != nil {
 		if s, ok := statusMap[supplier.LastStatus.String]; ok {
-			status = s
-		} else {
-			return iso18626.StatusInfo{}, errors.New("failed to resolve status for value: " + supplier.LastStatus.String)
+			status = &s
 		}
+	} else {
+		status = defaultStatus
+	}
+	if status == nil {
+		return iso18626.StatusInfo{}, errors.New("failed to resolve status for value")
 	}
 	return iso18626.StatusInfo{
-		Status: status,
+		Status: *status,
 		LastChange: utils.XSDDateTime{
 			Time: transaction.Timestamp.Time,
 		},
