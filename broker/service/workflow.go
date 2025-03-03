@@ -23,13 +23,17 @@ func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event even
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus == events.EventStatusSuccess {
 		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
-	} //TODO message-requester ?
+	} else {
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}))
+	}
 }
 
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus == events.EventStatusSuccess {
 		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}))
-	} //TODO message-requester ?
+	} else {
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}))
+	}
 }
 
 func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
