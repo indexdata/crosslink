@@ -6,7 +6,6 @@ package db
 
 import (
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Authority struct {
@@ -16,13 +15,13 @@ type Authority struct {
 
 type Consortium struct {
 	ID             uuid.UUID
-	DirectoryEntry pgtype.UUID
+	DirectoryEntry *uuid.UUID
 	Name           *string
 }
 
 type Entry struct {
 	ID              uuid.UUID
-	Parent          pgtype.UUID
+	Parent          *uuid.UUID
 	Name            string
 	Description     *string
 	LmsLocationCode *string
@@ -32,17 +31,17 @@ type Entry struct {
 }
 
 type Entryendpoint struct {
-	ID      pgtype.UUID
-	Entry   pgtype.UUID
+	ID      *uuid.UUID
+	Entry   *uuid.UUID
 	Name    *string
 	Type    *string
 	Address *string
 }
 
 type Entrysymbol struct {
-	ID        pgtype.UUID
-	Owner     pgtype.UUID
-	Authority pgtype.UUID
+	ID        *uuid.UUID
+	Owner     *uuid.UUID
+	Authority *uuid.UUID
 	Symbol    *string
 }
 

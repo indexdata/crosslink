@@ -8,15 +8,15 @@ import (
 	"github.com/oapi-codegen/nullable"
 )
 
-func maybeUpdateTxtCol(cur *string, patch nullable.Nullable[string]) *string {
+func maybeUpdateCol[T any](cur *T, patch nullable.Nullable[T]) *T {
 	if !patch.IsSpecified() {
 		return cur
 	}
 	if patch.IsNull() {
 		return nil
 	}
-	patchStr := patch.MustGet()
-	return &patchStr
+	patchVal := patch.MustGet()
+	return &patchVal
 }
 
 func resolveCombinedSymbol(combined string) (authority, symbol string, err error) {
@@ -78,11 +78,18 @@ func elementHasProperty[T any, V comparable](s []T, propName string, value V) bo
 // 	return pgtype.UUID{Bytes: nlbl.MustGet(), Valid: true}
 // }
 
-// func PtrToPGTxt(ptr *string) pgtype.Text {
+// func PtrToPGUUID(ptr *uuid.UUID) pgtype.UUID {
 // 	if ptr == nil {
-// 		return pgtype.Text{String: "", Valid: false}
+// 		return pgtype.UUID{Bytes: [16]byte{}, Valid: false}
 // 	}
-// 	return pgtype.Text{String: *ptr, Valid: true}
+// 	return pgtype.UUID{Bytes: *ptr, Valid: true}
+// }
+// func PGUUIDToPtr(pguuid pgtype.UUID) *uuid.UUID {
+// 	if !pguuid.Valid {
+// 		return nil
+// 	}
+// 	u, _ := uuid.FromBytes(pguuid.Bytes[:])
+// 	return &u
 // }
 
 // func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {

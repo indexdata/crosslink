@@ -10,40 +10,35 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"indexdata/directoryish/db"
 )
 
 func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
-	if row.Entrysymbol.ID.Valid {
+	if row.Entrysymbol.ID != nil {
 		if entry.Symbols == nil {
 			s := []Symbol{}
 			entry.Symbols = &s
 		}
 
-		symid, _ := uuid.FromBytes(row.Entrysymbol.ID.Bytes[:])
-
-		if !elementHasProperty(*entry.Symbols, "Id", symid) {
+		if !elementHasProperty(*entry.Symbols, "Id", *row.Entrysymbol.ID) {
 			*entry.Symbols = append(*entry.Symbols, Symbol{
-				Id:        &symid,
+				Id:        row.Entrysymbol.ID,
 				Symbol:    *row.Entrysymbol.Symbol,
 				Authority: *row.SymbolAuthority,
 			})
 		}
 	}
 
-	if row.Entryendpoint.ID.Valid {
+	if row.Entryendpoint.ID != nil {
 		if entry.Endpoints == nil {
 			s := []ServiceEndpoint{}
 			entry.Endpoints = &s
 		}
 
-		epid, _ := uuid.FromBytes(row.Entryendpoint.ID.Bytes[:])
-
-		if !elementHasProperty(*entry.Endpoints, "Id", epid) {
+		if !elementHasProperty(*entry.Endpoints, "Id", *row.Entryendpoint.ID) {
 			*entry.Endpoints = append(*entry.Endpoints, ServiceEndpoint{
-				Id:      &epid,
+				Id:      row.Entryendpoint.ID,
 				Name:    *row.Entryendpoint.Name,
 				Type:    *row.Entryendpoint.Type,
 				Address: *row.Entryendpoint.Address,
@@ -99,7 +94,7 @@ func getOneEntryFromRows(rows []db.ListEntriesRow) Entry {
 }
 
 func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{ID: pgtype.UUID{Bytes: request.Id, Valid: true}})
+	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{ID: &request.Id})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -216,8 +211,8 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
 		Name:        derefOrDefault(request.Body.Name, orig.Name),
-		ContactName: maybeUpdateTxtCol(orig.ContactName, request.Body.ContactName),
-		Email:       maybeUpdateTxtCol(orig.Email, request.Body.Email),
+		ContactName: maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		Email:       maybeUpdateCol(orig.Email, request.Body.Email),
 		ID:          request.Id,
 	})
 	if err != nil {

@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const authorityBySymbol = `-- name: AuthorityBySymbol :one
@@ -189,7 +188,7 @@ ORDER BY e.name, e.id
 `
 
 type ListEntriesParams struct {
-	ID        pgtype.UUID
+	ID        *uuid.UUID
 	Authority *string
 	Symbol    *string
 }
