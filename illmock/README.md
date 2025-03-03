@@ -33,6 +33,9 @@ following values are recognized:
     WILLSUPPLY_UNFILLED
     UNFILLED
     LOANED
+    ERROR
+    HTTP-ERROR-400
+    HTTP-ERROR-500
 
 The scenario is inspected in the supplier request
 `<bibliographicInfo><supplierUniqueRecordId>` field.

@@ -481,6 +481,54 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
+	t.Run("Patron request ERROR", func(t *testing.T) {
+		app.flowsApi.Init()
+		scenario := "ERROR"
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+		buf, err := xml.Marshal(msg)
+		assert.Nil(t, err)
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.NotNil(t, response.RequestConfirmation.ErrorData)
+		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.RequestConfirmation.ErrorData.ErrorType)
+		assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, "ERROR")
+	})
+
+	t.Run("Patron request HTTP-ERROR", func(t *testing.T) {
+		app.flowsApi.Init()
+		for _, status := range []string{"400", "500"} {
+			scenario := "HTTP-ERROR-" + status
+			msg := createPatronRequest()
+			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+			buf, err := xml.Marshal(msg)
+			assert.Nil(t, err)
+			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+			assert.Nil(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			defer resp.Body.Close()
+			buf, err = io.ReadAll(resp.Body)
+			assert.Nil(t, err)
+			var response iso18626.ISO18626Message
+			err = xml.Unmarshal(buf, &response)
+			assert.Nil(t, err)
+			assert.NotNil(t, response.RequestConfirmation)
+			assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+			assert.NotNil(t, response.RequestConfirmation.ErrorData)
+			assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
+			assert.Contains(t, response.RequestConfirmation.ErrorData.ErrorValue, status)
+		}
+	})
+
 	t.Run("Patron request scenarios", func(t *testing.T) {
 		app.flowsApi.Init()
 		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {

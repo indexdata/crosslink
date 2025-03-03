@@ -259,6 +259,8 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 	requester.store(header, requesterInfo)
 
 	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
+	resmsg.RequestConfirmation.ErrorData = requestConfirmation.ErrorData
+	resmsg.RequestConfirmation.ConfirmationHeader.MessageStatus = requestConfirmation.ConfirmationHeader.MessageStatus
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
 }
 
@@ -285,6 +287,16 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusUnfilled)
 	case "LOANED":
 		status = append(status, iso18626.TypeStatusLoaned)
+	case "ERROR":
+		log.Warn("handleSupplierRequest ERROR")
+		app.handleRequestError(&illRequest.Header, role.Supplier, "MOCK ERROR", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		return
+	case "HTTP-ERROR-400":
+		http.Error(w, "MOCK HTTP-ERROR-400", http.StatusBadRequest)
+		return
+	case "HTTP-ERROR-500":
+		http.Error(w, "MOCK HTTP-ERROR-500", http.StatusInternalServerError)
+		return
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
