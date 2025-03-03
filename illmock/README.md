@@ -43,9 +43,13 @@ The scenario is inspected in the supplier request
 # ILL flows
 
 History of ILL messages can be retrieved at the `/api/flows` endpoint.
+This endpoint takes 3 optional query parameters: `role`, `supplier` and `requester`
+which limits the result by role, supplier agency ID and requester agency
+ID respectively.
+
 For example:
 
-    curl http://localhost:8081/api/flows
+    curl http://localhost:8081/api/flows?supplier=myid
 
 # SRU service
 
