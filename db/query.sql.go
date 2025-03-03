@@ -89,6 +89,15 @@ func (q *Queries) DeleteAllOwnedSymbols(ctx context.Context, owner uuid.UUID) er
 	return err
 }
 
+const deleteEntry = `-- name: DeleteEntry :exec
+DELETE from entries where id = $1
+`
+
+func (q *Queries) DeleteEntry(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEntry, id)
+	return err
+}
+
 const deleteOtherOwnedServiceEndpoints = `-- name: DeleteOtherOwnedServiceEndpoints :exec
 DELETE FROM service_endpoints WHERE entry = $1 AND ID <> ALL($2::uuid[])
 `

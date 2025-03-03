@@ -180,7 +180,7 @@ func testCase(t *testing.T, c httpTestCase) {
 		}
 	}
 
-	if c.refetchFile != "" {
+	if c.refetchFile != "" || c.refetchStatus != 0 {
 		var refetchEndpoint string
 		if c.refetchEndpoint != "" {
 			refetchEndpoint = c.refetchEndpoint
@@ -191,23 +191,30 @@ func testCase(t *testing.T, c httpTestCase) {
 			refetchEndpoint += "/" + idOfPosted
 		}
 		reres, redata := jsonReq(t, http.MethodGet, refetchEndpoint, "")
-		if reres.StatusCode >= 400 {
+		if c.refetchStatus != 0 {
+			if reres.StatusCode != c.refetchStatus {
+				t.Errorf(pre+"Expected response status of %d when refetching, got %d and body of %s", c.refetchStatus, reres.StatusCode, redata)
+			}
+		} else if reres.StatusCode >= 400 {
 			t.Errorf(pre+"Expected response status of OK when refetching, got %d and body of %s", reres.StatusCode, redata)
 		}
-		var expectedRefetchResponse string
-		if idOfPosted != "" {
-			expectedRefetchResponse, err = loadApiTmpl(c.refetchFile, map[string]any{"id": idOfPosted})
-			if err != nil {
-				t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
-			}
-		} else {
-			expectedRefetchResponse, err = loadApiFixture(c.refetchFile)
-			if err != nil {
-				t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
-			}
 
+		if c.refetchFile != "" {
+			var expectedRefetchResponse string
+			if idOfPosted != "" {
+				expectedRefetchResponse, err = loadApiTmpl(c.refetchFile, map[string]any{"id": idOfPosted})
+				if err != nil {
+					t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
+				}
+			} else {
+				expectedRefetchResponse, err = loadApiFixture(c.refetchFile)
+				if err != nil {
+					t.Errorf(pre+"Error loading fixture to re-fetch: %v", err)
+				}
+
+			}
+			ja.Assertf(redata, expectedRefetchResponse)
 		}
-		ja.Assertf(redata, expectedRefetchResponse)
 	}
 }
 
@@ -224,6 +231,7 @@ type httpTestCase struct {
 	resFunc         func(*http.Response, string) bool // if defined will need to evaluate to true when passed res
 	refetchFile     string                            // if nonempty a GET will be performed and compared to this
 	refetchEndpoint string                            // alternate endpoint prefix to id for refetch
+	refetchStatus   int
 }
 
 func testCases(t *testing.T, cases []httpTestCase) {
@@ -325,6 +333,13 @@ func TestEntryCases(t *testing.T) {
 			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000001",
 			status:   http.StatusBadRequest,
 			bodyFile: "entry-dupe-sym.patch.req.json",
+		},
+		{
+			name:          "DELETE entry",
+			method:        http.MethodDelete,
+			endpoint:      "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:        http.StatusNoContent,
+			refetchStatus: http.StatusNotFound,
 		},
 	}
 	testCases(t, cases)

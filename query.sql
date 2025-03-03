@@ -34,6 +34,9 @@ SET
   email = @email
 WHERE id = @id;
 
+-- name: DeleteEntry :exec
+DELETE from entries where id = @id;
+
 
 -- name: AuthorityBySymbol :one
 SELECT * FROM authorities

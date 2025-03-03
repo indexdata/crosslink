@@ -309,6 +309,10 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	return UpdateEntry204Response{}, nil
 }
 
-func (ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
+func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
+	err := a.queries.DeleteEntry(ctx, request.Id)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return DeleteEntry204Response{}, nil
 }
