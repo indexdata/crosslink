@@ -99,16 +99,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
-	var statusInfo iso18626.StatusInfo
-	var statusErr error
-	var peer *ill_db.Peer
-	if s, ok := event.EventData.Data["supplierStatus"]; ok {
-		statusInfo, statusErr = c.createStatusInfoFromString(illTrans, s.(string))
-	} else {
-		locSupplier, foundPeer, _ := c.getSupplier(ctx, illTrans)
-		peer = foundPeer
-		statusInfo, statusErr = c.createStatusInfo(illTrans, locSupplier)
-	}
+	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
+	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier)
 
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
@@ -183,7 +175,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 			}
 			message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-			c.updateSelectedSupplierAction(&selected, RequestAction)
+			c.updateSelectedSupplierAction(selected, RequestAction)
 		} else {
 			var action iso18626.TypeAction
 			found, ok := actionMap[illTrans.LastRequesterAction.String]
@@ -197,7 +189,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				Action: action,
 				Note:   "",
 			}
-			c.updateSelectedSupplierAction(&selected, string(action))
+			c.updateSelectedSupplierAction(selected, string(action))
 		}
 		resultData["message"] = message
 		if internalErr != "" {
@@ -214,7 +206,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			}
-			utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selected)))
+			utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 		}
 	}
 
@@ -231,7 +223,7 @@ func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplie
 	}
 }
 
-func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (ill_db.LocatedSupplier, *ill_db.Peer, error) {
+func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
 	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: transaction.ID,
 		SupplierStatus: pgtype.Text{
@@ -240,13 +232,14 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 		},
 	})
 	if err != nil {
-		return ill_db.LocatedSupplier{}, nil, err
+		return nil, nil, err
 	}
 	if len(locatedSuppliers) == 0 {
-		return ill_db.LocatedSupplier{}, nil, errors.New("missing selected supplier")
+		return nil, nil, errors.New("missing selected supplier")
 	}
 	peer, err := c.illRepo.GetPeerById(ctx, locatedSuppliers[0].SupplierID)
-	return locatedSuppliers[0], &peer, err
+	locSup := locatedSuppliers[0]
+	return &locSup, &peer, err
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer, hideRequester bool) iso18626.Header {
@@ -284,27 +277,14 @@ func (c *Iso18626Client) createMessageInfo() iso18626.MessageInfo {
 	}
 }
 
-func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier ill_db.LocatedSupplier) (iso18626.StatusInfo, error) {
-	var status iso18626.TypeStatus
-	if s, ok := statusMap[supplier.LastStatus.String]; ok {
-		status = s
-	} else {
-		return iso18626.StatusInfo{}, errors.New("failed to resolve status for value: " + supplier.LastStatus.String)
-	}
-	return iso18626.StatusInfo{
-		Status: status,
-		LastChange: utils.XSDDateTime{
-			Time: transaction.Timestamp.Time,
-		},
-	}, nil
-}
-
-func (c *Iso18626Client) createStatusInfoFromString(transaction ill_db.IllTransaction, statusString string) (iso18626.StatusInfo, error) {
-	var status iso18626.TypeStatus
-	if s, ok := statusMap[statusString]; ok {
-		status = s
-	} else {
-		return iso18626.StatusInfo{}, errors.New("failed to resolve status for value: " + statusString)
+func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier) (iso18626.StatusInfo, error) {
+	var status = iso18626.TypeStatusUnfilled
+	if supplier != nil {
+		if s, ok := statusMap[supplier.LastStatus.String]; ok {
+			status = s
+		} else {
+			return iso18626.StatusInfo{}, errors.New("failed to resolve status for value: " + supplier.LastStatus.String)
+		}
 	}
 	return iso18626.StatusInfo{
 		Status: status,

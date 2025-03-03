@@ -47,7 +47,6 @@ const (
 type EventData struct {
 	Timestamp       pgtype.Timestamp
 	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
-	Data            map[string]any
 }
 
 type EventResult struct {

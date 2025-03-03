@@ -24,7 +24,7 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, e
 	if event.EventStatus == events.EventStatusSuccess {
 		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
 	} else {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{Data: map[string]any{"supplierStatus": iso18626.TypeStatusUnfilled}}))
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}))
 	}
 }
 
@@ -32,7 +32,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 	if event.EventStatus == events.EventStatusSuccess {
 		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}))
 	} else {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{Data: map[string]any{"supplierStatus": iso18626.TypeStatusUnfilled}}))
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}))
 	}
 }
 
