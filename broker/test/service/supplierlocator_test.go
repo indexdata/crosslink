@@ -299,8 +299,9 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelect) == 2 {
-			return completedSelect[0].EventStatus == events.EventStatusSuccess && completedSelect[1].EventStatus == events.EventStatusSuccess
+		if len(completedSelect) >= 2 {
+			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {

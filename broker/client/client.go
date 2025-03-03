@@ -211,11 +211,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
-				if isRequest && response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
-					status = events.EventStatusProblem
-				} else if !isRequest && response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
-					status = events.EventStatusProblem
-				}
+				status = c.checkConfirmationError(isRequest, response, status)
 			}
 		}
 		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
@@ -304,6 +300,14 @@ func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, sup
 	}, nil
 }
 
+func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
+	if isRequest && response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		return events.EventStatusProblem
+	} else if !isRequest && response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		return events.EventStatusProblem
+	}
+	return defaultStatus
+}
 func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
 	breq := utils.Must(xml.Marshal(msg))
 	if breq == nil {
