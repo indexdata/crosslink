@@ -105,6 +105,9 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 		if err != nil {
 			ctx.Logger().Error("failed to lookup directories: "+strings.Join(symbols, ","), "error", err)
+			if len(suppliersToAdd) == 0 {
+				return logErrorAndReturnResult(ctx, "failed to lookup directories: "+strings.Join(symbols, ","), err)
+			}
 		} else if len(directories) == 0 {
 			ctx.Logger().Error("could not find directories: " + strings.Join(symbols, ","))
 		} else {
@@ -256,7 +259,7 @@ func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err err
 
 func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Info(message)
-	return events.EventStatusProblem, getEventResult(map[string]any{"message": message})
+	return events.EventStatusProblem, getEventResult(map[string]any{"message": message, "kindOfProblem": "no-suppliers"})
 }
 
 func getEventResult(resultData map[string]any) *events.EventResult {

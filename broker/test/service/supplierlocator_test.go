@@ -308,8 +308,8 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
-			eventStatus: events.EventStatusProblem,
-			message:     "failed to add any supplier from: error",
+			eventStatus: events.EventStatusError,
+			message:     "failed to lookup directories: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
@@ -327,6 +327,12 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					completedTask = append(completedTask, event)
+				}
+			})
+			var messageRequester []events.Event
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+				if illTrId == event.IllTransactionID {
+					messageRequester = append(messageRequester, event)
 				}
 			})
 
@@ -350,6 +356,12 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			errorMessage, _ := event.ResultData.Data["message"].(string)
 			if errorMessage != tt.message {
 				t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+			}
+
+			if !test.WaitForPredicateToBeTrue(func() bool {
+				return len(messageRequester) == 1
+			}) {
+				t.Error("expected to have unfilled message send to requester")
 			}
 		})
 	}
@@ -378,6 +390,12 @@ func TestSelectSupplierErrors(t *testing.T) {
 					completedTask = append(completedTask, event)
 				}
 			})
+			var messageRequester []events.Event
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+				if illTrId == event.IllTransactionID {
+					messageRequester = append(messageRequester, event)
+				}
+			})
 
 			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -399,6 +417,12 @@ func TestSelectSupplierErrors(t *testing.T) {
 			errorMessage, _ := event.ResultData.Data["message"].(string)
 			if errorMessage != tt.message {
 				t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+			}
+
+			if !test.WaitForPredicateToBeTrue(func() bool {
+				return len(messageRequester) == 1
+			}) {
+				t.Error("expected to have unfilled message send to requester")
 			}
 		})
 	}
