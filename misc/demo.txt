@@ -6,7 +6,11 @@
 
   https://broker.dev-us-east-1.indexdata.com/peers
 
-2. ILL transactions are created in the broker with ISO18626 Request messages.
+2. ILL transactions are created in the broker with ISO18626 Request messages and the broker uses a designated SRU endpoint to lookup holdings.
+   The ILL mock includes an test SRU endpoint that returns auto-generated holdings:
+
+  https://illmock.dev-us-east-1.indexdata.com/sru?query=id=UNFILLED%3bLOANED&maximumRecords=100
+  
    In this demo, we will first create a patron request in the ILL mock which will then create a loan request in the broker:
 
   - pre-canned request with one supplier which does not supply:
