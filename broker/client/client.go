@@ -158,6 +158,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
+	var isRequest = illTrans.LastRequesterAction.String == RequestAction
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
@@ -167,7 +168,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	} else {
 		var message = &iso18626.ISO18626Message{}
 		internalErr := ""
-		if illTrans.LastRequesterAction.String == RequestAction {
+		if isRequest {
 			message.Request = &iso18626.Request{
 				Header:                c.createMessageHeader(illTrans, peer, true),
 				BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
@@ -210,11 +211,23 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				resultData["error"] = err
 				ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
+			} else {
+				if isRequest && response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+					status = events.EventStatusProblem
+				} else if !isRequest && response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+					status = events.EventStatusProblem
+				}
 			}
 			utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 		}
 	}
-
+	if status != events.EventStatusSuccess {
+		if isRequest {
+			resultData["kindOfProblem"] = "requestFailed"
+		} else {
+			resultData["kindOfProblem"] = "requestingAgencyMessageFailed"
+		}
+	}
 	return status, &events.EventResult{
 		Data: resultData,
 	}

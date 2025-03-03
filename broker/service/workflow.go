@@ -61,6 +61,14 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}))
 }
 
+func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
+	if event.EventStatus != events.EventStatusSuccess {
+		if p, ok := event.ResultData.Data["kindOfProblem"]; ok && p.(string) == "requestFailed" {
+			Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
+		}
+	}
+}
+
 func Must(ctx extctx.ExtendedContext, err error) {
 	if err != nil {
 		ctx.Logger().Error(err.Error())
