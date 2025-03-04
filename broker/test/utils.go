@@ -107,10 +107,7 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 		IllTransactionID: illTransId,
 		SupplierID:       supplierId,
 		Ordinal:          0,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
+		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 		LastStatus: pgtype.Text{
 			String: status,
 			Valid:  true,

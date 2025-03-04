@@ -220,12 +220,6 @@ func TestLocateSuppliersOrder(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
-	var completedSelect []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			completedSelect = append(completedSelect, event)
-		}
-	})
 	sup1 := getOrCreatePeer(t, illRepo, "isil:sup1", 3, 4)
 	sup2 := getOrCreatePeer(t, illRepo, "isil:sup2", 2, 4)
 
@@ -253,6 +247,75 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	// Clean
 	getOrCreatePeer(t, illRepo, "isil:sup1", 0, 0)
 	getOrCreatePeer(t, illRepo, "isil:sup2", 0, 0)
+}
+
+func TestLocateSupplierUnreachable(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := getIllTransId(t, illRepo, "LOANED;LOANED")
+	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
+	if err != nil {
+		t.Error("failed to get ill transaction by id: " + err.Error())
+	}
+	illTr.LastRequesterAction = pgtype.Text{
+		String: "Request",
+		Valid:  true,
+	}
+	illTr, err = illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams(illTr))
+	if err != nil {
+		t.Error("failed to update ill transaction: " + err.Error())
+	}
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			completedTask = append(completedTask, event)
+		}
+	})
+	var messageSupplier []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			messageSupplier = append(messageSupplier, event)
+		}
+	})
+	var completedSelect []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			completedSelect = append(completedSelect, event)
+		}
+	})
+
+	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedSelect) >= 2 {
+			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("expected to have select supplier event twice and successful")
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(messageSupplier) > 0 {
+			event, _ = eventRepo.GetEvent(appCtx, messageSupplier[0].ID)
+			return event.EventStatus == events.EventStatusProblem
+		}
+		return false
+	}) {
+		t.Error("expected to have failed request to supplier")
+	}
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
@@ -561,17 +624,11 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("ill transaction last requester status should be ShippedReturn not %s",
 			illTrans.LastRequesterAction.String)
 	}
-	suppliers, _ := illRepo.GetLocatedSupplierByIllTransactionAndStatus(appCtx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-		IllTransactionID: illId,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
-	})
+	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
 
-	if suppliers[0].LastStatus.String != "LoanCompleted" {
+	if supplier.LastStatus.String != "LoanCompleted" {
 		t.Errorf("selected supplier last status should be LoanCompleted not %s",
-			suppliers[0].LastStatus.String)
+			supplier.LastStatus.String)
 	}
 }
 

@@ -2,6 +2,7 @@ package ill_db
 
 import (
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type IllTransactionData struct {
@@ -23,3 +24,12 @@ const (
 	RefreshPolicyNever       RefreshPolicy = "never"
 	RefreshPolicyTransaction RefreshPolicy = "transaction"
 )
+
+const SupplierStatusSelected = "selected"
+
+var SupplierStatusSelectedPg = pgtype.Text{
+	String: SupplierStatusSelected,
+	Valid:  true,
+}
+
+const RequestAction = "Request"

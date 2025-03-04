@@ -207,10 +207,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
+		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 	})
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "could not find selected suppliers", err)
@@ -241,10 +238,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 		return logProblemAndReturnResult(ctx, "no suppliers with new status")
 	}
 	locSup := suppliers[0]
-	locSup.SupplierStatus = pgtype.Text{
-		String: "selected",
-		Valid:  true,
-	}
+	locSup.SupplierStatus = ill_db.SupplierStatusSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
