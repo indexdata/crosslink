@@ -93,6 +93,10 @@ func (r *MockIllRepositorySuccess) DeletePeer(ctx extctx.ExtendedContext, id str
 	return nil
 }
 
+func (r *MockIllRepositorySuccess) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, nil
+}
+
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -144,4 +148,8 @@ func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext) ([]ill_db
 }
 func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id string) error {
 	return errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }

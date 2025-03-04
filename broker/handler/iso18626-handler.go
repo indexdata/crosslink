@@ -224,7 +224,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	//TODO we need to delay the confirmation until the supplier has responded
 	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, nil)
 	writeResponse(resmsg, w)
 }

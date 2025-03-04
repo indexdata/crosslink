@@ -72,7 +72,7 @@ func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRep
 		return nil, nil, nil, err
 	}
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), holdingsAdapter)
-	workflowManager := service.CreateWorkflowManager(eventBus)
+	workflowManager := service.CreateWorkflowManager(eventBus, illRepo)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
 	return eventBus, illRepo, eventRepo, nil
@@ -172,6 +172,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, workflowManager.RequesterMessageReceived)
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))

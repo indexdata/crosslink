@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISO 18626 Request Form</title>
+</head>
+<body>
+    <h1>ISO 18626 Request Form</h1>
+    <form action="/submit" method="post">
+        <!-- Header Section -->
+        <fieldset>
+            <legend>Header</legend>
+            <label for="header.supplyingAgencyIdType">Supplying Agency ID Type: *</label>
+            <input type="text" id="header.supplyingAgencyIdType" name="header.supplyingAgencyIdType" required><br><br>
+
+            <label for="header.supplyingAgencyIdValue">Supplying Agency ID Value: *</label>
+            <input type="text" id="header.supplyingAgencyIdValue" name="header.supplyingAgencyIdValue" required><br><br>
+
+            <label for="header.requestingAgencyIdType">Requesting Agency ID Type: *</label>
+            <input type="text" id="header.requestingAgencyIdType" name="header.requestingAgencyIdType" required><br><br>
+
+            <label for="header.requestingAgencyIdValue">Requesting Agency ID Value: *</label>
+            <input type="text" id="header.requestingAgencyIdValue" name="header.requestingAgencyIdValue" required><br><br>
+
+            <label for="header.multipleItemRequestId">Multiple Item Request ID:</label>
+            <input type="text" id="header.multipleItemRequestId" name="header.multipleItemRequestId"><br><br>
+
+            <label for="header.timestamp">Timestamp: *</label>
+            <input type="datetime-local" id="header.timestamp" name="header.timestamp" required><br><br>
+
+            <label for="header.requestingAgencyRequestId">Requesting Agency Request ID: *</label>
+            <input type="text" id="header.requestingAgencyRequestId" name="header.requestingAgencyRequestId" required><br><br>
+        </fieldset>
+
+        <!-- Bibliographic Info Section -->
+        <fieldset>
+            <legend>Bibliographic Info</legend>
+            <label for="bibliographicInfo.supplierUniqueRecordId">Supplier Unique Record ID:</label>
+            <input type="text" id="bibliographicInfo.supplierUniqueRecordId" name="bibliographicInfo.supplierUniqueRecordId"><br><br>
+
+            <label for="bibliographicInfo.title">Title: *</label>
+            <input type="text" id="bibliographicInfo.title" name="bibliographicInfo.title" required><br><br>
+
+            <label for="bibliographicInfo.author">Author:</label>
+            <input type="text" id="bibliographicInfo.author" name="bibliographicInfo.author"><br><br>
+
+            <label for="bibliographicInfo.subtitle">Subtitle:</label>
+            <input type="text" id="bibliographicInfo.subtitle" name="bibliographicInfo.subtitle"><br><br>
+
+            <label for="bibliographicInfo.seriesTitle">Series Title:</label>
+            <input type="text" id="bibliographicInfo.seriesTitle" name="bibliographicInfo.seriesTitle"><br><br>
+
+            <label for="bibliographicInfo.edition">Edition:</label>
+            <input type="text" id="bibliographicInfo.edition" name="bibliographicInfo.edition"><br><br>
+
+            <label for="bibliographicInfo.titleOfComponent">Title of Component:</label>
+            <input type="text" id="bibliographicInfo.titleOfComponent" name="bibliographicInfo.titleOfComponent"><br><br>
+
+            <label for="bibliographicInfo.authorOfComponent">Author of Component:</label>
+            <input type="text" id="bibliographicInfo.authorOfComponent" name="bibliographicInfo.authorOfComponent"><br><br>
+
+            <label for="bibliographicInfo.volume">Volume:</label>
+            <input type="text" id="bibliographicInfo.volume" name="bibliographicInfo.volume"><br><br>
+
+            <label for="bibliographicInfo.issue">Issue:</label>
+            <input type="text" id="bibliographicInfo.issue" name="bibliographicInfo.issue"><br><br>
+
+            <label for="bibliographicInfo.pagesRequested">Pages Requested:</label>
+            <input type="text" id="bibliographicInfo.pagesRequested" name="bibliographicInfo.pagesRequested"><br><br>
+
+            <label for="bibliographicInfo.estimatedNoPages">Estimated Number of Pages:</label>
+            <input type="text" id="bibliographicInfo.estimatedNoPages" name="bibliographicInfo.estimatedNoPages"><br><br>
+
+            <label for="bibliographicInfo.bibliographicItemIdentifier">Bibliographic Item Identifier:</label>
+            <input type="text" id="bibliographicInfo.bibliographicItemIdentifier" name="bibliographicInfo.bibliographicItemIdentifier"><br><br>
+
+            <label for="bibliographicInfo.bibliographicItemIdentifierCode">Bibliographic Item Identifier Code:</label>
+            <input type="text" id="bibliographicInfo.bibliographicItemIdentifierCode" name="bibliographicInfo.bibliographicItemIdentifierCode"><br><br>
+
+            <label for="bibliographicInfo.sponsor">Sponsor:</label>
+            <input type="text" id="bibliographicInfo.sponsor" name="bibliographicInfo.sponsor"><br><br>
+
+            <label for="bibliographicInfo.informationSource">Information Source:</label>
+            <input type="text" id="bibliographicInfo.informationSource" name="bibliographicInfo.informationSource"><br><br>
+
+            <label for="bibliographicInfo.bibliographicRecordIdentifierCode">Bibliographic Record Identifier Code:</label>
+            <input type="text" id="bibliographicInfo.bibliographicRecordIdentifierCode" name="bibliographicInfo.bibliographicRecordIdentifierCode"><br><br>
+
+            <label for="bibliographicInfo.bibliographicRecordIdentifier">Bibliographic Record Identifier:</label>
+            <input type="text" id="bibliographicInfo.bibliographicRecordIdentifier" name="bibliographicInfo.bibliographicRecordIdentifier"><br><br>
+        </fieldset>
+
+        <!-- Publication Info Section -->
+        <fieldset>
+            <legend>Publication Info</legend>
+            <label for="publicationInfo.publisher">Publisher:</label>
+            <input type="text" id="publicationInfo.publisher" name="publicationInfo.publisher"><br><br>
+
+            <label for="publicationInfo.publicationType">Publication Type:</label>
+            <input type="text" id="publicationInfo.publicationType" name="publicationInfo.publicationType"><br><br>
+
+            <label for="publicationInfo.publicationDate">Publication Date:</label>
+            <input type="date" id="publicationInfo.publicationDate" name="publicationInfo.publicationDate"><br><br>
+
+            <label for="publicationInfo.placeOfPublication">Place of Publication:</label>
+            <input type="text" id="publicationInfo.placeOfPublication" name="publicationInfo.placeOfPublication"><br><br>
+        </fieldset>
+
+        <!-- Service Info Section -->
+        <fieldset>
+            <legend>Service Info</legend>
+            <label for="serviceInfo.requestType">Request Type: *</label>
+            <select id="serviceInfo.requestType" name="serviceInfo.requestType" required>
+                <option value="New">New</option>
+                <option value="Retry">Retry</option>
+                <option value="Reminder">Reminder</option>
+            </select><br><br>
+
+            <label for="serviceInfo.requestSubType">Request Sub Type:</label>
+            <select id="serviceInfo.requestSubType" name="serviceInfo.requestSubType">
+                <option value="BookingRequest">BookingRequest</option>
+                <option value="MultipleItemRequest">MultipleItemRequest</option>
+                <option value="PatronRequest">PatronRequest</option>
+                <option value="TransferRequest">TransferRequest</option>
+                <option value="SupplyingLibrarysChoice">SupplyingLibrarysChoice</option>
+            </select><br><br>
+
+            <label for="serviceInfo.requestingAgencyPreviousRequestId">Requesting Agency Previous Request ID:</label>
+            <input type="text" id="serviceInfo.requestingAgencyPreviousRequestId" name="serviceInfo.requestingAgencyPreviousRequestId"><br><br>
+
+            <label for="serviceInfo.serviceType">Service Type: *</label>
+            <select id="serviceInfo.serviceType" name="serviceInfo.serviceType" required>
+                <option value="Copy">Copy</option>
+                <option value="Loan">Loan</option>
+                <option value="CopyOrLoan">CopyOrLoan</option>
+            </select><br><br>
+
+            <label for="serviceInfo.serviceLevel">Service Level:</label>
+            <input type="text" id="serviceInfo.serviceLevel" name="serviceInfo.serviceLevel"><br><br>
+
+            <label for="serviceInfo.preferredFormat">Preferred Format:</label>
+            <input type="text" id="serviceInfo.preferredFormat" name="serviceInfo.preferredFormat"><br><br>
+
+            <label for="serviceInfo.needBeforeDate">Need Before Date:</label>
+            <input type="date" id="serviceInfo.needBeforeDate" name="serviceInfo.needBeforeDate"><br><br>
+
+            <label for="serviceInfo.copyrightCompliance">Copyright Compliance:</label>
+            <input type="text" id="serviceInfo.copyrightCompliance" name="serviceInfo.copyrightCompliance"><br><br>
+
+            <label for="serviceInfo.anyEdition">Any Edition:</label>
+            <select id="serviceInfo.anyEdition" name="serviceInfo.anyEdition">
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select><br><br>
+
+            <label for="serviceInfo.startDate">Start Date:</label>
+            <input type="date" id="serviceInfo.startDate" name="serviceInfo.startDate"><br><br>
+
+            <label for="serviceInfo.endDate">End Date:</label>
+            <input type="date" id="serviceInfo.endDate" name="serviceInfo.endDate"><br><br>
+
+            <label for="serviceInfo.note">Note:</label>
+            <input type="text" id="serviceInfo.note" name="serviceInfo.note"><br><br>
+        </fieldset>
+
+        <!-- Supplier Info Section -->
+        <fieldset>
+            <legend>Supplier Info</legend>
+            <label for="supplierInfo.sortOrder">Sort Order:</label>
+            <input type="number" id="supplierInfo.sortOrder" name="supplierInfo.sortOrder"><br><br>
+
+            <label for="supplierInfo.supplierCode">Supplier Code:</label>
+            <input type="text" id="supplierInfo.supplierCode" name="supplierInfo.supplierCode"><br><br>
+
+            <label for="supplierInfo.supplierDescription">Supplier Description:</label>
+            <input type="text" id="supplierInfo.supplierDescription" name="supplierInfo.supplierDescription"><br><br>
+
+            <label for="supplierInfo.callNumber">Call Number:</label>
+            <input type="text" id="supplierInfo.callNumber" name="supplierInfo.callNumber"><br><br>
+
+            <label for="supplierInfo.summaryHoldings">Summary Holdings:</label>
+            <input type="text" id="supplierInfo.summaryHoldings" name="supplierInfo.summaryHoldings"><br><br>
+
+            <label for="supplierInfo.availabilityNote">Availability Note:</label>
+            <input type="text" id="supplierInfo.availabilityNote" name="supplierInfo.availabilityNote"><br><br>
+        </fieldset>
+
+        <!-- Requested Delivery Info Section -->
+        <fieldset>
+            <legend>Requested Delivery Info</legend>
+            <label for="requestedDeliveryInfo.sortOrder">Sort Order:</label>
+            <input type="number" id="requestedDeliveryInfo.sortOrder" name="requestedDeliveryInfo.sortOrder"><br><br>
+
+            <label for="requestedDeliveryInfo.address">Address:</label>
+            <input type="text" id="requestedDeliveryInfo.address" name="requestedDeliveryInfo.address"><br><br>
+        </fieldset>
+
+        <!-- Requesting Agency Info Section -->
+        <fieldset>
+            <legend>Requesting Agency Info</legend>
+            <label for="requestingAgencyInfo.name">Name:</label>
+            <input type="text" id="requestingAgencyInfo.name" name="requestingAgencyInfo.name"><br><br>
+
+            <label for="requestingAgencyInfo.contactName">Contact Name:</label>
+            <input type="text" id="requestingAgencyInfo.contactName" name="requestingAgencyInfo.contactName"><br><br>
+
+            <label for="requestingAgencyInfo.address">Address:</label>
+            <input type="text" id="requestingAgencyInfo.address" name="requestingAgencyInfo.address"><br><br>
+        </fieldset>
+
+        <!-- Patron Info Section -->
+        <fieldset>
+            <legend>Patron Info</legend>
+            <label for="patronInfo.patronId">Patron ID:</label>
+            <input type="text" id="patronInfo.patronId" name="patronInfo.patronId"><br><br>
+
+            <label for="patronInfo.surname">Surname:</label>
+            <input type="text" id="patronInfo.surname" name="patronInfo.surname"><br><br>
+
+            <label for="patronInfo.givenName">Given Name:</label>
+            <input type="text" id="patronInfo.givenName" name="patronInfo.givenName"><br><br>
+
+            <label for="patronInfo.patronType">Patron Type:</label>
+            <input type="text" id="patronInfo.patronType" name="patronInfo.patronType"><br><br>
+
+            <label for="patronInfo.sendToPatron">Send to Patron:</label>
+            <select id="patronInfo.sendToPatron" name="patronInfo.sendToPatron">
+                <option value="Y">Yes</option>
+                <option value="N">No</option>
+            </select><br><br>
+
+            <label for="patronInfo.address">Address:</label>
+            <input type="text" id="patronInfo.address" name="patronInfo.address"><br><br>
+        </fieldset>
+
+        <!-- Billing Info Section -->
+        <fieldset>
+            <legend>Billing Info</legend>
+            <label for="billingInfo.paymentMethod">Payment Method:</label>
+            <input type="text" id="billingInfo.paymentMethod" name="billingInfo.paymentMethod"><br><br>
+
+            <label for="billingInfo.maximumCosts">Maximum Costs:</label>
+            <input type="text" id="billingInfo.maximumCosts" name="billingInfo.maximumCosts"><br><br>
+
+            <label for="billingInfo.billingMethod">Billing Method:</label>
+            <input type="text" id="billingInfo.billingMethod" name="billingInfo.billingMethod"><br><br>
+
+            <label for="billingInfo.billingName">Billing Name:</label>
+            <input type="text" id="billingInfo.billingName" name="billingInfo.billingName"><br><br>
+
+            <!-- Address Section for Billing Info -->
+            <fieldset>
+                <legend>Billing Address</legend>
+                <label for="billingInfo.address.electronicAddressType">Electronic Address Type:</label>
+                <input type="text" id="billingInfo.address.electronicAddressType" name="billingInfo.address.electronicAddressType"><br><br>
+
+                <label for="billingInfo.address.electronicAddressData">Electronic Address Data:</label>
+                <input type="text" id="billingInfo.address.electronicAddressData" name="billingInfo.address.electronicAddressData"><br><br>
+
+                <label for="billingInfo.address.line1">Line 1:</label>
+                <input type="text" id="billingInfo.address.line1" name="billingInfo.address.line1"><br><br>
+
+                <label for="billingInfo.address.line2">Line 2:</label>
+                <input type="text" id="billingInfo.address.line2" name="billingInfo.address.line2"><br><br>
+
+                <label for="billingInfo.address.locality">Locality:</label>
+                <input type="text" id="billingInfo.address.locality" name="billingInfo.address.locality"><br><br>
+
+                <label for="billingInfo.address.postalCode">Postal Code:</label>
+                <input type="text" id="billingInfo.address.postalCode" name="billingInfo.address.postalCode"><br><br>
+
+                <label for="billingInfo.address.region">Region:</label>
+                <input type="text" id="billingInfo.address.region" name="billingInfo.address.region"><br><br>
+
+                <label for="billingInfo.address.country">Country:</label>
+                <input type="text" id="billingInfo.address.country" name="billingInfo.address.country"><br><br>
+            </fieldset>
+        </fieldset>
+
+        <input type="submit" value="Submit">
+    </form>
+</body>
+</html>
