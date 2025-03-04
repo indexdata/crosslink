@@ -203,9 +203,10 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	return &response, nil
 }
 
-func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
-	patronReqHeader := illRequest.Header
+func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+	illRequest := illMessage.Request
 
+	patronReqHeader := illRequest.Header
 	requester := &app.requester
 	msg := createRequest()
 	msg.Request.Header = illRequest.Header
@@ -242,6 +243,8 @@ func (app *MockApp) handlePatronRequest(illRequest *iso18626.Request, w http.Res
 		header.SupplyingAgencyId.AgencyIdValue = requester.supplyingAgencyId
 	}
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+
+	app.logIncomingReq(role.Requester, header, illMessage)
 
 	requesterInfo := &requesterInfo{action: action, supplierUrl: app.peerUrl}
 	for _, supplierInfo := range illRequest.SupplierInfo {
@@ -382,6 +385,12 @@ func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *su
 	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusCancelled
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	for i := 0; i < state.index; i++ {
+		if state.status[i] == iso18626.TypeStatusLoaned {
+			answer = iso18626.TypeYesNoN
+			break
+		}
+	}
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
 	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
 	if err != nil {
@@ -600,8 +609,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			if illRequest.ServiceInfo != nil {
 				subtypes := illRequest.ServiceInfo.RequestSubType
 				if slices.Contains(subtypes, iso18626.TypeRequestSubTypePatronRequest) {
-					app.logIncomingReq(role.Requester, &illRequest.Header, &illMessage)
-					app.handlePatronRequest(illRequest, w)
+					app.handlePatronRequest(&illMessage, w)
 					return
 				}
 			}

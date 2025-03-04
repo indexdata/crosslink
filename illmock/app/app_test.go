@@ -532,8 +532,10 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request scenarios", func(t *testing.T) {
 		app.flowsApi.Init()
-		requesterId := uuid.NewString()
+		requesterIds := []string{}
 		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {
+			requesterId := uuid.NewString()
+			requesterIds = append(requesterIds, requesterId)
 			msg := createPatronRequest()
 			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
 			msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
@@ -553,18 +555,30 @@ func TestService(t *testing.T) {
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
 		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get(apiUrl + "?requester=" + requesterId)
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		defer resp.Body.Close()
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<serviceInfo>")
-		var flowR flows.Flows
-		err = xml.Unmarshal(buf, &flowR)
-		assert.Nil(t, err)
-		assert.Len(t, flowR.Flows, 9)
+		for i, requesterId := range requesterIds {
+			resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
+			assert.Nil(t, err)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+			defer resp.Body.Close()
+			buf, err := io.ReadAll(resp.Body)
+			assert.Nil(t, err)
+			var flowR flows.Flows
+			err = xml.Unmarshal(buf, &flowR)
+			assert.Nil(t, err)
+			assert.Len(t, flowR.Flows, 1)
+			assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
+			assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
+			if i == 0 {
+				assert.Len(t, flowR.Flows[0].Message, 14)
+			} else if i == 1 {
+				assert.Len(t, flowR.Flows[0].Message, 8)
+			} else if i == 2 {
+				assert.Len(t, flowR.Flows[0].Message, 6)
+			} else if i == 3 {
+				assert.Len(t, flowR.Flows[0].Message, 12)
+			}
+		}
 	})
 
 	t.Run("Patron request cancel no", func(t *testing.T) {
@@ -591,7 +605,7 @@ func TestService(t *testing.T) {
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
 		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get(apiUrl + "?requester=" + requesterId)
+		resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
@@ -602,10 +616,13 @@ func TestService(t *testing.T) {
 		var flowR flows.Flows
 		err = xml.Unmarshal(buf, &flowR)
 		assert.Nil(t, err)
-		assert.Len(t, flowR.Flows, 3)
-		assert.Len(t, flowR.Flows[0].Message, 1)
-		assert.Len(t, flowR.Flows[1].Message, 8)
-		assert.Len(t, flowR.Flows[1].Message, 8)
+		assert.Len(t, flowR.Flows, 1)
+		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
+		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		assert.Equal(t, iso18626.TypeYesNoN, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		assert.Len(t, flowR.Flows[0].Message, 10)
 	})
 
 	t.Run("Patron request cancel yes", func(t *testing.T) {
@@ -632,21 +649,23 @@ func TestService(t *testing.T) {
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
 		time.Sleep(600 * time.Millisecond)
-		resp, err := http.Get(apiUrl + "?requester=" + requesterId)
+		resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		defer resp.Body.Close()
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		assert.Contains(t, string(buf), "<serviceInfo>")
 		var flowR flows.Flows
 		err = xml.Unmarshal(buf, &flowR)
 		assert.Nil(t, err)
-		assert.Len(t, flowR.Flows, 3)
-		assert.Len(t, flowR.Flows[0].Message, 1)
-		assert.Len(t, flowR.Flows[1].Message, 11)
-		assert.Len(t, flowR.Flows[1].Message, 11)
+		assert.Len(t, flowR.Flows, 1)
+		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
+		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		assert.Equal(t, iso18626.TypeYesNoY, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		assert.Len(t, flowR.Flows[0].Message, 12)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
