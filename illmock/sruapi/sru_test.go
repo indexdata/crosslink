@@ -193,22 +193,25 @@ func TestSruService(t *testing.T) {
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 		assert.Equal(t, "42;43", marc.Id)
-		matched := false
+		matched := 0
 		for _, f := range marc.RecordType.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				matched = true
-				assert.Len(t, f.Subfield, 4)
-				assert.Equal(t, "l", f.Subfield[0].Code)
-				assert.Equal(t, "42", string(f.Subfield[0].Text))
-				assert.Equal(t, "s", f.Subfield[1].Code)
-				assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
-				assert.Equal(t, "l", f.Subfield[2].Code)
-				assert.Equal(t, "43", string(f.Subfield[2].Text))
-				assert.Equal(t, "s", f.Subfield[3].Code)
-				assert.Equal(t, "isil:sup2", string(f.Subfield[3].Text))
+				assert.Len(t, f.Subfield, 2)
+				if matched == 0 {
+					assert.Equal(t, "l", f.Subfield[0].Code)
+					assert.Equal(t, "42", string(f.Subfield[0].Text))
+					assert.Equal(t, "s", f.Subfield[1].Code)
+					assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+				} else if matched == 1 {
+					assert.Equal(t, "l", f.Subfield[0].Code)
+					assert.Equal(t, "43", string(f.Subfield[0].Text))
+					assert.Equal(t, "s", f.Subfield[1].Code)
+					assert.Equal(t, "isil:sup2", string(f.Subfield[1].Text))
+				}
+				matched++
 			}
 		}
-		assert.True(t, matched)
+		assert.Equal(t, 2, matched)
 	})
 
 	t.Run("sr2.0 magic: not found", func(t *testing.T) {
@@ -226,14 +229,13 @@ func TestSruService(t *testing.T) {
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 		assert.Equal(t, "not-found", marc.Id)
-		matched := false
+		matched := 0
 		for _, f := range marc.RecordType.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				matched = true
-				assert.Len(t, f.Subfield, 0)
+				matched++
 			}
 		}
-		assert.True(t, matched)
+		assert.Equal(t, 0, matched)
 	})
 
 	t.Run("sr2.0 magic: empty", func(t *testing.T) {
@@ -251,14 +253,13 @@ func TestSruService(t *testing.T) {
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 		assert.Equal(t, "", marc.Id)
-		matched := false
+		matched := 0
 		for _, f := range marc.RecordType.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				matched = true
-				assert.Len(t, f.Subfield, 0)
+				matched++
 			}
 		}
-		assert.True(t, matched)
+		assert.Equal(t, 0, matched)
 	})
 
 	t.Run("sr2.0 magic: error", func(t *testing.T) {
