@@ -3,16 +3,19 @@ package service
 import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
 type WorkflowManager struct {
 	eventBus events.EventBus
+	illRepo  ill_db.IllRepo
 }
 
-func CreateWorkflowManager(eventBus events.EventBus) WorkflowManager {
+func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo) WorkflowManager {
 	return WorkflowManager{
 		eventBus: eventBus,
+		illRepo:  illRepo,
 	}
 }
 
@@ -59,6 +62,19 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
 	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}))
+}
+
+func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
+	if event.EventStatus != events.EventStatusSuccess {
+		selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
+		if err != nil {
+			ctx.Logger().Error("failed to read selected supplier", "error", err)
+			return
+		}
+		if selSup.LastAction.String == ill_db.RequestAction {
+			Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
+		}
+	}
 }
 
 func Must(ctx extctx.ExtendedContext, err error) {

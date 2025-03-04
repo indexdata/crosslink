@@ -1,6 +1,7 @@
 package ill_db
 
 import (
+	"errors"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +20,7 @@ type IllRepo interface {
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error)
+	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 }
 
 type PgIllRepo struct {
@@ -101,4 +103,21 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveL
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplier(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {
+	selSup, err := r.GetLocatedSupplierByIllTransactionAndStatus(ctx, GetLocatedSupplierByIllTransactionAndStatusParams{
+		IllTransactionID: illTransId,
+		SupplierStatus:   SupplierStatusSelectedPg,
+	})
+	if err != nil {
+		return LocatedSupplier{}, err
+	}
+	if len(selSup) == 1 {
+		return selSup[0], err
+	} else if len(selSup) == 0 {
+		return LocatedSupplier{}, errors.New("did not find selected supplier for ill transaction: " + illTransId)
+	} else {
+		return LocatedSupplier{}, errors.New("too many selected suppliers found for ill transaction: " + illTransId)
+	}
 }

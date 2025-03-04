@@ -120,7 +120,8 @@ func TestMessageSupplier(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			_, ok := event.ResultData.Data["response"]
+			return ok
 		}
 		return false
 	}) {

@@ -34,7 +34,6 @@ var statusMap = map[string]iso18626.TypeStatus{
 	string(iso18626.TypeStatusCancelled):              iso18626.TypeStatusCancelled,
 }
 
-var RequestAction = "Request"
 var actionMap = map[string]iso18626.TypeAction{
 	string(iso18626.TypeActionStatusRequest):  iso18626.TypeActionStatusRequest,
 	string(iso18626.TypeActionReceived):       iso18626.TypeActionReceived,
@@ -158,6 +157,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
+	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
@@ -167,7 +167,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	} else {
 		var message = &iso18626.ISO18626Message{}
 		internalErr := ""
-		if illTrans.LastRequesterAction.String == RequestAction {
+		if isRequest {
 			message.Request = &iso18626.Request{
 				Header:                c.createMessageHeader(illTrans, peer, true),
 				BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
@@ -180,7 +180,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 			}
 			message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-			c.updateSelectedSupplierAction(selected, RequestAction)
+			c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
 		} else {
 			var action iso18626.TypeAction
 			found, ok := actionMap[illTrans.LastRequesterAction.String]
@@ -210,11 +210,12 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				resultData["error"] = err
 				ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
+			} else {
+				status = c.checkConfirmationError(isRequest, response, status)
 			}
-			utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 		}
+		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 	}
-
 	return status, &events.EventResult{
 		Data: resultData,
 	}
@@ -229,22 +230,15 @@ func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplie
 }
 
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
-	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-		IllTransactionID: transaction.ID,
-		SupplierStatus: pgtype.Text{
-			String: "selected",
-			Valid:  true,
-		},
-	})
+	selectedSupplier, err := c.illRepo.GetSelectedSupplierForIllTransaction(ctx, transaction.ID)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(locatedSuppliers) == 0 {
-		return nil, nil, errors.New("missing selected supplier")
+	peer, err := c.illRepo.GetPeerById(ctx, selectedSupplier.SupplierID)
+	if err != nil {
+		return nil, nil, err
 	}
-	peer, err := c.illRepo.GetPeerById(ctx, locatedSuppliers[0].SupplierID)
-	locSup := locatedSuppliers[0]
-	return &locSup, &peer, err
+	return &selectedSupplier, &peer, err
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer, hideRequester bool) iso18626.Header {
@@ -302,6 +296,14 @@ func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, sup
 	}, nil
 }
 
+func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
+	if isRequest && response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		return events.EventStatusProblem
+	} else if !isRequest && response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		return events.EventStatusProblem
+	}
+	return defaultStatus
+}
 func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
 	breq := utils.Must(xml.Marshal(msg))
 	if breq == nil {
