@@ -83,8 +83,6 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 	record.Controlfield = append(record.Controlfield, marcxml.ControlFieldType{Text: "123456", Id: "2", Tag: "001"})
 	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "245", Ind1: "1", Ind2: "0",
 		Subfield: []marcxml.SubfieldatafieldType{{Code: "a", Text: "Title record from SRU mock"}}})
-	subFields := []marcxml.SubfieldatafieldType{}
-
 	localIds := strings.Split(id, ";")
 	i := 1
 	for _, localId := range localIds {
@@ -103,12 +101,14 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 			lValue = localId
 			sValue = "isil:sup" + strconv.Itoa(i)
 		}
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)})
-		subFields = append(subFields, marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(sValue)})
+		subFields := []marcxml.SubfieldatafieldType{
+			marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)},
+			marcxml.SubfieldatafieldType{Code: "s", Text: marcxml.SubfieldDataType(sValue)},
+		}
+		record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
+			Subfield: subFields})
 		i++
 	}
-	record.Datafield = append(record.Datafield, marcxml.DataFieldType{Tag: "999", Ind1: "1", Ind2: "1",
-		Subfield: subFields})
 
 	return &record, nil
 }
