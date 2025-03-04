@@ -40,6 +40,13 @@ var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
+type Context struct {
+	EventBus   events.EventBus
+	IllRepo    ill_db.IllRepo
+	EventRepo  events.EventRepo
+	DirAdapter adapter.DirectoryLookupAdapter
+}
+
 func configLog() slog.Handler {
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
 		jsonHandler := slog.NewJSONHandler(os.Stdout, nil)
@@ -50,7 +57,7 @@ func configLog() slog.Handler {
 	}
 }
 
-func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, adapter.DirectoryLookupAdapter, error) {
+func Init(ctx context.Context) (Context, error) {
 	RunMigrateScripts()
 	pool := InitDbPool()
 	eventRepo := CreateEventRepo(pool)
@@ -64,37 +71,42 @@ func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRep
 	})
 	dirAdapter := new(adapter.MockDirectoryLookupAdapter)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return Context{}, err
 	}
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
-	return eventBus, illRepo, eventRepo, dirAdapter, nil
+	return Context{
+		EventBus:   eventBus,
+		IllRepo:    illRepo,
+		EventRepo:  eventRepo,
+		DirAdapter: dirAdapter,
+	}, nil
 }
 
 func Run(ctx context.Context) error {
-	eventBus, illRepo, eventRepo, dirAdapter, err := Init(ctx)
+	context, err := Init(ctx)
 	if err != nil {
 		return err
 	}
-	return StartServer(illRepo, eventRepo, eventBus, dirAdapter)
+	return StartServer(context)
 }
 
-func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) error {
+func StartServer(context Context) error {
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
 
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus, dirAdapter))
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter))
 	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(eventRepo, illRepo)
+	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo)
 	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))

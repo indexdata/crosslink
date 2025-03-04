@@ -44,13 +44,13 @@ func WaitForPredicateToBeTrue(predicate func() bool) bool {
 }
 
 func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
-	eventBus, illRepo, eventRepo, dirAdapter, err := app.Init(ctx)
+	context, err := app.Init(ctx)
 	Expect(err, "failed to init app")
 	go func() {
-		err := app.StartServer(illRepo, eventRepo, eventBus, dirAdapter)
+		err := app.StartServer(context)
 		Expect(err, "failed to start server")
 	}()
-	return eventBus, illRepo, eventRepo
+	return context.EventBus, context.IllRepo, context.EventRepo
 }
 
 func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {

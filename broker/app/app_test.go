@@ -47,6 +47,6 @@ func TestBadHoldingsAdapter(t *testing.T) {
 	defer cancel()
 
 	HOLDINGS_ADAPTER = "bad"
-	_, _, _, _, err := Init(ctx)
+	_, err := Init(ctx)
 	assert.ErrorContains(t, err, "bad value for HOLDINGS_ADAPTER")
 }

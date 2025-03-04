@@ -148,15 +148,15 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			}
 		}
 		if len(symbolsToFetch) > 0 {
-			directories, err := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
+			dirEntries, err := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 				Symbols: symbolsToFetch,
 			})
 			if err != nil {
-				ctx.Logger().Error("failed to get directories by symbols", "symbols", symbolsToFetch, "error", err)
-			} else if len(directories) == 0 {
-				ctx.Logger().Error("did not find directories by symbols", "symbols", symbolsToFetch, "error", err)
+				ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
+			} else if len(dirEntries) == 0 {
+				ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
 			} else {
-				for _, dir := range directories {
+				for _, dir := range dirEntries {
 					peer, loopErr := r.GetPeerBySymbol(ctx, dir.Symbol)
 					if loopErr != nil {
 						if errors.Is(loopErr, pgx.ErrNoRows) {
