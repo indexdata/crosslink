@@ -376,6 +376,24 @@ func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
+func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
+	msg := createSupplyingAgencyMessage()
+	msg.SupplyingAgencyMessage.Header = *header
+	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusCancelled
+	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
+	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
+	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
+	if err != nil {
+		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
+		return
+	}
+	if responseMsg.SupplyingAgencyMessageConfirmation == nil {
+		log.Warn("sendSupplyingAgencyCancel did not receive SupplyingAgencyMessageConfirmation")
+		return
+	}
+}
+
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	time.Sleep(app.supplyDuration)
 
@@ -390,21 +408,12 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 	}
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
-	// if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
-	// 	supplier.delete(header)
-	// }
+	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
+		supplier.delete(header)
+	}
 	log.Info("sendSupplyingAgencyMessage", "status", state.status[state.index], "index", state.index)
 
-	if state.status[state.index] == iso18626.TypeStatusCancelled {
-		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
-		var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
-		for i := 0; i < state.index; i++ {
-			if state.status[i] == iso18626.TypeStatusLoaned {
-				answer = iso18626.TypeYesNoN
-			}
-		}
-		msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
-	} else if state.index == 0 {
+	if state.index == 0 {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
 	} else {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
@@ -454,19 +463,15 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 		log.Warn("sendSupplyingAgencyMessage no key", "key", supplier.getKey(header))
 		return
 	}
-
-	var typeStatus iso18626.TypeStatus
-	if requestingAgencyMessage.Action == iso18626.TypeActionShippedReturn {
-		typeStatus = iso18626.TypeStatusLoanCompleted
-	} else if requestingAgencyMessage.Action == iso18626.TypeActionCancel {
-		typeStatus = iso18626.TypeStatusCancelled
-	} else {
+	if requestingAgencyMessage.Action == iso18626.TypeActionCancel {
+		app.sendSupplyingAgencyCancel(header, state)
+		return
+	}
+	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
 		return
 	}
 	state.index = 0
-	state.status = []iso18626.TypeStatus{typeStatus}
-	// state.status = state.status[:state.index]
-	// state.status = append(state.status, typeStatus)
+	state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
 	go app.sendSupplyingAgencyMessage(header)
 }
 
@@ -516,8 +521,12 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 		supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header)
 	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted ||
-		supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled {
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
+		log.Info("handleIso18626SupplyingAgencyMessage supplier loan completed delete")
+		requester.delete(header)
+	}
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled {
+		log.Info("handleIso18626SupplyingAgencyMessage cancelled delete")
 		requester.delete(header)
 	}
 }

@@ -604,9 +604,8 @@ func TestService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Len(t, flowR.Flows, 3)
 		assert.Len(t, flowR.Flows[0].Message, 1)
-		assert.Len(t, flowR.Flows[1].Message, 9)
-		assert.Len(t, flowR.Flows[1].Message, 9)
-		assert.NotNil(t, err)
+		assert.Len(t, flowR.Flows[1].Message, 8)
+		assert.Len(t, flowR.Flows[1].Message, 8)
 	})
 
 	t.Run("Patron request cancel yes", func(t *testing.T) {
@@ -632,7 +631,7 @@ func TestService(t *testing.T) {
 			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(600 * time.Millisecond)
 		resp, err := http.Get(apiUrl + "?requester=" + requesterId)
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -646,8 +645,8 @@ func TestService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Len(t, flowR.Flows, 3)
 		assert.Len(t, flowR.Flows[0].Message, 1)
-		assert.Len(t, flowR.Flows[1].Message, 9)
-		assert.Len(t, flowR.Flows[1].Message, 9)
+		assert.Len(t, flowR.Flows[1].Message, 11)
+		assert.Len(t, flowR.Flows[1].Message, 11)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
