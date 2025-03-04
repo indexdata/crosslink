@@ -33,6 +33,25 @@ type Authority struct {
 	Symbol string `json:"symbol"`
 }
 
+// Consortium defines model for Consortium.
+type Consortium struct {
+	Entry *openapi_types.UUID `json:"entry,omitempty"`
+
+	// Id Unique identifier
+	Id *openapi_types.UUID `json:"id,omitempty"`
+
+	// Name Display name
+	Name string `json:"name"`
+}
+
+// ConsortiumPatch defines model for ConsortiumPatch.
+type ConsortiumPatch struct {
+	Entry nullable.Nullable[openapi_types.UUID] `json:"entry,omitempty"`
+
+	// Name Display name
+	Name *string `json:"name,omitempty"`
+}
+
 // Entry defines model for Entry.
 type Entry struct {
 	// ContactName Name of contact person
@@ -142,6 +161,15 @@ type GetAuthoritiesParams struct {
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// GetConsortiaParams defines parameters for GetConsortia.
+type GetConsortiaParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit maximum number of results to return
+	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetEntriesParams defines parameters for GetEntries.
 type GetEntriesParams struct {
 	// Q keywords to filter by
@@ -153,6 +181,12 @@ type GetEntriesParams struct {
 
 // AddAuthorityJSONRequestBody defines body for AddAuthority for application/json ContentType.
 type AddAuthorityJSONRequestBody = Authority
+
+// AddConsortiumJSONRequestBody defines body for AddConsortium for application/json ContentType.
+type AddConsortiumJSONRequestBody = Consortium
+
+// UpdateConsortiumJSONRequestBody defines body for UpdateConsortium for application/json ContentType.
+type UpdateConsortiumJSONRequestBody = ConsortiumPatch
 
 // AddEntryJSONRequestBody defines body for AddEntry for application/json ContentType.
 type AddEntryJSONRequestBody = Entry
@@ -168,6 +202,21 @@ type ServerInterface interface {
 	// Creates a new authority
 	// (POST /authorities)
 	AddAuthority(w http.ResponseWriter, r *http.Request)
+	// Returns all consortia
+	// (GET /consortia)
+	GetConsortia(w http.ResponseWriter, r *http.Request, params GetConsortiaParams)
+	// Creates a new consortium
+	// (POST /consortia)
+	AddConsortium(w http.ResponseWriter, r *http.Request)
+	// Delete consortium by ID
+	// (DELETE /consortia/{id})
+	DeleteConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a consortium by ID
+	// (GET /consortia/{id})
+	GetConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Update a consortium
+	// (PATCH /consortia/{id})
+	UpdateConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams)
@@ -237,6 +286,130 @@ func (siw *ServerInterfaceWrapper) AddAuthority(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AddAuthority(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConsortia operation middleware
+func (siw *ServerInterfaceWrapper) GetConsortia(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetConsortiaParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConsortia(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddConsortium operation middleware
+func (siw *ServerInterfaceWrapper) AddConsortium(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddConsortium(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteConsortium operation middleware
+func (siw *ServerInterfaceWrapper) DeleteConsortium(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteConsortium(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConsortium operation middleware
+func (siw *ServerInterfaceWrapper) GetConsortium(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConsortium(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateConsortium operation middleware
+func (siw *ServerInterfaceWrapper) UpdateConsortium(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateConsortium(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -517,6 +690,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc("GET "+options.BaseURL+"/authorities", wrapper.GetAuthorities)
 	m.HandleFunc("POST "+options.BaseURL+"/authorities", wrapper.AddAuthority)
+	m.HandleFunc("GET "+options.BaseURL+"/consortia", wrapper.GetConsortia)
+	m.HandleFunc("POST "+options.BaseURL+"/consortia", wrapper.AddConsortium)
+	m.HandleFunc("DELETE "+options.BaseURL+"/consortia/{id}", wrapper.DeleteConsortium)
+	m.HandleFunc("GET "+options.BaseURL+"/consortia/{id}", wrapper.GetConsortium)
+	m.HandleFunc("PATCH "+options.BaseURL+"/consortia/{id}", wrapper.UpdateConsortium)
 	m.HandleFunc("GET "+options.BaseURL+"/entries", wrapper.GetEntries)
 	m.HandleFunc("POST "+options.BaseURL+"/entries", wrapper.AddEntry)
 	m.HandleFunc("DELETE "+options.BaseURL+"/entries/by-id/{id}", wrapper.DeleteEntry)
@@ -603,6 +781,160 @@ func (response AddAuthoritydefaultTextResponse) VisitAddAuthorityResponse(w http
 	w.WriteHeader(response.StatusCode)
 
 	_, err := w.Write([]byte(response.Body))
+	return err
+}
+
+type GetConsortiaRequestObject struct {
+	Params GetConsortiaParams
+}
+
+type GetConsortiaResponseObject interface {
+	VisitGetConsortiaResponse(w http.ResponseWriter) error
+}
+
+type GetConsortia200JSONResponse []Consortium
+
+func (response GetConsortia200JSONResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetConsortia400TextResponse string
+
+func (response GetConsortia400TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddConsortiumRequestObject struct {
+	Body *AddConsortiumJSONRequestBody
+}
+
+type AddConsortiumResponseObject interface {
+	VisitAddConsortiumResponse(w http.ResponseWriter) error
+}
+
+type AddConsortium201JSONResponse Id
+
+func (response AddConsortium201JSONResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddConsortium400TextResponse string
+
+func (response AddConsortium400TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteConsortiumRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteConsortiumResponseObject interface {
+	VisitDeleteConsortiumResponse(w http.ResponseWriter) error
+}
+
+type DeleteConsortium204Response struct {
+}
+
+func (response DeleteConsortium204Response) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteConsortium400TextResponse string
+
+func (response DeleteConsortium400TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetConsortiumRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetConsortiumResponseObject interface {
+	VisitGetConsortiumResponse(w http.ResponseWriter) error
+}
+
+type GetConsortium200JSONResponse Consortium
+
+func (response GetConsortium200JSONResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetConsortium400TextResponse string
+
+func (response GetConsortium400TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetConsortium404TextResponse string
+
+func (response GetConsortium404TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type UpdateConsortiumRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateConsortiumJSONRequestBody
+}
+
+type UpdateConsortiumResponseObject interface {
+	VisitUpdateConsortiumResponse(w http.ResponseWriter) error
+}
+
+type UpdateConsortium204Response struct {
+}
+
+func (response UpdateConsortium204Response) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UpdateConsortium400TextResponse string
+
+func (response UpdateConsortium400TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type UpdateConsortium404TextResponse string
+
+func (response UpdateConsortium404TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
 	return err
 }
 
@@ -842,6 +1174,21 @@ type StrictServerInterface interface {
 	// Creates a new authority
 	// (POST /authorities)
 	AddAuthority(ctx context.Context, request AddAuthorityRequestObject) (AddAuthorityResponseObject, error)
+	// Returns all consortia
+	// (GET /consortia)
+	GetConsortia(ctx context.Context, request GetConsortiaRequestObject) (GetConsortiaResponseObject, error)
+	// Creates a new consortium
+	// (POST /consortia)
+	AddConsortium(ctx context.Context, request AddConsortiumRequestObject) (AddConsortiumResponseObject, error)
+	// Delete consortium by ID
+	// (DELETE /consortia/{id})
+	DeleteConsortium(ctx context.Context, request DeleteConsortiumRequestObject) (DeleteConsortiumResponseObject, error)
+	// Returns a consortium by ID
+	// (GET /consortia/{id})
+	GetConsortium(ctx context.Context, request GetConsortiumRequestObject) (GetConsortiumResponseObject, error)
+	// Update a consortium
+	// (PATCH /consortia/{id})
+	UpdateConsortium(ctx context.Context, request UpdateConsortiumRequestObject) (UpdateConsortiumResponseObject, error)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error)
@@ -941,6 +1288,148 @@ func (sh *strictHandler) AddAuthority(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AddAuthorityResponseObject); ok {
 		if err := validResponse.VisitAddAuthorityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConsortia operation middleware
+func (sh *strictHandler) GetConsortia(w http.ResponseWriter, r *http.Request, params GetConsortiaParams) {
+	var request GetConsortiaRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConsortia(ctx, request.(GetConsortiaRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConsortia")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConsortiaResponseObject); ok {
+		if err := validResponse.VisitGetConsortiaResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddConsortium operation middleware
+func (sh *strictHandler) AddConsortium(w http.ResponseWriter, r *http.Request) {
+	var request AddConsortiumRequestObject
+
+	var body AddConsortiumJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddConsortium(ctx, request.(AddConsortiumRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddConsortium")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddConsortiumResponseObject); ok {
+		if err := validResponse.VisitAddConsortiumResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteConsortium operation middleware
+func (sh *strictHandler) DeleteConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteConsortiumRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteConsortium(ctx, request.(DeleteConsortiumRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteConsortium")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteConsortiumResponseObject); ok {
+		if err := validResponse.VisitDeleteConsortiumResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetConsortium operation middleware
+func (sh *strictHandler) GetConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetConsortiumRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetConsortium(ctx, request.(GetConsortiumRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetConsortium")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetConsortiumResponseObject); ok {
+		if err := validResponse.VisitGetConsortiumResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateConsortium operation middleware
+func (sh *strictHandler) UpdateConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateConsortiumRequestObject
+
+	request.Id = id
+
+	var body UpdateConsortiumJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateConsortium(ctx, request.(UpdateConsortiumRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateConsortium")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateConsortiumResponseObject); ok {
+		if err := validResponse.VisitUpdateConsortiumResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1119,28 +1608,32 @@ func (sh *strictHandler) GetEntryBySymbol(w http.ResponseWriter, r *http.Request
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"ofltLAAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -21,9 +21,7 @@ components:
           type: string
           format: uuid
           description: Unique identifier
-        contactName:
-          type: string
-        contactEmail:
+        name:
           type: string
         entry:
           type: string

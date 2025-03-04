@@ -14,9 +14,9 @@ type Authority struct {
 }
 
 type Consortium struct {
-	ID             uuid.UUID
-	DirectoryEntry *uuid.UUID
-	Name           *string
+	ID    uuid.UUID
+	Entry *uuid.UUID
+	Name  string
 }
 
 type Entry struct {

@@ -23,6 +23,18 @@ func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authori
 	return i, err
 }
 
+const consortiumById = `-- name: ConsortiumById :one
+SELECT id, entry, name FROM consortia
+WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) ConsortiumById(ctx context.Context, id uuid.UUID) (Consortium, error) {
+	row := q.db.QueryRow(ctx, consortiumById, id)
+	var i Consortium
+	err := row.Scan(&i.ID, &i.Entry, &i.Name)
+	return i, err
+}
+
 const createAuthority = `-- name: CreateAuthority :one
 INSERT INTO authorities (
   symbol
@@ -36,6 +48,27 @@ func (q *Queries) CreateAuthority(ctx context.Context, symbol string) (Authority
 	row := q.db.QueryRow(ctx, createAuthority, symbol)
 	var i Authority
 	err := row.Scan(&i.ID, &i.Symbol)
+	return i, err
+}
+
+const createConsortium = `-- name: CreateConsortium :one
+INSERT INTO consortia (
+  name, entry
+) VALUES (
+  $1, $2
+)
+RETURNING id, entry, name
+`
+
+type CreateConsortiumParams struct {
+	Name  string
+	Entry *uuid.UUID
+}
+
+func (q *Queries) CreateConsortium(ctx context.Context, arg CreateConsortiumParams) (Consortium, error) {
+	row := q.db.QueryRow(ctx, createConsortium, arg.Name, arg.Entry)
+	var i Consortium
+	err := row.Scan(&i.ID, &i.Entry, &i.Name)
 	return i, err
 }
 
@@ -85,6 +118,15 @@ DELETE FROM symbols WHERE owner = $1
 
 func (q *Queries) DeleteAllOwnedSymbols(ctx context.Context, owner uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteAllOwnedSymbols, owner)
+	return err
+}
+
+const deleteConsortium = `-- name: DeleteConsortium :exec
+DELETE from consortia where id = $1
+`
+
+func (q *Queries) DeleteConsortium(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteConsortium, id)
 	return err
 }
 
@@ -170,6 +212,32 @@ func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
 	return items, nil
 }
 
+const listConsortia = `-- name: ListConsortia :many
+SELECT id, entry, name FROM consortia
+WHERE
+  (id = $1 OR $1 IS NULL)
+`
+
+func (q *Queries) ListConsortia(ctx context.Context, id *uuid.UUID) ([]Consortium, error) {
+	rows, err := q.db.Query(ctx, listConsortia, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Consortium
+	for rows.Next() {
+		var i Consortium
+		if err := rows.Scan(&i.ID, &i.Entry, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEntries = `-- name: ListEntries :many
 SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.symbol as symbol_authority, ep.id, ep.entry, ep.name, ep.type, ep.address
 FROM entries e
@@ -237,6 +305,25 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateConsortium = `-- name: UpdateConsortium :exec
+UPDATE consortia
+SET
+  name = $1,
+  entry = $2
+WHERE id = $3
+`
+
+type UpdateConsortiumParams struct {
+	Name  string
+	Entry *uuid.UUID
+	ID    uuid.UUID
+}
+
+func (q *Queries) UpdateConsortium(ctx context.Context, arg UpdateConsortiumParams) error {
+	_, err := q.db.Exec(ctx, updateConsortium, arg.Name, arg.Entry, arg.ID)
+	return err
 }
 
 const updateEntry = `-- name: UpdateEntry :exec

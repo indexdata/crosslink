@@ -213,6 +213,7 @@ func testCase(t *testing.T, c httpTestCase) {
 				}
 
 			}
+			fmt.Print(redata)
 			ja.Assertf(redata, expectedRefetchResponse)
 		}
 	}
@@ -338,6 +339,61 @@ func TestEntryCases(t *testing.T) {
 			name:          "DELETE entry",
 			method:        http.MethodDelete,
 			endpoint:      "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:        http.StatusNoContent,
+			refetchStatus: http.StatusNotFound,
+		},
+	}
+	testCases(t, cases)
+}
+func TestConsortiumCases(t *testing.T) {
+	cases := []httpTestCase{
+		{
+			name:     "GET consortium",
+			method:   http.MethodGet,
+			endpoint: "/consortia/00000000-0000-0000-0000-000000000001",
+			status:   http.StatusOK,
+			resFile:  "consortium.get.res.json",
+		},
+		{
+			name:     "GET id not found",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-id/f0000000-0000-0000-0000-000000000002",
+			status:   http.StatusNotFound,
+		},
+		{
+			name:     "GET consortia",
+			method:   http.MethodGet,
+			endpoint: "/consortia",
+			status:   http.StatusOK,
+			resFile:  "consortia.get.res.json",
+		},
+		{
+			name:        "POST consortium",
+			method:      http.MethodPost,
+			endpoint:    "/consortia",
+			status:      http.StatusCreated,
+			bodyFile:    "consortium.post.req.json",
+			refetchFile: "consortium.post.refetch.json",
+		},
+		{
+			name:        "PATCH consortium",
+			method:      http.MethodPatch,
+			endpoint:    "/consortia/00000000-0000-0000-0000-000000000001",
+			status:      http.StatusNoContent,
+			bodyFile:    "consortium.patch.req.json",
+			refetchFile: "consortium.patch.refetch.json",
+		},
+		{
+			name:     "PATCH id not found",
+			method:   http.MethodPatch,
+			endpoint: "/consortia/f0000000-0000-0000-0000-000000000002",
+			bodyFile: "consortium.patch.req.json",
+			status:   http.StatusNotFound,
+		},
+		{
+			name:          "DELETE consortium",
+			method:        http.MethodDelete,
+			endpoint:      "/consortia/00000000-0000-0000-0000-000000000001",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 		},

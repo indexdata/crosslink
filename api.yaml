@@ -3,6 +3,159 @@ info:
   version: 1.0.0
   title: Directoryish API
 paths:
+  /consortia:
+    get:
+      summary: Returns all consortia
+      description: Returns all consortia the user has access to.
+      operationId: getConsortia
+      parameters:
+        - name: q
+          in: query
+          description: keywords to filter by
+          required: false
+          style: form
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Consortium list response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Consortium'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Creates a new consortium
+      description: Creates a new consortium
+      operationId: addConsortium
+      requestBody:
+        description: Consortium to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Consortium'
+      responses:
+        '201':
+          description: Consortium response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+          links:
+            GetConsortiumByID:
+              operationId: getConsortium
+              parameters:
+                id: '$response.body#/id'
+            # UpdateConsortium:
+            #   operationId: updateConsortium
+            #   parameters:
+            #     id: '$response.body#/id'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /consortia/{id}:
+    get:
+      summary: Returns a consortium by ID
+      operationId: getConsortium
+      parameters:
+        - name: id
+          in: path
+          description: ID of consortium to fetch
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Consortium response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consortium'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Entry not found
+          content:
+            text/plain:
+              schema:
+                type: string
+    patch:
+      summary: Update a consortium
+      description: Update a consortium
+      operationId: updateConsortium
+      parameters:
+        - name: id
+          in: path
+          description: ID of consortium to update
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Updated fields
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsortiumPatch'
+      responses:
+        '204':
+          description: Consortium updated
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Entry not found
+          content:
+            text/plain:
+              schema:
+                type: string
+    delete:
+      summary: Delete consortium by ID
+      operationId: deleteConsortium
+      parameters:
+        - name: id
+          in: path
+          description: ID of consortium to delete
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: consortium deleted
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
   /entries:
     get:
       summary: Returns all entries
@@ -323,7 +476,7 @@ components:
           description: Service endpoints associated with this entry
           items:
             $ref: '#/components/schemas/ServiceEndpoint'
-    EntryPatch: 
+    EntryPatch:
       type: object
       properties:
         name:
@@ -400,10 +553,10 @@ components:
     ServiceEndpointProperties:
       type: object
       required:
-        - name 
+        - name
         - type
         - address
-      properties: 
+      properties:
         name:
           type: string
         type:
@@ -429,3 +582,34 @@ components:
               format: uuid
               description: Unique id
         - $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    Consortium:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+          minLength: 1
+        name:
+          type: string
+          description: Display name
+          minLength: 1
+        entry:
+          type: string
+          format: uuid
+    ConsortiumPatch:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name
+          minLength: 1
+        entry:
+          type: string
+          format: uuid
+          nullable: true

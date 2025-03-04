@@ -100,3 +100,31 @@ DELETE FROM service_endpoints WHERE entry = @entry AND ID <> ALL(@ids::uuid[]);
 
 -- name: DeleteAllOwnedServiceEndpoints :exec
 DELETE FROM service_endpoints WHERE entry = @entry;
+
+
+-- name: ListConsortia :many
+SELECT * FROM consortia
+WHERE
+  (id = sqlc.narg(id) OR sqlc.narg(id) IS NULL);
+
+-- name: ConsortiumById :one
+SELECT * FROM consortia
+WHERE id = $1 LIMIT 1;
+
+-- name: CreateConsortium :one
+INSERT INTO consortia (
+  name, entry
+) VALUES (
+  @name, @entry
+)
+RETURNING *;
+
+-- name: UpdateConsortium :exec
+UPDATE consortia
+SET
+  name = @name,
+  entry = @entry
+WHERE id = @id;
+
+-- name: DeleteConsortium :exec
+DELETE from consortia where id = @id;
