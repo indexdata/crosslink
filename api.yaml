@@ -357,77 +357,7 @@ paths:
             application/json:
               schema:
                 type: string
-  /authorities:
-    get:
-      summary: Returns all authorities
-      description: Returns all authorities from the system that the user has access to.
-      operationId: getAuthorities
-      parameters:
-        - name: q
-          in: query
-          description: keywords to filter by
-          required: false
-          style: form
-          schema:
-            type: string
-        - name: limit
-          in: query
-          description: maximum number of results to return
-          required: false
-          schema:
-            type: integer
-            format: int32
-      responses:
-        '200':
-          description: Authority list response
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Authority'
-        '400':
-          description: Request validation error
-          content:
-            text/plain:
-              schema:
-                type: string
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                type: string
-    post:
-      summary: Creates a new authority
-      description: Creates a new authority
-      operationId: addAuthority
-      requestBody:
-        description: Authority to add
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Authority'
-      responses:
-        '200':
-          description: ID of new Authority
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Id'
-        '400':
-          description: Request validation error
-          content:
-            text/plain:
-              schema:
-                type: string
-        default:
-          description: unexpected error
-          content:
-            text/plain:
-              schema:
-                type: string
+
 components:
   schemas:
     Id:
@@ -535,20 +465,6 @@ components:
               format: uuid
               description: Unique id
         - $ref: '#/components/schemas/SymbolProperties'
-
-    Authority:
-      required:
-        - id
-        - symbol
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique id
-        symbol:
-          type: string
-          description: Uppercase string
 
     ServiceEndpointProperties:
       type: object

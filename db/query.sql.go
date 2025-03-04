@@ -11,18 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const authorityBySymbol = `-- name: AuthorityBySymbol :one
-SELECT id, symbol FROM authorities
-WHERE symbol = $1 LIMIT 1
-`
-
-func (q *Queries) AuthorityBySymbol(ctx context.Context, symbol string) (Authority, error) {
-	row := q.db.QueryRow(ctx, authorityBySymbol, symbol)
-	var i Authority
-	err := row.Scan(&i.ID, &i.Symbol)
-	return i, err
-}
-
 const consortiumById = `-- name: ConsortiumById :one
 SELECT id, entry, name FROM consortia
 WHERE id = $1 LIMIT 1
@@ -32,22 +20,6 @@ func (q *Queries) ConsortiumById(ctx context.Context, id uuid.UUID) (Consortium,
 	row := q.db.QueryRow(ctx, consortiumById, id)
 	var i Consortium
 	err := row.Scan(&i.ID, &i.Entry, &i.Name)
-	return i, err
-}
-
-const createAuthority = `-- name: CreateAuthority :one
-INSERT INTO authorities (
-  symbol
-) VALUES (
-  $1
-)
-RETURNING id, symbol
-`
-
-func (q *Queries) CreateAuthority(ctx context.Context, symbol string) (Authority, error) {
-	row := q.db.QueryRow(ctx, createAuthority, symbol)
-	var i Authority
-	err := row.Scan(&i.ID, &i.Symbol)
 	return i, err
 }
 
@@ -188,30 +160,6 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 	return i, err
 }
 
-const listAuthorities = `-- name: ListAuthorities :many
-SELECT id, symbol FROM authorities
-`
-
-func (q *Queries) ListAuthorities(ctx context.Context) ([]Authority, error) {
-	rows, err := q.db.Query(ctx, listAuthorities)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Authority
-	for rows.Next() {
-		var i Authority
-		if err := rows.Scan(&i.ID, &i.Symbol); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listConsortia = `-- name: ListConsortia :many
 SELECT id, entry, name FROM consortia
 WHERE
@@ -239,16 +187,15 @@ func (q *Queries) ListConsortia(ctx context.Context, id *uuid.UUID) ([]Consortiu
 }
 
 const listEntries = `-- name: ListEntries :many
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, a.symbol as symbol_authority, ep.id, ep.entry, ep.name, ep.type, ep.address
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone, s.id, s.owner, s.authority, s.symbol, ep.id, ep.entry, ep.name, ep.type, ep.address
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
-LEFT JOIN authorities a ON a.id = s.authority
 LEFT JOIN entryendpoints ep ON e.id = ep.entry
 WHERE
   (e.id = $1 OR $1 IS NULL)
   AND (
     (e.id = (
-      SELECT owner FROM symbols s2, authorities a2 WHERE a2.symbol = $2 AND s2.symbol = $3
+      SELECT owner FROM symbols s2 WHERE s2.authority = $2 AND s2.symbol = $3
     ))
     OR ($2 IS NULL AND $3 IS NULL)
   )
@@ -262,10 +209,9 @@ type ListEntriesParams struct {
 }
 
 type ListEntriesRow struct {
-	Entry           Entry
-	Entrysymbol     Entrysymbol
-	SymbolAuthority *string
-	Entryendpoint   Entryendpoint
+	Entry         Entry
+	Entrysymbol   Entrysymbol
+	Entryendpoint Entryendpoint
 }
 
 func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]ListEntriesRow, error) {
@@ -290,7 +236,6 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 			&i.Entrysymbol.Owner,
 			&i.Entrysymbol.Authority,
 			&i.Entrysymbol.Symbol,
-			&i.SymbolAuthority,
 			&i.Entryendpoint.ID,
 			&i.Entryendpoint.Entry,
 			&i.Entryendpoint.Name,
@@ -419,7 +364,7 @@ type UpsertSymbolParams struct {
 	ID        interface{}
 	Owner     uuid.UUID
 	Symbol    string
-	Authority uuid.UUID
+	Authority string
 }
 
 func (q *Queries) UpsertSymbol(ctx context.Context, arg UpsertSymbolParams) (Symbol, error) {

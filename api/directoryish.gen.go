@@ -24,15 +24,6 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Authority defines model for Authority.
-type Authority struct {
-	// Id Unique id
-	Id *openapi_types.UUID `json:"id,omitempty"`
-
-	// Symbol Uppercase string
-	Symbol string `json:"symbol"`
-}
-
 // Consortium defines model for Consortium.
 type Consortium struct {
 	Entry *openapi_types.UUID `json:"entry,omitempty"`
@@ -152,15 +143,6 @@ type SymbolProperties struct {
 	Symbol string `json:"symbol"`
 }
 
-// GetAuthoritiesParams defines parameters for GetAuthorities.
-type GetAuthoritiesParams struct {
-	// Q keywords to filter by
-	Q *string `form:"q,omitempty" json:"q,omitempty"`
-
-	// Limit maximum number of results to return
-	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
 // GetConsortiaParams defines parameters for GetConsortia.
 type GetConsortiaParams struct {
 	// Q keywords to filter by
@@ -179,9 +161,6 @@ type GetEntriesParams struct {
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// AddAuthorityJSONRequestBody defines body for AddAuthority for application/json ContentType.
-type AddAuthorityJSONRequestBody = Authority
-
 // AddConsortiumJSONRequestBody defines body for AddConsortium for application/json ContentType.
 type AddConsortiumJSONRequestBody = Consortium
 
@@ -196,12 +175,6 @@ type UpdateEntryJSONRequestBody = EntryPatch
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Returns all authorities
-	// (GET /authorities)
-	GetAuthorities(w http.ResponseWriter, r *http.Request, params GetAuthoritiesParams)
-	// Creates a new authority
-	// (POST /authorities)
-	AddAuthority(w http.ResponseWriter, r *http.Request)
 	// Returns all consortia
 	// (GET /consortia)
 	GetConsortia(w http.ResponseWriter, r *http.Request, params GetConsortiaParams)
@@ -245,55 +218,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// GetAuthorities operation middleware
-func (siw *ServerInterfaceWrapper) GetAuthorities(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params GetAuthoritiesParams
-
-	// ------------- Optional query parameter "q" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetAuthorities(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// AddAuthority operation middleware
-func (siw *ServerInterfaceWrapper) AddAuthority(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AddAuthority(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // GetConsortia operation middleware
 func (siw *ServerInterfaceWrapper) GetConsortia(w http.ResponseWriter, r *http.Request) {
@@ -688,8 +612,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("GET "+options.BaseURL+"/authorities", wrapper.GetAuthorities)
-	m.HandleFunc("POST "+options.BaseURL+"/authorities", wrapper.AddAuthority)
 	m.HandleFunc("GET "+options.BaseURL+"/consortia", wrapper.GetConsortia)
 	m.HandleFunc("POST "+options.BaseURL+"/consortia", wrapper.AddConsortium)
 	m.HandleFunc("DELETE "+options.BaseURL+"/consortia/{id}", wrapper.DeleteConsortium)
@@ -703,85 +625,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/entries/by-symbol/{symbol}", wrapper.GetEntryBySymbol)
 
 	return m
-}
-
-type GetAuthoritiesRequestObject struct {
-	Params GetAuthoritiesParams
-}
-
-type GetAuthoritiesResponseObject interface {
-	VisitGetAuthoritiesResponse(w http.ResponseWriter) error
-}
-
-type GetAuthorities200JSONResponse []Authority
-
-func (response GetAuthorities200JSONResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetAuthorities400TextResponse string
-
-func (response GetAuthorities400TextResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(400)
-
-	_, err := w.Write([]byte(response))
-	return err
-}
-
-type GetAuthoritiesdefaultJSONResponse struct {
-	Body       string
-	StatusCode int
-}
-
-func (response GetAuthoritiesdefaultJSONResponse) VisitGetAuthoritiesResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-
-	return json.NewEncoder(w).Encode(response.Body)
-}
-
-type AddAuthorityRequestObject struct {
-	Body *AddAuthorityJSONRequestBody
-}
-
-type AddAuthorityResponseObject interface {
-	VisitAddAuthorityResponse(w http.ResponseWriter) error
-}
-
-type AddAuthority200JSONResponse Id
-
-func (response AddAuthority200JSONResponse) VisitAddAuthorityResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type AddAuthority400TextResponse string
-
-func (response AddAuthority400TextResponse) VisitAddAuthorityResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(400)
-
-	_, err := w.Write([]byte(response))
-	return err
-}
-
-type AddAuthoritydefaultTextResponse struct {
-	Body       string
-	StatusCode int
-}
-
-func (response AddAuthoritydefaultTextResponse) VisitAddAuthorityResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(response.StatusCode)
-
-	_, err := w.Write([]byte(response.Body))
-	return err
 }
 
 type GetConsortiaRequestObject struct {
@@ -1168,12 +1011,6 @@ func (response GetEntryBySymboldefaultJSONResponse) VisitGetEntryBySymbolRespons
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// Returns all authorities
-	// (GET /authorities)
-	GetAuthorities(ctx context.Context, request GetAuthoritiesRequestObject) (GetAuthoritiesResponseObject, error)
-	// Creates a new authority
-	// (POST /authorities)
-	AddAuthority(ctx context.Context, request AddAuthorityRequestObject) (AddAuthorityResponseObject, error)
 	// Returns all consortia
 	// (GET /consortia)
 	GetConsortia(ctx context.Context, request GetConsortiaRequestObject) (GetConsortiaResponseObject, error)
@@ -1236,63 +1073,6 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
-}
-
-// GetAuthorities operation middleware
-func (sh *strictHandler) GetAuthorities(w http.ResponseWriter, r *http.Request, params GetAuthoritiesParams) {
-	var request GetAuthoritiesRequestObject
-
-	request.Params = params
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetAuthorities(ctx, request.(GetAuthoritiesRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetAuthorities")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetAuthoritiesResponseObject); ok {
-		if err := validResponse.VisitGetAuthoritiesResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// AddAuthority operation middleware
-func (sh *strictHandler) AddAuthority(w http.ResponseWriter, r *http.Request) {
-	var request AddAuthorityRequestObject
-
-	var body AddAuthorityJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
-		return
-	}
-	request.Body = &body
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AddAuthority(ctx, request.(AddAuthorityRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AddAuthority")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AddAuthorityResponseObject); ok {
-		if err := validResponse.VisitAddAuthorityResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }
 
 // GetConsortia operation middleware
@@ -1608,32 +1388,30 @@ func (sh *strictHandler) GetEntryBySymbol(w http.ResponseWriter, r *http.Request
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"ofltLAAA",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

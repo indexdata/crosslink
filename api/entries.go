@@ -25,7 +25,7 @@ func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
 			*entry.Symbols = append(*entry.Symbols, Symbol{
 				Id:        row.Entrysymbol.ID,
 				Symbol:    *row.Entrysymbol.Symbol,
-				Authority: *row.SymbolAuthority,
+				Authority: *row.Entrysymbol.Authority,
 			})
 		}
 	}
@@ -144,17 +144,10 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	if request.Body.Symbols != nil {
 		for _, symbol := range *request.Body.Symbols {
-			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(symbol.Authority))
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					return AddEntry400TextResponse("Unrecognized authority"), nil
-				}
-			}
-
 			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
 				Owner:     insertedEntry.ID,
 				Symbol:    strings.ToUpper(symbol.Symbol),
-				Authority: auth.ID,
+				Authority: strings.ToUpper(symbol.Authority),
 			})
 			if err != nil {
 				var pge *pgconn.PgError
@@ -236,18 +229,11 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 
 		// Update/create symbols
 		for _, symbol := range reqsyms {
-			auth, err := qtx.AuthorityBySymbol(ctx, strings.ToUpper(symbol.Authority))
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					return UpdateEntry400TextResponse("Unrecognized authority"), nil
-				}
-			}
-
 			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
 				ID:        symbol.Id,
 				Owner:     request.Id,
 				Symbol:    strings.ToUpper(symbol.Symbol),
-				Authority: auth.ID,
+				Authority: strings.ToUpper(symbol.Authority),
 			})
 			if err != nil {
 				log.Println(err)

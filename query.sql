@@ -3,16 +3,15 @@ SELECT * FROM entries
 WHERE id = $1 LIMIT 1;
 
 -- name: ListEntries :many
-SELECT sqlc.embed(e), sqlc.embed(s), a.symbol as symbol_authority, sqlc.embed(ep)
+SELECT sqlc.embed(e), sqlc.embed(s), sqlc.embed(ep)
 FROM entries e
 LEFT JOIN entrysymbols s ON e.id = s.owner
-LEFT JOIN authorities a ON a.id = s.authority
 LEFT JOIN entryendpoints ep ON e.id = ep.entry
 WHERE
   (e.id = sqlc.narg(id) OR sqlc.narg(id) IS NULL)
   AND (
     (e.id = (
-      SELECT owner FROM symbols s2, authorities a2 WHERE a2.symbol = sqlc.narg(authority) AND s2.symbol = sqlc.narg(symbol)
+      SELECT owner FROM symbols s2 WHERE s2.authority = sqlc.narg(authority) AND s2.symbol = sqlc.narg(symbol)
     ))
     OR (sqlc.narg(authority) IS NULL AND sqlc.narg(symbol) IS NULL)
   )
@@ -37,11 +36,6 @@ WHERE id = @id;
 -- name: DeleteEntry :exec
 DELETE from entries where id = @id;
 
-
--- name: AuthorityBySymbol :one
-SELECT * FROM authorities
-WHERE symbol = $1 LIMIT 1;
-
 -- name: UpsertSymbol :one
 INSERT INTO symbols (
   id, owner, symbol, authority
@@ -63,18 +57,6 @@ DELETE FROM symbols WHERE owner = @owner AND ID <> ALL(@ids::uuid[]);
 
 -- name: DeleteAllOwnedSymbols :exec
 DELETE FROM symbols WHERE owner = @owner;
-
-
--- name: ListAuthorities :many
-SELECT * FROM authorities;
-
--- name: CreateAuthority :one
-INSERT INTO authorities (
-  symbol
-) VALUES (
-  @symbol
-)
-RETURNING *;
 
 
 -- name: UpsertServiceEndpoint :one

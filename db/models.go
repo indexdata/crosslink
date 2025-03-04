@@ -8,11 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type Authority struct {
-	ID     uuid.UUID
-	Symbol string
-}
-
 type Consortium struct {
 	ID    uuid.UUID
 	Entry *uuid.UUID
@@ -41,7 +36,7 @@ type Entryendpoint struct {
 type Entrysymbol struct {
 	ID        *uuid.UUID
 	Owner     *uuid.UUID
-	Authority *uuid.UUID
+	Authority *string
 	Symbol    *string
 }
 
@@ -79,7 +74,7 @@ type ServiceEndpoint struct {
 type Symbol struct {
 	ID        uuid.UUID
 	Owner     uuid.UUID
-	Authority uuid.UUID
+	Authority string
 	Symbol    string
 }
 

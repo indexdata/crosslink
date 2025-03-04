@@ -9,16 +9,10 @@ CREATE TABLE IF NOT EXISTS entries (
 	phone varchar(255)
 );
 
-CREATE TABLE IF NOT EXISTS authorities (
-	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
-	UNIQUE (symbol)
-);
-
 CREATE TABLE IF NOT EXISTS symbols (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	owner uuid NOT NULL REFERENCES entries (id),
-	authority uuid NOT NULL REFERENCES authorities (id),
+	authority varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	UNIQUE (authority, symbol)
 );
