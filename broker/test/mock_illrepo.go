@@ -3,6 +3,7 @@ package test
 import (
 	"errors"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -97,6 +98,10 @@ func (r *MockIllRepositorySuccess) GetSelectedSupplierForIllTransaction(ctx extc
 	return ill_db.LocatedSupplier{}, nil
 }
 
+func (r *MockIllRepositorySuccess) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
+	return []ill_db.Peer{{ID: uuid.NewString()}}
+}
+
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -152,4 +157,8 @@ func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id strin
 
 func (r *MockIllRepositoryError) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
+	return []ill_db.Peer{}
 }

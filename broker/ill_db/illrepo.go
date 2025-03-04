@@ -2,9 +2,13 @@ package ill_db
 
 import (
 	"errors"
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 type IllRepo interface {
@@ -21,6 +25,7 @@ type IllRepo interface {
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
+	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer
 }
 
 type PgIllRepo struct {
@@ -119,5 +124,78 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedCont
 		return LocatedSupplier{}, errors.New("did not find selected supplier for ill transaction: " + illTransId)
 	} else {
 		return LocatedSupplier{}, errors.New("too many selected suppliers found for ill transaction: " + illTransId)
+	}
+}
+
+func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer {
+	var peers []Peer
+	if len(symbols) > 0 {
+		var symbolsToFetch []string
+		for _, sym := range symbols {
+			peer, err := r.GetPeerBySymbol(ctx, sym)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					symbolsToFetch = append(symbolsToFetch, sym)
+				} else {
+					ctx.Logger().Error("failed to read peer", "symbol", sym, "error", err)
+				}
+			} else {
+				if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
+					symbolsToFetch = append(symbolsToFetch, sym)
+				} else {
+					peers = append(peers, peer)
+				}
+			}
+		}
+		if len(symbolsToFetch) > 0 {
+			directories, err := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
+				Symbols: symbolsToFetch,
+			})
+			if err != nil {
+				ctx.Logger().Error("failed to get directories by symbols", "symbols", symbolsToFetch, "error", err)
+			} else if len(directories) == 0 {
+				ctx.Logger().Error("did not find directories by symbols", "symbols", symbolsToFetch, "error", err)
+			} else {
+				for _, dir := range directories {
+					peer, loopErr := r.GetPeerBySymbol(ctx, dir.Symbol)
+					if loopErr != nil {
+						if errors.Is(loopErr, pgx.ErrNoRows) {
+							peer, err = r.SavePeer(ctx, SavePeerParams{
+								ID:            uuid.New().String(),
+								Symbol:        dir.Symbol,
+								Url:           dir.URL,
+								Name:          dir.Symbol,
+								RefreshPolicy: RefreshPolicyTransaction,
+								RefreshTime:   GetPgNow(),
+							})
+							if err != nil {
+								ctx.Logger().Error("failed to save peer", "symbol", dir.Symbol, "error", err)
+							} else {
+								peers = append(peers, peer)
+							}
+						} else {
+							ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)
+						}
+					} else {
+						peer.Url = dir.URL
+						peer.RefreshTime = GetPgNow()
+						peer, err = r.SavePeer(ctx, SavePeerParams(peer))
+						if err != nil {
+							ctx.Logger().Error("could not update peer", "symbol", dir.Symbol, "error", err)
+						} else {
+							peers = append(peers, peer)
+						}
+					}
+				}
+			}
+		}
+	}
+	return peers
+}
+
+func GetPgNow() pgtype.Timestamp {
+	return pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
 	}
 }

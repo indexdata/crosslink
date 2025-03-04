@@ -44,10 +44,10 @@ func WaitForPredicateToBeTrue(predicate func() bool) bool {
 }
 
 func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
-	eventBus, illRepo, eventRepo, err := app.Init(ctx)
+	eventBus, illRepo, eventRepo, dirAdapter, err := app.Init(ctx)
 	Expect(err, "failed to init app")
 	go func() {
-		err := app.StartServer(illRepo, eventRepo, eventBus)
+		err := app.StartServer(illRepo, eventRepo, eventBus, dirAdapter)
 		Expect(err, "failed to start server")
 	}()
 	return eventBus, illRepo, eventRepo

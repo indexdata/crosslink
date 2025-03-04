@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"io"
 	"net/http"
 	"strings"
@@ -16,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.HandlerFunc {
+func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
 		if r.Method != http.MethodPost {
@@ -44,7 +45,7 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.Han
 		}
 
 		if illMessage.Request != nil {
-			handleIso18626Request(ctx, &illMessage, w, repo, eventBus)
+			handleIso18626Request(ctx, &illMessage, w, repo, eventBus, dirAdapter)
 		} else if illMessage.RequestingAgencyMessage != nil {
 			handleIso18626RequestingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
 		} else if illMessage.SupplyingAgencyMessage != nil {
@@ -56,7 +57,7 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus) http.Han
 	}
 }
 
-func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
 	if illMessage.Request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(illMessage, "Requesting agency request id cannot be empty", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
@@ -68,8 +69,8 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	}
 
 	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
-	requester, err := repo.GetPeerBySymbol(ctx, requesterSymbol.String)
-	if err != nil {
+	peers := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
+	if len(peers) != 1 {
 		handleRequestError(illMessage, "Cannot resolve requester symbol", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
@@ -94,11 +95,11 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Time:  illMessage.Request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
 		ID:                  id,
 		Timestamp:           timestamp,
 		RequesterSymbol:     requesterSymbol,
-		RequesterID:         createPgText(requester.ID),
+		RequesterID:         createPgText(peers[0].ID),
 		LastRequesterAction: requestAction,
 		SupplierSymbol:      supplierSymbol,
 		RequesterRequestID:  requesterRequestId,
