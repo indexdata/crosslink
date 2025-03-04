@@ -66,18 +66,13 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus != events.EventStatusSuccess {
-		selSup, err := w.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-			IllTransactionID: event.IllTransactionID,
-			SupplierStatus:   ill_db.SupplierStatusSelectedPg,
-		})
+		selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
 		if err != nil {
-			ctx.Logger().Error("failed to read selected suppliers", "error", err)
+			ctx.Logger().Error("failed to read selected supplier", "error", err)
 			return
 		}
-		if len(selSup) == 1 {
-			if selSup[0].LastAction.String == ill_db.RequestAction {
-				Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
-			}
+		if selSup.LastAction.String == ill_db.RequestAction {
+			Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}))
 		}
 	}
 }

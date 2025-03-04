@@ -230,19 +230,15 @@ func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplie
 }
 
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
-	locatedSuppliers, err := c.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-		IllTransactionID: transaction.ID,
-		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
-	})
+	selectedSupplier, err := c.illRepo.GetSelectedSupplierForIllTransaction(ctx, transaction.ID)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(locatedSuppliers) == 0 {
-		return nil, nil, errors.New("missing selected supplier")
+	peer, err := c.illRepo.GetPeerById(ctx, selectedSupplier.SupplierID)
+	if err != nil {
+		return nil, nil, err
 	}
-	peer, err := c.illRepo.GetPeerById(ctx, locatedSuppliers[0].SupplierID)
-	locSup := locatedSuppliers[0]
-	return &locSup, &peer, err
+	return &selectedSupplier, &peer, err
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer, hideRequester bool) iso18626.Header {

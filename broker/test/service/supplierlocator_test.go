@@ -624,14 +624,11 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("ill transaction last requester status should be ShippedReturn not %s",
 			illTrans.LastRequesterAction.String)
 	}
-	suppliers, _ := illRepo.GetLocatedSupplierByIllTransactionAndStatus(appCtx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
-		IllTransactionID: illId,
-		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
-	})
+	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
 
-	if suppliers[0].LastStatus.String != "LoanCompleted" {
+	if supplier.LastStatus.String != "LoanCompleted" {
 		t.Errorf("selected supplier last status should be LoanCompleted not %s",
-			suppliers[0].LastStatus.String)
+			supplier.LastStatus.String)
 	}
 }
 
