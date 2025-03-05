@@ -24,6 +24,30 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for EntryLookupKey.
+const (
+	EntryLookupKeyById     EntryLookupKey = "by-id"
+	EntryLookupKeyBySymbol EntryLookupKey = "by-symbol"
+)
+
+// Defines values for DeleteEntryParamsKey.
+const (
+	DeleteEntryParamsKeyById     DeleteEntryParamsKey = "by-id"
+	DeleteEntryParamsKeyBySymbol DeleteEntryParamsKey = "by-symbol"
+)
+
+// Defines values for GetEntryParamsKey.
+const (
+	GetEntryParamsKeyById     GetEntryParamsKey = "by-id"
+	GetEntryParamsKeyBySymbol GetEntryParamsKey = "by-symbol"
+)
+
+// Defines values for UpdateEntryParamsKey.
+const (
+	UpdateEntryParamsKeyById     UpdateEntryParamsKey = "by-id"
+	UpdateEntryParamsKeyBySymbol UpdateEntryParamsKey = "by-symbol"
+)
+
 // Consortium defines model for Consortium.
 type Consortium struct {
 	Entry *openapi_types.UUID `json:"entry,omitempty"`
@@ -143,6 +167,12 @@ type SymbolProperties struct {
 	Symbol string `json:"symbol"`
 }
 
+// EntryLookupKey defines model for entryLookupKey.
+type EntryLookupKey string
+
+// EntryLookupValue defines model for entryLookupValue.
+type EntryLookupValue = string
+
 // GetConsortiaParams defines parameters for GetConsortia.
 type GetConsortiaParams struct {
 	// Q keywords to filter by
@@ -160,6 +190,15 @@ type GetEntriesParams struct {
 	// Limit maximum number of results to return
 	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// DeleteEntryParamsKey defines parameters for DeleteEntry.
+type DeleteEntryParamsKey string
+
+// GetEntryParamsKey defines parameters for GetEntry.
+type GetEntryParamsKey string
+
+// UpdateEntryParamsKey defines parameters for UpdateEntry.
+type UpdateEntryParamsKey string
 
 // AddConsortiumJSONRequestBody defines body for AddConsortium for application/json ContentType.
 type AddConsortiumJSONRequestBody = Consortium
@@ -197,17 +236,14 @@ type ServerInterface interface {
 	// (POST /entries)
 	AddEntry(w http.ResponseWriter, r *http.Request)
 	// Delete directory entry by ID
-	// (DELETE /entries/by-id/{id})
-	DeleteEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Returns a directory entry by ID
-	// (GET /entries/by-id/{id})
-	GetEntryByID(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// (DELETE /entries/{key}/{value})
+	DeleteEntry(w http.ResponseWriter, r *http.Request, key DeleteEntryParamsKey, value EntryLookupValue)
+	// Returns a directory entry by ID or symbol
+	// (GET /entries/{key}/{value})
+	GetEntry(w http.ResponseWriter, r *http.Request, key GetEntryParamsKey, value EntryLookupValue)
 	// Update an entry
-	// (PATCH /entries/by-id/{id})
-	UpdateEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Returns a directory entry by symbol
-	// (GET /entries/by-symbol/{symbol})
-	GetEntryBySymbol(w http.ResponseWriter, r *http.Request, symbol string)
+	// (PATCH /entries/{key}/{value})
+	UpdateEntry(w http.ResponseWriter, r *http.Request, key UpdateEntryParamsKey, value EntryLookupValue)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -397,17 +433,26 @@ func (siw *ServerInterfaceWrapper) DeleteEntry(w http.ResponseWriter, r *http.Re
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "key" -------------
+	var key DeleteEntryParamsKey
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteEntry(w, r, id)
+		siw.Handler.DeleteEntry(w, r, key, value)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -417,22 +462,31 @@ func (siw *ServerInterfaceWrapper) DeleteEntry(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
-// GetEntryByID operation middleware
-func (siw *ServerInterfaceWrapper) GetEntryByID(w http.ResponseWriter, r *http.Request) {
+// GetEntry operation middleware
+func (siw *ServerInterfaceWrapper) GetEntry(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "key" -------------
+	var key GetEntryParamsKey
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEntryByID(w, r, id)
+		siw.Handler.GetEntry(w, r, key, value)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -447,42 +501,26 @@ func (siw *ServerInterfaceWrapper) UpdateEntry(w http.ResponseWriter, r *http.Re
 
 	var err error
 
-	// ------------- Path parameter "id" -------------
-	var id openapi_types.UUID
+	// ------------- Path parameter "key" -------------
+	var key UpdateEntryParamsKey
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateEntry(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetEntryBySymbol operation middleware
-func (siw *ServerInterfaceWrapper) GetEntryBySymbol(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "symbol" -------------
-	var symbol string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "symbol", r.PathValue("symbol"), &symbol, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "symbol", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEntryBySymbol(w, r, symbol)
+		siw.Handler.UpdateEntry(w, r, key, value)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -619,10 +657,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PATCH "+options.BaseURL+"/consortia/{id}", wrapper.UpdateConsortium)
 	m.HandleFunc("GET "+options.BaseURL+"/entries", wrapper.GetEntries)
 	m.HandleFunc("POST "+options.BaseURL+"/entries", wrapper.AddEntry)
-	m.HandleFunc("DELETE "+options.BaseURL+"/entries/by-id/{id}", wrapper.DeleteEntry)
-	m.HandleFunc("GET "+options.BaseURL+"/entries/by-id/{id}", wrapper.GetEntryByID)
-	m.HandleFunc("PATCH "+options.BaseURL+"/entries/by-id/{id}", wrapper.UpdateEntry)
-	m.HandleFunc("GET "+options.BaseURL+"/entries/by-symbol/{symbol}", wrapper.GetEntryBySymbol)
+	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{key}/{value}", wrapper.DeleteEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/entries/{key}/{value}", wrapper.GetEntry)
+	m.HandleFunc("PATCH "+options.BaseURL+"/entries/{key}/{value}", wrapper.UpdateEntry)
 
 	return m
 }
@@ -836,7 +873,8 @@ func (response AddEntry400TextResponse) VisitAddEntryResponse(w http.ResponseWri
 }
 
 type DeleteEntryRequestObject struct {
-	Id openapi_types.UUID `json:"id"`
+	Key   DeleteEntryParamsKey `json:"key"`
+	Value EntryLookupValue     `json:"value"`
 }
 
 type DeleteEntryResponseObject interface {
@@ -874,26 +912,27 @@ func (response DeleteEntrydefaultTextResponse) VisitDeleteEntryResponse(w http.R
 	return err
 }
 
-type GetEntryByIDRequestObject struct {
-	Id openapi_types.UUID `json:"id"`
+type GetEntryRequestObject struct {
+	Key   GetEntryParamsKey `json:"key"`
+	Value EntryLookupValue  `json:"value"`
 }
 
-type GetEntryByIDResponseObject interface {
-	VisitGetEntryByIDResponse(w http.ResponseWriter) error
+type GetEntryResponseObject interface {
+	VisitGetEntryResponse(w http.ResponseWriter) error
 }
 
-type GetEntryByID200JSONResponse Entry
+type GetEntry200JSONResponse Entry
 
-func (response GetEntryByID200JSONResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+func (response GetEntry200JSONResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetEntryByID400TextResponse string
+type GetEntry400TextResponse string
 
-func (response GetEntryByID400TextResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+func (response GetEntry400TextResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -901,9 +940,9 @@ func (response GetEntryByID400TextResponse) VisitGetEntryByIDResponse(w http.Res
 	return err
 }
 
-type GetEntryByID404TextResponse string
+type GetEntry404TextResponse string
 
-func (response GetEntryByID404TextResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+func (response GetEntry404TextResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(404)
 
@@ -911,12 +950,12 @@ func (response GetEntryByID404TextResponse) VisitGetEntryByIDResponse(w http.Res
 	return err
 }
 
-type GetEntryByIDdefaultJSONResponse struct {
+type GetEntrydefaultJSONResponse struct {
 	Body       string
 	StatusCode int
 }
 
-func (response GetEntryByIDdefaultJSONResponse) VisitGetEntryByIDResponse(w http.ResponseWriter) error {
+func (response GetEntrydefaultJSONResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -924,8 +963,9 @@ func (response GetEntryByIDdefaultJSONResponse) VisitGetEntryByIDResponse(w http
 }
 
 type UpdateEntryRequestObject struct {
-	Id   openapi_types.UUID `json:"id"`
-	Body *UpdateEntryJSONRequestBody
+	Key   UpdateEntryParamsKey `json:"key"`
+	Value EntryLookupValue     `json:"value"`
+	Body  *UpdateEntryJSONRequestBody
 }
 
 type UpdateEntryResponseObject interface {
@@ -960,55 +1000,6 @@ func (response UpdateEntry404TextResponse) VisitUpdateEntryResponse(w http.Respo
 	return err
 }
 
-type GetEntryBySymbolRequestObject struct {
-	Symbol string `json:"symbol"`
-}
-
-type GetEntryBySymbolResponseObject interface {
-	VisitGetEntryBySymbolResponse(w http.ResponseWriter) error
-}
-
-type GetEntryBySymbol200JSONResponse Entry
-
-func (response GetEntryBySymbol200JSONResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type GetEntryBySymbol400TextResponse string
-
-func (response GetEntryBySymbol400TextResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(400)
-
-	_, err := w.Write([]byte(response))
-	return err
-}
-
-type GetEntryBySymbol404TextResponse string
-
-func (response GetEntryBySymbol404TextResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(404)
-
-	_, err := w.Write([]byte(response))
-	return err
-}
-
-type GetEntryBySymboldefaultJSONResponse struct {
-	Body       string
-	StatusCode int
-}
-
-func (response GetEntryBySymboldefaultJSONResponse) VisitGetEntryBySymbolResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(response.StatusCode)
-
-	return json.NewEncoder(w).Encode(response.Body)
-}
-
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Returns all consortia
@@ -1033,17 +1024,14 @@ type StrictServerInterface interface {
 	// (POST /entries)
 	AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error)
 	// Delete directory entry by ID
-	// (DELETE /entries/by-id/{id})
+	// (DELETE /entries/{key}/{value})
 	DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error)
-	// Returns a directory entry by ID
-	// (GET /entries/by-id/{id})
-	GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error)
+	// Returns a directory entry by ID or symbol
+	// (GET /entries/{key}/{value})
+	GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error)
 	// Update an entry
-	// (PATCH /entries/by-id/{id})
+	// (PATCH /entries/{key}/{value})
 	UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error)
-	// Returns a directory entry by symbol
-	// (GET /entries/by-symbol/{symbol})
-	GetEntryBySymbol(ctx context.Context, request GetEntryBySymbolRequestObject) (GetEntryBySymbolResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1275,10 +1263,11 @@ func (sh *strictHandler) AddEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteEntry operation middleware
-func (sh *strictHandler) DeleteEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+func (sh *strictHandler) DeleteEntry(w http.ResponseWriter, r *http.Request, key DeleteEntryParamsKey, value EntryLookupValue) {
 	var request DeleteEntryRequestObject
 
-	request.Id = id
+	request.Key = key
+	request.Value = value
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteEntry(ctx, request.(DeleteEntryRequestObject))
@@ -1300,25 +1289,26 @@ func (sh *strictHandler) DeleteEntry(w http.ResponseWriter, r *http.Request, id 
 	}
 }
 
-// GetEntryByID operation middleware
-func (sh *strictHandler) GetEntryByID(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	var request GetEntryByIDRequestObject
+// GetEntry operation middleware
+func (sh *strictHandler) GetEntry(w http.ResponseWriter, r *http.Request, key GetEntryParamsKey, value EntryLookupValue) {
+	var request GetEntryRequestObject
 
-	request.Id = id
+	request.Key = key
+	request.Value = value
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetEntryByID(ctx, request.(GetEntryByIDRequestObject))
+		return sh.ssi.GetEntry(ctx, request.(GetEntryRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetEntryByID")
+		handler = middleware(handler, "GetEntry")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetEntryByIDResponseObject); ok {
-		if err := validResponse.VisitGetEntryByIDResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetEntryResponseObject); ok {
+		if err := validResponse.VisitGetEntryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1327,10 +1317,11 @@ func (sh *strictHandler) GetEntryByID(w http.ResponseWriter, r *http.Request, id
 }
 
 // UpdateEntry operation middleware
-func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, key UpdateEntryParamsKey, value EntryLookupValue) {
 	var request UpdateEntryRequestObject
 
-	request.Id = id
+	request.Key = key
+	request.Value = value
 
 	var body UpdateEntryJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1359,59 +1350,34 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, id 
 	}
 }
 
-// GetEntryBySymbol operation middleware
-func (sh *strictHandler) GetEntryBySymbol(w http.ResponseWriter, r *http.Request, symbol string) {
-	var request GetEntryBySymbolRequestObject
-
-	request.Symbol = symbol
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetEntryBySymbol(ctx, request.(GetEntryBySymbolRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetEntryBySymbol")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetEntryBySymbolResponseObject); ok {
-		if err := validResponse.VisitGetEntryBySymbolResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

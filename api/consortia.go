@@ -23,7 +23,7 @@ func (a ApiImpl) AddConsortium(ctx context.Context, request AddConsortiumRequest
 	})
 	if err != nil {
 		log.Println(err)
-		return AddConsortium400TextResponse("Error creating authority"), nil
+		return AddConsortium400TextResponse("Error creating consortium"), nil
 	}
 
 	var resp Id

@@ -93,35 +93,31 @@ func getOneEntryFromRows(rows []db.ListEntriesRow) Entry {
 	return resp
 }
 
-func (a ApiImpl) GetEntryByID(ctx context.Context, request GetEntryByIDRequestObject) (GetEntryByIDResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{ID: &request.Id})
+func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
+	var rows []db.ListEntriesRow
+	var err error
+	if request.Key == GetEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return GetEntry400TextResponse("Error parsing id"), nil
+		}
+		rows, err = a.queries.ListEntries(ctx, db.ListEntriesParams{ID: &parsedId})
+	} else if request.Key == GetEntryParamsKeyBySymbol {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return GetEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		rows, err = a.queries.ListEntries(ctx, db.ListEntriesParams{Authority: &authority, Symbol: &symbol})
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if len(rows) == 0 {
-		return GetEntryByID404TextResponse("Entry not found"), nil
+		return GetEntry404TextResponse("Entry not found"), nil
 	}
 
-	return GetEntryByID200JSONResponse(getOneEntryFromRows(rows)), nil
-}
-
-func (a ApiImpl) GetEntryBySymbol(ctx context.Context, request GetEntryBySymbolRequestObject) (GetEntryBySymbolResponseObject, error) {
-	authority, symbol, err := resolveCombinedSymbol(request.Symbol)
-	if err != nil {
-		return GetEntryBySymbol400TextResponse("No delimiter found in symbol"), nil
-	}
-
-	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{Authority: &authority, Symbol: &symbol})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(rows) == 0 {
-		return GetEntryBySymbol404TextResponse("Entry not found"), nil
-	}
-
-	return GetEntryBySymbol200JSONResponse(getOneEntryFromRows(rows)), nil
+	return GetEntry200JSONResponse(getOneEntryFromRows(rows)), nil
 }
 
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
@@ -188,7 +184,23 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
 	var orig db.Entry
-	orig, err := a.queries.EntryById(ctx, request.Id)
+	var err error
+	if request.Key == UpdateEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("Error parsing id"), nil
+		}
+		orig, err = a.queries.EntryById(ctx, parsedId)
+		if err != nil {
+			print(err.Error())
+		}
+	} else if request.Key == UpdateEntryParamsKeyBySymbol {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		orig, err = a.queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: authority, Symbol: symbol})
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return UpdateEntry404TextResponse("Entry not found"), nil
 	} else if err != nil {
@@ -206,7 +218,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		Name:        derefOrDefault(request.Body.Name, orig.Name),
 		ContactName: maybeUpdateCol(orig.ContactName, request.Body.ContactName),
 		Email:       maybeUpdateCol(orig.Email, request.Body.Email),
-		ID:          request.Id,
+		ID:          orig.ID,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -222,16 +234,16 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 		if len(patchedSymbols) > 0 {
-			qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: request.Id, Ids: patchedSymbols})
+			qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: orig.ID, Ids: patchedSymbols})
 		} else {
-			qtx.DeleteAllOwnedSymbols(ctx, request.Id)
+			qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
 		}
 
 		// Update/create symbols
 		for _, symbol := range reqsyms {
 			_, err = qtx.UpsertSymbol(ctx, db.UpsertSymbolParams{
 				ID:        symbol.Id,
-				Owner:     request.Id,
+				Owner:     orig.ID,
 				Symbol:    strings.ToUpper(symbol.Symbol),
 				Authority: strings.ToUpper(symbol.Authority),
 			})
@@ -247,7 +259,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 	} else if request.Body.Symbols.IsNull() {
-		qtx.DeleteAllOwnedSymbols(ctx, request.Id)
+		qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
 	}
 
 	if request.Body.Endpoints.IsSpecified() && !request.Body.Endpoints.IsNull() {
@@ -260,16 +272,16 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 		if len(patchedEndpoints) > 0 {
-			qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: request.Id, Ids: patchedEndpoints})
+			qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: orig.ID, Ids: patchedEndpoints})
 		} else {
-			qtx.DeleteAllOwnedServiceEndpoints(ctx, request.Id)
+			qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
 		}
 
 		// Update/create endpoints
 		for _, endpoint := range reqeps {
 			_, err = qtx.UpsertServiceEndpoint(ctx, db.UpsertServiceEndpointParams{
 				ID:      endpoint.Id,
-				Entry:   request.Id,
+				Entry:   orig.ID,
 				Name:    endpoint.Name,
 				Type:    endpoint.Type,
 				Address: endpoint.Address,
@@ -279,7 +291,7 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 	} else if request.Body.Endpoints.IsNull() {
-		qtx.DeleteAllOwnedServiceEndpoints(ctx, request.Id)
+		qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
 	}
 
 	err = tx.Commit(ctx)
@@ -291,7 +303,20 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 }
 
 func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
-	err := a.queries.DeleteEntry(ctx, request.Id)
+	var err error
+	if request.Key == DeleteEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return DeleteEntry400TextResponse("Error parsing id"), nil
+		}
+		err = a.queries.DeleteEntryById(ctx, parsedId)
+	} else if request.Key == DeleteEntryParamsKeyBySymbol {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return DeleteEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		err = a.queries.DeleteEntryBySymbol(ctx, db.DeleteEntryBySymbolParams{Authority: authority, Symbol: symbol})
+	}
 	if err != nil {
 		log.Fatal(err)
 	}

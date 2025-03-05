@@ -102,12 +102,29 @@ func (q *Queries) DeleteConsortium(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-const deleteEntry = `-- name: DeleteEntry :exec
-DELETE from entries where id = $1
+const deleteEntryById = `-- name: DeleteEntryById :exec
+DELETE from entries WHERE id = $1
 `
 
-func (q *Queries) DeleteEntry(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteEntry, id)
+func (q *Queries) DeleteEntryById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEntryById, id)
+	return err
+}
+
+const deleteEntryBySymbol = `-- name: DeleteEntryBySymbol :exec
+DELETE from entries USING symbols
+WHERE entries.id = symbols.owner
+  AND symbols.authority = $1
+  AND symbols.symbol = $2
+`
+
+type DeleteEntryBySymbolParams struct {
+	Authority string
+	Symbol    string
+}
+
+func (q *Queries) DeleteEntryBySymbol(ctx context.Context, arg DeleteEntryBySymbolParams) error {
+	_, err := q.db.Exec(ctx, deleteEntryBySymbol, arg.Authority, arg.Symbol)
 	return err
 }
 
@@ -140,12 +157,36 @@ func (q *Queries) DeleteOtherOwnedSymbols(ctx context.Context, arg DeleteOtherOw
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries
-WHERE id = $1 LIMIT 1
+SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 	row := q.db.QueryRow(ctx, entryById, id)
+	var i Entry
+	err := row.Scan(
+		&i.ID,
+		&i.Parent,
+		&i.Name,
+		&i.Description,
+		&i.LmsLocationCode,
+		&i.ContactName,
+		&i.Email,
+		&i.Phone,
+	)
+	return i, err
+}
+
+const entryBySymbol = `-- name: EntryBySymbol :one
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+`
+
+type EntryBySymbolParams struct {
+	Authority string
+	Symbol    string
+}
+
+func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (Entry, error) {
+	row := q.db.QueryRow(ctx, entryBySymbol, arg.Authority, arg.Symbol)
 	var i Entry
 	err := row.Scan(
 		&i.ID,

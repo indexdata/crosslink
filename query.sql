@@ -1,6 +1,8 @@
 -- name: EntryById :one
-SELECT * FROM entries
-WHERE id = $1 LIMIT 1;
+SELECT * FROM entries WHERE id = $1 LIMIT 1;
+
+-- name: EntryBySymbol :one
+SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
 
 -- name: ListEntries :many
 SELECT sqlc.embed(e), sqlc.embed(s), sqlc.embed(ep)
@@ -33,8 +35,14 @@ SET
   email = @email
 WHERE id = @id;
 
--- name: DeleteEntry :exec
-DELETE from entries where id = @id;
+-- name: DeleteEntryById :exec
+DELETE from entries WHERE id = @id;
+
+-- name: DeleteEntryBySymbol :exec
+DELETE from entries USING symbols
+WHERE entries.id = symbols.owner
+  AND symbols.authority = @authority
+  AND symbols.symbol = @symbol;
 
 -- name: UpsertSymbol :one
 INSERT INTO symbols (

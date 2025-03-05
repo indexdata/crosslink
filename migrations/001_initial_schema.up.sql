@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS entries (
 
 CREATE TABLE IF NOT EXISTS symbols (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	owner uuid NOT NULL REFERENCES entries (id),
+	owner uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	authority varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	symbol varchar(255) NOT NULL CHECK (symbol = upper(symbol)),
 	UNIQUE (authority, symbol)
@@ -21,7 +21,7 @@ CREATE INDEX symbols_authority_symbol_idx ON symbols (symbol, authority);
 
 CREATE TABLE IF NOT EXISTS service_endpoints (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	entry uuid NOT NULL REFERENCES entries (id),
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255) NOT NULL,
 	type varchar(255) NOT NULL,
 	address varchar(255) NOT NULL
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS service_endpoints (
 
 CREATE TABLE IF NOT EXISTS consortia (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	entry uuid REFERENCES entries (id),
+	entry uuid REFERENCES entries (id) ON DELETE SET NULL,
 	name varchar(255) NOT NULL
 );
 

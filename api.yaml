@@ -156,6 +156,7 @@ paths:
             text/plain:
               schema:
                 type: string
+
   /entries:
     get:
       summary: Returns all entries
@@ -224,18 +225,13 @@ paths:
             text/plain:
               schema:
                 type: string
-  /entries/by-id/{id}:
+  /entries/{key}/{value}:
     get:
-      summary: Returns a directory entry by ID
-      operationId: getEntryByID
+      summary: Returns a directory entry by ID or symbol
+      operationId: getEntry
       parameters:
-        - name: id
-          in: path
-          description: ID of entry to fetch
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
       responses:
         '200':
           description: Entry response
@@ -266,13 +262,8 @@ paths:
       description: Update an entry
       operationId: updateEntry
       parameters:
-        - name: id
-          in: path
-          description: ID of entry to update
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
       requestBody:
         description: Updated fields
         required: true
@@ -299,13 +290,8 @@ paths:
       summary: Delete directory entry by ID
       operationId: deleteEntry
       parameters:
-        - name: id
-          in: path
-          description: ID of entry to delete
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
       responses:
         '204':
           description: entry deleted
@@ -321,44 +307,27 @@ paths:
             text/plain:
               schema:
                 type: string
-  /entries/by-symbol/{symbol}:
-    get:
-      summary: Returns a directory entry by symbol
-      operationId: getEntryBySymbol
-      parameters:
-        - name: symbol
-          in: path
-          description: Symbol of entry to fetch
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Entry response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Entry'
-        '400':
-          description: Request validation error
-          content:
-            text/plain:
-              schema:
-                type: string
-        '404':
-          description: Entry not found
-          content:
-            text/plain:
-              schema:
-                type: string
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                type: string
+
+
 
 components:
+  parameters:
+    entryLookupKey:
+      name: key
+      in: path
+      description: Key to look up entry, either 'id' or 'symbol'
+      required: true
+      schema:
+        type: string
+        enum: [by-id, by-symbol]
+    entryLookupValue:
+      name: value
+      in: path
+      description: Value of id or symbol to access entry by
+      required: true
+      schema:
+        type: string
+
   schemas:
     Id:
       required:

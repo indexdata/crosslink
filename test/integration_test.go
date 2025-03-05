@@ -213,7 +213,6 @@ func testCase(t *testing.T, c httpTestCase) {
 				}
 
 			}
-			fmt.Print(redata)
 			ja.Assertf(redata, expectedRefetchResponse)
 		}
 	}
@@ -271,6 +270,12 @@ func TestEntryCases(t *testing.T) {
 			status:   http.StatusBadRequest,
 		},
 		{
+			name:     "GET by invalid id",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-id/not-an-id",
+			status:   http.StatusBadRequest,
+		},
+		{
 			name:     "GET id not found",
 			method:   http.MethodGet,
 			endpoint: "/entries/by-id/f0000000-0000-0000-0000-000000000002",
@@ -314,12 +319,13 @@ func TestEntryCases(t *testing.T) {
 			refetchFile: "entry.patch.refetch.json",
 		},
 		{
-			name:        "PATCH entry differently",
-			method:      http.MethodPatch,
-			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000002",
-			status:      http.StatusNoContent,
-			bodyFile:    "entry.patch2.req.json",
-			refetchFile: "entry.patch2.refetch.json",
+			name:            "PATCH entry by symbol",
+			method:          http.MethodPatch,
+			endpoint:        "/entries/by-symbol/TEST:ANINST",
+			status:          http.StatusNoContent,
+			bodyFile:        "entry.patch2.req.json",
+			refetchEndpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			refetchFile:     "entry.patch2.refetch.json",
 		},
 		{
 			name:     "PATCH id not found",
@@ -339,6 +345,13 @@ func TestEntryCases(t *testing.T) {
 			name:          "DELETE entry",
 			method:        http.MethodDelete,
 			endpoint:      "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:        http.StatusNoContent,
+			refetchStatus: http.StatusNotFound,
+		},
+		{
+			name:          "DELETE entry by symbol",
+			method:        http.MethodDelete,
+			endpoint:      "/entries/by-symbol/TEST:ANINST",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 		},
