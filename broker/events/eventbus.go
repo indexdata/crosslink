@@ -15,7 +15,7 @@ import (
 )
 
 type EventBus interface {
-	Start(ctx extctx.ExtendedContext)
+	Start(ctx extctx.ExtendedContext) error
 	CreateTask(illTransactionID string, eventName EventName, data EventData) error
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error
 	BeginTask(eventId string) error
