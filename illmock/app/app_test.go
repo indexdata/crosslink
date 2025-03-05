@@ -584,33 +584,32 @@ func TestService(t *testing.T) {
 	t.Run("Patron request cancel no", func(t *testing.T) {
 		app.flowsApi.Init()
 		requesterId := uuid.NewString()
-		for _, scenario := range []string{"LOANED"} {
-			msg := createPatronRequest()
-			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
-			msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
-			msg.Request.ServiceInfo.Note = "#CANCEL#"
-			buf, err := xml.Marshal(msg)
-			assert.Nil(t, err)
-			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-			assert.Nil(t, err)
-			assert.Equal(t, 200, resp.StatusCode)
-			defer resp.Body.Close()
-			buf, err = io.ReadAll(resp.Body)
-			assert.Nil(t, err)
-			var response iso18626.ISO18626Message
-			err = xml.Unmarshal(buf, &response)
-			assert.Nil(t, err)
-			assert.NotNil(t, response.RequestConfirmation)
-			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-			assert.Nil(t, response.RequestConfirmation.ErrorData)
-		}
+		scenario := "LOANED"
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
+		msg.Request.ServiceInfo.Note = "#CANCEL#"
+		buf, err := xml.Marshal(msg)
+		assert.Nil(t, err)
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Nil(t, response.RequestConfirmation.ErrorData)
 		time.Sleep(500 * time.Millisecond)
-		resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
+		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		defer resp.Body.Close()
-		buf, err := io.ReadAll(resp.Body)
+		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		assert.Contains(t, string(buf), "<serviceInfo>")
 		var flowR flows.Flows
@@ -622,39 +621,38 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoN, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
-		assert.Len(t, flowR.Flows[0].Message, 10)
+		assert.Len(t, flowR.Flows[0].Message, 14)
 	})
 
 	t.Run("Patron request cancel yes", func(t *testing.T) {
 		app.flowsApi.Init()
 		requesterId := uuid.NewString()
-		for _, scenario := range []string{"WILLSUPPLY_LOANED"} {
-			msg := createPatronRequest()
-			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
-			msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
-			msg.Request.ServiceInfo.Note = "#CANCEL#"
-			buf, err := xml.Marshal(msg)
-			assert.Nil(t, err)
-			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-			assert.Nil(t, err)
-			assert.Equal(t, 200, resp.StatusCode)
-			defer resp.Body.Close()
-			buf, err = io.ReadAll(resp.Body)
-			assert.Nil(t, err)
-			var response iso18626.ISO18626Message
-			err = xml.Unmarshal(buf, &response)
-			assert.Nil(t, err)
-			assert.NotNil(t, response.RequestConfirmation)
-			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
-			assert.Nil(t, response.RequestConfirmation.ErrorData)
-		}
-		time.Sleep(600 * time.Millisecond)
-		resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
+		scenario := "WILLSUPPLY_LOANED"
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
+		msg.Request.ServiceInfo.Note = "#CANCEL#"
+		buf, err := xml.Marshal(msg)
+		assert.Nil(t, err)
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Nil(t, response.RequestConfirmation.ErrorData)
+		time.Sleep(500 * time.Millisecond)
+		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		defer resp.Body.Close()
-		buf, err := io.ReadAll(resp.Body)
+		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var flowR flows.Flows
 		err = xml.Unmarshal(buf, &flowR)
@@ -883,7 +881,7 @@ func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
-	app.sendSupplyingAgencyMessage(header)
+	app.sendSupplyingAgencyLater(header)
 }
 
 func TestSendSuppluingAgencyInternalError(t *testing.T) {
@@ -904,7 +902,7 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 
 	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
-	app.sendSupplyingAgencyMessage(header)
+	app.sendSupplyingAgencyLater(header)
 }
 
 func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
@@ -931,5 +929,5 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 
 	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
-	app.sendSupplyingAgencyMessage(header)
+	app.sendSupplyingAgencyLater(header)
 }

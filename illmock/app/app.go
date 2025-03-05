@@ -328,7 +328,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	app.writeIso18626Response(resmsg, w, role.Supplier, &illRequest.Header)
-	go app.sendSupplyingAgencyMessage(&illRequest.Header)
+	go app.sendSupplyingAgencyLater(&illRequest.Header)
 }
 
 func logMessage(lead string, illMessage *iso18626.Iso18626MessageNS) bool {
@@ -379,6 +379,19 @@ func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
+func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.Iso18626MessageNS) bool {
+	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
+	if err != nil {
+		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
+		return false
+	}
+	if responseMsg.SupplyingAgencyMessageConfirmation == nil {
+		log.Warn("sendSupplyingAgencyCancel did not receive SupplyingAgencyMessageConfirmation")
+		return false
+	}
+	return true
+}
+
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
@@ -392,18 +405,10 @@ func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *su
 		}
 	}
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
-	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
-	if err != nil {
-		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
-		return
-	}
-	if responseMsg.SupplyingAgencyMessageConfirmation == nil {
-		log.Warn("sendSupplyingAgencyCancel did not receive SupplyingAgencyMessageConfirmation")
-		return
-	}
+	app.sendSupplyingAgencyMessage(header, state, msg)
 }
 
-func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
+func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	time.Sleep(app.supplyDuration)
 
 	msg := createSupplyingAgencyMessage()
@@ -428,17 +433,10 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header) {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	}
 	state.index++
-	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
-	if err != nil {
-		log.Warn("sendSupplyingAgencyMessage", "error", err.Error())
-		return
-	}
-	if responseMsg.SupplyingAgencyMessageConfirmation == nil {
-		log.Warn("sendSupplyingAgencyMessage did not receive SupplyingAgencyMessageConfirmation")
-		return
-	}
-	if state.index < len(state.status) {
-		go app.sendSupplyingAgencyMessage(header)
+	if app.sendSupplyingAgencyMessage(header, state, msg) {
+		if state.index < len(state.status) {
+			go app.sendSupplyingAgencyLater(header)
+		}
 	}
 }
 
@@ -481,7 +479,7 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 	}
 	state.index = 0
 	state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
-	go app.sendSupplyingAgencyMessage(header)
+	go app.sendSupplyingAgencyLater(header)
 }
 
 func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
@@ -534,9 +532,12 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 		log.Info("handleIso18626SupplyingAgencyMessage supplier loan completed delete")
 		requester.delete(header)
 	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled {
-		log.Info("handleIso18626SupplyingAgencyMessage cancelled delete")
-		requester.delete(header)
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled &&
+		supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
+		if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
+			log.Info("handleIso18626SupplyingAgencyMessage cancelled delete")
+			requester.delete(header)
+		}
 	}
 }
 
@@ -565,6 +566,9 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	if responseMsg.RequestingAgencyMessageConfirmation.Action == nil || *responseMsg.RequestingAgencyMessageConfirmation.Action != action {
 		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation")
 		return
+	}
+	if state.action == iso18626.TypeActionCancel {
+		state.action = ""
 	}
 	if state.action == iso18626.TypeActionReceived {
 		state.action = iso18626.TypeActionShippedReturn
