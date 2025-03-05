@@ -17,11 +17,11 @@ other:
     HTTP_PORT=8081 PEER_URL=http://localhost:8082 ./illmock
 
 We will use the former as a requester and the latter as a supplier, by sending
-a Patron Request to the former with:
+a Patron Request with one of the sample message in directory `examples`:
 
-    curl -XPOST -HContent-Type:text/xml \ -d'<ISO18626Message><request><bibliographicInfo><supplierUniqueRecordId>WILLSUPPLY_LOANED</supplierUniqueRecordId>
-     </bibliographicInfo><serviceInfo><requestType>New</requestType><requestSubType>PatronRequest</requestSubType><serviceType>
-     </serviceType></serviceInfo></request></ISO18626Message>' http://localhost:8081/iso18626
+    curl -XPOST -HContent-Type:text/xml -d@examples/req.xml http://localhost:8081/iso18626
+
+## Supplier behavior
 
 The `supplierUniqueRecordId` value is used to invoke a particular scenario on
 the supplier.
@@ -39,6 +39,13 @@ following values are recognized:
 
 The scenario is inspected in the supplier request
 `<bibliographicInfo><supplierUniqueRecordId>` field.
+
+## Requester behavior
+
+If the PatronRequest's serviceInfo/note fields is `#CANCEL#` the requester will send a
+Cancel to the supplier upon receiving the first SupplyingAgencyMessage.
+
+For a sample, refer `examples/cancel-req.xml`.
 
 # ILL flows
 
@@ -117,7 +124,8 @@ If omitted or empty, a value of `REQ` is used.
 
 ## CLEAN_TIMEOUT
 
-Flow WS API: Specifies how long a flow is kept in memory before being removed. Default value is `10m`.
+Flow Web service API: Specifies how long a flow is kept in memory before being removed.
+Default value is `10m`.
 
 ## SUPPLY_DURATION
 
