@@ -13,6 +13,7 @@ const (
 	EventStatusSuccess    EventStatus = "SUCCESS"
 	EventStatusProblem    EventStatus = "PROBLEM"
 	EventStatusError      EventStatus = "ERROR"
+	//TODO add new EventStatusRetry
 )
 
 type EventType string

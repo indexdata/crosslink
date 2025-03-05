@@ -15,10 +15,13 @@ import (
 )
 
 type EventBus interface {
-	Start(ctx extctx.ExtendedContext) error
+	Start(ctx extctx.ExtendedContext)
 	CreateTask(illTransactionID string, eventName EventName, data EventData) error
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error
 	BeginTask(eventId string) error
+	//TODO indicate that the task should be retried by setting the status to EventStatusRetry
+	//TODO the event bus will use the default retry timeout and count, but the handler can override this
+	//TODO by setting the event.RetryAfter and/or event.RetryCount fields
 	CompleteTask(eventId string, result *EventResult, status EventStatus) error
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
@@ -125,6 +128,7 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		triggerHandlers(eventCtx, event, p.TaskStartedHandlers)
 	case SignalTaskComplete:
 		triggerHandlers(eventCtx, event, p.TaskCompletedHandlers)
+	//TODO on SignalTaskRetry handle the delay specified with event.Deadline
 	default:
 		p.ctx.Logger().Error("Not supported signal", "signal", data.Signal)
 	}
@@ -238,6 +242,9 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete)
+		// TODO if event is in status EventStatusRetry, do not notify SignalTaskComplete, instead create a new event with the same data,
+		// TODO calculate the event.Deadline and event.RetryNumber based on the default config or event.RetryAfter and event.RetryCount fields if specified
+		// TODO then notify SignalTaskRetry
 		return err
 	})
 }
