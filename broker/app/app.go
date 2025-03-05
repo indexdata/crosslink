@@ -2,22 +2,17 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/client"
 	"github.com/indexdata/crosslink/broker/oapi"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/indexdata/crosslink/broker/service"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/indexdata/crosslink/broker/client"
-	"github.com/indexdata/crosslink/broker/service"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -40,11 +35,17 @@ var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
-var INIT_DATA = utils.GetEnv("INIT_DATA", "true")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
+
+type Context struct {
+	EventBus   events.EventBus
+	IllRepo    ill_db.IllRepo
+	EventRepo  events.EventRepo
+	DirAdapter adapter.DirectoryLookupAdapter
+}
 
 func configLog() slog.Handler {
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
@@ -56,7 +57,7 @@ func configLog() slog.Handler {
 	}
 }
 
-func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, error) {
+func Init(ctx context.Context) (Context, error) {
 	RunMigrateScripts()
 	pool := InitDbPool()
 	eventRepo := CreateEventRepo(pool)
@@ -68,41 +69,44 @@ func Init(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRep
 		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
 		adapter.SruUrl:          SRU_URL,
 	})
+	dirAdapter := new(adapter.MockDirectoryLookupAdapter)
 	if err != nil {
-		return nil, nil, nil, err
+		return Context{}, err
 	}
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, new(adapter.MockDirectoryLookupAdapter), holdingsAdapter)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo)
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
 	StartEventBus(ctx, eventBus)
-	return eventBus, illRepo, eventRepo, nil
+	return Context{
+		EventBus:   eventBus,
+		IllRepo:    illRepo,
+		EventRepo:  eventRepo,
+		DirAdapter: dirAdapter,
+	}, nil
 }
 
 func Run(ctx context.Context) error {
-	eventBus, illRepo, eventRepo, err := Init(ctx)
+	context, err := Init(ctx)
 	if err != nil {
 		return err
 	}
-	return StartServer(illRepo, eventRepo, eventBus)
+	return StartServer(context)
 }
 
-func StartServer(illRepo ill_db.IllRepo, eventRepo events.EventRepo, eventBus events.EventBus) error {
-	if strings.EqualFold(INIT_DATA, "true") {
-		initData(illRepo)
-	}
+func StartServer(context Context) error {
 	mux := http.NewServeMux()
 
 	serviceHandler := http.HandlerFunc(HandleRequest)
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
 
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(illRepo, eventBus))
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter))
 	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(eventRepo, illRepo)
+	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo)
 	oapi.HandlerFromMux(&apiHandler, mux)
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
@@ -194,33 +198,4 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
-}
-
-func initData(illRepo ill_db.IllRepo) {
-	peer, err := illRepo.GetPeerBySymbol(appCtx, "isil:req")
-	if err == nil {
-		appCtx.Logger().Info("Deleting existing mock Requester peer")
-		err = illRepo.DeletePeer(appCtx, peer.ID)
-		if err != nil {
-			appCtx.Logger().Warn("Deleting existing mock Requester peer failed, probably used in a transaction", "error", err)
-			return
-		}
-	} else {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			panic(err)
-		}
-		appCtx.Logger().Info("No existing mock Requester peer found")
-	}
-	appCtx.Logger().Info("Creating mock Requester peer")
-	utils.Warn(illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
-		ID:            "d3b07384-d9a0-4c1e-8f8e-4f8e4f8e4f8e",
-		Name:          "Requester",
-		Symbol:        "isil:req",
-		Url:           adapter.MOCK_CLIENT_URL,
-		RefreshPolicy: ill_db.RefreshPolicyNever,
-		RefreshTime: pgtype.Timestamp{
-			Time:  time.Now(),
-			Valid: true,
-		},
-	}))
 }

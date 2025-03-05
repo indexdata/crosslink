@@ -1,24 +1,16 @@
 package service
 
 import (
-	"errors"
-	"math"
-	"sort"
-	"strings"
-	"time"
-
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"math"
+	"sort"
+	"strings"
 )
-
-var PEER_REFRESH_INTERVAL = utils.GetEnv("PEER_REFRESH_INTERVAL", "5m")
-var PeerRefreshInterval = utils.Must(time.ParseDuration(PEER_REFRESH_INTERVAL))
 
 type SupplierLocator struct {
 	eventBus        events.EventBus
@@ -85,35 +77,20 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	symLocalIdMapping := make(map[string]string, len(holdings))
 	suppliersToAdd := make([]SupplierToAdd, 0, len(holdings))
 	for _, holding := range holdings {
-		peer, e := s.illRepo.GetPeerBySymbol(ctx, holding.Symbol)
-		if e != nil || s.shouldRefreshSupplier(peer) {
-			symbols = append(symbols, holding.Symbol)
-			symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
-		} else {
-			suppliersToAdd = append(suppliersToAdd, SupplierToAdd{
-				Peer:            peer,
-				LocalIdentifier: holding.LocalIdentifier,
-				Ratio:           getPeerRatio(peer),
-			})
-		}
+		symbols = append(symbols, holding.Symbol)
+		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
 	}
 
-	if len(symbols) > 0 {
-		directories, err := s.dirAdapter.Lookup(adapter.DirectoryLookupParams{
-			Symbols: symbols,
-		})
-
-		if err != nil {
-			ctx.Logger().Error("failed to lookup directories: "+strings.Join(symbols, ","), "error", err)
-			if len(suppliersToAdd) == 0 {
-				return logErrorAndReturnResult(ctx, "failed to lookup directories: "+strings.Join(symbols, ","), err)
-			}
-		} else if len(directories) == 0 {
-			ctx.Logger().Error("could not find directories: " + strings.Join(symbols, ","))
+	peers := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
+	for _, peer := range peers {
+		if localId, ok := symLocalIdMapping[peer.Symbol]; ok {
+			suppliersToAdd = append(suppliersToAdd, SupplierToAdd{
+				Peer:            peer,
+				LocalIdentifier: localId,
+				Ratio:           getPeerRatio(peer),
+			})
 		} else {
-			for _, dir := range directories {
-				s.findSymbolAndAddToList(ctx, dir, symLocalIdMapping, &suppliersToAdd)
-			}
+			ctx.Logger().Error("could not find local id for symbol", "symbol", peer.Symbol)
 		}
 	}
 
@@ -135,55 +112,6 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	}
 
 	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
-}
-
-func (s *SupplierLocator) shouldRefreshSupplier(peer ill_db.Peer) bool {
-	return peer.RefreshPolicy == ill_db.RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval))
-}
-
-func (s *SupplierLocator) findSymbolAndAddToList(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, symLocalIdMapping map[string]string, suppliersToAdd *[]SupplierToAdd) {
-	peer, err := s.illRepo.GetPeerBySymbol(ctx, dir.Symbol)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams{
-				ID:            uuid.New().String(),
-				Symbol:        dir.Symbol,
-				Url:           dir.URL,
-				Name:          dir.Symbol,
-				RefreshPolicy: ill_db.RefreshPolicyTransaction,
-				RefreshTime: pgtype.Timestamp{
-					Time:  time.Now(),
-					Valid: true,
-				},
-			})
-		}
-		if err != nil {
-			ctx.Logger().Error("could not get peer by symbol", "symbol", dir.Symbol, "error", err)
-			return
-		}
-	}
-	if s.shouldRefreshSupplier(peer) {
-		peer.Url = dir.URL
-		peer.RefreshTime = pgtype.Timestamp{
-			Time:  time.Now(),
-			Valid: true,
-		}
-		peer, err = s.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
-		if err != nil {
-			ctx.Logger().Error("could not update peer", "symbol", dir.Symbol, "error", err)
-			return
-		}
-	}
-	locId, ok := symLocalIdMapping[dir.Symbol]
-	if !ok {
-		ctx.Logger().Error("could not get local id for symbol", "symbol", dir.Symbol, "mapping", symLocalIdMapping)
-		return
-	}
-	*suppliersToAdd = append(*suppliersToAdd, SupplierToAdd{
-		Peer:            peer,
-		LocalIdentifier: locId,
-		Ratio:           getPeerRatio(peer),
-	})
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {

@@ -371,8 +371,8 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
-			eventStatus: events.EventStatusError,
-			message:     "failed to lookup directories: error",
+			eventStatus: events.EventStatusProblem,
+			message:     "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",

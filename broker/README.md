@@ -21,7 +21,6 @@ Configuration is provided via environment variables:
 | DB_DATABASE           | Database name                              | `crosslink`                       |
 | DB_PORT               | Database port                              | `25432`                           |
 | ENABLE_JSON_LOG       | Should JSON log format be enabled          | `false`                           |
-| INIT_DATA             | Should init test data                      | `true`                            |
 | MOCK_CLIENT_URL       | Mock client URL used for directory entries | `http://localhost:19083/iso18626` |
 | HOLDINGS_ADAPTER      | Holdings lookup method: `mock` or `sru`    | `mock`                            |
 | SRU_URL               | URL when HOLDINGS_ADAPTER is `sru`         | `http://localhost:8081/sru`       |

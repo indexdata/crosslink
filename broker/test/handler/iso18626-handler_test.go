@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ var eventBussSuccess = events.NewPostgresEventBus(mockEventRepoSuccess, "mock")
 var mockIllRepoError = new(test.MockIllRepositoryError)
 var mockEventRepoError = new(test.MockEventRepositoryError)
 var eventBussError = events.NewPostgresEventBus(mockEventRepoError, "mock")
+var dirAdapter = new(adapter.MockDirectoryLookupAdapter)
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/request.xml")
@@ -28,7 +30,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -49,7 +51,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusMethodNotAllowed {
@@ -64,7 +66,7 @@ func TestIso18626PostHandlerWrongContentType(t *testing.T) {
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusUnsupportedMediaType {
@@ -78,7 +80,7 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusBadRequest {
@@ -93,7 +95,7 @@ func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -114,7 +116,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 	rr := httptest.NewRecorder()
 	var mockRepo = &MockRepository{}
 
-	handler.Iso18626PostHandler(mockRepo, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockRepo, eventBussError, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -129,7 +131,7 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -150,7 +152,7 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -170,7 +172,7 @@ func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -185,7 +187,7 @@ func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -205,7 +207,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -225,7 +227,7 @@ func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusInternalServerError {
@@ -240,7 +242,7 @@ func TestIso18626PostRequestingMessageMissing(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
 
 	// Check the response
 	if status := rr.Code; status != http.StatusOK {
@@ -258,10 +260,10 @@ type MockRepository struct {
 	test.MockIllRepositoryError
 }
 
-func (r *MockRepository) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (ill_db.Peer, error) {
-	return ill_db.Peer{
+func (r *MockRepository) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
+	return []ill_db.Peer{{
 		ID:     "peer1",
-		Name:   symbol,
-		Symbol: symbol,
-	}, nil
+		Name:   symbols[0],
+		Symbol: symbols[0],
+	}}
 }

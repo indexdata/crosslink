@@ -2,7 +2,9 @@ package ill_db
 
 import (
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"time"
 )
 
 type IllTransactionData struct {
@@ -33,3 +35,6 @@ var SupplierStatusSelectedPg = pgtype.Text{
 }
 
 const RequestAction = "Request"
+
+var PEER_REFRESH_INTERVAL = utils.GetEnv("PEER_REFRESH_INTERVAL", "5m")
+var PeerRefreshInterval = utils.Must(time.ParseDuration(PEER_REFRESH_INTERVAL))
