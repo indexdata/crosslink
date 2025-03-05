@@ -425,8 +425,6 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
 		supplier.delete(header)
 	}
-	log.Info("sendSupplyingAgencyMessage", "status", state.status[state.index], "index", state.index)
-
 	if state.index == 0 {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
 	} else {
@@ -529,13 +527,11 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 		go app.sendRequestingAgencyMessage(header)
 	}
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
-		log.Info("handleIso18626SupplyingAgencyMessage supplier loan completed delete")
 		requester.delete(header)
 	}
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled &&
 		supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
 		if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
-			log.Info("handleIso18626SupplyingAgencyMessage cancelled delete")
 			requester.delete(header)
 		}
 	}
@@ -568,7 +564,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 		return
 	}
 	if state.action == iso18626.TypeActionCancel {
-		state.action = ""
+		state.action = "" // send only cancel action once
 	}
 	if state.action == iso18626.TypeActionReceived {
 		state.action = iso18626.TypeActionShippedReturn
