@@ -546,6 +546,9 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	}
 
 	action := state.action
+	if state.action == iso18626.TypeActionCancel {
+		state.action = "" // send only cancel action once
+	}
 	msg := createRequestingAgencyMessage()
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = action
@@ -562,9 +565,6 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 	if responseMsg.RequestingAgencyMessageConfirmation.Action == nil || *responseMsg.RequestingAgencyMessageConfirmation.Action != action {
 		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation")
 		return
-	}
-	if state.action == iso18626.TypeActionCancel {
-		state.action = "" // send only cancel action once
 	}
 	if state.action == iso18626.TypeActionReceived {
 		state.action = iso18626.TypeActionShippedReturn
