@@ -26,7 +26,7 @@ import (
 )
 
 type requesterInfo struct {
-	action      iso18626.TypeAction
+	cancel      bool
 	supplierUrl string
 }
 
@@ -221,10 +221,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	header := &msg.Request.Header
 
 	// ServiceInfo != nil already
-	action := iso18626.TypeActionReceived
-	if illRequest.ServiceInfo.Note == "#CANCEL#" {
-		action = iso18626.TypeActionCancel
-	}
+	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -246,7 +243,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 
 	app.logIncomingReq(role.Requester, header, illMessage)
 
-	requesterInfo := &requesterInfo{action: action, supplierUrl: app.peerUrl}
+	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
 		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
@@ -395,15 +392,19 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *s
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
-	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusCancelled
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
+	// cancel by default
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	var status iso18626.TypeStatus = iso18626.TypeStatusCancelled
+	// check if already loaned
 	for i := 0; i < state.index; i++ {
 		if state.status[i] == iso18626.TypeStatusLoaned {
 			answer = iso18626.TypeYesNoN
+			status = iso18626.TypeStatusLoaned
 			break
 		}
 	}
+	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
 	app.sendSupplyingAgencyMessage(header, state, msg)
 }
@@ -522,9 +523,11 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
 
-	if state.action == iso18626.TypeActionCancel ||
-		supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
-		go app.sendRequestingAgencyMessage(header)
+	if state.cancel {
+		state.cancel = false
+		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
+	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
 	}
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
 		requester.delete(header)
@@ -537,15 +540,13 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	}
 }
 
-func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
+func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action iso18626.TypeAction) {
 	requester := &app.requester
 	state := requester.load(header)
 	if state == nil {
 		log.Warn("sendRequestingAgencyMessage request gone", "key", requester.getKey(header))
 		return
 	}
-
-	action := state.action
 	msg := createRequestingAgencyMessage()
 	msg.RequestingAgencyMessage.Header = *header
 	msg.RequestingAgencyMessage.Action = action
@@ -563,12 +564,8 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header) {
 		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation")
 		return
 	}
-	if state.action == iso18626.TypeActionCancel {
-		state.action = "" // send only cancel action once
-	}
-	if state.action == iso18626.TypeActionReceived {
-		state.action = iso18626.TypeActionShippedReturn
-		go app.sendRequestingAgencyMessage(header)
+	if action == iso18626.TypeActionReceived {
+		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionShippedReturn)
 	}
 }
 

@@ -288,8 +288,6 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("request: Empty SupplyingAgencyId", func(t *testing.T) {
-		app.flowsApi.Init() // clear flows, so only this request is present
-
 		requesterId := uuid.NewString()
 		msg := createRequest()
 		msg.Request.Header.RequestingAgencyRequestId = uuid.NewString()
@@ -483,7 +481,6 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request ERROR", func(t *testing.T) {
-		app.flowsApi.Init()
 		scenario := "ERROR"
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
@@ -506,7 +503,6 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request HTTP-ERROR", func(t *testing.T) {
-		app.flowsApi.Init()
 		for _, status := range []string{"400", "500"} {
 			scenario := "HTTP-ERROR-" + status
 			msg := createPatronRequest()
@@ -531,7 +527,6 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request scenarios", func(t *testing.T) {
-		app.flowsApi.Init()
 		requesterIds := []string{}
 		for _, scenario := range []string{"WILLSUPPLY_LOANED", "WILLSUPPLY_UNFILLED", "UNFILLED", "LOANED"} {
 			requesterId := uuid.NewString()
@@ -582,7 +577,6 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("Patron request cancel no", func(t *testing.T) {
-		app.flowsApi.Init()
 		requesterId := uuid.NewString()
 		scenario := "LOANED"
 		msg := createPatronRequest()
@@ -616,16 +610,15 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &flowR)
 		assert.Nil(t, err)
 		assert.Len(t, flowR.Flows, 1)
+		assert.Len(t, flowR.Flows[0].Message, 16)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
 		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoN, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
-		assert.Len(t, flowR.Flows[0].Message, 14)
 	})
 
 	t.Run("Patron request cancel yes", func(t *testing.T) {
-		app.flowsApi.Init()
 		requesterId := uuid.NewString()
 		scenario := "WILLSUPPLY_LOANED"
 		msg := createPatronRequest()
@@ -775,7 +768,7 @@ func TestSendRequestingAgencyNoKey(t *testing.T) {
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	var app MockApp
-	app.sendRequestingAgencyMessage(header)
+	app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
 }
 
 func TestSendRequestingAgencyInternalError(t *testing.T) {
@@ -793,9 +786,9 @@ func TestSendRequestingAgencyInternalError(t *testing.T) {
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	requesterInfo := &requesterInfo{supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
-	app.sendRequestingAgencyMessage(header)
+	app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
 }
 
 func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
@@ -817,9 +810,9 @@ func TestSendRequestingAgencyUnexpectedISO18626Message(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	requesterInfo := &requesterInfo{supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
-	app.sendRequestingAgencyMessage(header)
+	app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
 }
 
 func TestSendRequestingAgencyActionMismatch(t *testing.T) {
@@ -844,9 +837,9 @@ func TestSendRequestingAgencyActionMismatch(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	requesterInfo := &requesterInfo{supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
-	app.sendRequestingAgencyMessage(header)
+	app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
 }
 
 func TestSendRequestingAgencyActionNil(t *testing.T) {
@@ -869,9 +862,9 @@ func TestSendRequestingAgencyActionNil(t *testing.T) {
 	header := &iso18626.Header{}
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
-	requesterInfo := &requesterInfo{action: iso18626.TypeActionCancel, supplierUrl: server.URL}
+	requesterInfo := &requesterInfo{supplierUrl: server.URL}
 	app.requester.store(header, requesterInfo)
-	app.sendRequestingAgencyMessage(header)
+	app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
 }
 
 func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
