@@ -613,19 +613,9 @@ func TestService(t *testing.T) {
 		assert.Len(t, flowR.Flows[0].Message, 16)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
 		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
-		// check that we get exactly one "no" answer
-		// the order can be tricky as shipped return and cancel are sent same time from requester!
-		found := 0
-		for idx := 7; idx <= 10; idx++ {
-			msg := &flowR.Flows[0].Message[idx].Message
-			if msg.SupplyingAgencyMessage != nil &&
-				msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
-				if *msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
-					found++
-				}
-			}
-		}
-		assert.Equal(t, 1, found)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
+		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+		assert.Equal(t, iso18626.TypeYesNoN, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 	})
 
 	t.Run("Patron request cancel yes", func(t *testing.T) {

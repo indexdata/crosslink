@@ -392,15 +392,19 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *s
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.Header = *header
-	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusCancelled
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
+	// cancel by default
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	var status iso18626.TypeStatus = iso18626.TypeStatusCancelled
+	// check if already loaned
 	for i := 0; i < state.index; i++ {
 		if state.status[i] == iso18626.TypeStatusLoaned {
 			answer = iso18626.TypeYesNoN
+			status = iso18626.TypeStatusLoaned
 			break
 		}
 	}
+	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
 	app.sendSupplyingAgencyMessage(header, state, msg)
 }
@@ -522,11 +526,9 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	if state.cancel {
 		state.cancel = false
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
-	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
 	}
-
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
 		requester.delete(header)
 	}
