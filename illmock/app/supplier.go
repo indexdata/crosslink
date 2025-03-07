@@ -155,7 +155,8 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	} else {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	}
-	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
+	if state.status[state.index] == iso18626.TypeStatusLoanCompleted ||
+		state.status[state.index] == iso18626.TypeStatusUnfilled {
 		supplier.delete(header)
 	}
 	state.index++

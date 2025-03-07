@@ -209,7 +209,8 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
 		}
 	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
+	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted ||
+		supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
 		requester.delete(header)
 	}
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled &&
