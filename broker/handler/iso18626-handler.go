@@ -43,6 +43,18 @@ const InternalFailedToCreateNotice = "failed to create notice event"
 
 var requestMapping = map[string]RequestWait{}
 
+type Iso18626Handler struct {
+	eventBus  events.EventBus
+	eventRepo events.EventRepo
+}
+
+func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo) Iso18626Handler {
+	return Iso18626Handler{
+		eventBus:  eventBus,
+		eventRepo: eventRepo,
+	}
+}
+
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
@@ -392,7 +404,57 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 	writeResponse(ctx, resmsg, w)
 }
 
-func ConfirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, respData map[string]interface{}) any {
+func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
+	h.eventBus.ProcessTask(ctx, event, h.handleConfirmRequesterMsgTask)
+}
+
+func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	status := events.EventStatusSuccess
+	var resultData = map[string]any{}
+	if event.ParentID.Valid {
+		responseEvent := h.findParentEvent(ctx, &event.ParentID.String, events.EventNameMessageSupplier)
+		if responseEvent != nil && responseEvent.ParentID.Valid {
+			originalEvent := h.findParentEvent(ctx, &responseEvent.ParentID.String, events.EventNameRequesterMsgReceived)
+			if originalEvent != nil {
+				resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
+			} else {
+				resultData["result"] = "requester message received event missing"
+			}
+		} else {
+			resultData["result"] = "message supplier event missing"
+		}
+	} else {
+		resultData["result"] = "parent id missing"
+	}
+	return status, &events.EventResult{
+		Data: resultData,
+	}
+}
+
+func (c *Iso18626Handler) findParentEvent(ctx extctx.ExtendedContext, parentId *string, eventName events.EventName) *events.Event {
+	var event *events.Event
+	for {
+		if parentId == nil {
+			break
+		}
+		found, err := c.eventRepo.GetEvent(ctx, *parentId)
+		if err != nil {
+			ctx.Logger().Error("failed to get event", "eventId", parentId, "error", err)
+		} else if found.EventName == eventName {
+			event = &found
+			break
+		} else {
+			if found.ParentID.Valid {
+				parentId = &found.ParentID.String
+			} else {
+				parentId = nil
+			}
+		}
+	}
+	return event
+}
+
+func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, respData map[string]interface{}) any {
 	wait, ok := requestMapping[requestId]
 	if ok {
 		delete(requestMapping, requestId)
@@ -414,7 +476,6 @@ func ConfirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMe
 			}
 		} else {
 			// We don't have response, so it was http error or connection error
-
 			if origError, ok := respData["error"]; ok {
 				if strVal, isString := origError.(string); isString {
 					status, responseError := parseError(strVal)

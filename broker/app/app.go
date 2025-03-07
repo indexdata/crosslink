@@ -64,7 +64,8 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, eventRepo)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
+	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
 		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
@@ -76,7 +77,7 @@ func Init(ctx context.Context) (Context, error) {
 	}
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo)
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager)
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
 	return Context{
 		EventBus:   eventBus,
@@ -165,10 +166,11 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 	return eventBus
 }
 
-func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager) {
+func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
+	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Client.ConfirmRequesterMsg)
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)

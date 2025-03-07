@@ -65,16 +65,15 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
-	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID))
-	if event.EventStatus != events.EventStatusSuccess {
-		selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
-		if err != nil {
-			ctx.Logger().Error("failed to read selected supplier", "error", err)
-			return
-		}
-		if selSup.LastAction.String == ill_db.RequestAction {
-			Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
-		}
+	selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
+	if err != nil {
+		ctx.Logger().Error("failed to read selected supplier", "error", err)
+		return
+	}
+	if selSup.LastAction.String != ill_db.RequestAction {
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID))
+	} else if event.EventStatus != events.EventStatusSuccess {
+		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
 	}
 }
 

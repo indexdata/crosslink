@@ -23,6 +23,7 @@ type EventBus interface {
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
+	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult))
 }
 
 type PostgresEventBus struct {
@@ -266,6 +267,21 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx e
 		p.TaskCompletedHandlers[eventName] = []func(ctx extctx.ExtendedContext, event Event){}
 	}
 	p.TaskCompletedHandlers[eventName] = append(p.TaskCompletedHandlers[eventName], f)
+}
+
+func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) {
+	err := p.BeginTask(event.ID)
+	if err != nil {
+		ctx.Logger().Error("failed to start event processing", "error", err)
+		return
+	}
+
+	status, result := h(ctx, event)
+
+	err = p.CompleteTask(event.ID, result, status)
+	if err != nil {
+		ctx.Logger().Error("failed to complete event processing", "error", err)
+	}
 }
 
 func getPgNow() pgtype.Timestamp {
