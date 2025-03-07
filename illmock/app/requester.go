@@ -196,27 +196,31 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	reason := supplyingAgencyMessage.MessageInfo.ReasonForMessage
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
-
 	if state.cancel {
 		state.cancel = false
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
-	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned && !state.received {
-		state.received = true
-		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
-	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusOverdue {
+		return
+	}
+	switch supplyingAgencyMessage.StatusInfo.Status {
+	case iso18626.TypeStatusLoaned:
+		if !state.received {
+			state.received = true
+			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
+		}
+	case iso18626.TypeStatusOverdue:
 		if state.renew {
 			state.renew = false
 			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
 		}
-	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted ||
-		supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+	case iso18626.TypeStatusLoanCompleted:
 		requester.delete(header)
-	}
-	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusCancelled &&
-		supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
-		if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
-			requester.delete(header)
+	case iso18626.TypeStatusUnfilled:
+		requester.delete(header)
+	case iso18626.TypeStatusCancelled:
+		if supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
+			if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
+				requester.delete(header)
+			}
 		}
 	}
 }
