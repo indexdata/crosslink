@@ -15,6 +15,8 @@ import (
 
 type requesterInfo struct {
 	cancel      bool
+	renew       bool
+	received    bool
 	supplierUrl string
 }
 
@@ -69,6 +71,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 
 	// ServiceInfo != nil already
 	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
+	renew := illRequest.ServiceInfo.Note == "#RENEW#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -90,7 +93,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 
 	app.logIncomingReq(role.Requester, header, illMessage)
 
-	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel}
+	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel, renew: renew}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
 		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
@@ -137,11 +140,19 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 		log.Warn("sendRequestingAgencyMessage did not receive RequestingAgencyMessageConfirmation")
 		return
 	}
-	if responseMsg.RequestingAgencyMessageConfirmation.Action == nil || *responseMsg.RequestingAgencyMessageConfirmation.Action != action {
-		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation")
+	if responseMsg.RequestingAgencyMessageConfirmation.Action == nil {
+		log.Warn("sendRequestingAgencyMessage did not receive action in confirmation", "action", action)
+		return
+	}
+
+	if *responseMsg.RequestingAgencyMessageConfirmation.Action != action {
+		log.Warn("sendRequestingAgencyMessage did not receive same action in confirmation", "action", action,
+			"got", responseMsg.RequestingAgencyMessageConfirmation.Action)
 		return
 	}
 	if action == iso18626.TypeActionReceived {
+		// give a chance for overdue to come in!!
+		time.Sleep(200 * time.Millisecond)
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionShippedReturn)
 	}
 }
@@ -191,8 +202,14 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	if state.cancel {
 		state.cancel = false
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
-	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned && !state.received {
+		state.received = true
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
+	} else if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusOverdue {
+		if state.renew {
+			state.renew = false
+			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
+		}
 	}
 	if supplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
 		requester.delete(header)

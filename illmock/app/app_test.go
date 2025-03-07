@@ -549,7 +549,7 @@ func TestService(t *testing.T) {
 			assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 			assert.Nil(t, response.RequestConfirmation.ErrorData)
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 		for i, requesterId := range requesterIds {
 			resp, err := http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 			assert.Nil(t, err)
@@ -576,6 +576,77 @@ func TestService(t *testing.T) {
 		}
 	})
 
+	t.Run("Patron request willsupply loaned overdue", func(t *testing.T) {
+		requesterId := uuid.NewString()
+		scenario := "WILLSUPPLY_LOANED_OVERDUE"
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
+		buf, err := xml.Marshal(msg)
+		assert.Nil(t, err)
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Nil(t, response.RequestConfirmation.ErrorData)
+		time.Sleep(500 * time.Millisecond)
+		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var flowR flows.Flows
+		err = xml.Unmarshal(buf, &flowR)
+		assert.Nil(t, err)
+		assert.Len(t, flowR.Flows, 1)
+		assert.Len(t, flowR.Flows[0].Message, 14)
+	})
+
+	t.Run("Patron request loaned overdue renew", func(t *testing.T) {
+		requesterId := uuid.NewString()
+		scenario := "LOANED_OVERDUE"
+		msg := createPatronRequest()
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
+		msg.Request.ServiceInfo.Note = "#RENEW#"
+		buf, err := xml.Marshal(msg)
+		assert.Nil(t, err)
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.NotNil(t, response.RequestConfirmation)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+		assert.Nil(t, response.RequestConfirmation.ErrorData)
+		time.Sleep(600 * time.Millisecond)
+		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var flowR flows.Flows
+		err = xml.Unmarshal(buf, &flowR)
+		assert.Nil(t, err)
+		assert.Len(t, flowR.Flows, 1)
+		assert.Len(t, flowR.Flows[0].Message, 18)
+	})
+
 	t.Run("Patron request cancel no", func(t *testing.T) {
 		requesterId := uuid.NewString()
 		scenario := "LOANED"
@@ -597,7 +668,7 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.Nil(t, response.RequestConfirmation.ErrorData)
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(800 * time.Millisecond)
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -656,7 +727,7 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *flowR.Flows[0].Message[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
-		assert.Len(t, flowR.Flows[0].Message, 12)
+		assert.Len(t, flowR.Flows[0].Message, 10)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {

@@ -14,8 +14,10 @@ import (
 type supplierInfo struct {
 	index             int                   // index into status below
 	status            []iso18626.TypeStatus // the status that the supplier will return
+	overdue           bool                  // overdue flag
 	supplierRequestId string                // supplier request Id
 	requesterUrl      string                // requester URL
+	presentResponse   bool                  // if it's first supplying message
 }
 
 type Supplier struct {
@@ -54,6 +56,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		app.handleRequestError(&illRequest.Header, role.Supplier, "RequestingAgencyRequestId already exists", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
+	overdue := false
 	var status []iso18626.TypeStatus
 	// should be able to parse the value and put any types into status...
 	switch illRequest.BibliographicInfo.SupplierUniqueRecordId {
@@ -65,6 +68,12 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusUnfilled)
 	case "LOANED":
 		status = append(status, iso18626.TypeStatusLoaned)
+	case "LOANED_OVERDUE":
+		status = append(status, iso18626.TypeStatusLoaned)
+		overdue = true
+	case "WILLSUPPLY_LOANED_OVERDUE":
+		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
+		overdue = true
 	case "ERROR":
 		log.Warn("handleSupplierRequest ERROR")
 		app.handleRequestError(&illRequest.Header, role.Supplier, "MOCK ERROR", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
@@ -79,7 +88,14 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
 
-	supplierInfo := &supplierInfo{status: status, index: 0, supplierRequestId: uuid.NewString(), requesterUrl: app.peerUrl}
+	supplierInfo := &supplierInfo{
+		status:            status,
+		index:             0,
+		supplierRequestId: uuid.NewString(),
+		requesterUrl:      app.peerUrl,
+		overdue:           overdue,
+		presentResponse:   true,
+	}
 	requestingAgencyInfo := illRequest.RequestingAgencyInfo
 	if requestingAgencyInfo != nil {
 		for _, address := range requestingAgencyInfo.Address {
@@ -107,6 +123,8 @@ func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 }
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.Iso18626MessageNS) bool {
+	msg.SupplyingAgencyMessage.Header = *header
+	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
@@ -122,24 +140,23 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *s
 func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	time.Sleep(app.supplyDuration)
 
-	msg := createSupplyingAgencyMessage()
-	msg.SupplyingAgencyMessage.Header = *header
-
 	supplier := &app.supplier
 	state := supplier.load(header)
 	if state == nil {
 		log.Warn("sendSupplyingAgencyMessage no key", "key", supplier.getKey(header))
 		return
 	}
-	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
+	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
-	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
-		supplier.delete(header)
-	}
-	if state.index == 0 {
+
+	if state.presentResponse {
+		state.presentResponse = false
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
 	} else {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	}
+	if state.status[state.index] == iso18626.TypeStatusLoanCompleted {
+		supplier.delete(header)
 	}
 	state.index++
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
@@ -149,9 +166,24 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	}
 }
 
+func (app *MockApp) sendSupplyingAgencyOverdue(header *iso18626.Header, state *supplierInfo) {
+	msg := createSupplyingAgencyMessage()
+	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusOverdue
+	app.sendSupplyingAgencyMessage(header, state, msg)
+}
+
+func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *supplierInfo) {
+	msg := createSupplyingAgencyMessage()
+	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
+	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
+	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
+	app.sendSupplyingAgencyMessage(header, state, msg)
+}
+
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
 	msg := createSupplyingAgencyMessage()
-	msg.SupplyingAgencyMessage.Header = *header
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
 	// cancel by default
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
@@ -166,6 +198,10 @@ func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *su
 	}
 	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
+	if status == iso18626.TypeStatusCancelled {
+		supplier := &app.supplier
+		supplier.delete(header)
+	}
 	app.sendSupplyingAgencyMessage(header, state, msg)
 }
 
@@ -194,14 +230,19 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 		log.Warn("sendSupplyingAgencyMessage no key", "key", supplier.getKey(header))
 		return
 	}
-	if requestingAgencyMessage.Action == iso18626.TypeActionCancel {
+	switch requestingAgencyMessage.Action {
+	case iso18626.TypeActionCancel:
 		app.sendSupplyingAgencyCancel(header, state)
-		return
+	case iso18626.TypeActionRenew:
+		app.sendSupplyingAgencyRenew(header, state)
+	case iso18626.TypeActionReceived:
+		if state.overdue {
+			state.overdue = false
+			app.sendSupplyingAgencyOverdue(header, state)
+		}
+	case iso18626.TypeActionShippedReturn:
+		state.index = 0
+		state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
+		go app.sendSupplyingAgencyLater(header)
 	}
-	if requestingAgencyMessage.Action != iso18626.TypeActionShippedReturn {
-		return
-	}
-	state.index = 0
-	state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
-	go app.sendSupplyingAgencyLater(header)
 }
