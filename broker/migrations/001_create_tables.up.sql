@@ -52,12 +52,15 @@ INSERT INTO event_config (event_name, event_type, retry_count)
 VALUES ('requester-msg-received', 'NOTICE', 1);
 INSERT INTO event_config (event_name, event_type, retry_count)
 VALUES ('message-supplier', 'TASK', 1);
+INSERT INTO event_config (event_name, event_type, retry_count)
+VALUES ('confirm-requester-msg', 'TASK', 1);
 
 CREATE TABLE event
 (
     id                 VARCHAR PRIMARY KEY,
     timestamp          TIMESTAMP NOT NULL DEFAULT now(),
     ill_transaction_id VARCHAR   NOT NULL,
+    parent_id          VARCHAR,
     event_type         VARCHAR   NOT NULL,
     event_name         VARCHAR   NOT NULL,
     event_status       VARCHAR   NOT NULL,

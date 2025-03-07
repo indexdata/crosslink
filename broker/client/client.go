@@ -43,16 +43,18 @@ var actionMap = map[string]iso18626.TypeAction{
 }
 
 type Iso18626Client struct {
-	eventBus events.EventBus
-	illRepo  ill_db.IllRepo
-	client   *http.Client
+	eventBus  events.EventBus
+	illRepo   ill_db.IllRepo
+	eventRepo events.EventRepo
+	client    *http.Client
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, eventRepo events.EventRepo) Iso18626Client {
 	return Iso18626Client{
-		eventBus: eventBus,
-		illRepo:  illRepo,
-		client:   http.DefaultClient,
+		eventBus:  eventBus,
+		illRepo:   illRepo,
+		eventRepo: eventRepo,
+		client:    http.DefaultClient,
 	}
 }
 
@@ -68,6 +70,10 @@ func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event even
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
 	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
+}
+
+func (c *Iso18626Client) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
+	c.triggerNotificationsAndProcessEvent(ctx, event, c.handleConfirmRequesterMsgTask)
 }
 
 func (c *Iso18626Client) triggerNotificationsAndProcessEvent(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
@@ -159,7 +165,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		resultData["error"] = err
+		resultData["error"] = err.Error()
 		ctx.Logger().Error("failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
@@ -205,7 +211,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				resultData["response"] = response
 			}
 			if err != nil {
-				resultData["error"] = err
+				resultData["error"] = err.Error()
 				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
@@ -321,4 +327,50 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		return nil, err
 	}
 	return &resmsg, nil
+}
+
+func (c *Iso18626Client) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	status := events.EventStatusSuccess
+	var resultData = map[string]any{}
+	if event.ParentID.Valid {
+		responseEvent := c.findParentEvent(ctx, &event.ParentID.String, events.EventNameMessageSupplier)
+		if responseEvent != nil && responseEvent.ParentID.Valid {
+			originalEvent := c.findParentEvent(ctx, &responseEvent.ParentID.String, events.EventNameRequesterMsgReceived)
+			if originalEvent != nil {
+				resultData["result"] = handler.ConfirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
+			} else {
+				resultData["result"] = "requester message received event missing"
+			}
+		} else {
+			resultData["result"] = "message supplier event missing"
+		}
+	} else {
+		resultData["result"] = "parent id missing"
+	}
+	return status, &events.EventResult{
+		Data: resultData,
+	}
+}
+
+func (c *Iso18626Client) findParentEvent(ctx extctx.ExtendedContext, parentId *string, eventName events.EventName) *events.Event {
+	var event *events.Event
+	for {
+		if parentId == nil {
+			break
+		}
+		found, err := c.eventRepo.GetEvent(ctx, *parentId)
+		if err != nil {
+			ctx.Logger().Error("failed to get event", "eventId", parentId, "error", err)
+		} else if found.EventName == eventName {
+			event = &found
+			break
+		} else {
+			if found.ParentID.Valid {
+				parentId = &found.ParentID.String
+			} else {
+				parentId = nil
+			}
+		}
+	}
+	return event
 }

@@ -34,13 +34,14 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, event_type, event_name, event_status, event_data, result_data
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8
+             $1, $2, $3, $4, $5, $6, $7, $8, $9
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
     ill_transaction_id = EXCLUDED.ill_transaction_id,
+    parent_id = EXCLUDED.parent_id,
     event_name = EXCLUDED.event_name,
     event_type = EXCLUDED.event_type,
     event_status = EXCLUDED.event_status,

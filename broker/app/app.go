@@ -64,7 +64,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
 		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
@@ -168,6 +168,7 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client, supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Client.ConfirmRequesterMsg)
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)

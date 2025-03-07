@@ -65,7 +65,7 @@ func TestCreateTask(t *testing.T) {
 	})
 	illId := test.GetIllTransId(t, illRepo)
 
-	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
+	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -125,7 +125,7 @@ func TestCreateNotice(t *testing.T) {
 
 	illId := test.GetIllTransId(t, illRepo)
 
-	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -161,7 +161,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 
 	illId := test.GetIllTransId(t, illRepo)
 
-	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{})
+	err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -298,7 +298,7 @@ func TestReconnectListener(t *testing.T) {
 
 	illId := test.GetIllTransId(t, illRepo)
 
-	err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
