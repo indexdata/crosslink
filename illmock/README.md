@@ -47,10 +47,12 @@ The scenario is inspected in the supplier request
 If the PatronRequest's serviceInfo/note fields is `#CANCEL#` the requester will send a
 Cancel to the supplier upon receiving the first SupplyingAgencyMessage.
 
+For a sample, refer to `examples/cancel-req.xml`.
+
 If the PatronRequest's serviceInfo/note fields is `#RENEW#` the requester will send a
 Renew to the supplier upon receiving an Overdue message.
 
-For a sample, refer `examples/cancel-req.xml`.
+For a sample, refer to `examples/renew-req.xml`.
 
 # ILL flows
 
