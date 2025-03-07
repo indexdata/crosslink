@@ -888,7 +888,7 @@ func TestSendSupplyingAgencyMessageNoKey(t *testing.T) {
 	header.RequestingAgencyRequestId = uuid.NewString()
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
-	app.sendSupplyingAgencyLater(header)
+	app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoaned})
 }
 
 func TestSendSuppluingAgencyInternalError(t *testing.T) {
@@ -907,9 +907,9 @@ func TestSendSuppluingAgencyInternalError(t *testing.T) {
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
 
-	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
+	supplierInfo := &supplierInfo{requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
-	app.sendSupplyingAgencyLater(header)
+	app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoaned})
 }
 
 func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
@@ -934,7 +934,7 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	header.SupplyingAgencyId.AgencyIdValue = "S1"
 	header.RequestingAgencyId.AgencyIdValue = "R1"
 
-	supplierInfo := &supplierInfo{index: 0, status: []iso18626.TypeStatus{iso18626.TypeStatusWillSupply}, requesterUrl: server.URL}
+	supplierInfo := &supplierInfo{requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
-	app.sendSupplyingAgencyLater(header)
+	app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoaned})
 }

@@ -12,12 +12,11 @@ import (
 )
 
 type supplierInfo struct {
-	index             int                   // index into status below
-	status            []iso18626.TypeStatus // the status that the supplier will return
-	overdue           bool                  // overdue flag
-	supplierRequestId string                // supplier request Id
-	requesterUrl      string                // requester URL
-	presentResponse   bool                  // if it's first supplying message
+	overdue           bool   // overdue flag
+	loaned            bool   // if loaned
+	supplierRequestId string // supplier request Id
+	requesterUrl      string // requester URL
+	presentResponse   bool   // if it's first supplying message
 }
 
 type Supplier struct {
@@ -89,8 +88,6 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	}
 
 	supplierInfo := &supplierInfo{
-		status:            status,
-		index:             0,
 		supplierRequestId: uuid.NewString(),
 		requesterUrl:      app.peerUrl,
 		overdue:           overdue,
@@ -113,7 +110,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	app.writeIso18626Response(resmsg, w, role.Supplier, &illRequest.Header)
-	go app.sendSupplyingAgencyLater(&illRequest.Header)
+	go app.sendSupplyingAgencyLater(&illRequest.Header, status)
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
@@ -137,7 +134,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *s
 	return true
 }
 
-func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
+func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList []iso18626.TypeStatus) {
 	time.Sleep(app.supplyDuration)
 
 	supplier := &app.supplier
@@ -147,7 +144,8 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 		return
 	}
 	msg := createSupplyingAgencyMessage()
-	msg.SupplyingAgencyMessage.StatusInfo.Status = state.status[state.index]
+	status := statusList[0]
+	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 
 	if state.presentResponse {
 		state.presentResponse = false
@@ -155,14 +153,15 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header) {
 	} else {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	}
-	if state.status[state.index] == iso18626.TypeStatusLoanCompleted ||
-		state.status[state.index] == iso18626.TypeStatusUnfilled {
+	if status == iso18626.TypeStatusLoaned {
+		state.loaned = true
+	}
+	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled {
 		supplier.delete(header)
 	}
-	state.index++
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
-		if state.index < len(state.status) {
-			go app.sendSupplyingAgencyLater(header)
+		if len(statusList) > 1 {
+			go app.sendSupplyingAgencyLater(header, statusList[1:])
 		}
 	}
 }
@@ -190,12 +189,9 @@ func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *su
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
 	var status iso18626.TypeStatus = iso18626.TypeStatusCancelled
 	// check if already loaned
-	for i := 0; i < state.index; i++ {
-		if state.status[i] == iso18626.TypeStatusLoaned {
-			answer = iso18626.TypeYesNoN
-			status = iso18626.TypeStatusLoaned
-			break
-		}
+	if state.loaned {
+		answer = iso18626.TypeYesNoN
+		status = iso18626.TypeStatusLoaned
 	}
 	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
@@ -242,8 +238,6 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 			app.sendSupplyingAgencyOverdue(header, state)
 		}
 	case iso18626.TypeActionShippedReturn:
-		state.index = 0
-		state.status = []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted}
-		go app.sendSupplyingAgencyLater(header)
+		go app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted})
 	}
 }
