@@ -1,14 +1,26 @@
 # Intro
 
 The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS
-searchRetrive services.
+searchRetrieve services.
 
 # ILL service
 
-The ILL protocol handling is triggered by requests to URI path `/iso18626`.
+The ISO18626 protocol endpoint is available at the `/iso18626` URI path.
 
 `illmock` can operate as both an ILL requester and an ILL supplier, depending
-on the type of ISO18626 message it processes.
+on the type of ISO18626 message it processes:
+
+  * standard `Request` message --> supplier role
+  * `Request` with `SubType` = `PatronRequest` --> requester role, standard `Request` is sent to configured peer
+  * `RequstingAgencyMessage` --> supplier role
+  * `SupplyingAgencyMessage` --> requester role
+
+`illmock` instance requires a peer URL to be configured for sending follow-up messages.
+A static value can be provided via the `PEER_URL` env var or the client can configure it
+dynamically by setting the following fields in the incoming `Request` message:
+
+  * `<RequestingAgencyInfo>/<Address>/<ElectronicAddress>/<ElectronicAddressData>` sets the requester peer URL
+  * `<SupplierInfo>/<Description>` sets the the supplier peer URL
 
 Example of launching two `illmock` instances that will send messages to each
 other:
@@ -23,36 +35,35 @@ a Patron Request with one of the sample message in directory `examples`:
 
 ## Supplier behavior
 
-The `supplierUniqueRecordId` value is used to invoke a particular scenario on
-the supplier.
+The `<bibliographicInfo>/<supplierUniqueRecordId>` value of incoming request is used to
+invoke a particular scenario when acting as the supplier.
 
 The scenario is used by the supplier to perform a particular workflow. The
 following values are recognized:
 
-    LOANED
-    LOANED_OVERDUE
-    UNFILLED
-    WILLSUPPLY_LOANED
-    WILLSUPPLY_UNFILLED
-    WILLSUPPLY_LOANED_OVERDUE
-    ERROR
-    HTTP-ERROR-400
-    HTTP-ERROR-500
-
-The scenario is inspected in the supplier request
-`<bibliographicInfo><supplierUniqueRecordId>` field.
+| Scenario                  | Workflow                                                             |
+|---------------------------|----------------------------------------------------------------------|
+|`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`          |
+|`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew` |
+|`UNFILLED`                 | Respond with `Unfilled` message                                      |
+|`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                         |
+|`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                       |
+|`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`   |
+|`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error       |
+|`HTTP-ERROR-400`           | Respond with HTTP `400` status                                       |
+|`HTTP-ERROR-500`           | Respond with HTTP `500` status                                       |
 
 ## Requester behavior
 
-If the PatronRequest's serviceInfo/note fields is `#CANCEL#` the requester will send a
-Cancel to the supplier upon receiving the first SupplyingAgencyMessage.
+The PatronRequest's `<serviceInfo>/<note>` field is used to control the requester behavior.
 
-For a sample, refer to `examples/cancel-req.xml`.
+The following values are recognized:
 
-If the PatronRequest's serviceInfo/note fields is `#RENEW#` the requester will send a
-Renew to the supplier upon receiving an Overdue message.
+  * `#CANCEL#` the requester will send a `Cancel` action to the supplier upon receiving the first SupplyingAgencyMessage.
+  For a sample, refer to `examples/cancel-req.xml`.
 
-For a sample, refer to `examples/renew-req.xml`.
+  * `#RENEW#` the requester will send a `Renew` request to the supplier upon receiving an `Overdue` message.
+  For a sample, refer to `examples/renew-req.xml`.
 
 # ILL flows
 
@@ -75,17 +86,14 @@ The service produces a MARCXML record if a query of format "id = value" is
 used. If the index (`id`) is omitted a SRU diagnostic is returned.
 
 The identifier value is split by semicolon and each substring generates a holdings record entry
-in 999_11 , `$l`, `$s` .
+in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.
 
 By default each substring is taken verbatim, except for some special cases:
 
-   * `error`: produces an SRU error (non-surrogate diagnostic).
-
-   * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
-
-   * `record-error`: produces SRU response with a diagnostic record.
-
-   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
+  * `error`: produces an SRU error (non-surrogate diagnostic).
+  * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
+  * `record-error`: produces SRU response with a diagnostic record.
+  * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
 
 For example to get a MARCXML with identifier 123, use:
 
@@ -106,39 +114,17 @@ With zoomsh:
 
 # Environment variables
 
-## HTTP_PORT
+| Name                  | Description                                                          | Default value         |
+|-----------------------|----------------------------------------------------------------------|-----------------------|
+|`HTTP_PORT`            | Listening `address:port` or just port, for example: `127.0.0.1:8090` |`8081`                 |
+|`PEER_URL`             | Fallback URL of the peer                                             |`http://localhost:8081`|
+|`AGENCY_TYPE`          | Fallback message header agency type value                            |`MOCK`                 |
+|`SUPPLYING_AGENCY_ID`  | Fallback supplier agency ID (symbol)                                 |`SUP`                  |
+|`REQUESTING_AGENCY_ID` | Fallback requester agency ID (symbol)                                |`REQ`                  |
+|`CLEAN_TIMEOUT`        | Specifies how long a flow is kept in memory before being removed     |`10m`                  |
+|`SUPPLY_DURATION`      | Timeout before sending each SupplyingAgencyMessage                   |`100ms`                |
 
-Listen address + port. If empty or omitted, the program will listen on any interface, port `8081`.
-
-If the value includes a colon, it is assumed to be listening address and port, for example: `127.0.0.1:8090`.
-Without colon, it translates to `:`value which will bind on any interface and port given.
-
-## PEER_URL
-
-The default value is `http://localhost:8081`.
-
-## AGENCY_TYPE
-
-If omitted or empty, a value of `MOCK` is used.
-
-## SUPPLYING_AGENCY_ID
-
-If omitted or empty, a value of `SUP` is used.
-
-## REQUESTING_AGENCY_ID
-
-If omitted or empty, a value of `REQ` is used.
-
-## CLEAN_TIMEOUT
-
-Flow Web service API: Specifies how long a flow is kept in memory before being removed.
-Default value is `10m`.
-
-## SUPPLY_DURATION
-
-Time the supplier is waiting before sending each SupplyingAgencyMessage . Default value is `100ms`
-
-# Deploy on Kubernetes
+# Deploying on Kubernetes
 
 Use the Helm chart published from this repo. You will need a GitHub __classic__
 `Personal Access Token` with `read:packages` scope.
