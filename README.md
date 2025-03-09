@@ -7,7 +7,7 @@ See individual components docs for details:
 * [broker](broker/README.md): ISO18626 transaction broker
 * [illmock](illmock/README.md): ISO18626 + SRU mocking service
 
-# Docker and Kubernetes
+## Running with Docker and Kubernetes
 
 All containers and Helm charts from this repository are published to the GitHub Container Registry,
 `ghcr.io/indexdata`.
