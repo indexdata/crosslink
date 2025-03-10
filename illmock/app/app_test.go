@@ -737,6 +737,7 @@ func TestService(t *testing.T) {
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
 
 		msg := createPatronRequest()
+		// RequestingAgencyRequestId not provided, so it will be generated
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
@@ -749,6 +750,8 @@ func TestService(t *testing.T) {
 		err = xml.Unmarshal(buf, &response)
 		assert.Nil(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
+		// Generated RequestingAgencyRequestId should be in response
+		assert.NotEqual(t, "", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)

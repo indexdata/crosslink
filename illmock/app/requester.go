@@ -55,7 +55,6 @@ func createRequest() *iso18626.Iso18626MessageNS {
 func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	illRequest := illMessage.Request
 
-	patronReqHeader := illRequest.Header
 	requester := &app.requester
 	msg := createRequest()
 	msg.Request.Header = illRequest.Header
@@ -104,17 +103,17 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	responseMsg, err := app.sendReceive(requesterInfo.supplierUrl, msg, role.Requester, header)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
-		app.handleRequestError(&patronReqHeader, role.Requester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		app.handleRequestError(header, role.Requester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
-		app.handleRequestError(&patronReqHeader, role.Requester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		app.handleRequestError(header, role.Requester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requester.store(header, requesterInfo)
 
-	var resmsg = createRequestResponse(&patronReqHeader, iso18626.TypeMessageStatusOK, nil, nil)
+	var resmsg = createRequestResponse(header, iso18626.TypeMessageStatusOK, nil, nil)
 	resmsg.RequestConfirmation.ErrorData = requestConfirmation.ErrorData
 	resmsg.RequestConfirmation.ConfirmationHeader.MessageStatus = requestConfirmation.ConfirmationHeader.MessageStatus
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
