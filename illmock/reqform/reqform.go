@@ -5,10 +5,8 @@ import (
 	_ "embed"
 	"fmt"
 	"html"
-	"io"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 )
 
@@ -45,15 +43,20 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			message := r.Form.Get("message")
-			req := httptest.NewRequest(http.MethodPost, "/iso18626", strings.NewReader(message))
+			req, err := http.NewRequest(http.MethodPost, "/iso18626", strings.NewReader(message))
+			if err != nil {
+				log.Println("[req-form] ERROR creating ISO18626 request", err)
+				http.Error(w, "error creating ISO18626 request", http.StatusBadRequest)
+				return
+			}
 			req.Header.Set("Content-Type", "application/xml")
-			resRec := httptest.NewRecorder()
-			rf.HandlerFunc(resRec, req)
-			res := resRec.Result()
-			resBody, _ := io.ReadAll(res.Body)
-			if res.StatusCode != http.StatusOK {
-				log.Println("[req-form] ERROR failure handling message:", res.Status, resBody)
-				rf.writeHTML(w, fmt.Sprintf("%s\n%s", res.Status, resBody))
+			res := NewWrappedResponseWriter()
+			rf.HandlerFunc(res, req)
+			statusCode := res.status
+			resBody := res.buf.Bytes()
+			if statusCode != http.StatusOK {
+				log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
+				rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody))
 				return
 			}
 			rf.writeHTML(w, string(resBody))
@@ -72,4 +75,29 @@ func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string) {
 	if err != nil {
 		log.Println("[req-form] ERROR writing response", err)
 	}
+}
+
+type WrappedResponseWriter struct {
+	buf    *bytes.Buffer
+	status int
+	header http.Header
+}
+
+func NewWrappedResponseWriter() *WrappedResponseWriter {
+	return &WrappedResponseWriter{
+		buf:    new(bytes.Buffer),
+		header: make(http.Header),
+	}
+}
+
+func (brw *WrappedResponseWriter) Header() http.Header {
+	return brw.header
+}
+
+func (brw *WrappedResponseWriter) Write(data []byte) (int, error) {
+	return brw.buf.Write(data)
+}
+
+func (brw *WrappedResponseWriter) WriteHeader(statusCode int) {
+	brw.status = statusCode
 }
