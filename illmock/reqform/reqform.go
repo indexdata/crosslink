@@ -38,7 +38,12 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodPost {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
-			r.ParseForm()
+			err := r.ParseForm()
+			if err != nil {
+				log.Println("[req-form] ERROR parsing form", err)
+				http.Error(w, "error parsing form", http.StatusBadRequest)
+				return
+			}
 			message := r.Form.Get("message")
 			req := httptest.NewRequest(http.MethodPost, "/iso18626", strings.NewReader(message))
 			req.Header.Set("Content-Type", "application/xml")
@@ -47,13 +52,13 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 			res := resRec.Result()
 			resBody, _ := io.ReadAll(res.Body)
 			if res.StatusCode != http.StatusOK {
-				log.Println("[req-form] ERROR failure handling message: ", res.Status, resBody)
+				log.Println("[req-form] ERROR failure handling message:", res.Status, resBody)
 				rf.writeHTML(w, fmt.Sprintf("%s\n%s", res.Status, resBody))
 				return
 			}
 			rf.writeHTML(w, string(resBody))
 		} else {
-			log.Println("[req-form] ERROR ", http.StatusUnsupportedMediaType)
+			log.Println("[req-form] ERROR", http.StatusUnsupportedMediaType)
 			http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
 		}
 	} else {
@@ -63,5 +68,8 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 
 func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string) {
 	w.Header().Add("Content-Type", "text/html")
-	w.Write(bytes.Replace(Html, []byte("{{response}}"), []byte(html.EscapeString(response)), 1))
+	_, err := w.Write(bytes.Replace(Html, []byte("{{response}}"), []byte(html.EscapeString(response)), 1))
+	if err != nil {
+		log.Println("[req-form] ERROR writing response", err)
+	}
 }
