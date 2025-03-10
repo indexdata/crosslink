@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/netutil"
+	"github.com/indexdata/crosslink/illmock/reqform"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/crosslink/illmock/sruapi"
@@ -313,7 +314,15 @@ func (app *MockApp) Run() error {
 	app.sruApi = sruapi.CreateSruApi()
 	log.Info("Start HTTP serve on " + addr)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/iso18626", iso18626Handler(app))
+	iso18626Handler := iso18626Handler(app)
+	mux.HandleFunc("/iso18626", iso18626Handler)
+	reqForm := &reqform.ReqForm{
+		Header:      "illmock ISO18626 submit form",
+		FormPath:    "/form",
+		IllPath:     "/iso18626",
+		HandlerFunc: iso18626Handler,
+	}
+	mux.HandleFunc(reqForm.FormPath, reqForm.HandleForm)
 	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())

@@ -33,6 +33,10 @@ a Patron Request with one of the sample message in directory `examples`:
 
     curl -XPOST -HContent-Type:text/xml -d@examples/req.xml http://localhost:8081/iso18626
 
+## Submit form
+
+The mock comes with a simple submit form at the `/form` path that can be used as an alternative to curl for posting ISO18626 requests.
+
 ## Supplier behavior
 
 The `<bibliographicInfo>/<supplierUniqueRecordId>` value of incoming request is used to

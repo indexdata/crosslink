@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>{{header}}</title>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <h3>{{header}}</h3>
+    <form action="{{path}}" method="post" accept-charset="utf-8">
+      <p><label for="message">ISO18626 message:</label></p>
+      <p><textarea id="message" name="message" rows="30" cols="80"></textarea></p>
+      <p>
+        <button type="submit">Post</button>
+      </p>
+    </form>
+    <h4>Response:</h4>
+    <p>See the <a href="/api/flows">flows log</a> for details</p>
+    <pre>{{response}}</pre>
+    <h4>Example:</h4>
+    <pre>{{example}}</pre>
+  </body>
+</html>
