@@ -8,6 +8,10 @@ illmock/*
 # Include .go files
 !illmock/**/*.go
 
+# reqform includes xml, html
+!illmock/reqform/*.xml
+!illmock/reqform/*.html
+
 # Exclude tests
 illmock/test
 illmock/**/*_test.go
