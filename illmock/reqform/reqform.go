@@ -22,51 +22,52 @@ func init() {
 
 type ReqForm struct {
 	Header      string
-	Path        string
+	FormPath    string
+	IllPath     string
 	HandlerFunc http.HandlerFunc
 }
 
 func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	Html = bytes.Replace(Html, []byte("{{header}}"), []byte(rf.Header), 2)
-	Html = bytes.Replace(Html, []byte("{{path}}"), []byte(rf.Path), 1)
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+	Html = bytes.Replace(Html, []byte("{{path}}"), []byte(rf.FormPath), 1)
+	if r.Method == http.MethodGet {
+		rf.writeHTML(w, "post a message to see the response")
+		return
+	}
+	if r.Method != http.MethodPost {
 		log.Println("[req-form] ERROR ", http.StatusMethodNotAllowed)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.Method == http.MethodPost {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
-			err := r.ParseForm()
-			if err != nil {
-				log.Println("[req-form] ERROR parsing form", err)
-				http.Error(w, "error parsing form", http.StatusBadRequest)
-				return
-			}
-			message := r.Form.Get("message")
-			req, err := http.NewRequest(http.MethodPost, "/iso18626", strings.NewReader(message))
-			if err != nil {
-				log.Println("[req-form] ERROR creating ISO18626 request", err)
-				http.Error(w, "error creating ISO18626 request", http.StatusBadRequest)
-				return
-			}
-			req.Header.Set("Content-Type", "application/xml")
-			res := NewWrappedResponseWriter()
-			rf.HandlerFunc(res, req)
-			statusCode := res.status
-			resBody := res.buf.Bytes()
-			if statusCode != http.StatusOK {
-				log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
-				rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody))
-				return
-			}
-			rf.writeHTML(w, string(resBody))
-		} else {
-			log.Println("[req-form] ERROR", http.StatusUnsupportedMediaType)
-			http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
-		}
-	} else {
-		rf.writeHTML(w, "post a message to see the response")
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		log.Println("[req-form] ERROR", http.StatusUnsupportedMediaType)
+		http.Error(w, "unsupported media type", http.StatusUnsupportedMediaType)
+		return
 	}
+	err := r.ParseForm()
+	if err != nil {
+		log.Println("[req-form] ERROR parsing form", err)
+		http.Error(w, "error parsing form", http.StatusBadRequest)
+		return
+	}
+	message := r.Form.Get("message")
+	req, err := http.NewRequest(http.MethodPost, rf.IllPath, strings.NewReader(message))
+	if err != nil {
+		log.Println("[req-form] ERROR creating ISO18626 request", err)
+		http.Error(w, "error creating ISO18626 request", http.StatusBadRequest)
+		return
+	}
+	req.Header.Set("Content-Type", "application/xml")
+	res := NewWrappedResponseWriter()
+	rf.HandlerFunc(res, req)
+	statusCode := res.status
+	resBody := res.buf.Bytes()
+	if statusCode != http.StatusOK {
+		log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
+		rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody))
+		return
+	}
+	rf.writeHTML(w, string(resBody))
 }
 
 func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string) {

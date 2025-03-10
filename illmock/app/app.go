@@ -318,10 +318,11 @@ func (app *MockApp) Run() error {
 	mux.HandleFunc("/iso18626", iso18626Handler)
 	reqForm := &reqform.ReqForm{
 		Header:      "illmock ISO18626 submit form",
-		Path:        "/form",
+		FormPath:    "/form",
+		IllPath:     "/iso18626",
 		HandlerFunc: iso18626Handler,
 	}
-	mux.HandleFunc(reqForm.Path, reqForm.HandleForm)
+	mux.HandleFunc(reqForm.FormPath, reqForm.HandleForm)
 	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
