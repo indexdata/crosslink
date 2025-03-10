@@ -1,0 +1,58 @@
+<ISO18626Message xmlns="http://illtransactions.org/2013/iso18626"
+  xmlns:ill="http://illtransactions.org/2013/iso18626"
+  ill:version="1.2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://illtransactions.org/2013/iso18626 http://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+  <request>
+    <header>
+      <supplyingAgencyId>
+        <agencyIdType>ISIL</agencyIdType>
+        <agencyIdValue>SUP</agencyIdValue>
+      </supplyingAgencyId>
+      <requestingAgencyId>
+        <agencyIdType>ISIL</agencyIdType>
+        <agencyIdValue>REQ</agencyIdValue>
+      </requestingAgencyId>
+      <multipleItemRequestId></multipleItemRequestId>
+      <timestamp>0001-01-01T00:00:00.000Z</timestamp>
+      <requestingAgencyRequestId></requestingAgencyRequestId>
+    </header>
+    <bibliographicInfo>
+      <!--
+        specify mock scenario via supplierUniqueRecordId, see https://github.com/indexdata/crosslink/blob/main/illmock/README.md#supplier-behavior
+        if CrossLink Broker is the supplier peer, and it's configured with the SRU mock holdings adapter, you can specify multiple scenarios, e.g:
+         <supplierUniqueRecordId>ERROR;UNFILLED;WILLSUPPLY_UNFILLED;LOANED</supplierUniqueRecordId>
+      -->
+      <supplierUniqueRecordId>LOANED</supplierUniqueRecordId>
+      <title>Lord of the Rings</title>
+      <author>JRR Tolkien</author>
+      <bibliographicItemId>
+        <bibliographicItemIdentifier>1983</bibliographicItemIdentifier>
+        <bibliographicItemIdentifierCode>ISBN</bibliographicItemIdentifierCode>
+      </bibliographicItemId>
+    </bibliographicInfo>
+    <serviceInfo>
+      <requestType>New</requestType>
+      <!-- use SubType=PatronRequest if mock should forward the request to the supplier peer -->
+      <requestSubType>PatronRequest</requestSubType>
+      <serviceType>Loan</serviceType>
+    </serviceInfo>
+    <!-- optionally, supplier peer address can be specified below, otherwise the default is used -->
+    <!--
+    <supplierInfo>
+      <supplierDescription>https://broker.crosslink-dev.indexdata.com/iso18626</supplierDescription>
+    </supplierInfo>
+    -->
+    <!-- optionally, requester peer address can be specified below, otherwise the default is used -->
+    <!--
+    <requestingAgencyInfo>
+      <address>
+        <electronicAddress>
+          <electronicAddressType></electronicAddressType>
+          <electronicAddressData>https://broker.crosslink-dev.indexdata.com/iso8626</electronicAddressData>
+        </electronicAddress>
+      </address>
+    </requestingAgencyInfo>
+    -->
+  </request>
+</ISO18626Message>
