@@ -33,6 +33,11 @@ a Patron Request with one of the sample message in directory `examples`:
 
     curl -XPOST -HContent-Type:text/xml -d@examples/req.xml http://localhost:8081/iso18626
 
+The `requestingAgencyRequestId` is  auto-generated, if it's not provided in the `Request` header, and it is
+reported in the `confirmationHeader` and the HTTP `X-Request-ID` header.
+
+The requester and supplier `agencyId` are set to default values unless they are provided in the `Request` header.
+
 ## Submit form
 
 The mock comes with a simple submit form at the `/form` path that can be used as an alternative to curl for posting ISO18626 requests.
@@ -72,9 +77,12 @@ The following values are recognized:
 # ILL flows
 
 History of ILL messages can be retrieved at the `/api/flows` endpoint.
-This endpoint takes 3 optional query parameters: `role`, `supplier` and `requester`
-which limits the result by role, supplier agency ID and requester agency
-ID respectively.
+The endpoint takes optional query parameters:
+
+  * `id` show flows for a particular `requestingAgencyRequestId`
+  * `role` either `requester` or `supplier`
+  * `requester` agency ID of the requesting agency
+  * `supplier` agency ID of the supplying agency
 
 For example:
 
