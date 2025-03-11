@@ -190,6 +190,7 @@ func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18
 	assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Nil(t, response.RequestConfirmation.ErrorData)
 
+	var ret []flows.FlowMessage = nil
 	for tries := 0; tries < 5; tries++ {
 		time.Sleep(400 * time.Millisecond)
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
@@ -205,13 +206,13 @@ func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18
 		assert.Len(t, flowR.Flows, 1)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
 		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
-		ret := flowR.Flows[0].Message
+		ret = flowR.Flows[0].Message
 		assert.LessOrEqual(t, len(ret), expectedLen)
 		if len(ret) == expectedLen {
 			return ret
 		}
 	}
-	assert.Fail(t, "Expected length not reached for scenario "+scenario)
+	assert.Equal(t, expectedLen, len(ret))
 	return nil
 }
 
@@ -671,6 +672,14 @@ func TestService(t *testing.T) {
 		m = ret[len(ret)-1].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
+	})
+
+	t.Run("Patron request retry loaned", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY_LOANED", 6)
+		m := ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {

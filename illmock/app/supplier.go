@@ -12,11 +12,12 @@ import (
 )
 
 type supplierInfo struct {
-	overdue           bool   // overdue flag
-	loaned            bool   // if loaned
-	supplierRequestId string // supplier request Id
-	requesterUrl      string // requester URL
-	presentResponse   bool   // if it's first supplying message
+	overdue           bool                          // overdue flag
+	loaned            bool                          // if loaned
+	supplierRequestId string                        // supplier request Id
+	requesterUrl      string                        // requester URL
+	presentResponse   bool                          // if it's first supplying message
+	reasonRetry       *iso18626.TypeSchemeValuePair // used on retry
 }
 
 type Supplier struct {
@@ -43,6 +44,23 @@ func (s *Supplier) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
+func getScenarioForRequest(illRequest *iso18626.Request) string {
+	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	// if request is already a retry, do not send retry again
+	if illRequest.ServiceInfo != nil {
+		if illRequest.ServiceInfo.RequestType != nil {
+			if *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
+				return strings.TrimPrefix(scenario, "RETRY_")
+			}
+		}
+	}
+	// initial request, consider both "RETRY" and "RETRY_" as prefix
+	if strings.HasPrefix(scenario, "RETRY_") {
+		scenario = "RETRY" // Consider it a "RETRY" only
+	}
+	return scenario
+}
+
 func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.ResponseWriter) {
 	supplier := &app.supplier
 	err := validateHeader(&illRequest.Header)
@@ -58,7 +76,14 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	overdue := false
 	var status []iso18626.TypeStatus
 	// should be able to parse the value and put any types into status...
-	switch illRequest.BibliographicInfo.SupplierUniqueRecordId {
+
+	scenario := getScenarioForRequest(illRequest)
+	var reasonRetry *iso18626.TypeSchemeValuePair = nil
+
+	switch scenario {
+	case "RETRY":
+		status = append(status, iso18626.TypeStatusRetryPossible)
+		reasonRetry = &iso18626.TypeSchemeValuePair{Text: "OnLoan"}
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 	case "WILLSUPPLY_UNFILLED":
@@ -92,6 +117,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		requesterUrl:      app.peerUrl,
 		overdue:           overdue,
 		presentResponse:   true,
+		reasonRetry:       reasonRetry,
 	}
 	requestingAgencyInfo := illRequest.RequestingAgencyInfo
 	if requestingAgencyInfo != nil {
@@ -146,6 +172,7 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	msg := createSupplyingAgencyMessage()
 	status := statusList[0]
 	msg.SupplyingAgencyMessage.StatusInfo.Status = status
+	msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry = state.reasonRetry
 
 	if state.presentResponse {
 		state.presentResponse = false
@@ -156,7 +183,7 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	if status == iso18626.TypeStatusLoaned {
 		state.loaned = true
 	}
-	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled {
+	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled || status == iso18626.TypeStatusRetryPossible {
 		supplier.delete(header)
 	}
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
