@@ -32,8 +32,8 @@ func httpInvoke(client *http.Client, method string, contentTypes []string, url s
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add(ContentType, contentTypes[0])
 	maps.Copy(req.Header, Headers)
+	req.Header.Set(ContentType, contentTypes[0])
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

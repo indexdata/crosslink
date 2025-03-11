@@ -273,7 +273,7 @@ func (app *MockApp) parseEnv() error {
 		app.supplyDuration = d
 	}
 	if app.tenantId == "" {
-		app.tenantId = utils.GetEnv("TENANT_ID", "tenant")
+		app.tenantId = utils.GetEnv("OKAPI_TENANT", "")
 	}
 	return nil
 }
@@ -290,7 +290,9 @@ func (app *MockApp) Shutdown() error {
 
 func (app *MockApp) Run() error {
 	err := app.parseEnv()
-	httpclient.Headers.Add("Okapi-Tenant", app.tenantId)
+	if app.tenantId != "" {
+		httpclient.Headers.Add("X-Okapi-Tenant", app.tenantId)
+	}
 	if err != nil {
 		return err
 	}
