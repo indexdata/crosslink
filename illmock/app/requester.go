@@ -61,8 +61,9 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	msg.Request.Header = illRequest.Header
 	msg.Request.BibliographicInfo = illRequest.BibliographicInfo
 	msg.Request.PublicationInfo = illRequest.PublicationInfo
-	msg.Request.ServiceInfo = illRequest.ServiceInfo
-	if msg.Request.ServiceInfo != nil {
+	if illRequest.ServiceInfo != nil {
+		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+		*msg.Request.ServiceInfo = *illRequest.ServiceInfo
 		msg.Request.ServiceInfo.RequestSubType = nil // not a patron request any more
 	}
 	msg.Request.SupplierInfo = illRequest.SupplierInfo
@@ -183,15 +184,16 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string) {
 	msg := &iso18626.Iso18626MessageNS{}
 	msg.Request = illRequest
-	if msg.Request.ServiceInfo == nil {
-		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	if msg.Request.ServiceInfo != nil {
+		*msg.Request.ServiceInfo = *illRequest.ServiceInfo
 	}
 	requestType := iso18626.TypeRequestTypeRetry
 	msg.Request.ServiceInfo.RequestType = &requestType
 
 	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &illRequest.Header)
 	if err != nil {
-		return
+		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())
 	}
 }
 
