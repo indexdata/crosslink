@@ -174,3 +174,21 @@ func TestMarshalFailed(t *testing.T) {
 	err := requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal failed: foo")
 }
+
+func TestCustomHeader(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "tenant", r.Header.Get("X-Okapi-Tenant"))
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	var response myType
+	Headers.Set("X-Okapi-Tenant", "tenant")
+	err := GetXml(http.DefaultClient, server.URL, &response)
+	assert.Nil(t, err)
+	assert.Equal(t, "OK", response.Msg)
+	Headers.Del("X-Okapi-Tenant")
+}
