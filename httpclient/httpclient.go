@@ -5,9 +5,9 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 const (
@@ -21,10 +21,29 @@ type HttpError struct {
 	message    string
 }
 
-var Headers = http.Header{}
-
 func (e *HttpError) Error() string {
 	return e.message
+}
+
+var defaultHeaders sync.Map
+
+// sets default headers for all requests
+// headers with empty key or value are ignored
+func SetDefaultHeader(key string, value string) {
+	if key == "" || value == "" {
+		return
+	}
+	defaultHeaders.Store(key, value)
+}
+
+// returns the value of the default header with the given key
+// if the key is not found, an empty string is returned
+func GetDefaultHeader(key string) string {
+	value, ok := defaultHeaders.Load(key)
+	if ok {
+		return value.(string)
+	}
+	return ""
 }
 
 func httpInvoke(client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
@@ -32,7 +51,10 @@ func httpInvoke(client *http.Client, method string, contentTypes []string, url s
 	if err != nil {
 		return nil, err
 	}
-	maps.Copy(req.Header, Headers)
+	defaultHeaders.Range(func(key, value any) bool {
+		req.Header.Set(key.(string), value.(string))
+		return true
+	})
 	req.Header.Set(ContentType, contentTypes[0])
 	resp, err := client.Do(req)
 	if err != nil {

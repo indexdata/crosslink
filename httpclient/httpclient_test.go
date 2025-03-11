@@ -176,8 +176,10 @@ func TestMarshalFailed(t *testing.T) {
 }
 
 func TestCustomHeader(t *testing.T) {
+	const headerName = "X-Okapi-Tenant"
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "tenant", r.Header.Get("X-Okapi-Tenant"))
+		assert.Equal(t, "tenant", r.Header.Get(headerName))
+		assert.Equal(t, "", r.Header.Get("empty"))
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
@@ -186,9 +188,12 @@ func TestCustomHeader(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
-	Headers.Set("X-Okapi-Tenant", "tenant")
+	SetDefaultHeader(headerName, "tenant")
+	SetDefaultHeader("empty", "")
 	err := GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "OK", response.Msg)
-	Headers.Del("X-Okapi-Tenant")
+	assert.Equal(t, "tenant", GetDefaultHeader(headerName))
+	assert.Equal(t, "", GetDefaultHeader("empty"))
+	assert.Equal(t, "", GetDefaultHeader("notset"))
 }
