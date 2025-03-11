@@ -33,6 +33,11 @@ a Patron Request with one of the sample message in directory `examples`:
 
     curl -XPOST -HContent-Type:text/xml -d@examples/req.xml http://localhost:8081/iso18626
 
+The `requestingAgencyRequestId` will be auto-generated, if it's not provided in the `Request` header, and it will be
+reported in the `confirmationHeader` and HTTP `X-Request-ID` header.
+
+The requester and supplier `agencyId` wil be set to defaults if they are not provided in the `Request` header.
+
 ## Submit form
 
 The mock comes with a simple submit form at the `/form` path that can be used as an alternative to curl for posting ISO18626 requests.
