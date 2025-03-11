@@ -61,6 +61,7 @@ following values are recognized:
 |`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error       |
 |`HTTP-ERROR-400`           | Respond with HTTP `400` status                                       |
 |`HTTP-ERROR-500`           | Respond with HTTP `500` status                                       |
+|`RETRY_` ...               | For non-tried respond with `RetryPossible` , otherwise the rest      |
 
 ## Requester behavior
 
