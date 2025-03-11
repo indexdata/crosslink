@@ -18,6 +18,7 @@ type requesterInfo struct {
 	renew       bool
 	received    bool
 	supplierUrl string
+	request     *iso18626.Request
 }
 
 type Requester struct {
@@ -60,7 +61,10 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	msg.Request.Header = illRequest.Header
 	msg.Request.BibliographicInfo = illRequest.BibliographicInfo
 	msg.Request.PublicationInfo = illRequest.PublicationInfo
-	msg.Request.ServiceInfo = nil // not a patron request any more
+	msg.Request.ServiceInfo = illRequest.ServiceInfo
+	if msg.Request.ServiceInfo != nil {
+		msg.Request.ServiceInfo.RequestSubType = nil // not a patron request any more
+	}
 	msg.Request.SupplierInfo = illRequest.SupplierInfo
 	msg.Request.RequestedDeliveryInfo = illRequest.RequestedDeliveryInfo
 	msg.Request.RequestingAgencyInfo = illRequest.RequestingAgencyInfo
@@ -92,7 +96,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 
 	app.logIncomingReq(role.Requester, header, illMessage)
 
-	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel, renew: renew}
+	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel, renew: renew, request: msg.Request}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
 		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
@@ -176,6 +180,21 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
+func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string) {
+	msg := &iso18626.Iso18626MessageNS{}
+	msg.Request = illRequest
+	if msg.Request.ServiceInfo == nil {
+		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+	}
+	requestType := iso18626.TypeRequestTypeRetry
+	msg.Request.ServiceInfo.RequestType = &requestType
+
+	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &illRequest.Header)
+	if err != nil {
+		return
+	}
+}
+
 func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	requester := &app.requester
 	supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
@@ -221,5 +240,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 				requester.delete(header)
 			}
 		}
+	case iso18626.TypeStatusRetryPossible:
+		go app.sendRetryRequest(state.request, state.supplierUrl)
 	}
 }

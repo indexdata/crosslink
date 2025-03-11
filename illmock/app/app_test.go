@@ -661,7 +661,7 @@ func TestService(t *testing.T) {
 		msg := createPatronRequest()
 		msg.Request.ServiceInfo.Note = "#CANCEL#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY_LOANED", 10)
-		assert.NotNil(t, ret[0].Message.Request.ServiceInfo)
+		assert.NotNil(t, ret[0].Message.Request.ServiceInfo.RequestSubType)
 		assert.Nil(t, ret[1].Message.Request.ServiceInfo)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
@@ -676,10 +676,14 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry loaned", func(t *testing.T) {
 		msg := createPatronRequest()
-		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY_LOANED", 6)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY_LOANED", 16)
+
 		m := ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
-		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
