@@ -779,7 +779,7 @@ func TestService(t *testing.T) {
 
 	t.Run("tenant ID set", func(t *testing.T) {
 		assert.Equal(t, "T1", app.tenantId)
-		assert.Equal(t, "T1", httpclient.GetDefaultHeader("X-Okapi-Tenant"))
+		assert.Equal(t, "T1", app.client.Headers.Get("X-Okapi-Tenant"))
 	})
 
 	err := app.Shutdown()

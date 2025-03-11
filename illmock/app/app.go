@@ -35,6 +35,7 @@ type MockApp struct {
 	flowsApi       *flows.FlowsApi
 	sruApi         *sruapi.SruApi
 	tenantId       string
+	client         httpclient.HttpClient
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -128,7 +129,7 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	url = url + "/iso18626"
 	app.logOutgoingReq(role, header, msg, url)
 	var response iso18626.Iso18626MessageNS
-	err := httpclient.PostXml(http.DefaultClient, url, msg, &response)
+	err := app.client.PostXml(http.DefaultClient, url, msg, &response)
 	if err != nil {
 		status := 0
 		if httpErr, ok := err.(*httpclient.HttpError); ok {
@@ -291,7 +292,7 @@ func (app *MockApp) Shutdown() error {
 func (app *MockApp) Run() error {
 	err := app.parseEnv()
 	if app.tenantId != "" {
-		httpclient.SetDefaultHeader("X-Okapi-Tenant", app.tenantId)
+		app.client = *httpclient.ClientWithHeaders("X-Okapi-Tenant", app.tenantId)
 	}
 	if err != nil {
 		return err

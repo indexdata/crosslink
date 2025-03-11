@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 const (
@@ -25,36 +24,30 @@ func (e *HttpError) Error() string {
 	return e.message
 }
 
-var defaultHeaders sync.Map
-
-// sets default headers for all requests
-// headers with empty key or value are ignored
-func SetDefaultHeader(key string, value string) {
-	if key == "" || value == "" {
-		return
-	}
-	defaultHeaders.Store(key, value)
+type HttpClient struct {
+	Headers http.Header
 }
 
-// returns the value of the default header with the given key
-// if the key is not found, an empty string is returned
-func GetDefaultHeader(key string) string {
-	value, ok := defaultHeaders.Load(key)
-	if ok {
-		return value.(string)
-	}
-	return ""
+func NewClient() *HttpClient {
+	return &HttpClient{Headers: http.Header{}}
 }
 
-func httpInvoke(client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
+func ClientWithHeaders(headers ...string) *HttpClient {
+	defHeaders := http.Header{}
+	for i := 0; i+1 < len(headers); i += 2 {
+		defHeaders.Add(headers[i], headers[i+1])
+	}
+	return &HttpClient{Headers: defHeaders}
+}
+
+func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
 	req, err := http.NewRequest(method, url, reader)
 	if err != nil {
 		return nil, err
 	}
-	defaultHeaders.Range(func(key, value any) bool {
-		req.Header.Set(key.(string), value.(string))
-		return true
-	})
+	if c.Headers != nil {
+		req.Header = c.Headers.Clone()
+	}
 	req.Header.Set(ContentType, contentTypes[0])
 	resp, err := client.Do(req)
 	if err != nil {
@@ -77,38 +70,38 @@ func httpInvoke(client *http.Client, method string, contentTypes []string, url s
 	return nil, fmt.Errorf("header Content-Type must be one of: %s", strings.Join(contentTypes, ", "))
 }
 
-func GetXml(client *http.Client, url string, res any) error {
-	return requestXml(client, http.MethodGet, url, res)
+func (c *HttpClient) GetXml(client *http.Client, url string, res any) error {
+	return c.requestXml(client, http.MethodGet, url, res)
 }
 
-func PostXml(client *http.Client, url string, req any, res any) error {
-	return requestResponseXml(client, http.MethodPost, url, req, res)
+func (c *HttpClient) PostXml(client *http.Client, url string, req any, res any) error {
+	return c.requestResponseXml(client, http.MethodPost, url, req, res)
 }
 
 // leaving these private until we are happy with them
 
-func requestXml(client *http.Client, method string, url string, res any) error {
-	return request(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, res, xml.Unmarshal)
+func (c *HttpClient) requestXml(client *http.Client, method string, url string, res any) error {
+	return c.request(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, res, xml.Unmarshal)
 }
 
-func requestResponseXml(client *http.Client, method string, url string, req any, res any) error {
-	return requestResponse(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res, xml.Marshal, xml.Unmarshal)
+func (c *HttpClient) requestResponseXml(client *http.Client, method string, url string, req any, res any) error {
+	return c.requestResponse(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res, xml.Marshal, xml.Unmarshal)
 }
 
-func request(client *http.Client, method string, contentTypes []string, url string, res any, unmarshal func([]byte, any) error) error {
-	resbuf, err := httpInvoke(client, method, contentTypes, url, nil)
+func (c *HttpClient) request(client *http.Client, method string, contentTypes []string, url string, res any, unmarshal func([]byte, any) error) error {
+	resbuf, err := c.httpInvoke(client, method, contentTypes, url, nil)
 	if err != nil {
 		return err
 	}
 	return unmarshal(resbuf, res)
 }
 
-func requestResponse(client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
+func (c *HttpClient) requestResponse(client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
 	buf, err := marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %v", err)
 	}
-	resbuf, err := httpInvoke(client, method, contentTypes, url, bytes.NewReader(buf))
+	resbuf, err := c.httpInvoke(client, method, contentTypes, url, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
