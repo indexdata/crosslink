@@ -34,6 +34,7 @@ type MockApp struct {
 	supplier       Supplier
 	flowsApi       *flows.FlowsApi
 	sruApi         *sruapi.SruApi
+	tenantId       string
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -271,6 +272,9 @@ func (app *MockApp) parseEnv() error {
 		}
 		app.supplyDuration = d
 	}
+	if app.tenantId == "" {
+		app.tenantId = utils.GetEnv("TENANT_ID", "tenant")
+	}
 	return nil
 }
 
@@ -286,6 +290,7 @@ func (app *MockApp) Shutdown() error {
 
 func (app *MockApp) Run() error {
 	err := app.parseEnv()
+	httpclient.Headers.Add("Okapi-Tenant", app.tenantId)
 	if err != nil {
 		return err
 	}

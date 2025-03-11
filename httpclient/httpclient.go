@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 )
@@ -20,6 +21,8 @@ type HttpError struct {
 	message    string
 }
 
+var Headers = http.Header{}
+
 func (e *HttpError) Error() string {
 	return e.message
 }
@@ -30,6 +33,7 @@ func httpInvoke(client *http.Client, method string, contentTypes []string, url s
 		return nil, err
 	}
 	req.Header.Add(ContentType, contentTypes[0])
+	maps.Copy(req.Header, Headers)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
