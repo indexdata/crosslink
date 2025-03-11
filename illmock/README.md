@@ -33,10 +33,10 @@ a Patron Request with one of the sample message in directory `examples`:
 
     curl -XPOST -HContent-Type:text/xml -d@examples/req.xml http://localhost:8081/iso18626
 
-The `requestingAgencyRequestId` will be auto-generated, if it's not provided in the `Request` header, and it will be
-reported in the `confirmationHeader` and HTTP `X-Request-ID` header.
+The `requestingAgencyRequestId` is  auto-generated, if it's not provided in the `Request` header, and it is
+reported in the `confirmationHeader` and the HTTP `X-Request-ID` header.
 
-The requester and supplier `agencyId` wil be set to defaults if they are not provided in the `Request` header.
+The requester and supplier `agencyId` are set to default values unless they are provided in the `Request` header.
 
 ## Submit form
 
