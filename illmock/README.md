@@ -72,9 +72,12 @@ The following values are recognized:
 # ILL flows
 
 History of ILL messages can be retrieved at the `/api/flows` endpoint.
-This endpoint takes 3 optional query parameters: `role`, `supplier` and `requester`
-which limits the result by role, supplier agency ID and requester agency
-ID respectively.
+The endpoint takes optional query parameters:
+
+  * `id` show flows for a particular `requestingAgencyRequestId`
+  * `role` either `requester` or `supplier`
+  * `requester` agency ID of the requesting agency
+  * `supplier` agency ID of the supplying agency
 
 For example:
 
