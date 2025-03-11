@@ -59,6 +59,7 @@ func (app *MockApp) writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w 
 	}
 	app.logOutgoingRes(role, header, resmsg)
 	w.Header().Set(httpclient.ContentType, httpclient.ContentTypeApplicationXml)
+	w.Header().Set("X-Request-ID", header.RequestingAgencyRequestId)
 	netutil.WriteHttpResponse(w, buf)
 }
 
@@ -320,6 +321,7 @@ func (app *MockApp) Run() error {
 		Header:      "illmock ISO18626 submit form",
 		FormPath:    "/form",
 		IllPath:     "/iso18626",
+		FlowsPath:   "/api/flows",
 		HandlerFunc: iso18626Handler,
 	}
 	mux.HandleFunc(reqForm.FormPath, reqForm.HandleForm)

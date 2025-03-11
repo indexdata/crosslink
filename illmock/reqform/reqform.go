@@ -7,6 +7,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -24,6 +25,7 @@ type ReqForm struct {
 	Header      string
 	FormPath    string
 	IllPath     string
+	FlowsPath   string
 	HandlerFunc http.HandlerFunc
 }
 
@@ -31,7 +33,7 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	Html = bytes.Replace(Html, []byte("{{header}}"), []byte(rf.Header), 2)
 	Html = bytes.Replace(Html, []byte("{{path}}"), []byte(rf.FormPath), 1)
 	if r.Method == http.MethodGet {
-		rf.writeHTML(w, "post a message to see the response")
+		rf.writeHTML(w, "post a message to see the response", "")
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -62,17 +64,25 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	rf.HandlerFunc(res, req)
 	statusCode := res.status
 	resBody := res.buf.Bytes()
+	requestId := res.Header().Get("X-Request-ID")
 	if statusCode != http.StatusOK {
 		log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
-		rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody))
+		rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody), requestId)
 		return
 	}
-	rf.writeHTML(w, string(resBody))
+	rf.writeHTML(w, string(resBody), requestId)
 }
 
-func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string) {
+func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string, requestId string) {
 	w.Header().Add("Content-Type", "text/html")
-	_, err := w.Write(bytes.Replace(Html, []byte("{{response}}"), []byte(html.EscapeString(response)), 1))
+	flowsLink := url.URL{Path: rf.FlowsPath}
+	query := flowsLink.Query()
+	if requestId != "" {
+		query.Set("id", requestId)
+	}
+	flowsLink.RawQuery = query.Encode()
+	out := bytes.Replace(Html, []byte("{{flowsLink}}"), []byte(flowsLink.String()), 1)
+	_, err := w.Write(bytes.Replace(out, []byte("{{response}}"), []byte(html.EscapeString(response)), 1))
 	if err != nil {
 		log.Println("[req-form] ERROR writing response", err)
 	}
