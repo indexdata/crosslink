@@ -227,7 +227,7 @@ func TestService(t *testing.T) {
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
-	app.tenantId = "T1"
+	os.Setenv("HTTP_HEADERS", "X-Okapi-Tenant:T1")
 	go func() {
 		err := app.Run()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -778,10 +778,9 @@ func TestService(t *testing.T) {
 	})
 
 	t.Run("tenant ID set", func(t *testing.T) {
-		assert.Equal(t, "T1", app.tenantId)
 		assert.Equal(t, "T1", app.client.Headers.Get("X-Okapi-Tenant"))
 	})
-
+	os.Unsetenv("HTTP_HEADERS")
 	err := app.Shutdown()
 	assert.Nil(t, err)
 }

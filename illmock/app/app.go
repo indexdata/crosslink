@@ -34,7 +34,7 @@ type MockApp struct {
 	supplier       Supplier
 	flowsApi       *flows.FlowsApi
 	sruApi         *sruapi.SruApi
-	tenantId       string
+	headers        []string
 	client         httpclient.HttpClient
 }
 
@@ -273,10 +273,22 @@ func (app *MockApp) parseEnv() error {
 		}
 		app.supplyDuration = d
 	}
-	if app.tenantId == "" {
-		app.tenantId = utils.GetEnv("OKAPI_TENANT", "")
+	if app.headers == nil {
+		app.headers = parseKVs(utils.GetEnv("HTTP_HEADERS", ""), ":", ";")
 	}
 	return nil
+}
+
+func parseKVs(kvs string, ksep string, kvsep string) []string {
+	var l []string
+	for _, kv := range strings.Split(kvs, kvsep) {
+		kv := strings.Split(kv, ksep)
+		if len(kv) == 2 {
+			l = append(l, strings.TrimSpace(kv[0]))
+			l = append(l, strings.TrimSpace(kv[1]))
+		}
+	}
+	return l
 }
 
 func (app *MockApp) Shutdown() error {
@@ -291,11 +303,11 @@ func (app *MockApp) Shutdown() error {
 
 func (app *MockApp) Run() error {
 	err := app.parseEnv()
-	if app.tenantId != "" {
-		app.client = *httpclient.NewClient().WithHeaders("X-Okapi-Tenant", app.tenantId)
-	}
 	if err != nil {
 		return err
+	}
+	if app.headers != nil {
+		app.client = *app.client.WithHeaders(app.headers...)
 	}
 	iso18626.InitNs()
 	log.Info("Mock starting")
