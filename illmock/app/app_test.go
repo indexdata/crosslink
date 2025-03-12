@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/httpclient"
+	"github.com/indexdata/crosslink/illmock/directory"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"
@@ -224,6 +226,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
+	directoryUrl := url + "/directory/entries"
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
@@ -780,6 +783,22 @@ func TestService(t *testing.T) {
 	t.Run("tenant ID set", func(t *testing.T) {
 		assert.Equal(t, "T1", app.client.Headers.Get("X-Okapi-Tenant"))
 	})
+
+	t.Run("directory entries", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		var entries []directory.Entry
+		err = json.Unmarshal(buf, &entries)
+		assert.Nil(t, err)
+		assert.Len(t, entries, 1)
+		assert.Equal(t, "diku", entries[0].Name)
+	})
+
 	os.Unsetenv("HTTP_HEADERS")
 	err := app.Shutdown()
 	assert.Nil(t, err)

@@ -1,0 +1,309 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Directory entries API
+paths:
+  /directory/entries:
+    get:
+      summary: Returns all entries
+      description: Returns all entries from the system that the user has access to.
+      operationId: getEntries
+      parameters:
+        - name: cql
+          in: query
+          description: CQL query filter
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+        - name: offset
+          in: query
+          description: maximum number of results to return
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: Entry list response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entry'
+        '400':
+          description: Request validation error
+          content:
+            text/plain:
+              schema:
+                type: string
+
+# apiroadmap.yaml
+
+components:
+  schemas:
+    Consortium:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        name:
+          type: string
+        entry:
+          type: string
+          format: uuid
+    Tier:
+      type: object
+      required:
+        - id
+        - consortium
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+        services:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/TierService'
+    TierService:
+      type: object
+      required:
+        - id
+        - tier
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        tier:
+          type: string
+          format: uuid
+        type:
+          type: string
+        deliveryMethod:
+          type: string
+        level:
+          type: string
+        cost:
+          type: number
+    Network:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
+        name:
+          type: string
+        priority:
+          type: integer
+    Membership:
+      type: object
+      required:
+        - consortium
+        - entry
+      properties:
+        consortium:
+          type: string
+          format: uuid
+        entry:
+          type: string
+          format: uuid
+    MembershipTier:
+      type: object
+      required:
+        - consortium
+        - entry
+      properties:
+        membership:
+          type: string
+          format: uuid
+        tier:
+          type: string
+          format: uuid
+    MembershipNetwork:
+      type: object
+      required:
+        - consortium
+        - entry
+      properties:
+        membership:
+          type: string
+          format: uuid
+        network:
+          type: string
+          format: uuid
+
+    # Similar to existing domain
+    Entry:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        parent:
+          type: string
+        description:
+          type: string
+        contactName:
+          type: string
+        email:
+          type: string
+        phoneNumber:
+          type: string
+        lmsLocationCode:
+          type: string
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+        endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceEndpoint'
+        networks:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Network'
+        tiers:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Tier'
+    Symbol:
+      required:
+        - id
+        - symbol
+        - authority
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+        symbol:
+          type: string
+          description: Uppercase string
+        authority:
+          type: string
+          description: Uppercase string
+    Authority:
+      required:
+        - id
+        - symbol
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique id
+        symbol:
+          type: string
+          description: Uppercase string
+    ServiceEndpoint:
+      type: object
+      required:
+        - id
+        - entry
+        - name
+        - type
+        - address
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        address:
+          type: string
+    Address:
+      type: object
+      required:
+        - id
+        - entry
+        - countryCode
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        label:
+          type: string
+        countryCode:
+          type: string
+    AddressLine:
+      type: object
+      required:
+        - id
+        - address
+        - seq
+        - type
+        - value
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        address:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+        type:
+          type: string
+        value:
+          type: string
+
