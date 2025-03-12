@@ -190,7 +190,7 @@ func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18
 	assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Nil(t, response.RequestConfirmation.ErrorData)
 
-	var ret []flows.FlowMessage = nil
+	var ret []flows.FlowMessage
 	for tries := 0; tries < 5; tries++ {
 		time.Sleep(400 * time.Millisecond)
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
