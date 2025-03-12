@@ -292,7 +292,7 @@ func (app *MockApp) Shutdown() error {
 func (app *MockApp) Run() error {
 	err := app.parseEnv()
 	if app.tenantId != "" {
-		app.client = *httpclient.ClientWithHeaders("X-Okapi-Tenant", app.tenantId)
+		app.client = *httpclient.NewClient().WithHeaders("X-Okapi-Tenant", app.tenantId)
 	}
 	if err != nil {
 		return err

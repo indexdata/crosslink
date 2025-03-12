@@ -188,7 +188,11 @@ func TestCustomHeader(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
-	err := ClientWithHeaders(headerName, "tenant", "empty", "", "novalue").
+	err := NewClient().WithHeaders(headerName, "tenant", "empty", "", "novalue").
+		GetXml(http.DefaultClient, server.URL, &response)
+	assert.Nil(t, err)
+	assert.Equal(t, "OK", response.Msg)
+	err = (&HttpClient{}).WithHeaders(headerName, "tenant", "empty", "", "", "").
 		GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "OK", response.Msg)

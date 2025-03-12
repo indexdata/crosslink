@@ -32,12 +32,17 @@ func NewClient() *HttpClient {
 	return &HttpClient{Headers: http.Header{}}
 }
 
-func ClientWithHeaders(headers ...string) *HttpClient {
-	defHeaders := http.Header{}
-	for i := 0; i+1 < len(headers); i += 2 {
-		defHeaders.Add(headers[i], headers[i+1])
+func (c *HttpClient) WithHeaders(headers ...string) *HttpClient {
+	if c.Headers == nil {
+		c.Headers = http.Header{}
 	}
-	return &HttpClient{Headers: defHeaders}
+	for i := 0; i+1 < len(headers); i += 2 {
+		if headers[i] == "" {
+			continue
+		}
+		c.Headers.Add(headers[i], headers[i+1])
+	}
+	return c
 }
 
 func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes []string, url string, reader io.Reader) ([]byte, error) {
