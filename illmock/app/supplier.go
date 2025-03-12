@@ -47,12 +47,9 @@ func (s *Supplier) delete(header *iso18626.Header) {
 func getScenarioForRequest(illRequest *iso18626.Request) string {
 	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	// if request is already a retry, do not send retry again
-	if illRequest.ServiceInfo != nil {
-		if illRequest.ServiceInfo.RequestType != nil {
-			if *illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
-				return strings.TrimPrefix(scenario, "RETRY_")
-			}
-		}
+	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.RequestType != nil &&
+		*illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
+		return strings.TrimPrefix(scenario, "RETRY_")
 	}
 	// initial request, consider both "RETRY" and "RETRY_" as prefix
 	if strings.HasPrefix(scenario, "RETRY_") {
