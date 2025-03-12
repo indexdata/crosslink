@@ -436,6 +436,25 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
+	t.Run("request: omit RequestType", func(t *testing.T) {
+		msg := createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = uuid.NewString()
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = uuid.NewString()
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = uuid.NewString()
+		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	})
+
 	t.Run("requestingAgencyMessage: Empty RequestingAgencyRequestId", func(t *testing.T) {
 		msg := createRequestingAgencyMessage()
 		msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
