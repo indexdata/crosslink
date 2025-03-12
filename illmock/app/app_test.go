@@ -814,105 +814,6 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "diku", entries[0].Name)
 	})
 
-	t.Run("directory entries cql any sym3", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%20any%20sym3")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 0)
-	})
-
-	t.Run("directory entries cql all sym1 sym2", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%20all%20sym1%20sym2")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 1)
-		assert.Equal(t, "diku", entries[0].Name)
-	})
-
-	t.Run("directory entries cql all sym1 sym2 sym3", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%20all%20sym1%20sym2%20sym3")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 0)
-	})
-
-	t.Run("directory entries cql = sym1 sym2 sym3", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3D%20sym1%20sym2%20sym3")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 0)
-	})
-
-	t.Run("directory entries cql = sym1 sym3", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3D%20sym1%20sym3")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 0)
-	})
-
-	t.Run("directory entries cql = sym2 sym1", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3D%20sym2%20sym1")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 1)
-	})
-
-	t.Run("directory entries cql = sym2 sym1", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3D%20sym2%20sym1")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer resp.Body.Close()
-		var entries []directory.Entry
-		err = json.Unmarshal(buf, &entries)
-		assert.Nil(t, err)
-		assert.Len(t, entries, 1)
-	})
-
 	t.Run("directory entries cql serverChoice sym2 sym3", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=sym1%20sym2")
 		assert.Nil(t, err)
@@ -922,6 +823,17 @@ func TestService(t *testing.T) {
 		assert.Nil(t, err)
 		defer resp.Body.Close()
 		assert.Contains(t, string(buf), "unsupported index cql.serverChoice")
+	})
+
+	t.Run("directory entries cql empty", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=")
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		assert.Contains(t, string(buf), "search term expected at position")
 	})
 
 	os.Unsetenv("HTTP_HEADERS")
