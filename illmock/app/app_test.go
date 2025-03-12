@@ -711,8 +711,9 @@ func TestService(t *testing.T) {
 		m = ret[4].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
-		assert.Equal(t, "OnLoan", m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, "LoanCondition", m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
 		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.Equal(t, "NoReproduction", m.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
 
 		m = ret[6].Message
 		assert.NotNil(t, m.Request)

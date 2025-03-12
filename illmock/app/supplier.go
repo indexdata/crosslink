@@ -80,7 +80,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	switch scenario {
 	case "RETRY":
 		status = append(status, iso18626.TypeStatusRetryPossible)
-		reasonRetry = &iso18626.TypeSchemeValuePair{Text: "OnLoan"}
+		reasonRetry = &iso18626.TypeSchemeValuePair{Text: "LoanCondition"}
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 	case "WILLSUPPLY_UNFILLED":
@@ -170,6 +170,10 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	status := statusList[0]
 	msg.SupplyingAgencyMessage.StatusInfo.Status = status
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry = state.reasonRetry
+	if state.reasonRetry != nil && state.reasonRetry.Text == "LoanCondition" {
+		msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
+		msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}
+	}
 
 	if state.presentResponse {
 		state.presentResponse = false
