@@ -20,13 +20,13 @@ type myType struct {
 
 func TestBadScheme(t *testing.T) {
 	var response myType
-	err := GetXml(http.DefaultClient, "xxx:/", &response)
+	err := NewClient().GetXml(http.DefaultClient, "xxx:/", &response)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
 func TestBadUrlChar(t *testing.T) {
 	var response myType
-	err := GetXml(http.DefaultClient, "http://localhost:8081\x7f", response)
+	err := NewClient().GetXml(http.DefaultClient, "http://localhost:8081\x7f", response)
 	assert.ErrorContains(t, err, "invalid control character in URL")
 }
 
@@ -38,7 +38,7 @@ func TestBadConnectionRefused(t *testing.T) {
 	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	l.Close()
 	var request, response myType
-	err = PostXml(http.DefaultClient, "http://localhost:"+port, request, &response)
+	err = NewClient().PostXml(http.DefaultClient, "http://localhost:"+port, request, &response)
 	assert.ErrorContains(t, err, "connection refused")
 }
 
@@ -49,7 +49,7 @@ func TestServerForbidden(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var request, response myType
-	err := PostXml(http.DefaultClient, server.URL, request, &response)
+	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "HTTP error: 403")
 	httpErr, ok := err.(*HttpError)
@@ -67,7 +67,7 @@ func TestServerBadContentType(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var request, response myType
-	err := PostXml(http.DefaultClient, server.URL, request, &response)
+	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.ErrorContains(t, err, "application/xml")
 	assert.ErrorContains(t, err, "text/xml")
 }
@@ -96,7 +96,7 @@ func TestPostXml(t *testing.T) {
 	defer server.Close()
 	var request, response myType
 	request.Msg = "hello"
-	err := PostXml(http.DefaultClient, server.URL, request, &response)
+	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
@@ -117,7 +117,7 @@ func TestServerApplicationXml(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
-	err := GetXml(http.DefaultClient, server.URL, &response)
+	err := NewClient().GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
@@ -138,7 +138,7 @@ func TestServerTextXml(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
-	err := GetXml(http.DefaultClient, server.URL, &response)
+	err := NewClient().GetXml(http.DefaultClient, server.URL, &response)
 	assert.Nil(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
@@ -161,7 +161,7 @@ func TestServerBrokenPipe(t *testing.T) {
 		assert.Greater(t, n, 20)
 	}()
 	var request, response myType
-	err := PostXml(http.DefaultClient, url, request, &response)
+	err := NewClient().PostXml(http.DefaultClient, url, request, &response)
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
 }
@@ -171,6 +171,29 @@ func TestMarshalFailed(t *testing.T) {
 	marshal := func(v any) ([]byte, error) {
 		return nil, fmt.Errorf("foo")
 	}
-	err := requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
+	err := NewClient().requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal failed: foo")
+}
+
+func TestCustomHeader(t *testing.T) {
+	const headerName = "X-Okapi-Tenant"
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "tenant", r.Header.Get(headerName))
+		assert.Equal(t, "", r.Header.Get("empty"))
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	var response myType
+	err := NewClient().WithHeaders(headerName, "tenant", "empty", "", "novalue").
+		GetXml(http.DefaultClient, server.URL, &response)
+	assert.Nil(t, err)
+	assert.Equal(t, "OK", response.Msg)
+	err = (&HttpClient{}).WithHeaders(headerName, "tenant", "empty", "", "", "").
+		GetXml(http.DefaultClient, server.URL, &response)
+	assert.Nil(t, err)
+	assert.Equal(t, "OK", response.Msg)
 }

@@ -136,3 +136,4 @@ With zoomsh:
 |`REQUESTING_AGENCY_ID` | Fallback requester agency ID (symbol)                                |`REQ`                  |
 |`CLEAN_TIMEOUT`        | Specifies how long a flow is kept in memory before being removed     |`10m`                  |
 |`SUPPLY_DURATION`      | Timeout before sending each SupplyingAgencyMessage                   |`100ms`                |
+|`HTTP_HEADERS`         | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                  |
