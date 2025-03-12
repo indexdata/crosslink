@@ -71,7 +71,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 	query := url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
-	err := httpclient.GetXml(s.client, s.sruUrl+"?maximumRecords=1000&query="+query, &sruResponse)
+	err := httpclient.NewClient().GetXml(s.client, s.sruUrl+"?maximumRecords=1000&query="+query, &sruResponse)
 	if err != nil {
 		return nil, err
 	}

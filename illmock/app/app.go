@@ -34,6 +34,8 @@ type MockApp struct {
 	supplier       Supplier
 	flowsApi       *flows.FlowsApi
 	sruApi         *sruapi.SruApi
+	headers        []string
+	client         httpclient.HttpClient
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -127,7 +129,7 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	url = url + "/iso18626"
 	app.logOutgoingReq(role, header, msg, url)
 	var response iso18626.Iso18626MessageNS
-	err := httpclient.PostXml(http.DefaultClient, url, msg, &response)
+	err := app.client.PostXml(http.DefaultClient, url, msg, &response)
 	if err != nil {
 		status := 0
 		if httpErr, ok := err.(*httpclient.HttpError); ok {
@@ -271,7 +273,22 @@ func (app *MockApp) parseEnv() error {
 		}
 		app.supplyDuration = d
 	}
+	if app.headers == nil {
+		app.headers = parseKVs(utils.GetEnv("HTTP_HEADERS", ""), ":", ";")
+	}
 	return nil
+}
+
+func parseKVs(kvs string, ksep string, kvsep string) []string {
+	var l []string
+	for _, kv := range strings.Split(kvs, kvsep) {
+		kv := strings.Split(kv, ksep)
+		if len(kv) == 2 {
+			l = append(l, strings.TrimSpace(kv[0]))
+			l = append(l, strings.TrimSpace(kv[1]))
+		}
+	}
+	return l
 }
 
 func (app *MockApp) Shutdown() error {
@@ -288,6 +305,9 @@ func (app *MockApp) Run() error {
 	err := app.parseEnv()
 	if err != nil {
 		return err
+	}
+	if app.headers != nil {
+		app.client = *app.client.WithHeaders(app.headers...)
 	}
 	iso18626.InitNs()
 	log.Info("Mock starting")
