@@ -188,9 +188,15 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 	if msg.Request.ServiceInfo != nil {
 		*msg.Request.ServiceInfo = *illRequest.ServiceInfo
 	}
+	msg.Request.ServiceInfo.RequestingAgencyPreviousRequestId = illRequest.Header.RequestingAgencyRequestId
 	requestType := iso18626.TypeRequestTypeRetry
 	msg.Request.ServiceInfo.RequestType = &requestType
-
+	if messageInfo.ReasonRetry != nil && messageInfo.ReasonRetry.Text == string(iso18626.ReasonRetryCostExceedsMaxCost) {
+		offered := *messageInfo.OfferedCosts
+		log.Info("offeredCosts", "offered", offered)
+		msg.Request.BillingInfo = &iso18626.BillingInfo{}
+		msg.Request.BillingInfo.MaximumCosts = &offered
+	}
 	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &illRequest.Header)
 	if err != nil {
 		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())

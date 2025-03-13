@@ -61,7 +61,9 @@ following values are recognized:
 |`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error       |
 |`HTTP-ERROR-400`           | Respond with HTTP `400` status                                       |
 |`HTTP-ERROR-500`           | Respond with HTTP `500` status                                       |
-|`RETRY_` ...               | For non-tried respond with `RetryPossible` , otherwise the rest      |
+|`RETRY:COND_` ...          | Response with retry-possible and retryStatus `LoanCondition`         |
+|`RETRY:COST_` ...          | Response with retry-possible and retryStatus `CostExceedsMaxCost`    |
+|`RETRY:ONLOAN_` ...        | Response with retry-possible and retryStatus `OnLoan`                |
 
 ## Requester behavior
 

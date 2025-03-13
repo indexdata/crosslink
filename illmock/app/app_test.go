@@ -703,7 +703,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry LoanCondition", func(t *testing.T) {
 		msg := createPatronRequest()
-		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:LoanCondition_LOANED", 16)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COND_LOANED", 16)
 
 		m := ret[1].Message
 		rid := m.Request.Header.RequestingAgencyRequestId
@@ -731,7 +731,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry CostExceedsMaxCost", func(t *testing.T) {
 		msg := createPatronRequest()
-		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:CostExceedsMaxCost_LOANED", 16)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COST_LOANED", 16)
 
 		m := ret[1].Message
 		rid := m.Request.Header.RequestingAgencyRequestId
@@ -747,6 +747,9 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.Request)
 		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
 		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+		assert.Equal(t, rid, m.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+		assert.Equal(t, utils.XSDDecimal{Base: 35, Exp: 0}, m.Request.BillingInfo.MaximumCosts.MonetaryValue)
+		assert.Equal(t, "USD", m.Request.BillingInfo.MaximumCosts.CurrencyCode.Text)
 
 		m = ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
@@ -759,7 +762,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry OnLoan", func(t *testing.T) {
 		msg := createPatronRequest()
-		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:OnLoan_LOANED", 16)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:ONLOAN_LOANED", 16)
 
 		m := ret[1].Message
 		rid := m.Request.Header.RequestingAgencyRequestId
@@ -1062,5 +1065,5 @@ func TestSendRetryRequest(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi()
 	msg := createRequest()
-	app.sendRetryRequest(msg.Request, "xx", nil)
+	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{})
 }

@@ -61,9 +61,6 @@ func getScenarioForRequest(illRequest *iso18626.Request) string {
 	} else if idx > 0 {
 		scenario = scenario[0:idx]
 	}
-	if scenario == "RETRY" {
-		scenario = "RETRY:CostExceedsMaxCost"
-	}
 	return scenario
 }
 
@@ -87,15 +84,15 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	var reasonRetry *iso18626.ReasonRetry
 
 	switch scenario {
-	case "RETRY:CostExceedsMaxCost":
+	case "RETRY:COST":
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryCostExceedsMaxCost
 		reasonRetry = &x
-	case "RETRY:OnLoan":
+	case "RETRY:ONLOAN":
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryOnLoan
 		reasonRetry = &x
-	case "RETRY:LoanCondition":
+	case "RETRY:COND":
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryLoanCondition
 		reasonRetry = &x

@@ -13,10 +13,10 @@ func TestGetScenarioForRequest(t *testing.T) {
 	assert.Equal(t, "A", getScenarioForRequest(request))
 
 	request.BibliographicInfo.SupplierUniqueRecordId = "RETRY"
-	assert.Equal(t, "RETRY:CostExceedsMaxCost", getScenarioForRequest(request))
+	assert.Equal(t, "RETRY", getScenarioForRequest(request))
 
 	request.BibliographicInfo.SupplierUniqueRecordId = "RETRY_"
-	assert.Equal(t, "RETRY:CostExceedsMaxCost", getScenarioForRequest(request))
+	assert.Equal(t, "RETRY", getScenarioForRequest(request))
 
 	request.BibliographicInfo.SupplierUniqueRecordId = "RETRY:beta_LOANED"
 	assert.Equal(t, "RETRY:beta", getScenarioForRequest(request))
