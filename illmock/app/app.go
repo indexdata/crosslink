@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/httpclient"
-	"github.com/indexdata/crosslink/illmock/directory"
+	"github.com/indexdata/crosslink/illmock/dirmock"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/illmock/reqform"
@@ -350,9 +350,8 @@ func (app *MockApp) Run() error {
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
 
-	dir := NewDirectoryMock()
-	sint := directory.NewStrictHandler(dir, nil)
-	directory.HandlerFromMux(sint, mux)
+	dir := dirmock.New()
+	dir.HandleFunc(mux)
 
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	app.flowsApi.Run()

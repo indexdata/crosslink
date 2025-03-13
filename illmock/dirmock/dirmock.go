@@ -1,8 +1,9 @@
-package app
+package dirmock
 
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +14,10 @@ import (
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
 
 type DirectoryMock struct{}
+
+func New() *DirectoryMock {
+	return &DirectoryMock{}
+}
 
 func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) {
 	if symbols == nil {
@@ -97,8 +102,6 @@ func matchQuery(query *cql.Query, symbols *[]directory.Symbol) (bool, error) {
 }
 
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
-	log.Info("GetEntries ", "cql", request.Params.Cql, "limit", request.Params.Limit, "offset", request.Params.Offset)
-
 	var query *cql.Query
 	if request.Params.Cql != nil {
 		var p cql.Parser
@@ -135,6 +138,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	return entries, nil
 }
 
-func NewDirectoryMock() *DirectoryMock {
-	return &DirectoryMock{}
+func (d *DirectoryMock) HandleFunc(mux *http.ServeMux) {
+	sint := directory.NewStrictHandler(d, nil)
+	directory.HandlerFromMux(sint, mux)
 }
