@@ -193,13 +193,9 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 		case iso18626.ReasonRetryCostExceedsMaxCost:
 			// CostExceedsMaxCost also puts a reason in ReasonUnfilled (bug really)
 			msg.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled = msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry
-
-			var amount utils.XSDDecimal
-			amount.UnmarshalText([]byte("35.00"))
-
 			msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts = &iso18626.TypeCosts{
 				CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "USD"},
-				MonetaryValue: amount,
+				MonetaryValue: utils.XSDDecimal{Base: 35, Exp: 0},
 			}
 		case iso18626.ReasonRetryOnLoan:
 			// the requester can retry now , basically!
