@@ -1,0 +1,10 @@
+package: directory
+output: directory/directory_gen.go
+output-options:
+  nullable-type: true
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+  embedded-spec: false
+  client: false

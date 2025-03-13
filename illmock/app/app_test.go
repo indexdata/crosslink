@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/httpclient"
+	"github.com/indexdata/crosslink/illmock/directory"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"
@@ -231,6 +233,7 @@ func TestService(t *testing.T) {
 	app.peerUrl = url
 	isoUrl := url + "/iso18626"
 	apiUrl := url + "/api/flows"
+	directoryUrl := url + "/directory/entries"
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
@@ -894,6 +897,60 @@ func TestService(t *testing.T) {
 	t.Run("tenant ID set", func(t *testing.T) {
 		assert.Equal(t, "T1", app.client.Headers.Get("X-Okapi-Tenant"))
 	})
+
+	t.Run("directory entries", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl)
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		var response directory.EntriesResponse
+		err = json.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Len(t, response.Items, 1)
+		assert.Equal(t, 1, *response.ResultInfo.TotalRecords)
+		assert.Equal(t, "diku", response.Items[0].Name)
+	})
+
+	t.Run("directory entries cql any sym3", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=symbol%20any%20sym3")
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		var response directory.EntriesResponse
+		err = json.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Len(t, response.Items, 0)
+		assert.Equal(t, 0, *response.ResultInfo.TotalRecords)
+	})
+
+	t.Run("directory entries cql serverChoice sym2 sym3", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=sym1%20sym2")
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		assert.Contains(t, string(buf), "unsupported index cql.serverChoice")
+	})
+
+	t.Run("directory entries cql empty", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=")
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		assert.Contains(t, string(buf), "search term expected at position")
+	})
+
 	os.Unsetenv("HTTP_HEADERS")
 	err := app.Shutdown()
 	assert.Nil(t, err)

@@ -1,7 +1,12 @@
 # Intro
 
-The `illmock` program is a utility for mocking ILL ISO18626 + SRU/OASIS
-searchRetrieve services.
+The `illmock` is a service offering:
+
+ * Mock ILL ISO18626 supplier and requester roles
+ * UI form for testing ILL
+ * ILL flows service
+ * Mock SRU/OASIS searchRetrieve service
+ * Mock Directory entries service
 
 # ILL service
 
@@ -126,6 +131,15 @@ With zoomsh:
     zoomsh "set sru_version 2.0" "set sru get" \
         "connect http://localhost:8081/sru" \
         "search cql:id=123" "show 0 1" "quit"
+
+# Directory service
+
+The directory service is accessible from the `/directory/entries` endpoint. For example:
+
+    curl http://localhost:8081/directory/entries
+
+See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
+The only supported index is `symbol`. Supported relations are: `anyl`, `all`, `=`.
 
 # Environment variables
 

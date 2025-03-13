@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/httpclient"
+	"github.com/indexdata/crosslink/illmock/dirmock"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/illmock/reqform"
@@ -348,6 +349,10 @@ func (app *MockApp) Run() error {
 	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
+
+	dir := dirmock.New()
+	dir.HandlerFromMux(mux)
+
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	app.flowsApi.Run()
 	return app.server.ListenAndServe()
