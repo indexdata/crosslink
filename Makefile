@@ -1,4 +1,4 @@
-SUBDIRS := iso18626 sru marcxml httpclient broker illmock
+SUBDIRS := iso18626 sru marcxml httpclient illmock broker
 GOALS := $(or $(MAKECMDGOALS),all)
 
 .PHONY: $(GOALS) $(SUBDIRS)
