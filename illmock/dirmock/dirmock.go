@@ -53,17 +53,12 @@ func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) 
 			}
 			return true, nil
 		case "=":
+			// all match match in order
 			if len(tSymbols) != len(*symbols) {
 				return false, nil
 			}
-			for _, t := range tSymbols {
-				found := false
-				for _, s := range *symbols {
-					if s.Symbol == t {
-						found = true
-					}
-				}
-				if !found {
+			for i, t := range tSymbols {
+				if t != (*symbols)[i].Symbol {
 					return false, nil
 				}
 			}

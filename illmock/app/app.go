@@ -345,13 +345,13 @@ func (app *MockApp) Run() error {
 		FlowsPath:   "/api/flows",
 		HandlerFunc: iso18626Handler,
 	}
-	dir := dirmock.New()
-	dir.HandlerFromMux(mux)
-
 	mux.HandleFunc(reqForm.FormPath, reqForm.HandleForm)
 	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
+
+	dir := dirmock.New()
+	dir.HandlerFromMux(mux)
 
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	app.flowsApi.Run()

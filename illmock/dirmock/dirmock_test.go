@@ -30,7 +30,7 @@ func TestMatchQueries(t *testing.T) {
 		{"symbol = a", "b", false, ""},
 		{"symbol = a", "a b", false, ""},
 		{"symbol = a b", "a b", true, ""},
-		{"symbol = b a", "a b", true, ""},
+		{"symbol = b a", "a b", false, ""},
 		{"symbol = b a", "a b c", false, ""},
 		{"symbol any a", "a", true, ""},
 		{"symbol any a", "b", false, ""},
