@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -11,9 +15,6 @@ import (
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type ApiHandler struct {
@@ -115,7 +116,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	}
 	if newPeer.Symbol == "" || !strings.Contains(newPeer.Symbol, ":") {
 		resp := ErrorMessage{
-			Error: "Symbol should be in format \"isil:sym\" but got " + newPeer.Symbol,
+			Error: "Symbol should be in \"ISIL:SYMBOL\" format but got " + newPeer.Symbol,
 		}
 		ctx.Logger().Error("error serving api request", "error", err.Error())
 		w.Header().Set("Content-Type", "application/json")

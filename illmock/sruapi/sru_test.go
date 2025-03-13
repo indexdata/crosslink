@@ -172,7 +172,7 @@ func TestSruService(t *testing.T) {
 				assert.Equal(t, "l", f.Subfield[0].Code)
 				assert.Equal(t, "42", string(f.Subfield[0].Text))
 				assert.Equal(t, "s", f.Subfield[1].Code)
-				assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+				assert.Equal(t, "ISIL:SUP1", string(f.Subfield[1].Text))
 			}
 		}
 		assert.True(t, matched)
@@ -201,12 +201,12 @@ func TestSruService(t *testing.T) {
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "42", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
-					assert.Equal(t, "isil:sup1", string(f.Subfield[1].Text))
+					assert.Equal(t, "ISIL:SUP1", string(f.Subfield[1].Text))
 				} else if matched == 1 {
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "43", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
-					assert.Equal(t, "isil:sup2", string(f.Subfield[1].Text))
+					assert.Equal(t, "ISIL:SUP2", string(f.Subfield[1].Text))
 				}
 				matched++
 			}

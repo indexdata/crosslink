@@ -99,7 +99,7 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 			sValue = lValue
 		} else {
 			lValue = localId
-			sValue = "isil:sup" + strconv.Itoa(i)
+			sValue = "ISIL:SUP" + strconv.Itoa(i)
 		}
 		subFields := []marcxml.SubfieldatafieldType{
 			marcxml.SubfieldatafieldType{Code: "l", Text: marcxml.SubfieldDataType(lValue)},
