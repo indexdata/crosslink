@@ -17,10 +17,6 @@ var Html []byte
 //go:embed example.xml
 var Example []byte
 
-func init() {
-	Html = bytes.Replace(Html, []byte("{{example}}"), []byte(html.EscapeString(string(Example))), 1)
-}
-
 type ReqForm struct {
 	Header      string
 	FormPath    string
@@ -33,7 +29,7 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	Html = bytes.Replace(Html, []byte("{{header}}"), []byte(rf.Header), 2)
 	Html = bytes.Replace(Html, []byte("{{path}}"), []byte(rf.FormPath), 1)
 	if r.Method == http.MethodGet {
-		rf.writeHTML(w, "post a message to see the response", "")
+		rf.writeHTML(w, string(Example), "post a message to see the response", "")
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -67,13 +63,13 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	requestId := res.Header().Get("X-Request-ID")
 	if statusCode != http.StatusOK {
 		log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
-		rf.writeHTML(w, fmt.Sprintf("%d\n%s", statusCode, resBody), requestId)
+		rf.writeHTML(w, message, fmt.Sprintf("%d\n%s", statusCode, resBody), requestId)
 		return
 	}
-	rf.writeHTML(w, string(resBody), requestId)
+	rf.writeHTML(w, message, string(resBody), requestId)
 }
 
-func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string, requestId string) {
+func (rf *ReqForm) writeHTML(w http.ResponseWriter, request string, response string, requestId string) {
 	w.Header().Add("Content-Type", "text/html")
 	flowsLink := url.URL{Path: rf.FlowsPath}
 	query := flowsLink.Query()
@@ -81,8 +77,10 @@ func (rf *ReqForm) writeHTML(w http.ResponseWriter, response string, requestId s
 		query.Set("id", requestId)
 	}
 	flowsLink.RawQuery = query.Encode()
-	out := bytes.Replace(Html, []byte("{{flowsLink}}"), []byte(flowsLink.String()), 1)
-	_, err := w.Write(bytes.Replace(out, []byte("{{response}}"), []byte(html.EscapeString(response)), 1))
+	out := bytes.Replace(Html, []byte("{{request}}"), []byte(html.EscapeString(request)), 1)
+	out = bytes.Replace(out, []byte("{{flowsLink}}"), []byte(flowsLink.String()), 1)
+	out = bytes.Replace(out, []byte("{{response}}"), []byte(html.EscapeString(response)), 1)
+	_, err := w.Write(out)
 	if err != nil {
 		log.Println("[req-form] ERROR writing response", err)
 	}
