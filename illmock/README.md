@@ -50,17 +50,20 @@ invoke a particular scenario when acting as the supplier.
 The scenario is used by the supplier to perform a particular workflow. The
 following values are recognized:
 
-| Scenario                  | Workflow                                                             |
-|---------------------------|----------------------------------------------------------------------|
-|`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`          |
-|`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew` |
-|`UNFILLED`                 | Respond with `Unfilled` message                                      |
-|`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                         |
-|`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                       |
-|`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`   |
-|`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error       |
-|`HTTP-ERROR-400`           | Respond with HTTP `400` status                                       |
-|`HTTP-ERROR-500`           | Respond with HTTP `500` status                                       |
+| Scenario                  | Workflow                                                                            |
+|---------------------------|-------------------------------------------------------------------------------------|
+|`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`                         |
+|`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
+|`UNFILLED`                 | Respond with `Unfilled` message                                                     |
+|`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
+|`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
+|`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
+|`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error                      |
+|`HTTP-ERROR-400`           | Respond with HTTP `400` status                                                      |
+|`HTTP-ERROR-500`           | Respond with HTTP `500` status                                                      |
+|`RETRY:COND_` ...          | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
+|`RETRY:COST_` ...          | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
+|`RETRY:ONLOAN_` ...        | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
 
 ## Requester behavior
 
