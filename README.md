@@ -7,6 +7,12 @@ See individual components docs for details:
 * [broker](broker/README.md): ISO18626 transaction broker
 * [illmock](illmock/README.md): ISO18626 + SRU mocking service
 
+## Development environment
+
+The broker is available at: https://broker.crosslink-dev.indexdata.com.
+
+The illmock submit form is available at: https://illmock.crosslink-dev.indexdata.com/form
+
 ## Running with Docker and Kubernetes
 
 All containers and Helm charts from this repository are published to the GitHub Container Registry,
