@@ -19,8 +19,12 @@
     </header>
     <bibliographicInfo>
       <!--
-        specify mock scenario via supplierUniqueRecordId, see https://github.com/indexdata/crosslink/blob/main/illmock/README.md#supplier-behavior
-        if CrossLink Broker is the supplier peer, and it's configured with the SRU mock holdings adapter, you can specify multiple scenarios, e.g:
+        specify supplier scenario via <supplierUniqueRecordId> field, see https://github.com/indexdata/crosslink/blob/main/illmock/README.md#supplier-behavior
+      -->
+      <!--
+        NOTE: when submitting a PatronRequest where the broker is the supplier peer (default),
+        and assuming the broker is configured with the mock SRU holdings adapter (also default),
+        you can specify multiple ILL scenarios for each mock supplier located by the broker with a semicolon separated list, e.g.:
          <supplierUniqueRecordId>ERROR;UNFILLED;WILLSUPPLY_UNFILLED;LOANED</supplierUniqueRecordId>
       -->
       <supplierUniqueRecordId>LOANED</supplierUniqueRecordId>
@@ -33,17 +37,29 @@
     </bibliographicInfo>
     <serviceInfo>
       <requestType>New</requestType>
-      <!-- use SubType=PatronRequest if mock should forward the request to the supplier peer -->
+      <!--
+        use requestSubType:PatronRequest ONLY if the mock should act as a requester and send a request to the supplier peer (broker by default)
+      -->
       <requestSubType>PatronRequest</requestSubType>
       <serviceType>Loan</serviceType>
+      <!--
+        specify requester behavior via the <note> field, see https://github.com/indexdata/crosslink/blob/main/illmock/README.md#requester-behavior
+      -->
+      <!--
+        <note>#CANCEL#</note>
+      -->
     </serviceInfo>
-    <!-- optionally, supplier peer address can be specified below, otherwise the default is used -->
+    <!--
+      optionally, supplier peer address can be specified below, otherwise the default (broker) is used
+    -->
     <!--
     <supplierInfo>
       <supplierDescription>https://broker.crosslink-dev.indexdata.com/iso18626</supplierDescription>
     </supplierInfo>
     -->
-    <!-- optionally, requester peer address can be specified below, otherwise the default is used -->
+    <!--
+      optionally, requester peer address can be specified below, otherwise the default (broker) is used
+    -->
     <!--
     <requestingAgencyInfo>
       <address>
