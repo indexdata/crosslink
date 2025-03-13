@@ -35,9 +35,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Entry'
+                $ref: '#/components/schemas/EntriesResponse'
         '400':
           description: Request validation error
           content:
@@ -49,6 +47,29 @@ paths:
 
 components:
   schemas:
+    EntriesResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+    ResultInfo:
+      type: object
+      properties:
+        totalRecords:
+          type: integer
+        diagnostics:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
     Consortium:
       type: object
       required:

@@ -127,7 +127,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		Symbols: &symbols,
 	}
 
-	var entries directory.GetEntries200JSONResponse
+	var entries []directory.Entry
 	match, err := matchQuery(query, entry.Symbols)
 	if err != nil {
 		return directory.GetEntries400TextResponse(err.Error()), nil
@@ -135,7 +135,13 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	if match {
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	var response directory.GetEntries200JSONResponse
+	response.Items = entries
+	total := len(entries)
+	response.ResultInfo = &directory.ResultInfo{
+		TotalRecords: &total,
+	}
+	return response, nil
 }
 
 func (d *DirectoryMock) HandleFunc(mux *http.ServeMux) {
