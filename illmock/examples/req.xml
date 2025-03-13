@@ -2,12 +2,12 @@
   <tag0:request>
     <tag0:header>
       <tag0:supplyingAgencyId>
-        <tag0:agencyIdType>isil</tag0:agencyIdType>
-        <tag0:agencyIdValue>broker</tag0:agencyIdValue>
+        <tag0:agencyIdType>ISIL</tag0:agencyIdType>
+        <tag0:agencyIdValue>BROKER</tag0:agencyIdValue>
       </tag0:supplyingAgencyId>
       <tag0:requestingAgencyId>
-        <tag0:agencyIdType>isil</tag0:agencyIdType>
-        <tag0:agencyIdValue>req</tag0:agencyIdValue>
+        <tag0:agencyIdType>ISIL</tag0:agencyIdType>
+        <tag0:agencyIdValue>REQ</tag0:agencyIdValue>
       </tag0:requestingAgencyId>
       <tag0:multipleItemRequestId></tag0:multipleItemRequestId>
       <tag0:timestamp>2024-11-28T10:25:11.136Z</tag0:timestamp>

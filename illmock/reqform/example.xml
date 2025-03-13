@@ -6,8 +6,8 @@
   <request>
     <header>
       <supplyingAgencyId>
-        <agencyIdType>isil</agencyIdType>
-        <agencyIdValue>broker</agencyIdValue>
+        <agencyIdType>ISIL</agencyIdType>
+        <agencyIdValue>BROKER</agencyIdValue>
       </supplyingAgencyId>
       <requestingAgencyId>
         <agencyIdType>ISIL</agencyIdType>

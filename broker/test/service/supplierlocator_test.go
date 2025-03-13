@@ -87,8 +87,8 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	yesterday := time.Now().Add(-24 * time.Hour)
 	toChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
-		Symbol:        "isil:sup1",
-		Name:          "isil:sup1",
+		Symbol:        "ISIL:SUP1",
+		Name:          "ISIL:SUP1",
 		RefreshPolicy: ill_db.RefreshPolicyTransaction,
 		RefreshTime: pgtype.Timestamp{
 			Time:  yesterday,
@@ -143,7 +143,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 func TestLocateSuppliersNoUpdate(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	var completedTask []events.Event
-	illTrId := getIllTransId(t, illRepo, "return-isil:nochange")
+	illTrId := getIllTransId(t, illRepo, "return-ISIL:NOCHANGE")
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
 			completedTask = append(completedTask, event)
@@ -158,7 +158,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 	noChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
-		Symbol:        "isil:nochange",
+		Symbol:        "ISIL:NOCHANGE",
 		Name:          "No Change",
 		RefreshPolicy: ill_db.RefreshPolicyNever,
 		RefreshTime: pgtype.Timestamp{
@@ -220,8 +220,8 @@ func TestLocateSuppliersOrder(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
-	sup1 := getOrCreatePeer(t, illRepo, "isil:sup1", 3, 4)
-	sup2 := getOrCreatePeer(t, illRepo, "isil:sup2", 2, 4)
+	sup1 := getOrCreatePeer(t, illRepo, "ISIL:SUP1", 3, 4)
+	sup2 := getOrCreatePeer(t, illRepo, "ISIL:SUP2", 2, 4)
 
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -245,8 +245,8 @@ func TestLocateSuppliersOrder(t *testing.T) {
 		t.Error("Expected to sup1 be second supplier")
 	}
 	// Clean
-	getOrCreatePeer(t, illRepo, "isil:sup1", 0, 0)
-	getOrCreatePeer(t, illRepo, "isil:sup2", 0, 0)
+	getOrCreatePeer(t, illRepo, "ISIL:SUP1", 0, 0)
+	getOrCreatePeer(t, illRepo, "ISIL:SUP2", 0, 0)
 }
 
 func TestLocateSupplierUnreachable(t *testing.T) {
@@ -493,7 +493,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 
 func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	supSymbol := "isil:newSupplier" + uuid.NewString()
+	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
 	illTrId := getIllTransId(t, illRepo, "return-"+supSymbol)
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
