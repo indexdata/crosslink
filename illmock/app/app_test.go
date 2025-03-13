@@ -192,6 +192,7 @@ func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18
 	assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Nil(t, response.RequestConfirmation.ErrorData)
 
+	var ret []flows.FlowMessage
 	for tries := 0; tries < 5; tries++ {
 		time.Sleep(400 * time.Millisecond)
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
@@ -205,15 +206,21 @@ func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18
 		err = xml.Unmarshal(buf, &flowR)
 		assert.Nil(t, err)
 		assert.Len(t, flowR.Flows, 1)
+		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
-		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
-		ret := flowR.Flows[0].Message
+		assert.Equal(t, iso18626.TypeRequestTypeNew, *flowR.Flows[0].Message[0].Message.Request.ServiceInfo.RequestType)
+		assert.Contains(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo.RequestSubType, iso18626.TypeRequestSubTypePatronRequest)
+		assert.Equal(t, iso18626.TypeRequestSubTypePatronRequest, flowR.Flows[0].Message[0].Message.Request.ServiceInfo.RequestSubType[0])
+		assert.NotNil(t, flowR.Flows[0].Message[1].Message.Request)
+		assert.NotNil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo)
+		assert.Nil(t, flowR.Flows[0].Message[1].Message.Request.ServiceInfo.RequestSubType)
+		ret = flowR.Flows[0].Message
 		assert.LessOrEqual(t, len(ret), expectedLen)
 		if len(ret) == expectedLen {
 			return ret
 		}
 	}
-	assert.Fail(t, "Expected length not reached for scenario "+scenario)
+	assert.Equal(t, expectedLen, len(ret))
 	return nil
 }
 
@@ -433,6 +440,25 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
+	t.Run("request: omit RequestType", func(t *testing.T) {
+		msg := createRequest()
+		msg.Request.Header.RequestingAgencyRequestId = uuid.NewString()
+		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = uuid.NewString()
+		msg.Request.Header.RequestingAgencyId.AgencyIdValue = uuid.NewString()
+		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
+		buf := utils.Must(xml.Marshal(msg))
+		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		defer resp.Body.Close()
+		buf, err = io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		var response iso18626.ISO18626Message
+		err = xml.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	})
+
 	t.Run("requestingAgencyMessage: Empty RequestingAgencyRequestId", func(t *testing.T) {
 		msg := createRequestingAgencyMessage()
 		msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
@@ -648,7 +674,8 @@ func TestService(t *testing.T) {
 		msg.Request.ServiceInfo.Note = "#CANCEL#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 16)
 		assert.NotNil(t, ret[0].Message.Request.ServiceInfo)
-		assert.Nil(t, ret[1].Message.Request.ServiceInfo)
+		assert.Equal(t, iso18626.TypeRequestSubTypePatronRequest, ret[0].Message.Request.ServiceInfo.RequestSubType[0])
+		assert.Nil(t, ret[1].Message.Request.ServiceInfo.RequestSubType)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoN, *ret[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
@@ -664,8 +691,8 @@ func TestService(t *testing.T) {
 		msg := createPatronRequest()
 		msg.Request.ServiceInfo.Note = "#CANCEL#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY_LOANED", 10)
-		assert.NotNil(t, ret[0].Message.Request.ServiceInfo)
-		assert.Nil(t, ret[1].Message.Request.ServiceInfo)
+		assert.Equal(t, iso18626.TypeRequestSubTypePatronRequest, ret[0].Message.Request.ServiceInfo.RequestSubType[0])
+		assert.Nil(t, ret[1].Message.Request.ServiceInfo.RequestSubType)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage)
 		assert.NotNil(t, ret[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *ret[7].Message.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
@@ -675,6 +702,93 @@ func TestService(t *testing.T) {
 		m = ret[len(ret)-1].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
+	})
+
+	t.Run("Patron request retry LoanCondition", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COND_LOANED", 16)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryLoanCondition), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.Equal(t, "NoReproduction", m.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+
+		m = ret[6].Message
+		assert.NotNil(t, m.Request)
+		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
+		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request retry CostExceedsMaxCost", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COST_LOANED", 16)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryCostExceedsMaxCost), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+
+		m = ret[6].Message
+		assert.NotNil(t, m.Request)
+		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
+		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+		assert.Equal(t, rid, m.Request.ServiceInfo.RequestingAgencyPreviousRequestId)
+		assert.Equal(t, utils.XSDDecimal{Base: 35, Exp: 0}, m.Request.BillingInfo.MaximumCosts.MonetaryValue)
+		assert.Equal(t, "USD", m.Request.BillingInfo.MaximumCosts.CurrencyCode.Text)
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request retry OnLoan", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:ONLOAN_LOANED", 16)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryOnLoan), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.RetryAfter)
+
+		m = ret[6].Message
+		assert.NotNil(t, m.Request)
+		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
+		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
@@ -1001,4 +1115,11 @@ func TestSendSupplyingAgencyUnexpectedISO18626message(t *testing.T) {
 	supplierInfo := &supplierInfo{requesterUrl: server.URL}
 	app.supplier.store(header, supplierInfo)
 	app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoaned})
+}
+
+func TestSendRetryRequest(t *testing.T) {
+	var app MockApp
+	app.flowsApi = flows.CreateFlowsApi()
+	msg := createRequest()
+	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{})
 }
