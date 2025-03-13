@@ -9,15 +9,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 )
 
 type supplierInfo struct {
-	overdue           bool                          // overdue flag
-	loaned            bool                          // if loaned
-	supplierRequestId string                        // supplier request Id
-	requesterUrl      string                        // requester URL
-	presentResponse   bool                          // if it's first supplying message
-	reasonRetry       *iso18626.TypeSchemeValuePair // used on retry
+	overdue           bool                  // overdue flag
+	loaned            bool                  // if loaned
+	supplierRequestId string                // supplier request Id
+	requesterUrl      string                // requester URL
+	presentResponse   bool                  // if it's first supplying message
+	reasonRetry       *iso18626.ReasonRetry // used on retry
+
 }
 
 type Supplier struct {
@@ -46,14 +48,21 @@ func (s *Supplier) delete(header *iso18626.Header) {
 
 func getScenarioForRequest(illRequest *iso18626.Request) string {
 	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	var idx int = -1
+	if strings.HasPrefix(scenario, "RETRY") {
+		idx = strings.Index(scenario, "_")
+	}
 	// if request is already a retry, do not send retry again
 	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.RequestType != nil &&
 		*illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
-		return strings.TrimPrefix(scenario, "RETRY_")
+		if idx > 0 {
+			return scenario[idx+1:]
+		}
+	} else if idx > 0 {
+		scenario = scenario[0:idx]
 	}
-	// initial request, consider both "RETRY" and "RETRY_" as prefix
-	if strings.HasPrefix(scenario, "RETRY_") {
-		scenario = "RETRY" // Consider it a "RETRY" only
+	if scenario == "RETRY" {
+		scenario = "RETRY:CostExceedsMaxCost"
 	}
 	return scenario
 }
@@ -75,12 +84,21 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	// should be able to parse the value and put any types into status...
 
 	scenario := getScenarioForRequest(illRequest)
-	var reasonRetry *iso18626.TypeSchemeValuePair = nil
+	var reasonRetry *iso18626.ReasonRetry
 
 	switch scenario {
-	case "RETRY":
+	case "RETRY:CostExceedsMaxCost":
 		status = append(status, iso18626.TypeStatusRetryPossible)
-		reasonRetry = &iso18626.TypeSchemeValuePair{Text: "LoanCondition"}
+		x := iso18626.ReasonRetryCostExceedsMaxCost
+		reasonRetry = &x
+	case "RETRY:OnLoan":
+		status = append(status, iso18626.TypeStatusRetryPossible)
+		x := iso18626.ReasonRetryOnLoan
+		reasonRetry = &x
+	case "RETRY:LoanCondition":
+		status = append(status, iso18626.TypeStatusRetryPossible)
+		x := iso18626.ReasonRetryLoanCondition
+		reasonRetry = &x
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 	case "WILLSUPPLY_UNFILLED":
@@ -169,12 +187,28 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	msg := createSupplyingAgencyMessage()
 	status := statusList[0]
 	msg.SupplyingAgencyMessage.StatusInfo.Status = status
-	msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry = state.reasonRetry
-	if state.reasonRetry != nil && state.reasonRetry.Text == "LoanCondition" {
-		msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
-		msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}
-	}
+	if state.reasonRetry != nil {
+		msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry = &iso18626.TypeSchemeValuePair{Text: string(*state.reasonRetry)}
+		switch *state.reasonRetry {
+		case iso18626.ReasonRetryCostExceedsMaxCost:
+			// CostExceedsMaxCost also puts a reason in ReasonUnfilled (bug really)
+			msg.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled = msg.SupplyingAgencyMessage.MessageInfo.ReasonRetry
 
+			var amount utils.XSDDecimal
+			amount.UnmarshalText([]byte("35.00"))
+
+			msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts = &iso18626.TypeCosts{
+				CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "USD"},
+				MonetaryValue: amount,
+			}
+		case iso18626.ReasonRetryOnLoan:
+			// the requester can retry now , basically!
+			msg.SupplyingAgencyMessage.MessageInfo.RetryAfter = &utils.XSDDateTime{Time: time.Now()}
+		case iso18626.ReasonRetryLoanCondition:
+			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
+			msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}
+		}
+	}
 	if state.presentResponse {
 		state.presentResponse = false
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse

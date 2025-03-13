@@ -701,9 +701,9 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 	})
 
-	t.Run("Patron request retry loaned", func(t *testing.T) {
+	t.Run("Patron request retry LoanCondition", func(t *testing.T) {
 		msg := createPatronRequest()
-		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY_LOANED", 16)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:LoanCondition_LOANED", 16)
 
 		m := ret[1].Message
 		rid := m.Request.Header.RequestingAgencyRequestId
@@ -711,9 +711,65 @@ func TestService(t *testing.T) {
 		m = ret[4].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
-		assert.Equal(t, "LoanCondition", m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, string(iso18626.ReasonRetryLoanCondition), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
 		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 		assert.Equal(t, "NoReproduction", m.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+
+		m = ret[6].Message
+		assert.NotNil(t, m.Request)
+		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
+		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request retry CostExceedsMaxCost", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:CostExceedsMaxCost_LOANED", 16)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryCostExceedsMaxCost), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.OfferedCosts)
+
+		m = ret[6].Message
+		assert.NotNil(t, m.Request)
+		assert.Equal(t, iso18626.TypeRequestTypeRetry, *m.Request.ServiceInfo.RequestType)
+		assert.Equal(t, rid, m.Request.Header.RequestingAgencyRequestId)
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request retry OnLoan", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:OnLoan_LOANED", 16)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryOnLoan), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.RetryAfter)
 
 		m = ret[6].Message
 		assert.NotNil(t, m.Request)
@@ -1006,5 +1062,5 @@ func TestSendRetryRequest(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi()
 	msg := createRequest()
-	app.sendRetryRequest(msg.Request, "xx")
+	app.sendRetryRequest(msg.Request, "xx", nil)
 }

@@ -181,7 +181,7 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string) {
+func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo) {
 	msg := &iso18626.Iso18626MessageNS{}
 	msg.Request = illRequest
 	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
@@ -243,6 +243,6 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			}
 		}
 	case iso18626.TypeStatusRetryPossible:
-		go app.sendRetryRequest(state.request, state.supplierUrl)
+		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo)
 	}
 }
