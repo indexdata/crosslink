@@ -124,7 +124,7 @@ func TestPeersCRUD(t *testing.T) {
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
-		Symbol:        "isil:peer",
+		Symbol:        "ISIL:PEER",
 		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
@@ -318,7 +318,7 @@ func TestPostPeersDbError(t *testing.T) {
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
-		Symbol:        "isil:peer",
+		Symbol:        "ISIL:PEER",
 		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)

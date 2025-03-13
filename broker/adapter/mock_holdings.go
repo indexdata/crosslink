@@ -28,7 +28,7 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 			})
 		} else {
 			holdings = append(holdings, Holding{
-				Symbol:          "isil:sup" + strconv.Itoa(i),
+				Symbol:          "ISIL:SUP" + strconv.Itoa(i),
 				LocalIdentifier: id,
 			})
 		}

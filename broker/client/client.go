@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var BrokerSymbol = "isil:broker"
+var BrokerSymbol = "ISIL:BROKER"
 var statusMap = map[string]iso18626.TypeStatus{
 	string(iso18626.TypeStatusRequestReceived):        iso18626.TypeStatusRequestReceived,
 	string(iso18626.TypeStatusExpectToSupply):         iso18626.TypeStatusExpectToSupply,
