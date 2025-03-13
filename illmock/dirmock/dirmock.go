@@ -144,7 +144,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	return response, nil
 }
 
-func (d *DirectoryMock) HandleFunc(mux *http.ServeMux) {
+func (d *DirectoryMock) HandlerFromMux(mux *http.ServeMux) {
 	sint := directory.NewStrictHandler(d, nil)
 	directory.HandlerFromMux(sint, mux)
 }
