@@ -51,7 +51,7 @@ func TestServerForbidden(t *testing.T) {
 	var request, response myType
 	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.NotNil(t, err)
-	assert.ErrorContains(t, err, "HTTP error 403")
+	assert.ErrorContains(t, err, "HTTP error 403: Forbidden")
 	httpErr, ok := err.(*HttpError)
 	assert.True(t, ok)
 	assert.Equal(t, http.StatusForbidden, httpErr.StatusCode)
