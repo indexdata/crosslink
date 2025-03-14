@@ -139,7 +139,7 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
     curl http://localhost:8081/directory/entries
 
 See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
-The only supported index is `symbol`. Supported relations are: `anyl`, `all`, `=`.
+The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`.
 
 # Environment variables
 
