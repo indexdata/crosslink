@@ -367,6 +367,7 @@ func TestSendHttpPost(t *testing.T) {
 			tenant: "testTenant",
 			mockResponse: &http.Response{
 				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/xml"}},
 				Body: io.NopCloser(bytes.NewBufferString(`<ISO18626Message>
 					<!-- Add your mock XML response -->
 				</ISO18626Message>`)),

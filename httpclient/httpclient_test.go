@@ -51,7 +51,7 @@ func TestServerForbidden(t *testing.T) {
 	var request, response myType
 	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
 	assert.NotNil(t, err)
-	assert.ErrorContains(t, err, "HTTP error: 403")
+	assert.ErrorContains(t, err, "HTTP error 403")
 	httpErr, ok := err.(*HttpError)
 	assert.True(t, ok)
 	assert.Equal(t, http.StatusForbidden, httpErr.StatusCode)
@@ -173,6 +173,12 @@ func TestMarshalFailed(t *testing.T) {
 	}
 	err := NewClient().requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal failed: foo")
+}
+
+func TestMarshalNil(t *testing.T) {
+	var response myType
+	err := NewClient().requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", nil, response, xml.Marshal, xml.Unmarshal)
+	assert.ErrorContains(t, err, "marshal returned nil")
 }
 
 func TestCustomHeader(t *testing.T) {

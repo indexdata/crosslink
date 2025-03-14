@@ -60,7 +60,8 @@ func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, &HttpError{resp.StatusCode, fmt.Sprintf("HTTP error: %d", resp.StatusCode)}
+		buf, _ := io.ReadAll(resp.Body)
+		return nil, &HttpError{resp.StatusCode, fmt.Sprintf("HTTP error %d: %s", resp.StatusCode, buf)}
 	}
 	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -105,6 +106,9 @@ func (c *HttpClient) requestResponse(client *http.Client, method string, content
 	buf, err := marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %v", err)
+	}
+	if buf == nil {
+		return fmt.Errorf("marshal returned nil")
 	}
 	resbuf, err := c.httpInvoke(client, method, contentTypes, url, bytes.NewReader(buf))
 	if err != nil {
