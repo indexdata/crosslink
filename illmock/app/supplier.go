@@ -173,7 +173,7 @@ func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *s
 }
 
 func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList []iso18626.TypeStatus) {
-	time.Sleep(app.supplyDuration)
+	time.Sleep(app.messageDelay)
 
 	supplier := &app.supplier
 	state := supplier.load(header)

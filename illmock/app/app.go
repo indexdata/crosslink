@@ -26,17 +26,17 @@ import (
 )
 
 type MockApp struct {
-	httpPort       string
-	agencyType     string
-	peerUrl        string
-	supplyDuration time.Duration
-	server         *http.Server
-	requester      Requester
-	supplier       Supplier
-	flowsApi       *flows.FlowsApi
-	sruApi         *sruapi.SruApi
-	headers        []string
-	client         httpclient.HttpClient
+	httpPort     string
+	agencyType   string
+	peerUrl      string
+	messageDelay time.Duration
+	server       *http.Server
+	requester    Requester
+	supplier     Supplier
+	flowsApi     *flows.FlowsApi
+	sruApi       *sruapi.SruApi
+	headers      []string
+	client       httpclient.HttpClient
 }
 
 var log *slog.Logger = slogwrap.SlogWrap()
@@ -240,13 +240,13 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 	}
 }
 
-func getSupplyDuration(val string) (time.Duration, error) {
+func getMessageDelay(val string) (time.Duration, error) {
 	d, err := time.ParseDuration(val)
 	if err != nil {
-		return 0, fmt.Errorf("invalid SUPPLY_DURATION: %s", err.Error())
+		return 0, fmt.Errorf("invalid MESSAGE_DELAY: %s", err.Error())
 	}
 	if d < 0 {
-		return 0, errors.New("SUPPLY_DURATION can not be negative")
+		return 0, errors.New("MESSAGE_DELAY can not be negative")
 	}
 	return d, nil
 }
@@ -267,12 +267,12 @@ func (app *MockApp) parseEnv() error {
 	if app.peerUrl == "" {
 		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081")
 	}
-	if app.supplyDuration == 0 {
-		d, err := getSupplyDuration(utils.GetEnv("SUPPLY_DURATION", "100ms"))
+	if app.messageDelay == 0 {
+		d, err := getMessageDelay(utils.GetEnv("MESSAGE_DELAY", "100ms"))
 		if err != nil {
 			return err
 		}
-		app.supplyDuration = d
+		app.messageDelay = d
 	}
 	if app.headers == nil {
 		app.headers = parseKVs(utils.GetEnv("HTTP_HEADERS", ""), ":", ";")

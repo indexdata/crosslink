@@ -155,6 +155,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 		return
 	}
 	if action == iso18626.TypeActionReceived {
+		time.Sleep(app.messageDelay)
 		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionShippedReturn)
 	}
 }
