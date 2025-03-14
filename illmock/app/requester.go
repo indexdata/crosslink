@@ -107,13 +107,13 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	}
 	responseMsg, err := app.sendReceive(requesterInfo.supplierUrl, msg, role.Requester, header)
 	if err != nil {
-		errorMessage := fmt.Sprintf("Error sending request to supplier: %s", err.Error())
+		errorMessage := fmt.Sprintf("error sending request to supplier: %s", err.Error())
 		app.handleRequestError(header, role.Requester, errorMessage, iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requestConfirmation := responseMsg.RequestConfirmation
 	if requestConfirmation == nil {
-		app.handleRequestError(header, role.Requester, "Did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
+		app.handleRequestError(header, role.Requester, "did not receive requestConfirmation from supplier", iso18626.TypeErrorTypeUnrecognisedDataElement, w)
 		return
 	}
 	requester.store(header, requesterInfo)
@@ -198,7 +198,6 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 	msg.Request.ServiceInfo.RequestType = &requestType
 	if messageInfo.ReasonRetry != nil && messageInfo.ReasonRetry.Text == string(iso18626.ReasonRetryCostExceedsMaxCost) {
 		offered := *messageInfo.OfferedCosts
-		log.Info("offeredCosts", "offered", offered)
 		msg.Request.BillingInfo = &iso18626.BillingInfo{}
 		msg.Request.BillingInfo.MaximumCosts = &offered
 	}
@@ -220,7 +219,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	}
 	state := requester.load(header)
 	if state == nil {
-		app.handleSupplyingAgencyError(supplyingAgencyMessage, "Non existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		app.handleSupplyingAgencyError(supplyingAgencyMessage, "non-existing RequestingAgencyRequestId", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 	resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)

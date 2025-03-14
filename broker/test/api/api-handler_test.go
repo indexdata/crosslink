@@ -82,13 +82,13 @@ func TestGetEvents(t *testing.T) {
 	body = getResponseBody(t, "/events?ill_transaction_id="+illId)
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
+		t.Errorf("failed to unmarshal json: %s", err)
 	}
 	if len(resp) == 0 {
-		t.Errorf("Did not find events")
+		t.Errorf("did not find events")
 	}
 	if resp[0].ID != eventId {
-		t.Errorf("Did not find created event")
+		t.Errorf("did not find created event")
 	}
 }
 
@@ -98,10 +98,10 @@ func TestGetIllTransactions(t *testing.T) {
 	var resp []oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
+		t.Errorf("failed to unmarshal json: %s", err)
 	}
 	if len(resp) == 0 {
-		t.Errorf("Did not find ill transaction")
+		t.Errorf("did not find ILL transaction")
 	}
 }
 
@@ -111,10 +111,10 @@ func TestGetIllTransactionsId(t *testing.T) {
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
+		t.Errorf("failed to unmarshal json: %s", err)
 	}
 	if resp.ID != illId {
-		t.Errorf("Did not find the same ill transaction")
+		t.Errorf("did not find the same ILL transaction")
 	}
 }
 
