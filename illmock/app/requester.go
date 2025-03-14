@@ -124,6 +124,11 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
 }
 
+func (app *MockApp) sendRequestingAgencyMessageDelay(header *iso18626.Header, action iso18626.TypeAction) {
+	time.Sleep(app.messageDelay)
+	app.sendRequestingAgencyMessage(header, action)
+}
+
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action iso18626.TypeAction) {
 	requester := &app.requester
 	state := requester.load(header)
@@ -155,8 +160,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 		return
 	}
 	if action == iso18626.TypeActionReceived {
-		time.Sleep(app.messageDelay)
-		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionShippedReturn)
+		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
 	}
 }
 
