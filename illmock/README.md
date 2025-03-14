@@ -151,5 +151,6 @@ The only supported index is `symbol`. Supported relations are: `anyl`, `all`, `=
 |`SUPPLYING_AGENCY_ID`  | Fallback supplier agency ID (symbol)                                 |`SUP`                  |
 |`REQUESTING_AGENCY_ID` | Fallback requester agency ID (symbol)                                |`REQ`                  |
 |`CLEAN_TIMEOUT`        | Specifies how long a flow is kept in memory before being removed     |`10m`                  |
-|`SUPPLY_DURATION`      | Timeout before sending each SupplyingAgencyMessage                   |`100ms`                |
+|`MESSAGE_DELAY`        | Supplier: delay between each SupplyingAgencyMessage.                 |`100ms`                |
+|                       | Requester: delay before sending ShippedReturn.                       |                       |
 |`HTTP_HEADERS`         | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                  |

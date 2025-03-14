@@ -40,7 +40,7 @@ func TestParseEnv(t *testing.T) {
 	os.Setenv("AGENCY_TYPE", "ABC")
 	os.Setenv("SUPPLYING_AGENCY_ID", "S1")
 	os.Setenv("REQUESTING_AGENCY_ID", "R1")
-	os.Setenv("SUPPLY_DURATION", "100ms")
+	os.Setenv("MESSAGE_DELAY", "1ms")
 	var app MockApp
 	err := app.parseEnv()
 	assert.Nil(t, err)
@@ -49,33 +49,33 @@ func TestParseEnv(t *testing.T) {
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
-	assert.Equal(t, 100*time.Millisecond, app.supplyDuration)
+	assert.Equal(t, 1*time.Millisecond, app.messageDelay)
 	os.Unsetenv("HTTP_PORT")
 	os.Unsetenv("PEER_URL")
 	os.Unsetenv("AGENCY_TYPE")
 	os.Unsetenv("SUPPLYING_AGENCY_ID")
 	os.Unsetenv("REQUESTING_AGENCY_ID")
-	os.Unsetenv("SUPPLY_DURATION")
+	os.Unsetenv("MESSAGE_DELAY")
 }
 
-func TestAppBadSupplyDuration(t *testing.T) {
-	os.Setenv("SUPPLY_DURATION", "x")
+func TestAppBadMessageDelay(t *testing.T) {
+	os.Setenv("MESSAGE_DELAY", "x")
 	var app MockApp
 	err := app.Run()
-	os.Unsetenv("SUPPLY_DURATION")
-	assert.ErrorContains(t, err, "invalid SUPPLY_DURATION: time: ")
+	os.Unsetenv("MESSAGE_DELAY")
+	assert.ErrorContains(t, err, "invalid MESSAGE_DELAY: time: ")
 }
 
-func TestGetSupplyDuration(t *testing.T) {
-	dur, err := getSupplyDuration("3ms")
+func TestGetMessageDelay(t *testing.T) {
+	dur, err := getMessageDelay("3ms")
 	assert.Nil(t, err)
 	assert.Equal(t, 3*time.Millisecond, dur)
 
-	_, err = getSupplyDuration("x")
-	assert.ErrorContains(t, err, "invalid SUPPLY_DURATION: time: ")
+	_, err = getMessageDelay("x")
+	assert.ErrorContains(t, err, "invalid MESSAGE_DELAY: time: ")
 
-	_, err = getSupplyDuration("-3ms")
-	assert.ErrorContains(t, err, "SUPPLY_DURATION can not be negative")
+	_, err = getMessageDelay("-3ms")
+	assert.ErrorContains(t, err, "MESSAGE_DELAY can not be negative")
 }
 
 func TestAppShutdown(t *testing.T) {
