@@ -103,7 +103,7 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	app.peerUrl = server.URL
+	app.peerUrl = server.URL + "/iso18626"
 	msg := iso18626.NewIso18626MessageNS()
 	msg.Request = &iso18626.Request{Header: iso18626.Header{
 		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1"},
@@ -230,8 +230,8 @@ func TestService(t *testing.T) {
 	dynPort := testutil.GetFreePortTest(t)
 	app.httpPort = dynPort
 	url := "http://localhost:" + dynPort
-	app.peerUrl = url
-	isoUrl := url + "/iso18626"
+	app.peerUrl = url + "/iso18626"
+	isoUrl := app.peerUrl
 	apiUrl := url + "/api/flows"
 	directoryUrl := url + "/directory/entries"
 	healthUrl := url + "/healthz"
@@ -822,8 +822,8 @@ func TestService(t *testing.T) {
 		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
-		msg.Request.SupplierInfo = []iso18626.SupplierInfo{{SupplierDescription: "http://localhost:" + dynPort}}
-		address := iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{ElectronicAddressData: "http://localhost:" + dynPort}}
+		msg.Request.SupplierInfo = []iso18626.SupplierInfo{{SupplierDescription: "http://localhost:" + dynPort + "/iso18626"}}
+		address := iso18626.Address{ElectronicAddress: &iso18626.ElectronicAddress{ElectronicAddressData: "http://localhost:" + dynPort + "/iso18626"}}
 		msg.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{Address: []iso18626.Address{address}}
 
 		buf := utils.Must(xml.Marshal(msg))
@@ -851,8 +851,8 @@ func TestService(t *testing.T) {
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
-		app.peerUrl = server.URL
-		defer func() { app.peerUrl = "http://localhost:" + dynPort }()
+		app.peerUrl = server.URL + "/iso18626"
+		defer func() { app.peerUrl = "http://localhost:" + dynPort + "/iso18626" }()
 
 		msg := createPatronRequest()
 		// RequestingAgencyRequestId not provided, so it will be generated

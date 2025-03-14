@@ -127,7 +127,6 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	if url == "" {
 		return nil, fmt.Errorf("url cannot be empty")
 	}
-	url = url + "/iso18626"
 	app.logOutgoingReq(role, header, msg, url)
 	var response iso18626.Iso18626MessageNS
 	err := app.client.PostXml(http.DefaultClient, url, msg, &response)
@@ -265,7 +264,7 @@ func (app *MockApp) parseEnv() error {
 		app.requester.requestingAgencyId = os.Getenv("REQUESTING_AGENCY_ID")
 	}
 	if app.peerUrl == "" {
-		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081")
+		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081/iso18626")
 	}
 	if app.messageDelay == 0 {
 		d, err := getMessageDelay(utils.GetEnv("MESSAGE_DELAY", "100ms"))
