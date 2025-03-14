@@ -1,11 +1,7 @@
 package client
 
 import (
-	"bytes"
-	"encoding/xml"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +9,7 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -304,35 +301,14 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 	}
 	return defaultStatus
 }
+
 func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
-	breq := utils.Must(xml.Marshal(msg))
-	if breq == nil {
-		return nil, fmt.Errorf("marshal returned nil")
-	}
-	reader := bytes.NewReader(breq)
-	req, err := http.NewRequest(http.MethodPost, url, reader)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/xml")
+	httpClient := httpclient.NewClient()
 	if len(tenant) > 0 {
-		req.Header.Set("X-Okapi-Tenant", tenant)
+		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
-	res, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		body, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("%d: %s", res.StatusCode, body)
-	}
-	bres, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-	resmsg := iso18626.ISO18626Message{}
-	err = xml.Unmarshal(bres, &resmsg)
+	var resmsg iso18626.ISO18626Message
+	err := httpClient.PostXml(c.client, url, msg, &resmsg)
 	if err != nil {
 		return nil, err
 	}
