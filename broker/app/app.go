@@ -3,16 +3,17 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/api"
-	"github.com/indexdata/crosslink/broker/client"
-	"github.com/indexdata/crosslink/broker/oapi"
-	"github.com/indexdata/crosslink/broker/service"
 	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/api"
+	"github.com/indexdata/crosslink/broker/client"
+	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/indexdata/crosslink/broker/service"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"

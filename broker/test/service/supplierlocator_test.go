@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
-	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)), "failed to set peer URL")
+	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
 
 	go func() {
 		var mockApp mockapp.MockApp
