@@ -66,7 +66,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 		*msg.Request.ServiceInfo = *illRequest.ServiceInfo
 		msg.Request.ServiceInfo.RequestSubType = nil // not a patron request any more
 	}
-	msg.Request.SupplierInfo = illRequest.SupplierInfo
+	//do not forward supplierInfo to the supplier
 	msg.Request.RequestedDeliveryInfo = illRequest.RequestedDeliveryInfo
 	msg.Request.RequestingAgencyInfo = illRequest.RequestingAgencyInfo
 	msg.Request.PatronInfo = illRequest.PatronInfo
