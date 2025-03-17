@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -107,10 +110,17 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		SupplierRequestID:   supplierRequestId,
 		IllTransactionData:  illTransactionData,
 	})
-	//TODO check error type and return iso error when transaction already exists
-	//TODO only return 500 on database connection error
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
+			msg := "ILL transaction already exists"
+			http.Error(w, msg, http.StatusBadRequest)
+			ctx.Logger().Error(msg, "error", err)
+		} else {
+			//do not expose internal error details
+			http.Error(w, "", http.StatusInternalServerError)
+			ctx.Logger().Error("failed to save ILL transaction", "error", err)
+		}
 		return
 	}
 
