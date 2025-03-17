@@ -118,7 +118,7 @@ components:
           description: Policy for refreshing peer information (never, transaction)
         Vendor:
           type: string
-          description: Network URL of the peer
+          description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
       required:
         - ID
         - Symbol
