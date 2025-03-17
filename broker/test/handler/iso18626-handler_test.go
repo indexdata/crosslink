@@ -296,7 +296,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
-		RequesterRequestID: test.CreatePgText("slnp-0009997"),
+		RequesterRequestID: test.CreatePgText("reqid"),
 	})
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)

@@ -16,10 +16,9 @@
             </ill:requestingAgencyId>
             <ill:multipleItemRequestId></ill:multipleItemRequestId>
             <ill:timestamp>2024-12-12T20:12:00.62959771Z</ill:timestamp>
-            <ill:requestingAgencyRequestId>slnp-0009997</ill:requestingAgencyRequestId>
+            <ill:requestingAgencyRequestId>reqid</ill:requestingAgencyRequestId>
             <ill:supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</ill:supplyingAgencyRequestId>
         </ill:header>
         <ill:action>Cancel</ill:action>
-        <ill:note>Note 1</ill:note>
     </ill:requestingAgencyMessage>
 </ill:ISO18626Message>

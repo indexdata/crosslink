@@ -8,11 +8,11 @@
         <ill:header>
             <ill:supplyingAgencyId>
                 <ill:agencyIdType>ISIL</ill:agencyIdType>
-                <ill:agencyIdValue>SLNP_TWO_A</ill:agencyIdValue>
+                <ill:agencyIdValue>SUP</ill:agencyIdValue>
             </ill:supplyingAgencyId>
             <ill:requestingAgencyId>
                 <ill:agencyIdType>ISIL</ill:agencyIdType>
-                <ill:agencyIdValue>SLNP_ONE</ill:agencyIdValue>
+                <ill:agencyIdValue>BROKER</ill:agencyIdValue>
             </ill:requestingAgencyId>
             <ill:multipleItemRequestId></ill:multipleItemRequestId>
             <ill:timestamp>2024-12-12T20:12:00.62959771Z</ill:timestamp>
@@ -21,9 +21,6 @@
         </ill:header>
         <ill:messageInfo>
             <ill:reasonForMessage>StatusChange</ill:reasonForMessage>
-            <ill:note>#seq:0#</ill:note>
-            <ill:reasonUnfilled></ill:reasonUnfilled>
-            <ill:reasonRetry></ill:reasonRetry>
         </ill:messageInfo>
         <ill:statusInfo>
             <ill:status>Loaned</ill:status>
@@ -31,10 +28,7 @@
         </ill:statusInfo>
         <ill:deliveryInfo>
             <ill:dateSent>2024-12-12T20:12:00.629725783Z</ill:dateSent>
-            <ill:itemId>barcode-2345,Callnum-2345,barcode-2345</ill:itemId>
-            <ill:sentToPatron>false</ill:sentToPatron>
-            <ill:loanCondition></ill:loanCondition>
-            <ill:deliveredFormat></ill:deliveredFormat>
+            <ill:itemId>12345</ill:itemId>
         </ill:deliveryInfo>
     </ill:supplyingAgencyMessage>
 </ill:ISO18626Message>
