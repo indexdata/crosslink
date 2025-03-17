@@ -196,7 +196,7 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
-		handleRequestingAgencyError(illMessage, "nissing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestingAgencyError(illMessage, "missing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
