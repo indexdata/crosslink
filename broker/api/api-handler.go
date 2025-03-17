@@ -336,6 +336,7 @@ func toApiPeer(peer ill_db.Peer) oapi.Peer {
 		Name:          peer.Name,
 		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
+		Vendor:        peer.Vendor,
 	}
 }
 
@@ -353,6 +354,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		Symbol:        peer.Symbol,
 		Name:          peer.Name,
 		Url:           peer.Url,
+		Vendor:        peer.Vendor,
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
 		RefreshTime: pgtype.Timestamp{
 			Time:  time.Now(),

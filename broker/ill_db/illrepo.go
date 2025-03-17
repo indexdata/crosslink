@@ -168,6 +168,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 								Name:          dir.Symbol,
 								RefreshPolicy: RefreshPolicyTransaction,
 								RefreshTime:   GetPgNow(),
+								Vendor:        dir.Vendor,
 							})
 							if err != nil {
 								ctx.Logger().Error("failed to save peer", "symbol", dir.Symbol, "error", err)

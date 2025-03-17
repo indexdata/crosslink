@@ -20,6 +20,7 @@ type DirectoryLookupParams struct {
 type DirectoryEntry struct {
 	Symbol string
 	URL    string
+	Vendor string
 }
 
 type MockDirectoryLookupAdapter struct {
@@ -36,6 +37,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		return []DirectoryEntry{{
 			Symbol: "ISIL:NOCHANGE",
 			URL:    MOCK_CLIENT_URL,
+			Vendor: "illmock",
 		}}, nil
 	}
 
@@ -44,6 +46,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		dirs = append(dirs, DirectoryEntry{
 			Symbol: value,
 			URL:    MOCK_CLIENT_URL,
+			Vendor: "illmock",
 		})
 	}
 	return dirs, nil

@@ -116,12 +116,16 @@ components:
           type: string
           enum: [never, transaction]
           description: Policy for refreshing peer information (never, transaction)
+        Vendor:
+          type: string
+          description: Network URL of the peer
       required:
         - ID
         - Symbol
         - Name
         - Url
         - RefreshPolicy
+        - Vendor
 
 paths:
   /events:

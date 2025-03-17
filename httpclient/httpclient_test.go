@@ -171,13 +171,13 @@ func TestMarshalFailed(t *testing.T) {
 	marshal := func(v any) ([]byte, error) {
 		return nil, fmt.Errorf("foo")
 	}
-	err := NewClient().requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
+	err := NewClient().RequestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", request, response, marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal failed: foo")
 }
 
 func TestMarshalNil(t *testing.T) {
 	var response myType
-	err := NewClient().requestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", nil, response, xml.Marshal, xml.Unmarshal)
+	err := NewClient().RequestResponse(http.DefaultClient, http.MethodGet, []string{"text/plain"}, "http://localhost:9999", nil, response, xml.Marshal, xml.Unmarshal)
 	assert.ErrorContains(t, err, "marshal returned nil")
 }
 
