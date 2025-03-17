@@ -1,15 +1,16 @@
 package service
 
 import (
+	"math"
+	"sort"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgtype"
-	"math"
-	"sort"
-	"strings"
 )
 
 type SupplierLocator struct {
@@ -54,11 +55,11 @@ func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.E
 func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read ill transaction", err)
+		return logErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
 
 	if illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId == "" {
-		return logProblemAndReturnResult(ctx, "ill transaction missing SupplierUniqueRecordId")
+		return logProblemAndReturnResult(ctx, "ILL transaction missing SupplierUniqueRecordId")
 	}
 
 	holdings, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{

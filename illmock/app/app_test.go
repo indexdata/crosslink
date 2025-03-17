@@ -536,7 +536,7 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
-	t.Run("supplying agency message: Non existing RequestingAgencyRequestId", func(t *testing.T) {
+	t.Run("supplying agency message: Non-existing RequestingAgencyRequestId", func(t *testing.T) {
 		msg := createSupplyingAgencyMessage()
 		msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId = uuid.NewString()
 		msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
@@ -553,7 +553,7 @@ func TestService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
-		assert.Equal(t, "Non existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+		assert.Equal(t, "non-existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	})
 
 	t.Run("Patron request ERROR", func(t *testing.T) {
@@ -873,7 +873,7 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataElement, response.RequestConfirmation.ErrorData.ErrorType)
-		assert.Equal(t, "Did not receive requestConfirmation from supplier", response.RequestConfirmation.ErrorData.ErrorValue)
+		assert.Equal(t, "did not receive requestConfirmation from supplier", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
 
 	t.Run("Request shipped return", func(t *testing.T) {

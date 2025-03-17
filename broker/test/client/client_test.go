@@ -486,7 +486,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, acti
 		},
 	})
 	if err != nil {
-		t.Errorf("Failed to create ill transaction: %s", err)
+		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
 	return illId
 }

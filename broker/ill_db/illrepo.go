@@ -2,13 +2,14 @@ package ill_db
 
 import (
 	"errors"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"time"
 )
 
 type IllRepo interface {
@@ -121,9 +122,9 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedCont
 	if len(selSup) == 1 {
 		return selSup[0], err
 	} else if len(selSup) == 0 {
-		return LocatedSupplier{}, errors.New("did not find selected supplier for ill transaction: " + illTransId)
+		return LocatedSupplier{}, errors.New("did not find selected supplier for ILL transaction: " + illTransId)
 	} else {
-		return LocatedSupplier{}, errors.New("too many selected suppliers found for ill transaction: " + illTransId)
+		return LocatedSupplier{}, errors.New("too many selected suppliers found for ILL transaction: " + illTransId)
 	}
 }
 

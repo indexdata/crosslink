@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 
 	go func() {
 		var mockApp mockapp.MockApp
-		test.Expect(mockApp.Run(), "failed to start ill mock client")
+		test.Expect(mockApp.Run(), "failed to start illmock client")
 	}()
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
@@ -331,7 +331,7 @@ func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusProcessing, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
-		t.Error("Failed to notify with error " + err.Error())
+		t.Error("failed to notify with error " + err.Error())
 	}
 
 	time.Sleep(1 * time.Second)
@@ -339,7 +339,7 @@ func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(completedTask) == 0
 	}) {
-		t.Error("Task was in progress so should not be finished")
+		t.Error("task was in progress so should not be finished")
 	}
 }
 
@@ -354,7 +354,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			message:     "ill transaction missing SupplierUniqueRecordId",
+			message:     "ILL transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -463,7 +463,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
-				t.Error("Failed to notify with error " + err.Error())
+				t.Error("failed to notify with error " + err.Error())
 			}
 
 			var event events.Event
@@ -474,12 +474,12 @@ func TestSelectSupplierErrors(t *testing.T) {
 				}
 				return false
 			}) {
-				t.Error("Expected to have request event received and processed")
+				t.Error("expected to have request event received and processed")
 			}
 
 			errorMessage, _ := event.ResultData.Data["message"].(string)
 			if errorMessage != tt.message {
-				t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+				t.Errorf("expected message '%s' got :'%s'", tt.message, errorMessage)
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
@@ -621,7 +621,7 @@ func TestSuccessfulFlow(t *testing.T) {
 	illId := mesReqTask[0].IllTransactionID
 	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
 	if illTrans.LastRequesterAction.String != "ShippedReturn" {
-		t.Errorf("ill transaction last requester status should be ShippedReturn not %s",
+		t.Errorf("ILL transaction last requester status should be ShippedReturn not %s",
 			illTrans.LastRequesterAction.String)
 	}
 	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
@@ -645,7 +645,7 @@ func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string
 		IllTransactionData: data,
 	})
 	if err != nil {
-		t.Errorf("Failed to create ill transaction: %s", err)
+		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
 	return illId
 }

@@ -18,7 +18,7 @@ components:
           description: Timestamp of the event
         IllTransactionID:
           type: string
-          description: ID of the ill transaction (if applicable)
+          description: ID of the ILL transaction (if applicable)
         EventType:
           type: string
           description: Type of the event
@@ -132,7 +132,7 @@ paths:
           name: ill_transaction_id
           schema:
             type: string
-          description: Filter events by ill transaction ID
+          description: Filter events by ILL transaction ID
       responses:
         '200':
           description: Successful retrieval of events

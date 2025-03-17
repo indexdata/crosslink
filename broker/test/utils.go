@@ -60,7 +60,7 @@ func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
 		Timestamp: GetNow(),
 	})
 	if err != nil {
-		t.Errorf("Failed to create ill transaction: %s", err)
+		t.Errorf("failed to create ILL transaction: %s", err)
 	}
 	return illId
 }

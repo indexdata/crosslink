@@ -87,7 +87,7 @@ func (c *Iso18626Client) triggerNotificationsAndProcessEvent(ctx extctx.Extended
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		ctx.Logger().Error("failed to read ill transaction", "error", err)
+		ctx.Logger().Error("failed to read ILL transaction", "error", err)
 		return events.EventStatusError, nil
 	}
 
@@ -113,7 +113,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
 		resultData["error"] = err.Error()
-		ctx.Logger().Error("Failed to get requester", "error", err)
+		ctx.Logger().Error("failed to get requester", "error", err)
 		status = events.EventStatusError
 	} else if statusErr != nil {
 		resultData["error"] = statusErr.Error()
@@ -126,7 +126,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		}
 		if err != nil {
 			resultData["error"] = err.Error()
-			ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
+			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 			status = events.EventStatusError
 		} else {
 			illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
@@ -136,7 +136,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			}
 			_, err = c.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 			if err != nil {
-				ctx.Logger().Error("failed to update ill transaction", "error", err)
+				ctx.Logger().Error("failed to update ILL transaction", "error", err)
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		ctx.Logger().Error("failed to read ill transaction", "error", err)
+		ctx.Logger().Error("failed to read ILL transaction", "error", err)
 		return events.EventStatusError, nil
 	}
 
@@ -159,7 +159,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
 		resultData["error"] = err
-		ctx.Logger().Error("Failed to get supplier", "error", err)
+		ctx.Logger().Error("failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
 		var message = &iso18626.ISO18626Message{}
@@ -205,7 +205,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			}
 			if err != nil {
 				resultData["error"] = err
-				ctx.Logger().Error("Failed to send ISO18626 message", "error", err)
+				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
 				status = c.checkConfirmationError(isRequest, response, status)

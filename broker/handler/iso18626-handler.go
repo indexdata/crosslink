@@ -2,11 +2,12 @@ package handler
 
 import (
 	"encoding/xml"
-	"github.com/indexdata/crosslink/broker/adapter"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/adapter"
 
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -195,7 +196,7 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
-		handleRequestingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestingAgencyError(illMessage, "nissing requesting agency request it", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
@@ -205,7 +206,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 	if illTrans.ID == "" {
-		handleRequestingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
+		handleRequestingAgencyError(illMessage, "could not find ILL transaction", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	}
 
@@ -250,7 +251,7 @@ func handleRequestingAgencyError(illMessage *iso18626.ISO18626Message, errorMess
 func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
-		handleSupplyingAgencyError(illMessage, "Missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleSupplyingAgencyError(illMessage, "missing requesting agency request it", iso18626.TypeErrorTypeBadlyFormedMessage, w)
 		return
 	}
 
@@ -260,7 +261,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		return
 	}
 	if illTrans.ID == "" {
-		handleSupplyingAgencyError(illMessage, "Could not find ill transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
+		handleSupplyingAgencyError(illMessage, "could not find ILL transaction", iso18626.TypeErrorTypeBadlyFormedMessage, w)
 		return
 	}
 
