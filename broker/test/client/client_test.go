@@ -444,8 +444,10 @@ func TestSendHttpPost(t *testing.T) {
 
 			httpClient := &http.Client{Transport: mockTransport}
 			isoClient := client.CreateIso18626ClientWithHttpClient(httpClient)
-
-			result, err := isoClient.SendHttpPost(tt.url, tt.msg, tt.tenant)
+			peer := ill_db.Peer{
+				Url: tt.url,
+			}
+			result, err := isoClient.SendHttpPost(&peer, tt.msg, tt.tenant)
 
 			if tt.expectedError == "" && err != nil {
 				t.Fatalf("expected no error, got %v", err)

@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"github.com/indexdata/crosslink/broker/shim"
 	"net/http"
 	"strings"
 	"time"
@@ -120,7 +121,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to get status", "error", statusErr)
 		status = events.EventStatusError
 	} else {
-		response, err := c.SendHttpPost(requester.Url, message, "")
+		response, err := c.SendHttpPost(&requester, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -199,7 +200,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			ctx.Logger().Error("failed to create message", "error", internalErr)
 			status = events.EventStatusProblem
 		} else {
-			response, err := c.SendHttpPost(peer.Url, message, "")
+			response, err := c.SendHttpPost(peer, message, "")
 			if response != nil {
 				resultData["response"] = response
 			}
@@ -302,13 +303,20 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 	return defaultStatus
 }
 
-func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient()
 	if len(tenant) > 0 {
 		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
+	iso18626Shim := shim.GetShim(peer.Vendor)
 	var resmsg iso18626.ISO18626Message
-	err := httpClient.PostXml(c.client, url, msg, &resmsg)
+	err := httpClient.RequestResponse(c.client, http.MethodPost,
+		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
+		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
+			return iso18626Shim.ApplyToOutgoing(v.(*iso18626.ISO18626Message))
+		}, func(b []byte, v any) error {
+			return iso18626Shim.ApplyToIncoming(b, v.(*iso18626.ISO18626Message))
+		})
 	if err != nil {
 		return nil, err
 	}

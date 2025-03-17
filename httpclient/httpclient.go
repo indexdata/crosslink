@@ -91,7 +91,7 @@ func (c *HttpClient) requestXml(client *http.Client, method string, url string, 
 }
 
 func (c *HttpClient) requestResponseXml(client *http.Client, method string, url string, req any, res any) error {
-	return c.requestResponse(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res, xml.Marshal, xml.Unmarshal)
+	return c.RequestResponse(client, method, []string{ContentTypeApplicationXml, ContentTypeTextXml}, url, req, res, xml.Marshal, xml.Unmarshal)
 }
 
 func (c *HttpClient) request(client *http.Client, method string, contentTypes []string, url string, res any, unmarshal func([]byte, any) error) error {
@@ -102,7 +102,7 @@ func (c *HttpClient) request(client *http.Client, method string, contentTypes []
 	return unmarshal(resbuf, res)
 }
 
-func (c *HttpClient) requestResponse(client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
+func (c *HttpClient) RequestResponse(client *http.Client, method string, contentTypes []string, url string, req any, res any, marshal func(any) ([]byte, error), unmarshal func([]byte, any) error) error {
 	buf, err := marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshal failed: %v", err)
