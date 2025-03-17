@@ -34,6 +34,7 @@ const (
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
+	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -455,7 +456,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 	wait, ok := requestMapping[requestId]
 	if ok {
 		delete(requestMapping, requestId)
-		var errorMessage *string
+		var errorMessage = ""
 		var errorType *iso18626.TypeErrorType
 		var messageStatus = iso18626.TypeMessageStatusOK
 		respMap, ok := respData["response"]
@@ -467,7 +468,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 			if resp.RequestingAgencyMessageConfirmation != nil {
 				messageStatus = resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
 				if resp.RequestingAgencyMessageConfirmation.ErrorData != nil {
-					errorMessage = &resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
+					errorMessage = resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
 					errorType = &resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
 				}
 			}
@@ -484,14 +485,13 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 					}
 				}
 			}
-			eMess := "Could not send request to peer"
 			eType := iso18626.TypeErrorTypeBadlyFormedMessage
-			errorMessage = &eMess
+			errorMessage = string(CouldNotSendReqToPeer)
 			errorType = &eType
 			messageStatus = iso18626.TypeMessageStatusERROR
 		}
-		var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorMessage, errorType)
-		writeResponse(resmsg, *wait.w)
+		var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
+		writeResponse(ctx, resmsg, *wait.w)
 		wait.wg.Done()
 		return resmsg
 	} else {
