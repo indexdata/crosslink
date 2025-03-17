@@ -245,6 +245,7 @@ func toApiEvent(event events.Event) oapi.Event {
 		EventType:        string(event.EventType),
 		EventName:        string(event.EventName),
 		EventStatus:      string(event.EventStatus),
+		ParentID:         toString(event.ParentID),
 	}
 	eventData := make(map[string]interface{})
 	eventData["Timestamp"] = event.EventData.Timestamp.Time
@@ -372,5 +373,13 @@ func toDbRefreshPolicy(policy oapi.PeerRefreshPolicy) ill_db.RefreshPolicy {
 		return ill_db.RefreshPolicyNever
 	} else {
 		return ill_db.RefreshPolicyTransaction
+	}
+}
+
+func toString(text pgtype.Text) *string {
+	if text.Valid {
+		return &text.String
+	} else {
+		return nil
 	}
 }
