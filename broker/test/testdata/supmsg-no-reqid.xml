@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<ill:ISO18626Message xmlns:ill="http://illtransactions.org/2013/iso18626" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ill:version="1.2" xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+<ill:ISO18626Message
+    xmlns:ill="http://illtransactions.org/2013/iso18626"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ill:version="1.2"
+    xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
     <ill:supplyingAgencyMessage>
         <ill:header>
             <ill:supplyingAgencyId>

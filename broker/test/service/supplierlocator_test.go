@@ -570,7 +570,7 @@ func TestSuccessfulFlow(t *testing.T) {
 		}
 	})
 
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}

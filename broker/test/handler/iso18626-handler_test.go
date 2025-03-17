@@ -3,6 +3,15 @@ package handler
 import (
 	"bytes"
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -12,14 +21,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -76,7 +77,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -97,7 +98,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongMethod(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("GET", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -112,7 +113,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongContentType(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -141,7 +142,7 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 }
 
 func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -161,7 +162,7 @@ func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
 }
 
 func TestIso18626PostHandlerFailToSave(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -177,7 +178,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 }
 
 func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-invalid.xml")
+	data, _ := os.ReadFile("../testdata/request-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -198,7 +199,7 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessage(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -218,7 +219,7 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -233,7 +234,7 @@ func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
 }
 
 func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message-invalid.xml")
+	data, _ := os.ReadFile("../testdata/supmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -290,7 +291,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 		},
 	}
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
 	illId := uuid.NewString()
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
@@ -337,7 +338,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -352,7 +353,7 @@ func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
 }
 
 func TestIso18626PostRequestingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/requesting-agency-message-invalid.xml")
+	data, _ := os.ReadFile("../testdata/reqmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
