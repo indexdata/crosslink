@@ -155,6 +155,8 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
+	ctx.Logger().Info("createAndSendRequestOrRequestingAgencyMessage", "LastRequesterAction", illTrans.LastRequesterAction.String,
+		"dbRequestAction", ill_db.RequestAction, "isRequest", isRequest)
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
