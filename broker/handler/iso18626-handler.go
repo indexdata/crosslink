@@ -32,7 +32,10 @@ const (
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
 )
 
-const FailedToProcessReqMsg = "failed to process request"
+const PublicFailedToProcessReqMsg = "failed to process request"
+const InternalFailedToLookupTx = "failed to lookup ILL transaction"
+const InternalFailedToSaveTx = "failed to save ILL transaction"
+const InternalFailedToCreateNotice = "failed to create notice event"
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -131,8 +134,8 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			handleRequestError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 			return
 		} else {
-			ctx.Logger().Error("failed to save ILL transaction", "error", err)
-			http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
+			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 			return
 		}
 	}
@@ -143,8 +146,8 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	}
 	err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
-		ctx.Logger().Error("failed to create notice event", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 
@@ -156,7 +159,7 @@ func writeResponse(ctx extctx.ExtendedContext, resmsg *iso18626.ISO18626Message,
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
 	if err != nil {
 		ctx.Logger().Error("failed to produce response", "error", err, "body", string(output))
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/xml")
@@ -232,8 +235,8 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
 			return
 		}
-		ctx.Logger().Error("failed to lookup transaction", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 
@@ -241,8 +244,8 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
 	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 	if err != nil {
-		ctx.Logger().Error("failed to save ILL transaction", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 	eventData := events.EventData{
@@ -251,8 +254,8 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	}
 	err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
-		ctx.Logger().Error("failed to create notice event", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 	//TODO we need to delay the confirmation until the supplier has responded
@@ -291,8 +294,8 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
 			return
 		}
-		ctx.Logger().Error("failed to lookup transaction", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 
@@ -302,8 +305,8 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	}
 	err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
-		ctx.Logger().Error("failed to create notice event", "error", err)
-		http.Error(w, FailedToProcessReqMsg, http.StatusInternalServerError)
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
