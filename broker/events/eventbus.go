@@ -24,6 +24,7 @@ type EventBus interface {
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult))
+	FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event
 }
 
 type PostgresEventBus struct {
@@ -284,6 +285,33 @@ func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, 
 	}
 }
 
+func (p *PostgresEventBus) FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event {
+	var event *Event
+	parentId := getParentId(descendant)
+	for {
+		if parentId == nil {
+			break
+		}
+		found, err := p.repo.GetEvent(ctx, *parentId)
+		if err != nil {
+			ctx.Logger().Error("failed to get event", "eventId", parentId, "error", err)
+		} else if found.EventName == eventName {
+			event = &found
+			break
+		} else {
+			parentId = getParentId(&found)
+		}
+	}
+	return event
+}
+
+func getParentId(event *Event) *string {
+	if event != nil && event.ParentID.Valid {
+		return &event.ParentID.String
+	} else {
+		return nil
+	}
+}
 func getPgNow() pgtype.Timestamp {
 	return pgtype.Timestamp{
 		Time:  time.Now(),

@@ -412,8 +412,8 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	status := events.EventStatusSuccess
 	var resultData = map[string]any{}
-	responseEvent := h.findAncestor(ctx, &event, events.EventNameMessageSupplier)
-	originalEvent := h.findAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
+	responseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
+	originalEvent := h.eventBus.FindAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
 	if responseEvent != nil && originalEvent != nil {
 		resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
 	} else {
@@ -421,34 +421,6 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedConte
 	}
 	return status, &events.EventResult{
 		Data: resultData,
-	}
-}
-
-func (c *Iso18626Handler) findAncestor(ctx extctx.ExtendedContext, descendant *events.Event, eventName events.EventName) *events.Event {
-	var event *events.Event
-	parentId := getParentId(descendant)
-	for {
-		if parentId == nil {
-			break
-		}
-		found, err := c.eventRepo.GetEvent(ctx, *parentId)
-		if err != nil {
-			ctx.Logger().Error("failed to get event", "eventId", parentId, "error", err)
-		} else if found.EventName == eventName {
-			event = &found
-			break
-		} else {
-			parentId = getParentId(&found)
-		}
-	}
-	return event
-}
-
-func getParentId(event *events.Event) *string {
-	if event != nil && event.ParentID.Valid {
-		return &event.ParentID.String
-	} else {
-		return nil
 	}
 }
 
