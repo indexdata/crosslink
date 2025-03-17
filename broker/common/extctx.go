@@ -14,6 +14,7 @@ type ExtendedContext interface {
 	Logger() *slog.Logger
 	// create new instance backed by the same context and log handler but with new log args
 	WithArgs(args *LoggerArgs) ExtendedContext
+	Must(ret any, err error) any
 }
 
 var DefaultLogHandler slog.Handler = slog.NewTextHandler(os.Stdout, nil)
@@ -37,6 +38,13 @@ func (ctx *_ExtCtxImpl) Logger() *slog.Logger {
 
 func (ctx *_ExtCtxImpl) WithArgs(args *LoggerArgs) ExtendedContext {
 	return CreateExtCtxWithLogArgsAndHandler(ctx.Context, args, ctx.logHandler)
+}
+
+func (ctx *_ExtCtxImpl) Must(ret any, err error) any {
+	if err != nil {
+		ctx.logger.Error(err.Error())
+	}
+	return ret
 }
 
 func CreateExtCtxWithArgs(ctx context.Context, args *LoggerArgs) ExtendedContext {

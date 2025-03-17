@@ -411,28 +411,21 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	status := events.EventStatusSuccess
 	var resultData = map[string]any{}
-	if event.ParentID.Valid {
-		responseEvent := h.findParentEvent(ctx, &event.ParentID.String, events.EventNameMessageSupplier)
-		if responseEvent != nil && responseEvent.ParentID.Valid {
-			originalEvent := h.findParentEvent(ctx, &responseEvent.ParentID.String, events.EventNameRequesterMsgReceived)
-			if originalEvent != nil {
-				resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
-			} else {
-				resultData["result"] = "requester message received event missing"
-			}
-		} else {
-			resultData["result"] = "message supplier event missing"
-		}
+	responseEvent := h.findAncestor(ctx, &event, events.EventNameMessageSupplier)
+	originalEvent := h.findAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
+	if responseEvent != nil && originalEvent != nil {
+		resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
 	} else {
-		resultData["result"] = "parent id missing"
+		resultData["result"] = "message ancestor event missing"
 	}
 	return status, &events.EventResult{
 		Data: resultData,
 	}
 }
 
-func (c *Iso18626Handler) findParentEvent(ctx extctx.ExtendedContext, parentId *string, eventName events.EventName) *events.Event {
+func (c *Iso18626Handler) findAncestor(ctx extctx.ExtendedContext, descendant *events.Event, eventName events.EventName) *events.Event {
 	var event *events.Event
+	parentId := getParentId(descendant)
 	for {
 		if parentId == nil {
 			break
@@ -444,14 +437,18 @@ func (c *Iso18626Handler) findParentEvent(ctx extctx.ExtendedContext, parentId *
 			event = &found
 			break
 		} else {
-			if found.ParentID.Valid {
-				parentId = &found.ParentID.String
-			} else {
-				parentId = nil
-			}
+			parentId = getParentId(&found)
 		}
 	}
 	return event
+}
+
+func getParentId(event *events.Event) *string {
+	if event != nil && event.ParentID.Valid {
+		return &event.ParentID.String
+	} else {
+		return nil
+	}
 }
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, respData map[string]interface{}) any {
@@ -531,7 +528,7 @@ func getNow() pgtype.Timestamp {
 }
 
 func parseError(errorMessage string) (int, *string) {
-	re := regexp.MustCompile(`^(\d{3}):\s*(.+)`)
+	re := regexp.MustCompile(`(\d{3}):\s*(.+)`)
 	matches := re.FindStringSubmatch(errorMessage)
 	if matches == nil {
 		return 0, nil

@@ -16,7 +16,7 @@ import (
 
 type EventBus interface {
 	Start(ctx extctx.ExtendedContext) error
-	CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) error
+	CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	BeginTask(eventId string) error
 	CompleteTask(eventId string, result *EventResult, status EventStatus) error
@@ -149,9 +149,9 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 	ctx.Logger().Info("All handlers finished.")
 }
 
-func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) error {
+func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,

@@ -20,22 +20,22 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo) Wor
 }
 
 func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event events.Event) {
-	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID))
+	ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID))
 }
 
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus == events.EventStatusSuccess {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
 	} else {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
 	}
 }
 
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus == events.EventStatusSuccess {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID))
 	} else {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
 	}
 }
 
@@ -47,21 +47,21 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 	status := event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status
 	switch status {
 	case iso18626.TypeStatusUnfilled:
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
 	case iso18626.TypeStatusLoaned,
 		iso18626.TypeStatusOverdue,
 		iso18626.TypeStatusRecalled,
 		iso18626.TypeStatusCopyCompleted,
 		iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusCompletedWithoutReturn:
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID))
 	case iso18626.TypeStatusCancelled:
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)) // TODO Check message. Maybe need to send message to requester
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)) // TODO Check message. Maybe need to send message to requester
 	}
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID))
+	ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID))
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
@@ -71,14 +71,8 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 		return
 	}
 	if selSup.LastAction.String != ill_db.RequestAction {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID))
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID))
 	} else if event.EventStatus != events.EventStatusSuccess {
-		Must(ctx, w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
-	}
-}
-
-func Must(ctx extctx.ExtendedContext, err error) {
-	if err != nil {
-		ctx.Logger().Error(err.Error())
+		ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID))
 	}
 }
