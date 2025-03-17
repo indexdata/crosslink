@@ -1,34 +1,35 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<ill:ISO18626Message
+<ISO18626Message
+    xmlns="http://illtransactions.org/2013/iso18626"
     xmlns:ill="http://illtransactions.org/2013/iso18626"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     ill:version="1.2"
     xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
-    <ill:supplyingAgencyMessage>
-        <ill:header>
-            <ill:supplyingAgencyId>
-                <ill:agencyIdType>ISIL</ill:agencyIdType>
-                <ill:agencyIdValue>SUP</ill:agencyIdValue>
-            </ill:supplyingAgencyId>
-            <ill:requestingAgencyId>
-                <ill:agencyIdType>ISIL</ill:agencyIdType>
-                <ill:agencyIdValue>BROKER</ill:agencyIdValue>
-            </ill:requestingAgencyId>
-            <ill:multipleItemRequestId></ill:multipleItemRequestId>
-            <ill:timestamp>2024-12-12T20:12:00.62959771Z</ill:timestamp>
-            <ill:requestingAgencyRequestId></ill:requestingAgencyRequestId>
-            <ill:supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</ill:supplyingAgencyRequestId>
-        </ill:header>
-        <ill:messageInfo>
-            <ill:reasonForMessage>StatusChange</ill:reasonForMessage>
-        </ill:messageInfo>
-        <ill:statusInfo>
-            <ill:status>Loaned</ill:status>
-            <ill:lastChange>2024-12-12T20:12:00.629710681Z</ill:lastChange>
-        </ill:statusInfo>
-        <ill:deliveryInfo>
-            <ill:dateSent>2024-12-12T20:12:00.629725783Z</ill:dateSent>
-            <ill:itemId>12345</ill:itemId>
-        </ill:deliveryInfo>
-    </ill:supplyingAgencyMessage>
-</ill:ISO18626Message>
+    <supplyingAgencyMessage>
+        <header>
+            <supplyingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>SUP</agencyIdValue>
+            </supplyingAgencyId>
+            <requestingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>BROKER</agencyIdValue>
+            </requestingAgencyId>
+            <multipleItemRequestId></multipleItemRequestId>
+            <timestamp>2024-12-12T20:12:00.62959771Z</timestamp>
+            <requestingAgencyRequestId></requestingAgencyRequestId>
+            <supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</supplyingAgencyRequestId>
+        </header>
+        <messageInfo>
+            <reasonForMessage>StatusChange</reasonForMessage>
+        </messageInfo>
+        <statusInfo>
+            <status>Loaned</status>
+            <lastChange>2024-12-12T20:12:00.629710681Z</lastChange>
+        </statusInfo>
+        <deliveryInfo>
+            <dateSent>2024-12-12T20:12:00.629725783Z</dateSent>
+            <itemId>12345</itemId>
+        </deliveryInfo>
+    </supplyingAgencyMessage>
+</ISO18626Message>
