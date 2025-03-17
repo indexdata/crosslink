@@ -586,37 +586,37 @@ func TestSuccessfulFlow(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(reqNotice) == 1
 	}) {
-		t.Error("should have received 1 request")
+		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(supMsgNotice) == 3
 	}) {
-		t.Error("should have received 3 supplier messages")
+		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(reqMsgNotice) == 2
 	}) {
-		t.Error("should have received 2 requester messages")
+		t.Errorf("should have received 2 requester messages, but got %d", len(reqMsgNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(locateTask) == 1
 	}) {
-		t.Error("should have finished locate supplier task")
+		t.Errorf("should have finished locate supplier task, but got %d", len(locateTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(selectTask) == 2
 	}) {
-		t.Error("should have 2 finished select supplier tasks")
+		t.Errorf("should have 2 finished select supplier tasks, but got %d", len(selectTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(mesSupTask) == 4
 	}) {
-		t.Error("should have finished 4 message supplier tasks")
+		t.Errorf("should have finished 4 message supplier tasks, but got %d", len(mesSupTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(mesReqTask) == 2
 	}) {
-		t.Error("should have finished 2 message requester tasks")
+		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
 	}
 	illId := mesReqTask[0].IllTransactionID
 	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
