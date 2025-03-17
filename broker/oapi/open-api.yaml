@@ -36,6 +36,9 @@ components:
           type: object
           description: Result data of the event
           additionalProperties: true
+        ParentID:
+          type: string
+          description: Parent event ID
       required:  # List required fields if any
         - ID
         - IllTransactionID

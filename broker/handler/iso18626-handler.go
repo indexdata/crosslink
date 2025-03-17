@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -30,12 +34,27 @@ const (
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
+	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
 const InternalFailedToLookupTx = "failed to lookup ILL transaction"
 const InternalFailedToSaveTx = "failed to save ILL transaction"
 const InternalFailedToCreateNotice = "failed to create notice event"
+
+var requestMapping = map[string]RequestWait{}
+
+type Iso18626Handler struct {
+	eventBus  events.EventBus
+	eventRepo events.EventRepo
+}
+
+func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo) Iso18626Handler {
+	return Iso18626Handler{
+		eventBus:  eventBus,
+		eventRepo: eventRepo,
+	}
+}
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +163,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Timestamp:       getNow(),
 		ISO18626Message: illMessage,
 	}
-	err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
+	_, err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -252,15 +271,19 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		Timestamp:       getNow(),
 		ISO18626Message: illMessage,
 	}
-	err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
+	eventId, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	//TODO we need to delay the confirmation until the supplier has responded
-	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
-	writeResponse(ctx, resmsg, w)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	requestMapping[eventId] = RequestWait{
+		w:  &w,
+		wg: &wg,
+	}
+	wg.Wait()
 }
 
 func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorType *iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
@@ -303,7 +326,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		Timestamp:       getNow(),
 		ISO18626Message: illMessage,
 	}
-	err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -382,9 +405,109 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 	writeResponse(ctx, resmsg, w)
 }
 
+func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
+	h.eventBus.ProcessTask(ctx, event, h.handleConfirmRequesterMsgTask)
+}
+
+func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	status := events.EventStatusSuccess
+	var resultData = map[string]any{}
+	responseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
+	originalEvent := h.eventBus.FindAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
+	if responseEvent != nil && originalEvent != nil {
+		resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
+	} else {
+		resultData["result"] = "message ancestor event missing"
+	}
+	return status, &events.EventResult{
+		Data: resultData,
+	}
+}
+
+func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, respData map[string]interface{}) any {
+	wait, ok := requestMapping[requestId]
+	if ok {
+		delete(requestMapping, requestId)
+		var errorMessage = ""
+		var errorType *iso18626.TypeErrorType
+		var messageStatus = iso18626.TypeMessageStatusOK
+		respMap, ok := respData["response"]
+		var resp *iso18626.ISO18626Message
+		if ok {
+			resp = toIsoMessage(ctx, respMap.(map[string]interface{}))
+		}
+		if resp != nil {
+			if resp.RequestingAgencyMessageConfirmation != nil {
+				messageStatus = resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
+				if resp.RequestingAgencyMessageConfirmation.ErrorData != nil {
+					errorMessage = resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
+					errorType = &resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
+				}
+			}
+		} else {
+			// We don't have response, so it was http error or connection error
+			if origError, ok := respData["error"]; ok {
+				if strVal, isString := origError.(string); isString {
+					status, responseError := parseError(strVal)
+					if responseError != nil {
+						(*wait.w).WriteHeader(status)
+						(*wait.w).Write([]byte(*responseError))
+						wait.wg.Done()
+						return strVal
+					}
+				}
+			}
+			eType := iso18626.TypeErrorTypeBadlyFormedMessage
+			errorMessage = string(CouldNotSendReqToPeer)
+			errorType = &eType
+			messageStatus = iso18626.TypeMessageStatusERROR
+		}
+		var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
+		writeResponse(ctx, resmsg, *wait.w)
+		wait.wg.Done()
+		return resmsg
+	} else {
+		return "did not find request by id: " + requestId
+	}
+}
+
+type RequestWait struct {
+	w  *http.ResponseWriter
+	wg *sync.WaitGroup
+}
+
+func toIsoMessage(ctx extctx.ExtendedContext, resp map[string]interface{}) *iso18626.ISO18626Message {
+	var result iso18626.ISO18626Message
+	if resp != nil {
+		jsonString, err := json.Marshal(resp)
+		if err == nil {
+			err = json.Unmarshal(jsonString, &result)
+			if err != nil {
+				ctx.Logger().Error("unmarshal error", "error", err)
+			}
+		} else {
+			ctx.Logger().Error("marshal error", "error", err)
+		}
+	}
+	return &result
+}
+
 func getNow() pgtype.Timestamp {
 	return pgtype.Timestamp{
 		Time:  time.Now(),
 		Valid: true,
 	}
+}
+
+func parseError(errorMessage string) (int, *string) {
+	re := regexp.MustCompile(`(\d{3}):\s*(.+)`)
+	matches := re.FindStringSubmatch(errorMessage)
+	if matches == nil {
+		return 0, nil
+	}
+	errorCode, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return 0, nil
+	}
+	return errorCode, &matches[2]
 }

@@ -63,26 +63,11 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 }
 
 func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event events.Event) {
-	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendSupplyingAgencyMessage)
+	c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
-	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
-}
-
-func (c *Iso18626Client) triggerNotificationsAndProcessEvent(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
-	err := c.eventBus.BeginTask(event.ID)
-	if err != nil {
-		ctx.Logger().Error("failed to start event processing", "error", err)
-		return
-	}
-
-	status, result := h(ctx, event)
-
-	err = c.eventBus.CompleteTask(event.ID, result, status)
-	if err != nil {
-		ctx.Logger().Error("failed to complete event processing", "error", err)
-	}
+	c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -159,7 +144,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		resultData["error"] = err
+		resultData["error"] = err.Error()
 		ctx.Logger().Error("failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
@@ -205,7 +190,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				resultData["response"] = response
 			}
 			if err != nil {
-				resultData["error"] = err
+				resultData["error"] = err.Error()
 				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
