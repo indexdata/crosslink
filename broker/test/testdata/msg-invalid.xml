@@ -1,0 +1,7 @@
+<ISO18626Message
+    xmlns="http://illtransactions.org/2013/iso18626"
+    xmlns:ill="http://illtransactions.org/2013/iso18626"
+    ill:version="1.2"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://illtransactions.org/2013/iso18626 http://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+</ISO18626Message>
