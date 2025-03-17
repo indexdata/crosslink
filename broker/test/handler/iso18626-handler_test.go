@@ -27,6 +27,9 @@ import (
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var mockIllRepoSuccess = new(test.MockIllRepositorySuccess)
@@ -154,7 +157,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	var mockRepo = &MockRepository{}
+	var mockRepo = &MockRepositoryOnlyPeersOK{}
 	handler.Iso18626PostHandler(mockRepo, eventBussError, dirAdapter)(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
@@ -173,6 +176,38 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 	errData := `<errorData>
  		<errorType>UnrecognisedDataValue</errorType>
  		<errorValue>requestingAgencyRequestId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
+
+func TestIso18626PostRequestNoSuppUniqRecId(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-no-suppuniqrecid.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
+	errData := `<errorData>
+		<errorType>UnrecognisedDataValue</errorType>
+		<errorValue>supplierUniqueRecordId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
+
+func TestIso18626PostRequestExists(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
+	errData := `<errorData>
+		<errorType>UnrecognisedDataValue</errorType>
+		<errorValue>requestingAgencyRequestId: request with a given ID already exists</errorValue>
 	</errorData>`
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
@@ -198,7 +233,7 @@ func TestIso18626PostSupplyingMessageDBFailure(t *testing.T) {
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
-func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
+func TestIso18626PostSupplyingMessageNoReqId(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/supmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
@@ -211,6 +246,22 @@ func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
 	errData := `<errorData>
 		<errorType>UnrecognisedDataValue</errorType>
 		<errorValue>requestingAgencyRequestId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
+
+func TestIso18626PostSupplyingMessageReqNotFound(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: request with a given ID not found</errorValue>
 	</errorData>`
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
@@ -309,7 +360,7 @@ func TestIso18626PostRequestingMessageDBFailure(t *testing.T) {
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
-func TestIso18626PostRequestingMessageMissing(t *testing.T) {
+func TestIso18626PostRequestingMessageNoReqId(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/reqmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
@@ -325,14 +376,56 @@ func TestIso18626PostRequestingMessageMissing(t *testing.T) {
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
-type MockRepository struct {
+func TestIso18626PostRequestingMessageReqNotFound(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: request with a given ID not found</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
+
+func TestIso18626PostRequestingMessageReqFailToSave(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "failed to process request\n", rr.Body.String())
+}
+
+type MockRepositoryOnlyPeersOK struct {
 	test.MockIllRepositoryError
 }
 
-func (r *MockRepository) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
+func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
 	return []ill_db.Peer{{
 		ID:     "peer1",
 		Name:   symbols[0],
 		Symbol: symbols[0],
 	}}
+}
+
+type MockRepositoryReqNotFound struct {
+	test.MockIllRepositoryError
+}
+
+func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, pgx.ErrNoRows
+}
+
+type MockRepositoryReqExists struct {
+	test.MockIllRepositorySuccess
+}
+
+func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, &pgconn.PgError{Code: "23505"}
 }
