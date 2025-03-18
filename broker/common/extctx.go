@@ -3,6 +3,7 @@ package extctx
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/google/uuid"
@@ -16,11 +17,31 @@ type ExtendedContext interface {
 	WithArgs(args *LoggerArgs) ExtendedContext
 }
 
-func Must[T any](ctx ExtendedContext, handler func() (ret T, err error)) T {
+func Must[T any](ctx ExtendedContext, handler func() (ret T, err error), errMsg string) T {
 	ret, err := handler()
 	if err != nil {
-		ctx.Logger().Error(err.Error())
-		panic(err)
+		if errMsg != "" {
+			ctx.Logger().Error(errMsg, "error", err)
+			panic(errMsg)
+		} else {
+			ctx.Logger().Error(err.Error(), "error", err)
+			panic(err)
+		}
+	}
+	return ret
+}
+
+func MustHttp[T any](ctx ExtendedContext, w http.ResponseWriter, handler func() (ret T, err error), errMsg string) T {
+	ret, err := handler()
+	if err != nil {
+		if errMsg != "" {
+			ctx.Logger().Error(errMsg, "error", err)
+			http.Error(w, errMsg, http.StatusInternalServerError)
+			panic(errMsg)
+		} else {
+			ctx.Logger().Error(err.Error(), "error", err)
+			panic(err)
+		}
 	}
 	return ret
 }
