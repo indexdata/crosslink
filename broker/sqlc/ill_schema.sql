@@ -7,7 +7,8 @@ CREATE TABLE peer
     refresh_time   TIMESTAMP NOT NULL DEFAULT now(),
     url            VARCHAR   NOT NULL,
     loans_count    INTEGER   NOT NULL DEFAULT 0,
-    borrows_count  INTEGER   NOT NULL DEFAULT 0
+    borrows_count  INTEGER   NOT NULL DEFAULT 0,
+    vendor         VARCHAR   NOT NULL
 );
 
 CREATE TABLE ill_transaction

@@ -30,26 +30,11 @@ func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dir
 }
 
 func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event events.Event) {
-	s.processTask(ctx, event, s.locateSuppliers)
+	s.eventBus.ProcessTask(ctx, event, s.locateSuppliers)
 }
 
 func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event events.Event) {
-	s.processTask(ctx, event, s.selectSupplier)
-}
-
-func (s *SupplierLocator) processTask(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
-	err := s.eventBus.BeginTask(event.ID)
-	if err != nil {
-		ctx.Logger().Error("failed to start event processing", "error", err)
-		return
-	}
-
-	status, result := h(ctx, event)
-
-	err = s.eventBus.CompleteTask(event.ID, result, status)
-	if err != nil {
-		ctx.Logger().Error("failed to complete event processing", "error", err)
-	}
+	s.eventBus.ProcessTask(ctx, event, s.selectSupplier)
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

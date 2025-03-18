@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"github.com/indexdata/crosslink/broker/shim"
 	"net/http"
 	"strings"
 	"time"
@@ -62,26 +63,11 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 }
 
 func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event events.Event) {
-	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendSupplyingAgencyMessage)
+	c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
-	c.triggerNotificationsAndProcessEvent(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
-}
-
-func (c *Iso18626Client) triggerNotificationsAndProcessEvent(ctx extctx.ExtendedContext, event events.Event, h func(extctx.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) {
-	err := c.eventBus.BeginTask(event.ID)
-	if err != nil {
-		ctx.Logger().Error("failed to start event processing", "error", err)
-		return
-	}
-
-	status, result := h(ctx, event)
-
-	err = c.eventBus.CompleteTask(event.ID, result, status)
-	if err != nil {
-		ctx.Logger().Error("failed to complete event processing", "error", err)
-	}
+	c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -120,7 +106,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to get status", "error", statusErr)
 		status = events.EventStatusError
 	} else {
-		response, err := c.SendHttpPost(requester.Url, message, "")
+		response, err := c.SendHttpPost(&requester, message, "")
 		if response != nil {
 			resultData["response"] = response
 		}
@@ -162,7 +148,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		resultData["error"] = err
+		resultData["error"] = err.Error()
 		ctx.Logger().Error("failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
@@ -203,12 +189,12 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			ctx.Logger().Error("failed to create message", "error", internalErr)
 			status = events.EventStatusProblem
 		} else {
-			response, err := c.SendHttpPost(peer.Url, message, "")
+			response, err := c.SendHttpPost(peer, message, "")
 			if response != nil {
 				resultData["response"] = response
 			}
 			if err != nil {
-				resultData["error"] = err
+				resultData["error"] = err.Error()
 				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
@@ -306,13 +292,20 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 	return defaultStatus
 }
 
-func (c *Iso18626Client) SendHttpPost(url string, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient()
 	if len(tenant) > 0 {
 		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
+	iso18626Shim := shim.GetShim(peer.Vendor)
 	var resmsg iso18626.ISO18626Message
-	err := httpClient.PostXml(c.client, url, msg, &resmsg)
+	err := httpClient.RequestResponse(c.client, http.MethodPost,
+		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
+		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
+			return iso18626Shim.ApplyToOutgoing(v.(*iso18626.ISO18626Message))
+		}, func(b []byte, v any) error {
+			return iso18626Shim.ApplyToIncoming(b, v.(*iso18626.ISO18626Message))
+		})
 	if err != nil {
 		return nil, err
 	}

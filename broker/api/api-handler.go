@@ -245,6 +245,7 @@ func toApiEvent(event events.Event) oapi.Event {
 		EventType:        string(event.EventType),
 		EventName:        string(event.EventName),
 		EventStatus:      string(event.EventStatus),
+		ParentID:         toString(event.ParentID),
 	}
 	eventData := make(map[string]interface{})
 	eventData["Timestamp"] = event.EventData.Timestamp.Time
@@ -336,6 +337,7 @@ func toApiPeer(peer ill_db.Peer) oapi.Peer {
 		Name:          peer.Name,
 		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
+		Vendor:        peer.Vendor,
 	}
 }
 
@@ -353,6 +355,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		Symbol:        peer.Symbol,
 		Name:          peer.Name,
 		Url:           peer.Url,
+		Vendor:        peer.Vendor,
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
 		RefreshTime: pgtype.Timestamp{
 			Time:  time.Now(),
@@ -370,5 +373,13 @@ func toDbRefreshPolicy(policy oapi.PeerRefreshPolicy) ill_db.RefreshPolicy {
 		return ill_db.RefreshPolicyNever
 	} else {
 		return ill_db.RefreshPolicyTransaction
+	}
+}
+
+func toString(text pgtype.Text) *string {
+	if text.Valid {
+		return &text.String
+	} else {
+		return nil
 	}
 }

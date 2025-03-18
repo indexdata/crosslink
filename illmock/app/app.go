@@ -194,6 +194,20 @@ func healthHandler() http.HandlerFunc {
 	}
 }
 
+func error400Handler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.Must(w.Write([]byte("Bad request")))
+	}
+}
+
+func error500Handler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.Must(w.Write([]byte("Internal server error")))
+	}
+}
+
 func iso18626Handler(app *MockApp) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -337,6 +351,8 @@ func (app *MockApp) Run() error {
 	mux := http.NewServeMux()
 	iso18626Handler := iso18626Handler(app)
 	mux.HandleFunc("/iso18626", iso18626Handler)
+	mux.HandleFunc("/iso18626/error400", error400Handler())
+	mux.HandleFunc("/iso18626/error500", error500Handler())
 	reqForm := &reqform.ReqForm{
 		Header:      "illmock ISO18626 submit form",
 		FormPath:    "/form",

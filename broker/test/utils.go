@@ -89,7 +89,7 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 		Symbol:        symbol,
 		Name:          symbol,
 		Url:           url,
-		RefreshPolicy: ill_db.RefreshPolicyTransaction,
+		RefreshPolicy: ill_db.RefreshPolicyNever,
 		RefreshTime: pgtype.Timestamp{
 			Time:  time.Now(),
 			Valid: true,
@@ -154,4 +154,12 @@ func WaitForServiceUp(port int) {
 	} else {
 		fmt.Println("Service up")
 	}
+}
+
+func CreatePgText(value string) pgtype.Text {
+	textValue := pgtype.Text{
+		String: value,
+		Valid:  true,
+	}
+	return textValue
 }

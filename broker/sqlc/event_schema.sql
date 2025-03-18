@@ -10,6 +10,7 @@ CREATE TABLE event
     id                 VARCHAR PRIMARY KEY,
     timestamp          TIMESTAMP NOT NULL,
     ill_transaction_id VARCHAR   NOT NULL,
+    parent_id          VARCHAR,
     event_type         VARCHAR   NOT NULL,
     event_name         VARCHAR   NOT NULL,
     event_status       VARCHAR   NOT NULL,

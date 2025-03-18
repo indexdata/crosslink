@@ -16,13 +16,15 @@ import (
 
 type EventBus interface {
 	Start(ctx extctx.ExtendedContext) error
-	CreateTask(illTransactionID string, eventName EventName, data EventData) error
-	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error
+	CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
+	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	BeginTask(eventId string) error
 	CompleteTask(eventId string, result *EventResult, status EventStatus) error
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
+	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult))
+	FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event
 }
 
 type PostgresEventBus struct {
@@ -148,19 +150,20 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 	ctx.Logger().Info("All handlers finished.")
 }
 
-func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData) error {
+func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
+	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
-			Timestamp:        getNow(),
+			Timestamp:        getPgNow(),
 			EventType:        EventTypeTask,
 			EventName:        eventName,
 			EventStatus:      EventStatusNew,
 			EventData:        data,
+			ParentID:         getPgText(parentId),
 		})
-		if err != nil {
+		if err != nil && event.ParentID.Valid {
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
@@ -168,13 +171,13 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) error {
+func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error) {
 	id := uuid.New().String()
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
-			Timestamp:        getNow(),
+			Timestamp:        getPgNow(),
 			EventType:        EventTypeNotice,
 			EventName:        eventName,
 			EventStatus:      status,
@@ -223,17 +226,12 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 	if event.EventStatus != EventStatusProcessing {
 		return errors.New("event is not in state PROCESSING")
 	}
+	event.EventStatus = status
+	if result != nil {
+		event.ResultData = *result
+	}
 	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams{
-			ID:               event.ID,
-			IllTransactionID: event.IllTransactionID,
-			Timestamp:        event.Timestamp,
-			EventType:        event.EventType,
-			EventName:        event.EventName,
-			EventStatus:      status,
-			EventData:        event.EventData,
-			ResultData:       *result,
-		})
+		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
 			return err
 		}
@@ -272,9 +270,62 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx e
 	p.TaskCompletedHandlers[eventName] = append(p.TaskCompletedHandlers[eventName], f)
 }
 
-func getNow() pgtype.Timestamp {
+func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) {
+	err := p.BeginTask(event.ID)
+	if err != nil {
+		ctx.Logger().Error("failed to start event processing", "error", err)
+		return
+	}
+
+	status, result := h(ctx, event)
+
+	err = p.CompleteTask(event.ID, result, status)
+	if err != nil {
+		ctx.Logger().Error("failed to complete event processing", "error", err)
+	}
+}
+
+func (p *PostgresEventBus) FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event {
+	var event *Event
+	parentId := getParentId(descendant)
+	for {
+		if parentId == nil {
+			break
+		}
+		found, err := p.repo.GetEvent(ctx, *parentId)
+		if err != nil {
+			ctx.Logger().Error("failed to get event", "eventId", parentId, "error", err)
+		} else if found.EventName == eventName {
+			event = &found
+			break
+		} else {
+			parentId = getParentId(&found)
+		}
+	}
+	return event
+}
+
+func getParentId(event *Event) *string {
+	if event != nil && event.ParentID.Valid {
+		return &event.ParentID.String
+	} else {
+		return nil
+	}
+}
+func getPgNow() pgtype.Timestamp {
 	return pgtype.Timestamp{
 		Time:  time.Now(),
 		Valid: true,
+	}
+}
+
+func getPgText(value *string) pgtype.Text {
+	stringValue := ""
+	if value != nil {
+		stringValue = *value
+	}
+	return pgtype.Text{
+		Valid:  value != nil,
+		String: stringValue,
 	}
 }
