@@ -3,15 +3,6 @@ package handler
 import (
 	"bytes"
 	"context"
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
-	mockapp "github.com/indexdata/crosslink/illmock/app"
-	"github.com/indexdata/go-utils/utils"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,10 +12,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/app"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
+	"github.com/indexdata/go-utils/utils"
+	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
+
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var mockIllRepoSuccess = new(test.MockIllRepositorySuccess)
@@ -76,180 +81,189 @@ func TestMain(m *testing.M) {
 }
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-
-	expected := "<messageStatus>OK</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>OK</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
 }
 
 func TestIso18626PostHandlerWrongMethod(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("GET", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusMethodNotAllowed {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusMethodNotAllowed)
-	}
+	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	assert.Equal(t, "only POST allowed\n", rr.Body.String())
 }
 
 func TestIso18626PostHandlerWrongContentType(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusUnsupportedMediaType {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusUnsupportedMediaType)
-	}
+	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
+	assert.Equal(t, "only application/xml or text/xml accepted\n", rr.Body.String())
 }
 
 func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("Invalid")))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "failure parsing request\n", rr.Body.String())
+}
 
-	// Check the response
-	if status := rr.Code; status != http.StatusBadRequest {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusBadRequest)
-	}
+func TestIso18626PostHandlerInvalid(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/msg-invalid.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "invalid ISO18626 message\n", rr.Body.String())
+}
+
+func norm(in string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(in, "\n", ""), "\t", ""), " ", "")
 }
 
 func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
 	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-	expected := "<messageStatus>ERROR</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyId: requesting agency not found</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
 func TestIso18626PostHandlerFailToSave(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request.xml")
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	var mockRepo = &MockRepository{}
-
+	var mockRepo = &MockRepositoryOnlyPeersOK{}
 	handler.Iso18626PostHandler(mockRepo, eventBussError, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
 func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-invalid.xml")
+	data, _ := os.ReadFile("../testdata/request-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
 
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
+func TestIso18626PostRequestNoSuppUniqRecId(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-no-suppuniqrecid.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
+	errData := `<errorData>
+		<errorType>UnrecognisedDataValue</errorType>
+		<errorValue>supplierUniqueRecordId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
 
-	expected := "<messageStatus>ERROR</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+func TestIso18626PostRequestExists(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
+	errData := `<errorData>
+		<errorType>UnrecognisedDataValue</errorType>
+		<errorValue>requestingAgencyRequestId: request with a given ID already exists</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
 func TestIso18626PostSupplyingMessage(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-	expected := "<messageStatus>OK</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>OK</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
 }
 
-func TestIso18626PostSupplyingMessageFailedToFind(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message.xml")
+func TestIso18626PostSupplyingMessageDBFailure(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
-func TestIso18626PostSupplyingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supplying-agency-message-invalid.xml")
+func TestIso18626PostSupplyingMessageNoReqId(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgOk := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgOk)
+	errData := `<errorData>
+		<errorType>UnrecognisedDataValue</errorType>
+		<errorValue>requestingAgencyRequestId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
 
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-	expected := "<messageStatus>ERROR</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+func TestIso18626PostSupplyingMessageReqNotFound(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: request with a given ID not found</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
 func TestIso18626PostRequestingMessage(t *testing.T) {
@@ -290,12 +304,12 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 		},
 	}
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
 	illId := uuid.NewString()
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
-		RequesterRequestID: test.CreatePgText("slnp-0009997"),
+		RequesterRequestID: test.CreatePgText("reqid"),
 	})
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)
@@ -336,49 +350,82 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	}
 }
 
-func TestIso18626PostRequestingMessageFailedToFindIllTransaction(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/requesting-agency-message.xml")
+func TestIso18626PostRequestingMessageDBFailure(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
-func TestIso18626PostRequestingMessageMissing(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/requesting-agency-message-invalid.xml")
+func TestIso18626PostRequestingMessageNoReqId(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-no-reqid.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-
 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
-
-	// Check the response
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
-	expected := "<messageStatus>ERROR</messageStatus>"
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("handler returned unexpected body: got %v want to contain %v",
-			rr.Body.String(), expected)
-	}
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: cannot be empty</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
-type MockRepository struct {
+func TestIso18626PostRequestingMessageReqNotFound(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	errStatus := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), errStatus)
+	errData := `<errorData>
+ 		<errorType>UnrecognisedDataValue</errorType>
+ 		<errorValue>requestingAgencyRequestId: request with a given ID not found</errorValue>
+	</errorData>`
+	assert.Contains(t, norm(rr.Body.String()), norm(errData))
+}
+
+func TestIso18626PostRequestingMessageReqFailToSave(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Equal(t, "failed to process request\n", rr.Body.String())
+}
+
+type MockRepositoryOnlyPeersOK struct {
 	test.MockIllRepositoryError
 }
 
-func (r *MockRepository) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
+func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
 	return []ill_db.Peer{{
 		ID:     "peer1",
 		Name:   symbols[0],
 		Symbol: symbols[0],
 	}}
+}
+
+type MockRepositoryReqNotFound struct {
+	test.MockIllRepositoryError
+}
+
+func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, pgx.ErrNoRows
+}
+
+type MockRepositoryReqExists struct {
+	test.MockIllRepositorySuccess
+}
+
+func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, &pgconn.PgError{Code: "23505"}
 }
