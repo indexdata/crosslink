@@ -20,7 +20,9 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo) Wor
 }
 
 func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event events.Event) {
-	ctx.Must(w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID))
+	extctx.Must(ctx, func() (string, error) {
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID)
+	})
 }
 
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
