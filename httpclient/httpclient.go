@@ -17,11 +17,11 @@ const (
 
 type HttpError struct {
 	StatusCode int
-	message    string
+	Body       []byte
 }
 
 func (e *HttpError) Error() string {
-	return e.message
+	return fmt.Sprintf("HTTP error %d: %s", e.StatusCode, e.Body)
 }
 
 type HttpClient struct {
@@ -61,7 +61,7 @@ func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		buf, _ := io.ReadAll(resp.Body)
-		return nil, &HttpError{resp.StatusCode, fmt.Sprintf("HTTP error %d: %s", resp.StatusCode, buf)}
+		return nil, &HttpError{resp.StatusCode, buf}
 	}
 	buf, err := io.ReadAll(resp.Body)
 	if err != nil {
