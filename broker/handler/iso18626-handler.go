@@ -242,11 +242,25 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 
 	illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 	illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
+	ctx.Logger().Info("AD: handle requesting agency message", "action", illTrans.LastRequesterAction)
 	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
+	}
+	if illTrans.LastRequesterAction.String != string(illMessage.RequestingAgencyMessage.Action) {
+		ctx.Logger().Info("AD: returned different action", "action", illTrans.LastRequesterAction.String)
+	}
+	illTrans2, err := repo.GetIllTransactionById(ctx, illTrans.ID)
+	if err != nil {
+		ctx.Logger().Info("AD: error", "error", err.Error())
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return
+	}
+	if illTrans2.LastRequesterAction.String != illTrans.LastRequesterAction.String {
+		ctx.Logger().Info("AD: mismatch", "action", illTrans.LastRequesterAction.String, "action2", illTrans2.LastRequesterAction.String)
 	}
 	eventData := events.EventData{
 		Timestamp:       getNow(),

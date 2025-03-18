@@ -2,6 +2,8 @@ package repo
 
 import (
 	"context"
+	"log/slog"
+
 	extctx "github.com/indexdata/crosslink/broker/common"
 
 	"github.com/jackc/pgx/v5"
@@ -65,6 +67,16 @@ func (r *PgBaseRepo[T]) GetConnOrTx() ConnOrTx {
 	if r.Tx != nil {
 		return r.Tx //return active tx if any
 	} else {
+		return r.Pool //otherwise aquire from the pool
+	}
+}
+
+func (r *PgBaseRepo[T]) GetConnOrTxLog() ConnOrTx {
+	if r.Tx != nil {
+		slog.Info("AD: Using tx")
+		return r.Tx //return active tx if any
+	} else {
+		slog.Info("AD: Using pool")
 		return r.Pool //otherwise aquire from the pool
 	}
 }

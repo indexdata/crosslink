@@ -134,6 +134,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 				String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
 				Valid:  true,
 			}
+			time.Sleep(1 * time.Millisecond)
+			ctx.Logger().Info("AD: client saves a transaction", "action", illTrans.LastRequesterAction.String)
 			_, err = c.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 			if err != nil {
 				ctx.Logger().Error("failed to update ILL transaction", "error", err)
@@ -155,7 +157,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var resultData = map[string]any{}
 	var status = events.EventStatusSuccess
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
-	ctx.Logger().Info("createAndSendRequestOrRequestingAgencyMessage", "LastRequesterAction", illTrans.LastRequesterAction.String,
+	ctx.Logger().Info("AD:createAndSendRequestOrRequestingAgencyMessage", "ID", illTrans.ID, "LastRequesterAction", illTrans.LastRequesterAction.String,
 		"dbRequestAction", ill_db.RequestAction, "isRequest", isRequest)
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
