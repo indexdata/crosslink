@@ -2,10 +2,11 @@ package client
 
 import (
 	"errors"
-	"github.com/indexdata/crosslink/broker/shim"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/shim"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
