@@ -3,6 +3,7 @@ package extctx
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/google/uuid"
@@ -14,7 +15,30 @@ type ExtendedContext interface {
 	Logger() *slog.Logger
 	// create new instance backed by the same context and log handler but with new log args
 	WithArgs(args *LoggerArgs) ExtendedContext
-	Must(ret any, err error) any
+}
+
+func Must[T any](ctx ExtendedContext, handler func() (ret T, err error), errMsg string) T {
+	return MustHttp(ctx, nil, handler, errMsg)
+}
+
+func MustHttp[T any](ctx ExtendedContext, w http.ResponseWriter, handler func() (ret T, err error), errMsg string) T {
+	ret, err := handler()
+	if err != nil {
+		if errMsg != "" {
+			ctx.Logger().Error(errMsg, "error", err)
+			if w != nil {
+				http.Error(w, errMsg, http.StatusInternalServerError)
+			}
+			panic(errMsg)
+		} else {
+			ctx.Logger().Error(err.Error(), "error", err)
+			if w != nil {
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+			panic(err)
+		}
+	}
+	return ret
 }
 
 var DefaultLogHandler slog.Handler = slog.NewTextHandler(os.Stdout, nil)
@@ -38,13 +62,6 @@ func (ctx *_ExtCtxImpl) Logger() *slog.Logger {
 
 func (ctx *_ExtCtxImpl) WithArgs(args *LoggerArgs) ExtendedContext {
 	return CreateExtCtxWithLogArgsAndHandler(ctx.Context, args, ctx.logHandler)
-}
-
-func (ctx *_ExtCtxImpl) Must(ret any, err error) any {
-	if err != nil {
-		ctx.logger.Error(err.Error())
-	}
-	return ret
 }
 
 func CreateExtCtxWithArgs(ctx context.Context, args *LoggerArgs) ExtendedContext {
