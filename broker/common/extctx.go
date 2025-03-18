@@ -18,28 +18,23 @@ type ExtendedContext interface {
 }
 
 func Must[T any](ctx ExtendedContext, handler func() (ret T, err error), errMsg string) T {
-	ret, err := handler()
-	if err != nil {
-		if errMsg != "" {
-			ctx.Logger().Error(errMsg, "error", err)
-			panic(errMsg)
-		} else {
-			ctx.Logger().Error(err.Error(), "error", err)
-			panic(err)
-		}
-	}
-	return ret
+	return MustHttp(ctx, nil, handler, errMsg)
 }
 
-func MustHttp[T any](ctx ExtendedContext, w http.ResponseWriter, handler func() (ret T, err error), errMsg string) T {
+func MustHttp[T any](ctx ExtendedContext, w *http.ResponseWriter, handler func() (ret T, err error), errMsg string) T {
 	ret, err := handler()
 	if err != nil {
 		if errMsg != "" {
 			ctx.Logger().Error(errMsg, "error", err)
-			http.Error(w, errMsg, http.StatusInternalServerError)
+			if w != nil {
+				http.Error(*w, errMsg, http.StatusInternalServerError)
+			}
 			panic(errMsg)
 		} else {
 			ctx.Logger().Error(err.Error(), "error", err)
+			if w != nil {
+				http.Error(*w, "Internal server error", http.StatusInternalServerError)
+			}
 			panic(err)
 		}
 	}
