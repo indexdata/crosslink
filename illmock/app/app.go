@@ -196,15 +196,13 @@ func healthHandler() http.HandlerFunc {
 
 func error400Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		netutil.WriteHttpResponse(w, []byte("Bad request"))
+		http.Error(w, "Bad request", http.StatusBadRequest)
 	}
 }
 
 func error500Handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		netutil.WriteHttpResponse(w, []byte("Internal server error"))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
