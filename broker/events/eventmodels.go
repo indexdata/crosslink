@@ -2,7 +2,6 @@ package events
 
 import (
 	"github.com/indexdata/crosslink/iso18626"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type EventStatus string
@@ -46,13 +45,21 @@ const (
 )
 
 type EventData struct {
-	Timestamp       pgtype.Timestamp
-	ISO18626Message *iso18626.ISO18626Message `json:"iso18626Message,omitempty"`
-	Data            map[string]any
+	CommonEventData
+	CustomData map[string]any
+}
+
+type CommonEventData struct {
+	IncomingMessage   *iso18626.ISO18626Message
+	OutgoingMessage   *iso18626.ISO18626Message
+	HttpFailureStatus *int
+	HttpFailureBody   []byte
+	Error             *string
 }
 
 type EventResult struct {
-	Data map[string]any
+	CommonEventData
+	CustomData map[string]any
 }
 
 type NotifyData struct {

@@ -97,7 +97,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		}
 	}
 
-	return events.EventStatusSuccess, getEventResult(map[string]any{"suppliers": locatedSuppliers})
+	return events.EventStatusSuccess, getEventResultWithError(nil, map[string]any{"suppliers": locatedSuppliers})
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
@@ -157,22 +157,26 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	return events.EventStatusSuccess, getEventResult(map[string]any{"supplierId": locSup.SupplierID})
+	return events.EventStatusSuccess, getEventResultWithError(nil, map[string]any{"supplierId": locSup.SupplierID})
 }
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Error(message, "error", err)
-	return events.EventStatusError, getEventResult(map[string]any{"message": message, "error": err})
+	eMsg := err.Error()
+	return events.EventStatusError, getEventResultWithError(&eMsg, map[string]any{"message": message})
 }
 
 func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Info(message)
-	return events.EventStatusProblem, getEventResult(map[string]any{"message": message, "kindOfProblem": "no-suppliers"})
+	return events.EventStatusProblem, getEventResultWithError(&message, map[string]any{"kindOfProblem": "no-suppliers"})
 }
 
-func getEventResult(resultData map[string]any) *events.EventResult {
+func getEventResultWithError(eMsg *string, customData map[string]any) *events.EventResult {
 	return &events.EventResult{
-		Data: resultData,
+		CommonEventData: events.CommonEventData{
+			Error: eMsg,
+		},
+		CustomData: customData,
 	}
 }
 

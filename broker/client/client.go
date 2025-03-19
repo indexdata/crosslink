@@ -77,7 +77,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		return events.EventStatusError, nil
 	}
 
-	var resultData = map[string]any{}
+	resData := events.CommonEventData{}
+	eMsg := ""
 	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
@@ -94,24 +95,29 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		MessageInfo: c.createMessageInfo(),
 		StatusInfo:  statusInfo,
 	}
-	resultData["message"] = message
+	resData.OutgoingMessage = message
 
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		resultData["error"] = err.Error()
+		eMsg = err.Error()
 		ctx.Logger().Error("failed to get requester", "error", err)
 		status = events.EventStatusError
 	} else if statusErr != nil {
-		resultData["error"] = statusErr.Error()
+		eMsg = statusErr.Error()
 		ctx.Logger().Error("failed to get status", "error", statusErr)
 		status = events.EventStatusError
 	} else {
 		response, err := c.SendHttpPost(&requester, message, "")
 		if response != nil {
-			resultData["response"] = response
+			resData.IncomingMessage = response
 		}
 		if err != nil {
-			resultData["error"] = err.Error()
+			var httpErr *httpclient.HttpError
+			if errors.As(err, &httpErr) {
+				resData.HttpFailureBody = httpErr.Body
+				resData.HttpFailureStatus = &httpErr.StatusCode
+			}
+			eMsg = err.Error()
 			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 			status = events.EventStatusError
 		} else {
@@ -126,8 +132,11 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			}
 		}
 	}
+	if eMsg != "" {
+		resData.Error = &eMsg
+	}
 	return status, &events.EventResult{
-		Data: resultData,
+		CommonEventData: resData,
 	}
 }
 
@@ -138,13 +147,14 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		return events.EventStatusError, nil
 	}
 
-	var resultData = map[string]any{}
+	resData := events.CommonEventData{}
+	eMsg := ""
 	var status = events.EventStatusSuccess
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		resultData["error"] = err.Error()
+		eMsg = err.Error()
 		ctx.Logger().Error("failed to get supplier", "error", err)
 		status = events.EventStatusError
 	} else {
@@ -179,18 +189,23 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			}
 			c.updateSelectedSupplierAction(selected, string(action))
 		}
-		resultData["message"] = message
+		resData.OutgoingMessage = message
 		if internalErr != "" {
-			resultData["error"] = internalErr
+			eMsg = internalErr
 			ctx.Logger().Error("failed to create message", "error", internalErr)
 			status = events.EventStatusProblem
 		} else {
 			response, err := c.SendHttpPost(peer, message, "")
 			if response != nil {
-				resultData["response"] = response
+				resData.IncomingMessage = response
 			}
 			if err != nil {
-				resultData["error"] = err.Error()
+				var httpErr *httpclient.HttpError
+				if errors.As(err, &httpErr) {
+					resData.HttpFailureBody = httpErr.Body
+					resData.HttpFailureStatus = &httpErr.StatusCode
+				}
+				eMsg = err.Error()
 				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
 				status = events.EventStatusError
 			} else {
@@ -199,8 +214,11 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
 	}
+	if eMsg != "" {
+		resData.Error = &eMsg
+	}
 	return status, &events.EventResult{
-		Data: resultData,
+		CommonEventData: resData,
 	}
 }
 

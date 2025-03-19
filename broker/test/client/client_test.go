@@ -94,7 +94,7 @@ func TestMessageRequester(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if _, ok := event.ResultData.Data["response"]; !ok {
+	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
 	}
 }
@@ -120,15 +120,14 @@ func TestMessageSupplier(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			_, ok := event.ResultData.Data["response"]
-			return ok
+			return event.ResultData.IncomingMessage != nil
 		}
 		return false
 	}) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if _, ok := event.ResultData.Data["response"]; !ok {
+	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
 	}
 }
@@ -161,7 +160,7 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if _, ok := event.ResultData.Data["error"]; !ok {
+	if event.ResultData.Error == nil {
 		t.Error("Should have error in result data")
 	}
 }
@@ -194,7 +193,7 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if _, ok := event.ResultData.Data["error"]; !ok {
+	if event.ResultData.Error == nil {
 		t.Error("Should have error in result data")
 	}
 }
@@ -225,7 +224,7 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if _, ok := event.ResultData.Data["error"]; !ok {
+	if event.ResultData.Error == nil {
 		t.Error("Should have error in result data")
 	}
 }
