@@ -160,7 +160,7 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if event.ResultData.Error == nil {
+	if event.ResultData.Error == "" {
 		t.Error("Should have error in result data")
 	}
 }
@@ -193,7 +193,7 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if event.ResultData.Error == nil {
+	if event.ResultData.Error == "" {
 		t.Error("Should have error in result data")
 	}
 }
@@ -224,7 +224,7 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-	if event.ResultData.Error == nil {
+	if event.ResultData.Error == "" {
 		t.Error("Should have error in result data")
 	}
 }

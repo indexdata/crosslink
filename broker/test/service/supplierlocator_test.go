@@ -425,7 +425,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			}
 
 			if tt.eMsg != "" {
-				if *event.ResultData.Error != tt.eMsg {
+				if event.ResultData.Error != tt.eMsg {
 					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Error)
 				}
 			}
@@ -486,7 +486,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 				t.Error("expected to have request event received and processed")
 			}
 
-			if *event.ResultData.Error != tt.message {
+			if event.ResultData.Error != tt.message {
 				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Error)
 			}
 

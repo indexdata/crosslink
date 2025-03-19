@@ -52,9 +52,9 @@ type EventData struct {
 type CommonEventData struct {
 	IncomingMessage   *iso18626.ISO18626Message
 	OutgoingMessage   *iso18626.ISO18626Message
-	HttpFailureStatus *int
+	HttpFailureStatus int
 	HttpFailureBody   []byte
-	Error             *string
+	Error             string
 }
 
 type EventResult struct {
