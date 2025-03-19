@@ -96,6 +96,8 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryLoanCondition
 		reasonRetry = &x
+	case "WILLSUPPLY":
+		status = append(status, iso18626.TypeStatusWillSupply)
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 	case "WILLSUPPLY_UNFILLED":
@@ -111,7 +113,6 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
 		overdue = true
 	case "ERROR":
-		log.Warn("handleSupplierRequest ERROR")
 		app.handleRequestError(&illRequest.Header, role.Supplier, "MOCK ERROR", iso18626.TypeErrorTypeUnrecognisedDataValue, w)
 		return
 	case "HTTP-ERROR-400":
