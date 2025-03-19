@@ -60,6 +60,7 @@ following values are recognized:
 |`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`                         |
 |`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
 |`UNFILLED`                 | Respond with `Unfilled` message                                                     |
+|`WILLSUPPLY`               | Respond with `WillSupply` only                                                      |
 |`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
 |`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
 |`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |

@@ -13,6 +13,7 @@ import (
 )
 
 type IllRepo interface {
+	repo.Transactional[IllRepo]
 	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
@@ -32,6 +33,18 @@ type IllRepo interface {
 type PgIllRepo struct {
 	repo.PgBaseRepo[IllRepo]
 	queries Queries
+}
+
+// delegate transaction handling to Base
+func (r *PgIllRepo) WithTxFunc(ctx extctx.ExtendedContext, fn func(IllRepo) error) error {
+	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
+}
+
+// DerivedRepo
+func (r *PgIllRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[IllRepo]) IllRepo {
+	eventRepo := new(PgIllRepo)
+	eventRepo.PgBaseRepo = *base
+	return eventRepo
 }
 
 func (r *PgIllRepo) SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {

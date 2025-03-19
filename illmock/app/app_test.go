@@ -264,6 +264,18 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
+	t.Run("400 handler", func(t *testing.T) {
+		resp, err := http.Get(url + "/iso18626/error400")
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+	})
+
+	t.Run("500 handler", func(t *testing.T) {
+		resp, err := http.Get(url + "/iso18626/error500")
+		assert.Nil(t, err)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
 	t.Run("flows handler: ok", func(t *testing.T) {
 		resp, err := http.Get(apiUrl)
 		assert.Nil(t, err)
@@ -622,6 +634,17 @@ func TestService(t *testing.T) {
 		m = ret[len(ret)-1].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request willsupply", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY", 6)
+		m := ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusWillSupply, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
 	t.Run("Patron request unfilled", func(t *testing.T) {
