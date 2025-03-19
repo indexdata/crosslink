@@ -2,10 +2,11 @@ package client
 
 import (
 	"errors"
-	"github.com/indexdata/crosslink/broker/shim"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/shim"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -78,7 +79,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 
 	var resultData = map[string]any{}
-	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
@@ -100,33 +100,46 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	if err != nil {
 		resultData["error"] = err.Error()
 		ctx.Logger().Error("failed to get requester", "error", err)
-		status = events.EventStatusError
-	} else if statusErr != nil {
-		resultData["error"] = statusErr.Error()
-		ctx.Logger().Error("failed to get status", "error", statusErr)
-		status = events.EventStatusError
-	} else {
-		response, err := c.SendHttpPost(&requester, message, "")
-		if response != nil {
-			resultData["response"] = response
-		}
-		if err != nil {
-			resultData["error"] = err.Error()
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			status = events.EventStatusError
-		} else {
-			illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
-			illTrans.LastSupplierStatus = pgtype.Text{
-				String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
-				Valid:  true,
-			}
-			_, err = c.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
-			if err != nil {
-				ctx.Logger().Error("failed to update ILL transaction", "error", err)
-			}
+		return events.EventStatusError, &events.EventResult{
+			Data: resultData,
 		}
 	}
-	return status, &events.EventResult{
+	if statusErr != nil {
+		resultData["error"] = statusErr.Error()
+		ctx.Logger().Error("failed to get status", "error", statusErr)
+		return events.EventStatusError, &events.EventResult{
+			Data: resultData,
+		}
+	}
+	response, err := c.SendHttpPost(&requester, message, "")
+	if response != nil {
+		resultData["response"] = response
+	}
+	if err != nil {
+		resultData["error"] = err.Error()
+		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+		return events.EventStatusError, &events.EventResult{
+			Data: resultData,
+		}
+	}
+	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+		if err != nil {
+			return err
+		}
+		illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
+		illTrans.LastSupplierStatus = pgtype.Text{
+			String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
+			Valid:  true,
+		}
+		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		return err
+	})
+	if err != nil {
+		// Should this also return status error?
+		ctx.Logger().Error("failed to update ILL transaction", "error", err)
+	}
+	return events.EventStatusSuccess, &events.EventResult{
 		Data: resultData,
 	}
 }
