@@ -127,7 +127,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.Data["supplierId"]
+	supplierId, ok := event.ResultData.CustomData["supplierId"]
 	if !ok || supplierId.(string) == "" {
 		t.Fatal("Expected to have supplierId")
 	}
@@ -198,7 +198,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.Data["supplierId"]
+	supplierId, ok := event.ResultData.CustomData["supplierId"]
 	if !ok || supplierId.(string) == "" {
 		t.Error("Expected to have supplierId")
 	}
@@ -238,10 +238,10 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	}) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
-	if supId := getSupplierId(0, event.ResultData.Data); supId != sup2.ID {
+	if supId := getSupplierId(0, event.ResultData.CustomData); supId != sup2.ID {
 		t.Errorf("Expected to sup2 be first supplier, expected %s, got %s", sup2.ID, supId)
 	}
-	if supId := getSupplierId(1, event.ResultData.Data); supId != sup1.ID {
+	if supId := getSupplierId(1, event.ResultData.CustomData); supId != sup1.ID {
 		t.Error("Expected to sup1 be second supplier")
 	}
 	// Clean
@@ -349,12 +349,13 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		supReqId    string
 		eventStatus events.EventStatus
 		message     string
+		eMsg        string
 	}{
 		{
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			message:     "ILL transaction missing SupplierUniqueRecordId",
+			eMsg:        "ILL transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -366,19 +367,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "could not find holdings for supplier request id: not-found",
+			eMsg:        "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			message:     "failed to add any supplier from: error",
+			eMsg:        "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "failed to add any supplier from: d-not-found",
+			eMsg:        "failed to add any supplier from: d-not-found",
 		},
 	}
 
@@ -416,9 +417,17 @@ func TestLocateSuppliersErrors(t *testing.T) {
 				t.Error("Expected to have request event received and processed")
 			}
 
-			errorMessage, _ := event.ResultData.Data["message"].(string)
-			if errorMessage != tt.message {
-				t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+			if tt.message != "" {
+				errorMessage, _ := event.ResultData.CustomData["message"].(string)
+				if errorMessage != tt.message {
+					t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+				}
+			}
+
+			if tt.eMsg != "" {
+				if event.ResultData.Error != tt.eMsg {
+					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Error)
+				}
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
@@ -477,9 +486,8 @@ func TestSelectSupplierErrors(t *testing.T) {
 				t.Error("expected to have request event received and processed")
 			}
 
-			errorMessage, _ := event.ResultData.Data["message"].(string)
-			if errorMessage != tt.message {
-				t.Errorf("expected message '%s' got :'%s'", tt.message, errorMessage)
+			if event.ResultData.Error != tt.message {
+				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Error)
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
