@@ -147,70 +147,71 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	if err != nil {
 		resultData["error"] = err.Error()
 		ctx.Logger().Error("failed to get supplier", "error", err)
-		status = events.EventStatusError
+		return events.EventStatusError, &events.EventResult{
+			Data: resultData,
+		}
+	}
+	var message = &iso18626.ISO18626Message{}
+	internalErr := ""
+	if isRequest {
+		message.Request = &iso18626.Request{
+			Header:                c.createMessageHeader(illTrans, peer, true),
+			BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
+			PublicationInfo:       illTrans.IllTransactionData.PublicationInfo,
+			ServiceInfo:           illTrans.IllTransactionData.ServiceInfo,
+			SupplierInfo:          illTrans.IllTransactionData.SupplierInfo,
+			RequestedDeliveryInfo: illTrans.IllTransactionData.RequestedDeliveryInfo,
+			PatronInfo:            illTrans.IllTransactionData.PatronInfo,
+			BillingInfo:           illTrans.IllTransactionData.BillingInfo,
+			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
+		}
+		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
+		c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
 	} else {
-		var message = &iso18626.ISO18626Message{}
-		internalErr := ""
-		if isRequest {
-			message.Request = &iso18626.Request{
-				Header:                c.createMessageHeader(illTrans, peer, true),
-				BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
-				PublicationInfo:       illTrans.IllTransactionData.PublicationInfo,
-				ServiceInfo:           illTrans.IllTransactionData.ServiceInfo,
-				SupplierInfo:          illTrans.IllTransactionData.SupplierInfo,
-				RequestedDeliveryInfo: illTrans.IllTransactionData.RequestedDeliveryInfo,
-				PatronInfo:            illTrans.IllTransactionData.PatronInfo,
-				BillingInfo:           illTrans.IllTransactionData.BillingInfo,
-				RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
-			}
-			message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-			c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
+		var action iso18626.TypeAction
+		found, ok := actionMap[illTrans.LastRequesterAction.String]
+		if ok {
+			action = found
 		} else {
-			var action iso18626.TypeAction
-			found, ok := actionMap[illTrans.LastRequesterAction.String]
-			if ok {
-				action = found
-			} else {
-				internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
-			}
-			message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-				Header: c.createMessageHeader(illTrans, peer, true),
-				Action: action,
-				Note:   "",
-			}
-			c.updateSelectedSupplierAction(selected, string(action))
+			internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
 		}
-		resultData["message"] = message
-		if internalErr != "" {
-			resultData["error"] = internalErr
-			ctx.Logger().Error("failed to create message", "error", internalErr)
-			status = events.EventStatusProblem
-		} else {
-			response, err := c.SendHttpPost(peer, message, "")
-			if response != nil {
-				resultData["response"] = response
-			}
-			if err != nil {
-				resultData["error"] = err.Error()
-				ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-				status = events.EventStatusError
-			} else {
-				status = c.checkConfirmationError(isRequest, response, status)
-			}
+		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+			Header: c.createMessageHeader(illTrans, peer, true),
+			Action: action,
+			Note:   "",
 		}
-		err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-			locsup, _, err := c.getSupplier(ctx, illTrans)
-			if err != nil {
-				return err // transaction gone meanwhile
-			}
-			locsup.PrevAction = selected.PrevAction
-			locsup.LastAction = selected.LastAction
-			_, err = c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*locsup))
-			return err
-		})
+		c.updateSelectedSupplierAction(selected, string(action))
+	}
+	resultData["message"] = message
+	if internalErr != "" {
+		resultData["error"] = internalErr
+		ctx.Logger().Error("failed to create message", "error", internalErr)
+		status = events.EventStatusProblem
+	} else {
+		response, err := c.SendHttpPost(peer, message, "")
+		if response != nil {
+			resultData["response"] = response
+		}
 		if err != nil {
-			ctx.Logger().Error("failed updating supplier", "error", err)
+			resultData["error"] = err.Error()
+			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+			status = events.EventStatusError
+		} else {
+			status = c.checkConfirmationError(isRequest, response, status)
 		}
+	}
+	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		locsup, err := c.illRepo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+		if err != nil {
+			return err // transaction gone meanwhile
+		}
+		locsup.PrevAction = selected.PrevAction
+		locsup.LastAction = selected.LastAction
+		_, err = c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
+		return err
+	})
+	if err != nil {
+		ctx.Logger().Error("failed updating supplier", "error", err)
 	}
 	return status, &events.EventResult{
 		Data: resultData,
