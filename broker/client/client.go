@@ -198,7 +198,19 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 				status = c.checkConfirmationError(isRequest, response, status)
 			}
 		}
-		utils.Must(c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*selected)))
+		err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+			locsup, _, err := c.getSupplier(ctx, illTrans)
+			if err != nil {
+				return err // transaction gone meanwhile
+			}
+			locsup.PrevAction = selected.PrevAction
+			locsup.LastAction = selected.LastAction
+			_, err = c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(*locsup))
+			return err
+		})
+		if err != nil {
+			ctx.Logger().Error("failed updating supplier", "error", err)
+		}
 	}
 	return status, &events.EventResult{
 		Data: resultData,
