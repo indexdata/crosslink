@@ -473,7 +473,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 		wait.wg.Done()
 		return resmsg, nil
 	} else {
-		return nil, errors.New("did not find request by id: " + requestId)
+		return nil, fmt.Errorf("cannot confirm request %s, not found", requestId)
 	}
 }
 
