@@ -264,6 +264,18 @@ func TestService(t *testing.T) {
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
+	t.Run("400 handler", func(t *testing.T) {
+		resp, err := http.Get(url + "/iso18626/error400")
+		assert.Nil(t, err)
+		assert.Equal(t, 400, resp.StatusCode)
+	})
+
+	t.Run("500 handler", func(t *testing.T) {
+		resp, err := http.Get(url + "/iso18626/error500")
+		assert.Nil(t, err)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
 	t.Run("flows handler: ok", func(t *testing.T) {
 		resp, err := http.Get(apiUrl)
 		assert.Nil(t, err)
