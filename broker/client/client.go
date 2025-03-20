@@ -156,8 +156,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
-	internalErr := ""
-	var lastAction string
+	var action string
 	if isRequest {
 		message.Request = &iso18626.Request{
 			Header:                c.createMessageHeader(illTrans, peer, true),
@@ -171,47 +170,43 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		lastAction = ill_db.RequestAction
+		action = ill_db.RequestAction
 	} else {
-		var action iso18626.TypeAction
 		found, ok := actionMap[illTrans.LastRequesterAction.String]
-		if ok {
-			action = found
-		} else {
-			internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
+		if !ok {
+			var internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
+			resData.Error = internalErr
+			ctx.Logger().Error("failed to create message", "error", internalErr)
+			return events.EventStatusProblem, &events.EventResult{
+				CommonEventData: resData,
+			}
 		}
 		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 			Header: c.createMessageHeader(illTrans, peer, true),
-			Action: action,
+			Action: found,
 			Note:   "",
 		}
-		lastAction = string(action)
+		action = string(found)
 	}
 	resData.OutgoingMessage = message
-	if internalErr != "" {
-		resData.Error = internalErr
-		ctx.Logger().Error("failed to create message", "error", internalErr)
-		status = events.EventStatusProblem
+	response, err := c.SendHttpPost(peer, message, "")
+	if response != nil {
+		resData.IncomingMessage = response
+	}
+	if err != nil {
+		var httpErr *httpclient.HttpError
+		if errors.As(err, &httpErr) {
+			resData.HttpFailureBody = httpErr.Body
+			resData.HttpFailureStatus = httpErr.StatusCode
+		}
+		resData.Error = err.Error()
+		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+		status = events.EventStatusError
 	} else {
-		response, err := c.SendHttpPost(peer, message, "")
-		if response != nil {
-			resData.IncomingMessage = response
-		}
-		if err != nil {
-			var httpErr *httpclient.HttpError
-			if errors.As(err, &httpErr) {
-				resData.HttpFailureBody = httpErr.Body
-				resData.HttpFailureStatus = httpErr.StatusCode
-			}
-			resData.Error = err.Error()
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			status = events.EventStatusError
-		} else {
-			status = c.checkConfirmationError(isRequest, response, status)
-		}
+		status = c.checkConfirmationError(isRequest, response, status)
 	}
 	// check for status == EvenStatusError and NOT save??
-	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, lastAction)
+	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
 	if err != nil {
 		ctx.Logger().Error("failed updating supplier", "error", err)
 		resData.Error = err.Error()
