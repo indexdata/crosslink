@@ -215,11 +215,13 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	} else {
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	}
-	if status == iso18626.TypeStatusLoaned {
+	switch status {
+	case iso18626.TypeStatusLoaned:
 		state.loaned = true
-	}
-	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled || status == iso18626.TypeStatusRetryPossible ||
-		status == iso18626.TypeStatusCopyCompleted {
+	case iso18626.TypeStatusLoanCompleted,
+		iso18626.TypeStatusUnfilled,
+		iso18626.TypeStatusRetryPossible,
+		iso18626.TypeStatusCopyCompleted:
 		supplier.delete(header)
 	}
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
