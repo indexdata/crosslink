@@ -157,6 +157,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	internalErr := ""
+	var lastAction string
 	if isRequest {
 		message.Request = &iso18626.Request{
 			Header:                c.createMessageHeader(illTrans, peer, true),
@@ -170,7 +171,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
+		lastAction = ill_db.RequestAction
 	} else {
 		var action iso18626.TypeAction
 		found, ok := actionMap[illTrans.LastRequesterAction.String]
@@ -184,7 +185,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			Action: action,
 			Note:   "",
 		}
-		c.updateSelectedSupplierAction(selected, string(action))
+		lastAction = string(action)
 	}
 	resData.OutgoingMessage = message
 	if internalErr != "" {
@@ -210,16 +211,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 	}
 	// check for status == EvenStatusError and NOT save??
-	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
-		if err != nil {
-			return err // transaction gone meanwhile
-		}
-		locsup.PrevAction = selected.PrevAction
-		locsup.LastAction = selected.LastAction
-		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
-		return err
-	})
+	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, lastAction)
 	if err != nil {
 		ctx.Logger().Error("failed updating supplier", "error", err)
 		resData.Error = err.Error()
@@ -230,12 +222,20 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	}
 }
 
-func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplier, action string) {
-	sup.PrevAction = sup.LastAction
-	sup.LastAction = pgtype.Text{
-		String: action,
-		Valid:  true,
-	}
+func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
+	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, id)
+		if err != nil {
+			return err // transaction gone meanwhile
+		}
+		locsup.PrevAction = locsup.LastAction
+		locsup.LastAction = pgtype.Text{
+			String: action,
+			Valid:  true,
+		}
+		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
+		return err
+	})
 }
 
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
