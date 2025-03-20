@@ -200,18 +200,21 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			status = c.checkConfirmationError(isRequest, response, status)
 		}
 	}
+	// check for status == EvenStatusError and NOT save??
 	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locsup, err := c.illRepo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 		if err != nil {
 			return err // transaction gone meanwhile
 		}
 		locsup.PrevAction = selected.PrevAction
 		locsup.LastAction = selected.LastAction
-		_, err = c.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
+		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
 		return err
 	})
 	if err != nil {
 		ctx.Logger().Error("failed updating supplier", "error", err)
+		resultData["error"] = err.Error()
+		status = events.EventStatusError
 	}
 	return status, &events.EventResult{
 		Data: resultData,
