@@ -422,10 +422,18 @@ func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx ex
 	return ill_db.IllTransaction{}, pgx.ErrNoRows
 }
 
+func (r *MockRepositoryReqNotFound) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+	return pgx.ErrNoRows
+}
+
 type MockRepositoryReqExists struct {
 	test.MockIllRepositorySuccess
 }
 
 func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, &pgconn.PgError{Code: "23505"}
+}
+
+func (r *MockRepositoryReqExists) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+	return &pgconn.PgError{Code: "23505"}
 }
