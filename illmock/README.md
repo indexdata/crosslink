@@ -64,7 +64,7 @@ following values are recognized:
 |`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
 |`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
 |`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
-|`COMPLETED`                | Respond with `CopyCompleted` if ServiceType=`Loan`; otherwise `LoanCompleted`       |
+|`COMPLETED`                | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
 |`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error                      |
 |`HTTP-ERROR-400`           | Respond with HTTP `400` status                                                      |
 |`HTTP-ERROR-500`           | Respond with HTTP `500` status                                                      |
