@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/indexdata/go-utils/utils"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -247,18 +250,34 @@ func toApiEvent(event events.Event) oapi.Event {
 		EventStatus:      string(event.EventStatus),
 		ParentID:         toString(event.ParentID),
 	}
-	eventData := make(map[string]interface{})
-	eventData["Timestamp"] = event.EventData.Timestamp.Time
-	if event.EventData.ISO18626Message != nil {
-		eventData["ISO18626Message"] = event.EventData.ISO18626Message
-	}
+	eventData := utils.Must(structToMap(event.EventData))
 	api.EventData = &eventData
-	resultData := make(map[string]interface{})
-	for key, value := range event.ResultData.Data {
-		resultData[key] = value
-	}
+	resultData := utils.Must(structToMap(event.ResultData))
 	api.ResultData = &resultData
 	return api
+}
+
+func structToMap(obj interface{}) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+	val := reflect.ValueOf(obj)
+	typ := reflect.TypeOf(obj)
+
+	if val.Kind() == reflect.Ptr {
+		val = val.Elem()
+		typ = typ.Elem()
+	}
+
+	if val.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("input is not a struct")
+	}
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		fieldName := typ.Field(i).Name
+		result[fieldName] = field.Interface()
+	}
+
+	return result, nil
 }
 
 func toApiIllTransaction(trans ill_db.IllTransaction) oapi.IllTransaction {
