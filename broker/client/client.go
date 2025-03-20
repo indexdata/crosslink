@@ -170,7 +170,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
-	internalErr := ""
+	var action string
 	if isRequest {
 		message.Request = &iso18626.Request{
 			Header:                c.createMessageHeader(illTrans, peer, true),
@@ -184,56 +184,43 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		c.updateSelectedSupplierAction(selected, ill_db.RequestAction)
+		action = ill_db.RequestAction
 	} else {
-		var action iso18626.TypeAction
 		found, ok := actionMap[illTrans.LastRequesterAction.String]
-		if ok {
-			action = found
-		} else {
-			internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
+		if !ok {
+			var internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
+			resData.Error = internalErr
+			ctx.Logger().Error("failed to create message", "error", internalErr)
+			return events.EventStatusProblem, &events.EventResult{
+				CommonEventData: resData,
+			}
 		}
 		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 			Header: c.createMessageHeader(illTrans, peer, true),
-			Action: action,
+			Action: found,
 			Note:   "",
 		}
-		c.updateSelectedSupplierAction(selected, string(action))
+		action = string(found)
 	}
 	resData.OutgoingMessage = message
-	if internalErr != "" {
-		resData.Error = internalErr
-		ctx.Logger().Error("failed to create message", "error", internalErr)
-		status = events.EventStatusProblem
+	response, err := c.SendHttpPost(peer, message, "")
+	if response != nil {
+		resData.IncomingMessage = response
+	}
+	if err != nil {
+		var httpErr *httpclient.HttpError
+		if errors.As(err, &httpErr) {
+			resData.HttpFailureBody = httpErr.Body
+			resData.HttpFailureStatus = httpErr.StatusCode
+		}
+		resData.Error = err.Error()
+		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+		status = events.EventStatusError
 	} else {
-		response, err := c.SendHttpPost(peer, message, "")
-		if response != nil {
-			resData.IncomingMessage = response
-		}
-		if err != nil {
-			var httpErr *httpclient.HttpError
-			if errors.As(err, &httpErr) {
-				resData.HttpFailureBody = httpErr.Body
-				resData.HttpFailureStatus = httpErr.StatusCode
-			}
-			resData.Error = err.Error()
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			status = events.EventStatusError
-		} else {
-			status = c.checkConfirmationError(isRequest, response, status)
-		}
+		status = c.checkConfirmationError(isRequest, response, status)
 	}
 	// check for status == EvenStatusError and NOT save??
-	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
-		if err != nil {
-			return err // transaction gone meanwhile
-		}
-		locsup.PrevAction = selected.PrevAction
-		locsup.LastAction = selected.LastAction
-		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
-		return err
-	})
+	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
 	if err != nil {
 		ctx.Logger().Error("failed updating supplier", "error", err)
 		resData.Error = err.Error()
@@ -244,12 +231,20 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	}
 }
 
-func (c *Iso18626Client) updateSelectedSupplierAction(sup *ill_db.LocatedSupplier, action string) {
-	sup.PrevAction = sup.LastAction
-	sup.LastAction = pgtype.Text{
-		String: action,
-		Valid:  true,
-	}
+func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
+	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, id)
+		if err != nil {
+			return err // transaction gone meanwhile
+		}
+		locsup.PrevAction = locsup.LastAction
+		locsup.LastAction = pgtype.Text{
+			String: action,
+			Valid:  true,
+		}
+		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
+		return err
+	})
 }
 
 func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {

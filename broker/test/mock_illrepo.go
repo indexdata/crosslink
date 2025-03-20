@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 
@@ -135,7 +136,7 @@ func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSupplier(c
 }
 
 func (r *MockIllRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
-	return nil
+	return errors.New("DB error")
 }
 
 func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
