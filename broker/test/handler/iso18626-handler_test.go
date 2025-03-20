@@ -422,6 +422,10 @@ func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx ex
 	return ill_db.IllTransaction{}, pgx.ErrNoRows
 }
 
+func (r *MockRepositoryReqNotFound) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+	return pgx.ErrNoRows
+}
+
 type MockRepositoryReqExists struct {
 	test.MockIllRepositorySuccess
 }

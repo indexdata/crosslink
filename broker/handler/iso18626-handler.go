@@ -248,16 +248,8 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 
-	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
-			return
-		}
-		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
-	}
+	var err error
+	var illTrans ill_db.IllTransaction
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 		if err != nil {
@@ -269,6 +261,10 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return err
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
+			return
+		}
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
