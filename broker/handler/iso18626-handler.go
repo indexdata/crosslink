@@ -258,16 +258,21 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-
-	illTrans.PrevRequesterAction = illTrans.LastRequesterAction
-	illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
-	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
+		if err != nil {
+			return err
+		}
+		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
+		illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
+		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		return err
+	})
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: illMessage,

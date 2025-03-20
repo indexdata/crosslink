@@ -429,3 +429,7 @@ type MockRepositoryReqExists struct {
 func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, &pgconn.PgError{Code: "23505"}
 }
+
+func (r *MockRepositoryReqExists) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+	return &pgconn.PgError{Code: "23505"}
+}
