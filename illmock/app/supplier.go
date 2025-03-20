@@ -96,6 +96,12 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryLoanCondition
 		reasonRetry = &x
+	case "COMPLETED":
+		if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
+			status = append(status, iso18626.TypeStatusCopyCompleted)
+		} else {
+			status = append(status, iso18626.TypeStatusLoanCompleted)
+		}
 	case "WILLSUPPLY":
 		status = append(status, iso18626.TypeStatusWillSupply)
 	case "WILLSUPPLY_LOANED":
@@ -212,7 +218,8 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	if status == iso18626.TypeStatusLoaned {
 		state.loaned = true
 	}
-	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled || status == iso18626.TypeStatusRetryPossible {
+	if status == iso18626.TypeStatusLoanCompleted || status == iso18626.TypeStatusUnfilled || status == iso18626.TypeStatusRetryPossible ||
+		status == iso18626.TypeStatusCopyCompleted {
 		supplier.delete(header)
 	}
 	if app.sendSupplyingAgencyMessage(header, state, msg) {
