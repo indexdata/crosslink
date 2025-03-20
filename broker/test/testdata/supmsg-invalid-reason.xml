@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ISO18626Message
+    xmlns="http://illtransactions.org/2013/iso18626"
+    xmlns:ill="http://illtransactions.org/2013/iso18626"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ill:version="1.2"
+    xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <supplyingAgencyMessage>
+        <header>
+            <supplyingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>SUP</agencyIdValue>
+            </supplyingAgencyId>
+            <requestingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>BROKER</agencyIdValue>
+            </requestingAgencyId>
+            <multipleItemRequestId></multipleItemRequestId>
+            <timestamp>2024-12-12T20:12:00.62959771Z</timestamp>
+            <requestingAgencyRequestId>reqid</requestingAgencyRequestId>
+            <supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</supplyingAgencyRequestId>
+        </header>
+        <messageInfo>
+            <reasonForMessage>NoGoodReason</reasonForMessage>
+        </messageInfo>
+        <statusInfo>
+            <status>Loaned</status>
+            <lastChange>2024-12-12T20:12:00.629710681Z</lastChange>
+        </statusInfo>
+        <deliveryInfo>
+            <dateSent>2024-12-12T20:12:00.629725783Z</dateSent>
+            <itemId>12345</itemId>
+        </deliveryInfo>
+    </supplyingAgencyMessage>
+</ISO18626Message>
