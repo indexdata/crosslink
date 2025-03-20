@@ -79,7 +79,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 
 	resData := events.CommonEventData{}
-	var status = events.EventStatusSuccess
 
 	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
@@ -101,40 +100,55 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	if err != nil {
 		resData.Error = err.Error()
 		ctx.Logger().Error("failed to get requester", "error", err)
-		status = events.EventStatusError
-	} else if statusErr != nil {
+		return events.EventStatusError, &events.EventResult{
+			CommonEventData: resData,
+		}
+	}
+	if statusErr != nil {
 		resData.Error = statusErr.Error()
 		ctx.Logger().Error("failed to get status", "error", statusErr)
-		status = events.EventStatusError
-	} else {
-		response, err := c.SendHttpPost(&requester, message, "")
-		if response != nil {
-			resData.IncomingMessage = response
-		}
-		if err != nil {
-			var httpErr *httpclient.HttpError
-			if errors.As(err, &httpErr) {
-				resData.HttpFailureBody = httpErr.Body
-				resData.HttpFailureStatus = httpErr.StatusCode
-			}
-			resData.Error = err.Error()
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			status = events.EventStatusError
-		} else {
-			illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
-			illTrans.LastSupplierStatus = pgtype.Text{
-				String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
-				Valid:  true,
-			}
-			_, err = c.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
-			if err != nil {
-				ctx.Logger().Error("failed to update ILL transaction", "error", err)
-			}
+		return events.EventStatusError, &events.EventResult{
+			CommonEventData: resData,
 		}
 	}
-	return status, &events.EventResult{
+	response, err := c.SendHttpPost(&requester, message, "")
+	if response != nil {
+		resData.IncomingMessage = response
+	}
+	if err != nil {
+		resData.Error = err.Error()
+		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+		return events.EventStatusError, &events.EventResult{
+			CommonEventData: resData,
+		}
+	}
+	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
+	if err != nil {
+		resData.Error = err.Error()
+		ctx.Logger().Error("failed to update supplier status", "error", err)
+		return events.EventStatusError, &events.EventResult{
+			CommonEventData: resData,
+		}
+	}
+	return events.EventStatusSuccess, &events.EventResult{
 		CommonEventData: resData,
 	}
+}
+
+func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
+	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		illTrans, err := repo.GetIllTransactionById(ctx, id)
+		if err != nil {
+			return err
+		}
+		illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
+		illTrans.LastSupplierStatus = pgtype.Text{
+			String: status,
+			Valid:  true,
+		}
+		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		return err
+	})
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
