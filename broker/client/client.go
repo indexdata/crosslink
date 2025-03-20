@@ -122,26 +122,33 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			Data: resultData,
 		}
 	}
-	err = c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
+	if err != nil {
+		resultData["error"] = err.Error()
+		ctx.Logger().Error("failed to update supplier status", "error", err)
+		return events.EventStatusError, &events.EventResult{
+			Data: resultData,
+		}
+	}
+	return events.EventStatusSuccess, &events.EventResult{
+		Data: resultData,
+	}
+}
+
+func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
+	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		illTrans, err := repo.GetIllTransactionById(ctx, id)
 		if err != nil {
 			return err
 		}
 		illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
 		illTrans.LastSupplierStatus = pgtype.Text{
-			String: string(message.SupplyingAgencyMessage.StatusInfo.Status),
+			String: status,
 			Valid:  true,
 		}
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	if err != nil {
-		// Should this also return status error?
-		ctx.Logger().Error("failed to update ILL transaction", "error", err)
-	}
-	return events.EventStatusSuccess, &events.EventResult{
-		Data: resultData,
-	}
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
