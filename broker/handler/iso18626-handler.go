@@ -1,13 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -159,9 +157,13 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		}
 	}
 
+	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
+
 	eventData := events.EventData{
-		Timestamp:       getNow(),
-		ISO18626Message: illMessage,
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+			OutgoingMessage: resmsg,
+		},
 	}
 	_, err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
@@ -169,8 +171,6 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-
-	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
 	writeResponse(ctx, resmsg, w)
 }
 
@@ -267,9 +267,11 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
+
 	eventData := events.EventData{
-		Timestamp:       getNow(),
-		ISO18626Message: illMessage,
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+		},
 	}
 	eventId, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
@@ -322,20 +324,22 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		return
 	}
 
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
-		Timestamp:       getNow(),
-		ISO18626Message: illMessage,
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+			OutgoingMessage: resmsg,
+		},
 	}
+	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
+	updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
-	updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
-	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
 	writeResponse(ctx, resmsg, w)
 }
 
@@ -411,51 +415,53 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 
 func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	status := events.EventStatusSuccess
-	var resultData = map[string]any{}
+	eMsg := ""
+	var resp *iso18626.ISO18626Message
 	responseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
 	originalEvent := h.eventBus.FindAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
 	if responseEvent != nil && originalEvent != nil {
-		resultData["result"] = h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.ISO18626Message, responseEvent.ResultData.Data)
+		cResp, err := h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.IncomingMessage, responseEvent.ResultData)
+		resp = cResp
+		if err != nil {
+			status = events.EventStatusProblem
+			eMsg = err.Error()
+		}
 	} else {
-		resultData["result"] = "message ancestor event missing"
+		status = events.EventStatusProblem
+		eMsg = "message ancestor event missing"
 	}
 	return status, &events.EventResult{
-		Data: resultData,
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: resp,
+			Error:           eMsg,
+		},
 	}
 }
 
-func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, respData map[string]interface{}) any {
+func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, result events.EventResult) (*iso18626.ISO18626Message, error) {
 	wait, ok := requestMapping[requestId]
 	if ok {
 		delete(requestMapping, requestId)
 		var errorMessage = ""
 		var errorType *iso18626.TypeErrorType
 		var messageStatus = iso18626.TypeMessageStatusOK
-		respMap, ok := respData["response"]
-		var resp *iso18626.ISO18626Message
-		if ok {
-			resp = toIsoMessage(ctx, respMap.(map[string]interface{}))
-		}
-		if resp != nil {
-			if resp.RequestingAgencyMessageConfirmation != nil {
-				messageStatus = resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
-				if resp.RequestingAgencyMessageConfirmation.ErrorData != nil {
-					errorMessage = resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
-					errorType = &resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
+		if result.IncomingMessage != nil {
+			if result.IncomingMessage.RequestingAgencyMessageConfirmation != nil {
+				messageStatus = result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
+				if result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData != nil {
+					errorMessage = result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
+					errorType = &result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
 				}
 			}
 		} else {
 			// We don't have response, so it was http error or connection error
-			if origError, ok := respData["error"]; ok {
-				if strVal, isString := origError.(string); isString {
-					status, responseError := parseError(strVal)
-					if responseError != nil {
-						(*wait.w).WriteHeader(status)
-						(*wait.w).Write([]byte(*responseError))
-						wait.wg.Done()
-						return strVal
-					}
+			if result.HttpFailureStatus != 0 {
+				(*wait.w).WriteHeader(result.HttpFailureStatus)
+				if len(result.HttpFailureBody) > 0 {
+					(*wait.w).Write(result.HttpFailureBody)
 				}
+				wait.wg.Done()
+				return nil, fmt.Errorf("HTTP error %d: %s", result.HttpFailureStatus, result.HttpFailureBody)
 			}
 			eType := iso18626.TypeErrorTypeBadlyFormedMessage
 			errorMessage = string(CouldNotSendReqToPeer)
@@ -465,49 +471,13 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 		var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
 		writeResponse(ctx, resmsg, *wait.w)
 		wait.wg.Done()
-		return resmsg
+		return resmsg, nil
 	} else {
-		return "did not find request by id: " + requestId
+		return nil, fmt.Errorf("cannot confirm request %s, not found", requestId)
 	}
 }
 
 type RequestWait struct {
 	w  *http.ResponseWriter
 	wg *sync.WaitGroup
-}
-
-func toIsoMessage(ctx extctx.ExtendedContext, resp map[string]interface{}) *iso18626.ISO18626Message {
-	var result iso18626.ISO18626Message
-	if resp != nil {
-		jsonString, err := json.Marshal(resp)
-		if err == nil {
-			err = json.Unmarshal(jsonString, &result)
-			if err != nil {
-				ctx.Logger().Error("unmarshal error", "error", err)
-			}
-		} else {
-			ctx.Logger().Error("marshal error", "error", err)
-		}
-	}
-	return &result
-}
-
-func getNow() pgtype.Timestamp {
-	return pgtype.Timestamp{
-		Time:  time.Now(),
-		Valid: true,
-	}
-}
-
-func parseError(errorMessage string) (int, *string) {
-	re := regexp.MustCompile(`(\d{3}):\s*(.+)`)
-	matches := re.FindStringSubmatch(errorMessage)
-	if matches == nil {
-		return 0, nil
-	}
-	errorCode, err := strconv.Atoi(matches[1])
-	if err != nil {
-		return 0, nil
-	}
-	return errorCode, &matches[2]
 }

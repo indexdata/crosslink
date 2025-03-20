@@ -46,11 +46,11 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	if event.EventData.ISO18626Message == nil || event.EventData.ISO18626Message.SupplyingAgencyMessage == nil {
+	if event.EventData.IncomingMessage == nil || event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
 	}
-	status := event.EventData.ISO18626Message.SupplyingAgencyMessage.StatusInfo.Status
+	status := event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status
 	switch status {
 	case iso18626.TypeStatusUnfilled:
 		extctx.Must(ctx, func() (string, error) {

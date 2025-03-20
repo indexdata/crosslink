@@ -127,7 +127,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.Data["supplierId"]
+	supplierId, ok := event.ResultData.CustomData["supplierId"]
 	if !ok || supplierId.(string) == "" {
 		t.Fatal("Expected to have supplierId")
 	}
@@ -198,7 +198,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.Data["supplierId"]
+	supplierId, ok := event.ResultData.CustomData["supplierId"]
 	if !ok || supplierId.(string) == "" {
 		t.Error("Expected to have supplierId")
 	}
@@ -238,10 +238,10 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	}) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
-	if supId := getSupplierId(0, event.ResultData.Data); supId != sup2.ID {
+	if supId := getSupplierId(0, event.ResultData.CustomData); supId != sup2.ID {
 		t.Errorf("Expected to sup2 be first supplier, expected %s, got %s", sup2.ID, supId)
 	}
-	if supId := getSupplierId(1, event.ResultData.Data); supId != sup1.ID {
+	if supId := getSupplierId(1, event.ResultData.CustomData); supId != sup1.ID {
 		t.Error("Expected to sup1 be second supplier")
 	}
 	// Clean
@@ -349,12 +349,13 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		supReqId    string
 		eventStatus events.EventStatus
 		message     string
+		eMsg        string
 	}{
 		{
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			message:     "ILL transaction missing SupplierUniqueRecordId",
+			eMsg:        "ILL transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -366,19 +367,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "could not find holdings for supplier request id: not-found",
+			eMsg:        "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			message:     "failed to add any supplier from: error",
+			eMsg:        "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			message:     "failed to add any supplier from: d-not-found",
+			eMsg:        "failed to add any supplier from: d-not-found",
 		},
 	}
 
@@ -416,9 +417,17 @@ func TestLocateSuppliersErrors(t *testing.T) {
 				t.Error("Expected to have request event received and processed")
 			}
 
-			errorMessage, _ := event.ResultData.Data["message"].(string)
-			if errorMessage != tt.message {
-				t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+			if tt.message != "" {
+				errorMessage, _ := event.ResultData.CustomData["message"].(string)
+				if errorMessage != tt.message {
+					t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+				}
+			}
+
+			if tt.eMsg != "" {
+				if event.ResultData.Error != tt.eMsg {
+					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Error)
+				}
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
@@ -477,9 +486,8 @@ func TestSelectSupplierErrors(t *testing.T) {
 				t.Error("expected to have request event received and processed")
 			}
 
-			errorMessage, _ := event.ResultData.Data["message"].(string)
-			if errorMessage != tt.message {
-				t.Errorf("expected message '%s' got :'%s'", tt.message, errorMessage)
+			if event.ResultData.Error != tt.message {
+				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Error)
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
@@ -617,6 +625,113 @@ func TestSuccessfulFlow(t *testing.T) {
 		return len(mesReqTask) == 2
 	}) {
 		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
+	}
+	illId := mesReqTask[0].IllTransactionID
+	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
+	if illTrans.LastRequesterAction.String != "ShippedReturn" {
+		t.Errorf("ILL transaction last requester status should be ShippedReturn not %s",
+			illTrans.LastRequesterAction.String)
+	}
+	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
+
+	if supplier.LastStatus.String != "LoanCompleted" {
+		t.Errorf("selected supplier last status should be LoanCompleted not %s",
+			supplier.LastStatus.String)
+	}
+}
+
+func TestLoanedOverdue(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrId := ""
+	var reqNotice []events.Event
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+		reqNotice = append(reqNotice, event)
+		illTrId = event.IllTransactionID
+	})
+	var supMsgNotice []events.Event
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			supMsgNotice = append(supMsgNotice, event)
+		}
+	})
+	var reqMsgNotice []events.Event
+	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			reqMsgNotice = append(reqMsgNotice, event)
+		}
+	})
+	var locateTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			locateTask = append(locateTask, event)
+		}
+	})
+	var selectTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			selectTask = append(selectTask, event)
+		}
+	})
+	var mesSupTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			mesSupTask = append(mesSupTask, event)
+		}
+	})
+	var mesReqTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			mesReqTask = append(mesReqTask, event)
+		}
+	})
+
+	data, _ := os.ReadFile("../testdata/request-loaned-overdue.xml")
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(reqNotice) == 1
+	}) {
+		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(supMsgNotice) == 3
+	}) {
+		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(reqMsgNotice) == 2
+	}) {
+		t.Errorf("should have received 2 requester messages, but got %d", len(reqMsgNotice))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(locateTask) == 1
+	}) {
+		t.Errorf("should have finished locate supplier task, but got %d", len(locateTask))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(selectTask) == 1
+	}) {
+		t.Errorf("should have 1 finished select supplier tasks, but got %d", len(selectTask))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(mesSupTask) == 3
+	}) {
+		t.Errorf("should have finished 3 message supplier tasks, but got %d", len(mesSupTask))
+	}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return len(mesReqTask) == 3
+	}) {
+		t.Errorf("should have finished 3 message requester tasks, but got %d", len(mesReqTask))
 	}
 	illId := mesReqTask[0].IllTransactionID
 	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
