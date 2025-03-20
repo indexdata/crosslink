@@ -16,10 +16,10 @@
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-11-28T10:25:11.136Z</timestamp>
-            <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f341</requestingAgencyRequestId>
+            <requestingAgencyRequestId>20e99395-4c3b-4229-ab91-49d5f7073188</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>UNFILLED;LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>LOANED_OVERDUE</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>
