@@ -73,7 +73,7 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSupplier
 }
 
 func (r *MockIllRepositorySuccess) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
-	return nil
+	return fn(r)
 }
 
 func (m *MockIllRepositorySuccess) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
@@ -154,6 +154,10 @@ func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSupplier(c
 }
 
 func (r *MockIllRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	err := fn(r)
+	if err != nil {
+		return err
+	}
 	return errors.New("DB error")
 }
 

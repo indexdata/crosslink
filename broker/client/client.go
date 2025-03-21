@@ -18,30 +18,6 @@ import (
 )
 
 var BrokerSymbol = "ISIL:BROKER"
-var StatusMap = map[string]iso18626.TypeStatus{
-	string(iso18626.TypeStatusRequestReceived):        iso18626.TypeStatusRequestReceived,
-	string(iso18626.TypeStatusExpectToSupply):         iso18626.TypeStatusExpectToSupply,
-	string(iso18626.TypeStatusWillSupply):             iso18626.TypeStatusWillSupply,
-	string(iso18626.TypeStatusLoaned):                 iso18626.TypeStatusLoaned,
-	string(iso18626.TypeStatusOverdue):                iso18626.TypeStatusOverdue,
-	string(iso18626.TypeStatusRecalled):               iso18626.TypeStatusRecalled,
-	string(iso18626.TypeStatusRetryPossible):          iso18626.TypeStatusRetryPossible,
-	string(iso18626.TypeStatusUnfilled):               iso18626.TypeStatusUnfilled,
-	string(iso18626.TypeStatusCopyCompleted):          iso18626.TypeStatusCopyCompleted,
-	string(iso18626.TypeStatusLoanCompleted):          iso18626.TypeStatusLoanCompleted,
-	string(iso18626.TypeStatusCompletedWithoutReturn): iso18626.TypeStatusCompletedWithoutReturn,
-	string(iso18626.TypeStatusCancelled):              iso18626.TypeStatusCancelled,
-}
-
-var ActionMap = map[string]iso18626.TypeAction{
-	string(iso18626.TypeActionStatusRequest):  iso18626.TypeActionStatusRequest,
-	string(iso18626.TypeActionReceived):       iso18626.TypeActionReceived,
-	string(iso18626.TypeActionCancel):         iso18626.TypeActionCancel,
-	string(iso18626.TypeActionRenew):          iso18626.TypeActionRenew,
-	string(iso18626.TypeActionShippedReturn):  iso18626.TypeActionShippedReturn,
-	string(iso18626.TypeActionShippedForward): iso18626.TypeActionShippedForward,
-	string(iso18626.TypeActionNotification):   iso18626.TypeActionNotification,
-}
 
 type Iso18626Client struct {
 	eventBus events.EventBus
@@ -194,7 +170,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
 		action = ill_db.RequestAction
 	} else {
-		found, ok := ActionMap[illTrans.LastRequesterAction.String]
+		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
 		if !ok {
 			var internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
 			resData.EventError = &events.EventError{
@@ -309,7 +285,7 @@ func (c *Iso18626Client) createMessageInfo() iso18626.MessageInfo {
 func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier, defaultStatus *iso18626.TypeStatus) (iso18626.StatusInfo, error) {
 	var status *iso18626.TypeStatus
 	if supplier != nil {
-		if s, ok := StatusMap[supplier.LastStatus.String]; ok {
+		if s, ok := iso18626.StatusMap[supplier.LastStatus.String]; ok {
 			status = &s
 		}
 	} else {

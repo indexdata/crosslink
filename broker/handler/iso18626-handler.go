@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/client"
 	"io"
 	"net/http"
 	"strings"
@@ -38,15 +37,6 @@ const (
 	InvalidStatus          ErrorValue = "%v is not valid status"
 	InvalidReason          ErrorValue = "%v is not valid reason"
 )
-
-var ReasonForMassageMap = map[string]iso18626.TypeReasonForMessage{
-	string(iso18626.TypeReasonForMessageRequestResponse):       iso18626.TypeReasonForMessageRequestResponse,
-	string(iso18626.TypeReasonForMessageStatusRequestResponse): iso18626.TypeReasonForMessageStatusRequestResponse,
-	string(iso18626.TypeReasonForMessageRenewResponse):         iso18626.TypeReasonForMessageRenewResponse,
-	string(iso18626.TypeReasonForMessageCancelResponse):        iso18626.TypeReasonForMessageCancelResponse,
-	string(iso18626.TypeReasonForMessageStatusChange):          iso18626.TypeReasonForMessageStatusChange,
-	string(iso18626.TypeReasonForMessageNotification):          iso18626.TypeReasonForMessageNotification,
-}
 
 const PublicFailedToProcessReqMsg = "failed to process request"
 const InternalFailedToLookupTx = "failed to lookup ILL transaction"
@@ -261,13 +251,23 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 
+	eventData := events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+		},
+	}
+
 	var err error
 	var illTrans ill_db.IllTransaction
-	var action string
+	var action iso18626.TypeAction
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err = repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(requestingRequestId))
 		if err != nil {
 			return err
+		}
+		action = validateAction(ctx, illMessage, w, eventData, eventBus, illTrans)
+		if action == "" {
+			return nil
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 		illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
@@ -295,9 +295,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	if action == "" {
 		return
 	}
-	illTrans.PrevRequesterAction = illTrans.LastRequesterAction
-	illTrans.LastRequesterAction = createPgText(string(action))
-	illTrans, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -320,7 +318,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 }
 
 func validateAction(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeAction {
-	action, ok := client.ActionMap[string(illMessage.RequestingAgencyMessage.Action)]
+	action, ok := iso18626.ActionMap[string(illMessage.RequestingAgencyMessage.Action)]
 	if !ok {
 		resp := handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(fmt.Sprintf(string(InvalidAction), illMessage.RequestingAgencyMessage.Action)))
 		eventData.OutgoingMessage = resp
@@ -395,7 +393,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 }
 
 func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeStatus {
-	status, ok := client.StatusMap[string(illMessage.SupplyingAgencyMessage.StatusInfo.Status)]
+	status, ok := iso18626.StatusMap[string(illMessage.SupplyingAgencyMessage.StatusInfo.Status)]
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(fmt.Sprintf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)))
 		eventData.OutgoingMessage = resp
@@ -407,7 +405,7 @@ func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *i
 		}
 		return ""
 	}
-	_, ok = ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
+	_, ok = iso18626.ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(fmt.Sprintf(string(InvalidReason), illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)))
 		eventData.OutgoingMessage = resp
