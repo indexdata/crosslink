@@ -78,7 +78,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		return events.EventStatusError, nil
 	}
 
-	ctx.Logger().Info("AD: createAndSendSupplyingAgencyMessage", "action", illTrans.LastRequesterAction.String)
 	resData := events.CommonEventData{}
 
 	var message = &iso18626.ISO18626Message{}
@@ -152,7 +151,7 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	ctx.Logger().Info("AD: updateSupplierStatus", "action", action)
+	ctx.Logger().Info("CROSSLINK-83: updateSupplierStatus SAVE", "action", action)
 	return err
 }
 
@@ -173,7 +172,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 	}
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
-	ctx.Logger().Info("AD: sending message", "action", illTrans.LastRequesterAction.String, "isRequest", isRequest)
+	ctx.Logger().Info("CROSSLINK-83: createAndSendRequestOrRequestingAgencyMessage USE", "action", illTrans.LastRequesterAction.String, "isRequest", isRequest)
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	var action string
