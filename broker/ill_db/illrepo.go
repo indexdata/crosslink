@@ -15,6 +15,7 @@ import (
 type IllRepo interface {
 	repo.Transactional[IllRepo]
 	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
+	UpdateSupplierStatus(ctx extctx.ExtendedContext, params UpdateSupplierStatusParams) error
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
@@ -50,6 +51,10 @@ func (r *PgIllRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[IllRepo]) IllRepo
 func (r *PgIllRepo) SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
 	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
 	return row.IllTransaction, err
+}
+
+func (r *PgIllRepo) UpdateSupplierStatus(ctx extctx.ExtendedContext, params UpdateSupplierStatusParams) error {
+	return r.queries.UpdateSupplierStatus(ctx, r.GetConnOrTx(), params)
 }
 
 func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {

@@ -136,19 +136,14 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
-	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		illTrans, err := repo.GetIllTransactionById(ctx, id)
-		if err != nil {
-			return err
-		}
-		illTrans.PrevSupplierStatus = illTrans.LastSupplierStatus
-		illTrans.LastSupplierStatus = pgtype.Text{
+	p := ill_db.UpdateSupplierStatusParams{
+		ID: id,
+		LastSupplierStatus: pgtype.Text{
 			String: status,
 			Valid:  true,
-		}
-		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
-		return err
-	})
+		},
+	}
+	return c.illRepo.UpdateSupplierStatus(ctx, p)
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

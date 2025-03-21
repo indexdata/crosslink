@@ -69,6 +69,13 @@ ON CONFLICT (id) DO UPDATE
         prev_supplier_status  = EXCLUDED.prev_supplier_status
 RETURNING sqlc.embed(ill_transaction);
 
+-- name: UpdateSupplierStatus :exec
+UPDATE ill_transaction
+SET prev_supplier_status = last_supplier_status,
+    last_supplier_status = $2
+
+WHERE id = $1;
+
 -- name: DeleteIllTransaction :exec
 DELETE
 FROM ill_transaction

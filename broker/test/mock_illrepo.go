@@ -75,6 +75,10 @@ func (m *MockIllRepositorySuccess) SaveIllTransaction(ctx extctx.ExtendedContext
 	return illTransaction, nil
 }
 
+func (m *MockIllRepositorySuccess) UpdateSupplierStatus(ctx extctx.ExtendedContext, params ill_db.UpdateSupplierStatusParams) error {
+	return nil
+}
+
 func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{
 		ID:                 "id",
@@ -141,6 +145,10 @@ func (r *MockIllRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(
 
 func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
+}
+
+func (m *MockIllRepositoryError) UpdateSupplierStatus(ctx extctx.ExtendedContext, params ill_db.UpdateSupplierStatusParams) error {
+	return errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
