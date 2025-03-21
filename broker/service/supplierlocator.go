@@ -97,7 +97,9 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		}
 	}
 
-	return events.EventStatusSuccess, getEventResultWithError("", map[string]any{"suppliers": locatedSuppliers})
+	return events.EventStatusSuccess, &events.EventResult{
+		CustomData: map[string]any{"suppliers": locatedSuppliers},
+	}
 }
 
 func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
@@ -157,25 +159,30 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 	if err != nil {
 		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	return events.EventStatusSuccess, getEventResultWithError("", map[string]any{"supplierId": locSup.SupplierID})
+	return events.EventStatusSuccess, &events.EventResult{
+		CustomData: map[string]any{"supplierId": locSup.SupplierID},
+	}
 }
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Error(message, "error", err)
-	return events.EventStatusError, getEventResultWithError(err.Error(), map[string]any{"message": message})
+	return events.EventStatusError, &events.EventResult{
+		CommonEventData: events.CommonEventData{
+			EventError: &events.EventError{
+				Message: message,
+				Cause:   err.Error(),
+			},
+		},
+	}
 }
 
 func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Info(message)
-	return events.EventStatusProblem, getEventResultWithError(message, map[string]any{"kindOfProblem": "no-suppliers"})
-}
-
-func getEventResultWithError(eMsg string, customData map[string]any) *events.EventResult {
-	return &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			Error: eMsg,
+	return events.EventStatusProblem, &events.EventResult{
+		Problem: &events.Problem{
+			Kind:    "no-suppliers",
+			Details: message,
 		},
-		CustomData: customData,
 	}
 }
 
