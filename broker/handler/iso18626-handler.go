@@ -419,27 +419,27 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 
 func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	status := events.EventStatusSuccess
-	eMsg := ""
-	var resp *iso18626.ISO18626Message
+	resData := events.EventResult{}
 	responseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
 	originalEvent := h.eventBus.FindAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
 	if responseEvent != nil && originalEvent != nil {
 		cResp, err := h.confirmSupplierResponse(ctx, originalEvent.ID, originalEvent.EventData.IncomingMessage, responseEvent.ResultData)
-		resp = cResp
+		resData.IncomingMessage = cResp
 		if err != nil {
-			status = events.EventStatusProblem
-			eMsg = err.Error()
+			status = events.EventStatusError
+			resData.EventError = &events.EventError{
+				Message: "failed tp confirm supplier message",
+				Cause:   err.Error(),
+			}
 		}
 	} else {
-		status = events.EventStatusProblem
-		eMsg = "message ancestor event missing"
+		status = events.EventStatusError
+		resData.EventError = &events.EventError{
+			Message: "missing ancestor events",
+			Cause:   "message ancestor event missing",
+		}
 	}
-	return status, &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: resp,
-			Error:           eMsg,
-		},
-	}
+	return status, &resData
 }
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, result events.EventResult) (*iso18626.ISO18626Message, error) {
@@ -459,13 +459,13 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, re
 			}
 		} else {
 			// We don't have response, so it was http error or connection error
-			if result.HttpFailureStatus != 0 {
-				(*wait.w).WriteHeader(result.HttpFailureStatus)
-				if len(result.HttpFailureBody) > 0 {
-					(*wait.w).Write(result.HttpFailureBody)
+			if result.HttpFailure != nil {
+				(*wait.w).WriteHeader(result.HttpFailure.StatusCode)
+				if len(result.HttpFailure.Body) > 0 {
+					(*wait.w).Write(result.HttpFailure.Body)
 				}
 				wait.wg.Done()
-				return nil, fmt.Errorf("HTTP error %d: %s", result.HttpFailureStatus, result.HttpFailureBody)
+				return nil, result.HttpFailure
 			}
 			eType := iso18626.TypeErrorTypeBadlyFormedMessage
 			errorMessage = string(CouldNotSendReqToPeer)

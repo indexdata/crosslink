@@ -858,6 +858,41 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
+	t.Run("Patron request completed loan", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "COMPLETED", 6)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request completed copy", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.Request.ServiceInfo.ServiceType = iso18626.TypeServiceTypeCopy
+		ret := runScenario(t, isoUrl, apiUrl, msg, "COMPLETED", 6)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusCopyCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
 	t.Run("Patron request, connection refused / bad peer URL", func(t *testing.T) {
 		// connect to port with no listening server
 		port := testutil.GetFreePortTest(t)

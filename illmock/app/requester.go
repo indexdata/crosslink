@@ -242,6 +242,8 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			state.renew = false
 			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
 		}
+	case iso18626.TypeStatusCopyCompleted:
+		requester.delete(header)
 	case iso18626.TypeStatusLoanCompleted:
 		requester.delete(header)
 	case iso18626.TypeStatusUnfilled:

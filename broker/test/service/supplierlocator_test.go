@@ -349,13 +349,13 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		supReqId    string
 		eventStatus events.EventStatus
 		message     string
-		eMsg        string
+		problem     string
 	}{
 		{
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "ILL transaction missing SupplierUniqueRecordId",
+			problem:     "ILL transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -367,19 +367,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "could not find holdings for supplier request id: not-found",
+			problem:     "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "failed to add any supplier from: error",
+			problem:     "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "failed to add any supplier from: d-not-found",
+			problem:     "failed to add any supplier from: d-not-found",
 		},
 	}
 
@@ -418,15 +418,14 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			}
 
 			if tt.message != "" {
-				errorMessage, _ := event.ResultData.CustomData["message"].(string)
-				if errorMessage != tt.message {
-					t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+				if event.ResultData.EventError.Message != tt.message {
+					t.Errorf("Expected message '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
 				}
 			}
 
-			if tt.eMsg != "" {
-				if event.ResultData.Error != tt.eMsg {
-					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Error)
+			if tt.problem != "" {
+				if event.ResultData.Problem.Details != tt.problem {
+					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
 				}
 			}
 
@@ -486,8 +485,8 @@ func TestSelectSupplierErrors(t *testing.T) {
 				t.Error("expected to have request event received and processed")
 			}
 
-			if event.ResultData.Error != tt.message {
-				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Error)
+			if event.ResultData.Problem.Details != tt.message {
+				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {

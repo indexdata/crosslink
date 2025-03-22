@@ -1,6 +1,7 @@
 package events
 
 import (
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -50,16 +51,26 @@ type EventData struct {
 }
 
 type CommonEventData struct {
-	IncomingMessage   *iso18626.ISO18626Message
-	OutgoingMessage   *iso18626.ISO18626Message
-	HttpFailureStatus int
-	HttpFailureBody   []byte
-	Error             string
+	IncomingMessage *iso18626.ISO18626Message `json:"incomingMessage,omitempty"`
+	OutgoingMessage *iso18626.ISO18626Message `json:"outgoingMessage,omitempty"`
+	HttpFailure     *httpclient.HttpError     `json:"httpFailure,omitempty"`
+	EventError      *EventError               `json:"eventError,omitempty"`
+}
+
+type EventError struct {
+	Message string
+	Cause   string
+}
+
+type Problem struct {
+	Kind    string
+	Details string
 }
 
 type EventResult struct {
 	CommonEventData
-	CustomData map[string]any
+	Problem    *Problem       `json:"problem,omitempty"`
+	CustomData map[string]any `json:"customData,omitempty"`
 }
 
 type NotifyData struct {
