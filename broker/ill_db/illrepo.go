@@ -16,7 +16,9 @@ type IllRepo interface {
 	repo.Transactional[IllRepo]
 	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
 	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
+	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
+	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
@@ -57,8 +59,18 @@ func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedCon
 	return row.IllTransaction, err
 }
 
+func (r *PgIllRepo) GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
+	row, err := r.queries.GetIllTransactionByRequesterRequestIdForUpdate(ctx, r.GetConnOrTx(), requesterRequestID)
+	return row.IllTransaction, err
+}
+
 func (r *PgIllRepo) GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error) {
 	row, err := r.queries.GetIllTransactionById(ctx, r.GetConnOrTx(), id)
+	return row.IllTransaction, err
+}
+
+func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error) {
+	row, err := r.queries.GetIllTransactionByIdForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.IllTransaction, err
 }
 
