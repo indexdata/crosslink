@@ -140,7 +140,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
 	var action string
 	err := c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		illTrans, err := repo.GetIllTransactionById(ctx, id)
+		illTrans, err := repo.GetIllTransactionByIdForUpdate(ctx, id)
 		if err != nil {
 			return err
 		}

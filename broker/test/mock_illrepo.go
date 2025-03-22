@@ -22,6 +22,12 @@ func (r *MockIllRepositorySuccess) GetIllTransactionById(ctx extctx.ExtendedCont
 	}, nil
 }
 
+func (r *MockIllRepositorySuccess) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{
+		ID: id,
+	}, nil
+}
+
 func (r *MockIllRepositorySuccess) SavePeer(ctx extctx.ExtendedContext, params ill_db.SavePeerParams) (ill_db.Peer, error) {
 	var peer = (ill_db.Peer)(params)
 	return peer, nil
@@ -81,6 +87,14 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestId(ctx ext
 		RequesterRequestID: requesterRequestID,
 	}, nil
 }
+
+func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{
+		ID:                 "id",
+		RequesterRequestID: requesterRequestID,
+	}, nil
+}
+
 func (r *MockIllRepositorySuccess) ListIllTransactions(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
 	return []ill_db.IllTransaction{{
 		ID: "id",
@@ -108,6 +122,10 @@ type MockIllRepositoryError struct {
 }
 
 func (r *MockIllRepositoryError) GetIllTransactionById(ctx extctx.ExtendedContext, id string) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
 
@@ -146,6 +164,11 @@ func (m *MockIllRepositoryError) SaveIllTransaction(ctx extctx.ExtendedContext, 
 func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
+
+func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, errors.New("DB error")
+}
+
 func (r *MockIllRepositoryError) ListIllTransactions(ctx extctx.ExtendedContext) ([]ill_db.IllTransaction, error) {
 	return []ill_db.IllTransaction{}, errors.New("DB error")
 }

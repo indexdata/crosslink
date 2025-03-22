@@ -252,7 +252,7 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	var illTrans ill_db.IllTransaction
 	var action string
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
+		illTrans, err = repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(requestingRequestId))
 		if err != nil {
 			return err
 		}
