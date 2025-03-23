@@ -113,7 +113,7 @@ in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` s
 By default each substring is taken verbatim, except for some special cases:
 
   * `error`: produces an SRU error (non-surrogate diagnostic).
-  * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
+  * `return-$s_$l` prefix: produces a holdings entry with `$l` as local ID and `$s` as symbol
   * `record-error`: produces SRU response with a diagnostic record.
   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
 
