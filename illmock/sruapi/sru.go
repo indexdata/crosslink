@@ -94,9 +94,19 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 		}
 		var lValue string
 		var sValue string
-		if strings.Index(id, "return-") == 0 {
-			lValue = strings.TrimPrefix(id, "return-")
-			sValue = lValue
+		if strings.HasPrefix(id, "return-") {
+			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "_", 2)
+			if len(val) < 1 || len(val[0]) < 1 {
+				return nil, fmt.Errorf("invalid return- value")
+			}
+			if len(val) == 1 {
+				sValue = val[0]
+				lValue = val[0]
+			}
+			if len(val) == 2 {
+				sValue = val[0]
+				lValue = val[1]
+			}
 		} else {
 			lValue = localId
 			sValue = "ISIL:SUP" + strconv.Itoa(i)
