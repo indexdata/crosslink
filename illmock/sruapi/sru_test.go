@@ -301,6 +301,46 @@ func TestSruService(t *testing.T) {
 		assert.True(t, matched)
 	})
 
+	t.Run("sr2.0 magic: return-", func(t *testing.T) {
+		cqlQuery := "id%3Dreturn-"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/diagnostics-v1.1", sruResp.Records.Record[0].RecordSchema)
+		assert.Contains(t, string(sruResp.Records.Record[0].RecordData.XMLContent), "<details>invalid return- value</details>")
+	})
+
+	t.Run("sr2.0 magic: return-foo_bar", func(t *testing.T) {
+		cqlQuery := "id%3Dreturn-foo_bar"
+		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
+		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
+		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
+		assert.Equal(t, uint64(1), sruResp.NumberOfRecords)
+		assert.Len(t, sruResp.Records.Record, 1)
+		assert.Equal(t, "xml", string(*sruResp.Records.Record[0].RecordXMLEscaping))
+		assert.Equal(t, "info:srw/schema/1/marcxml-v1.1", sruResp.Records.Record[0].RecordSchema)
+
+		var marc marcxml.Record
+		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
+		assert.Nil(t, err)
+
+		matched := false
+		for _, f := range marc.RecordType.Datafield {
+			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
+				matched = true
+				assert.Len(t, f.Subfield, 2)
+				assert.Equal(t, "l", f.Subfield[0].Code)
+				assert.Equal(t, "bar", string(f.Subfield[0].Text))
+				assert.Equal(t, "s", f.Subfield[1].Code)
+				assert.Equal(t, "foo", string(f.Subfield[1].Text))
+			}
+		}
+		assert.True(t, matched)
+	})
+
 	t.Run("sr2.0 magic: record-error", func(t *testing.T) {
 		cqlQuery := "id%3Drecord-error"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)

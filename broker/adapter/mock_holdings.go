@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -21,10 +22,22 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 			return []Holding{}, nil
 		}
 		if strings.Index(id, "return-") == 0 {
-			value := strings.TrimPrefix(id, "return-")
+			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "_", 2)
+			if len(val) < 1 || len(val[0]) < 1 {
+				return nil, fmt.Errorf("invalid return- value")
+			}
+			var s, l string
+			if len(val) == 1 {
+				s = val[0]
+				l = val[0]
+			}
+			if len(val) == 2 {
+				s = val[0]
+				l = val[1]
+			}
 			holdings = append(holdings, Holding{
-				Symbol:          value,
-				LocalIdentifier: value,
+				Symbol:          s,
+				LocalIdentifier: l,
 			})
 		} else {
 			holdings = append(holdings, Holding{
