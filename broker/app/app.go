@@ -38,7 +38,7 @@ var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
-
+var FORWARD_WILL_SUPPLY, _ = utils.GetEnvBool("FORWARD_WILL_SUPPLY", false)
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
@@ -76,7 +76,7 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
-	workflowManager := service.CreateWorkflowManager(eventBus, illRepo)
+	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{ForwardWillSupply: FORWARD_WILL_SUPPLY})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
 	return Context{
