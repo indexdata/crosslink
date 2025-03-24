@@ -15,7 +15,7 @@ func InitNs() {
 	utils.NSDefault(IllNs)
 	utils.NSPrefix("ill", IllNs)
 	utils.NSPrefix("xsi", XsiNs)
-	utils.AttrDefault("schemaLocation", fmt.Sprintln(IllNs, IllSl))
+	utils.AttrDefault("schemaLocation", fmt.Sprintf("%s %s", IllNs, IllSl))
 	utils.AttrDefault("version", IllV1_2)
 }
 
@@ -33,7 +33,7 @@ func NewIso18626MessageNS() *Iso18626MessageNS {
 	msg.Namespace = utils.NewPrefixAttr("xmlns", IllNs)
 	msg.NsIllPx = utils.NewPrefixAttrNS("xmlns", "ill", IllNs)
 	msg.NsXsiPx = utils.NewPrefixAttrNS("xmlns", "xsi", XsiNs)
-	msg.XsiSchemaLoc = utils.NewPrefixAttrNS(XsiNs, "schemaLocation", fmt.Sprintln(IllNs, IllSl))
+	msg.XsiSchemaLoc = utils.NewPrefixAttrNS(XsiNs, "schemaLocation", fmt.Sprintf("%s %s", IllNs, IllSl))
 	msg.ISO18626Message.Version = *utils.NewPrefixAttrNS(IllNs, "version", IllV1_2)
 	return &msg
 }

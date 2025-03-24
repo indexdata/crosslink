@@ -44,7 +44,6 @@ func TestMain(m *testing.M) {
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
-
 	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
@@ -56,6 +55,7 @@ func TestMain(m *testing.M) {
 	}()
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
+	app.FORWARD_WILL_SUPPLY = true
 	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -349,13 +349,13 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		supReqId    string
 		eventStatus events.EventStatus
 		message     string
-		eMsg        string
+		problem     string
 	}{
 		{
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "ILL transaction missing SupplierUniqueRecordId",
+			problem:     "ILL transaction missing SupplierUniqueRecordId",
 		},
 		{
 			name:        "FailedToLocateHoldings",
@@ -367,19 +367,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "could not find holdings for supplier request id: not-found",
+			problem:     "could not find holdings for supplier request id: not-found",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "failed to add any supplier from: error",
+			problem:     "failed to add any supplier from: error",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			eMsg:        "failed to add any supplier from: d-not-found",
+			problem:     "failed to add any supplier from: d-not-found",
 		},
 	}
 
@@ -418,15 +418,14 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			}
 
 			if tt.message != "" {
-				errorMessage, _ := event.ResultData.CustomData["message"].(string)
-				if errorMessage != tt.message {
-					t.Errorf("Expected message '%s' got :'%s'", tt.message, errorMessage)
+				if event.ResultData.EventError.Message != tt.message {
+					t.Errorf("Expected message '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
 				}
 			}
 
-			if tt.eMsg != "" {
-				if event.ResultData.Error != tt.eMsg {
-					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Error)
+			if tt.problem != "" {
+				if event.ResultData.Problem.Details != tt.problem {
+					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
 				}
 			}
 
@@ -486,8 +485,8 @@ func TestSelectSupplierErrors(t *testing.T) {
 				t.Error("expected to have request event received and processed")
 			}
 
-			if event.ResultData.Error != tt.message {
-				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Error)
+			if event.ResultData.Problem.Details != tt.message {
+				t.Errorf("expected message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
 			}
 
 			if !test.WaitForPredicateToBeTrue(func() bool {
@@ -597,7 +596,7 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(supMsgNotice) == 3
+		return len(supMsgNotice) == 5
 	}) {
 		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
 	}
@@ -622,7 +621,7 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("should have finished 4 message supplier tasks, but got %d", len(mesSupTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesReqTask) == 2
+		return len(mesReqTask) == 4
 	}) {
 		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
 	}

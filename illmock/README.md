@@ -64,6 +64,7 @@ following values are recognized:
 |`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
 |`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
 |`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
+|`COMPLETED`                | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
 |`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error                      |
 |`HTTP-ERROR-400`           | Respond with HTTP `400` status                                                      |
 |`HTTP-ERROR-500`           | Respond with HTTP `500` status                                                      |
@@ -112,7 +113,7 @@ in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` s
 By default each substring is taken verbatim, except for some special cases:
 
   * `error`: produces an SRU error (non-surrogate diagnostic).
-  * `return-` prefix: produces a holdings entry with both `$l`, `$s` of the suffix.
+  * `return-$s_$l` prefix: produces a holdings entry with `$l` as local ID and `$s` as symbol
   * `record-error`: produces SRU response with a diagnostic record.
   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
 

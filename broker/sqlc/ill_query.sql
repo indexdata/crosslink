@@ -39,10 +39,24 @@ FROM ill_transaction
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetIllTransactionByIdForUpdate :one
+SELECT sqlc.embed(ill_transaction)
+FROM ill_transaction
+WHERE id = $1
+FOR UPDATE
+LIMIT 1;
+
 -- name: GetIllTransactionByRequesterRequestId :one
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
 WHERE requester_request_id = $1
+LIMIT 1;
+
+-- name: GetIllTransactionByRequesterRequestIdForUpdate :one
+SELECT sqlc.embed(ill_transaction)
+FROM ill_transaction
+WHERE requester_request_id = $1
+FOR UPDATE
 LIMIT 1;
 
 -- name: ListIllTransactions :many

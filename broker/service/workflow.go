@@ -10,12 +10,18 @@ import (
 type WorkflowManager struct {
 	eventBus events.EventBus
 	illRepo  ill_db.IllRepo
+	config   WorkflowConfig
 }
 
-func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo) WorkflowManager {
+type WorkflowConfig struct {
+	ForwardWillSupply bool
+}
+
+func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, config WorkflowConfig) WorkflowManager {
 	return WorkflowManager{
 		eventBus: eventBus,
 		illRepo:  illRepo,
+		config:   config,
 	}
 }
 
@@ -46,12 +52,21 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
+	if event.EventStatus != events.EventStatusSuccess {
+		return
+	}
 	if event.EventData.IncomingMessage == nil || event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
 	}
 	status := event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status
 	switch status {
+	case iso18626.TypeStatusWillSupply:
+		if w.config.ForwardWillSupply {
+			extctx.Must(ctx, func() (string, error) {
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+			}, "")
+		}
 	case iso18626.TypeStatusUnfilled:
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
@@ -59,23 +74,22 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 	case iso18626.TypeStatusLoaned,
 		iso18626.TypeStatusOverdue,
 		iso18626.TypeStatusRecalled,
+		iso18626.TypeStatusCancelled,
 		iso18626.TypeStatusCopyCompleted,
 		iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusCompletedWithoutReturn:
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 		}, "")
-	case iso18626.TypeStatusCancelled:
-		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID) // TODO Check message. Maybe need to send message to requester
-		}, "")
 	}
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	extctx.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
-	}, "")
+	if event.EventStatus == events.EventStatusSuccess {
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+		}, "")
+	}
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
