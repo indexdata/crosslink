@@ -53,7 +53,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to read ILL transaction", "error", err)
 		return events.EventStatusError, nil
 	}
-
 	resData := events.EventResult{}
 
 	var message = &iso18626.ISO18626Message{}
@@ -62,9 +61,15 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	if locSupplier == nil {
 		dStatus := iso18626.TypeStatusUnfilled
 		defaultStatus = &dStatus
+	} else if locSupplier.LastStatus.String == string(iso18626.TypeStatusWillSupply) {
+		fwStatus := illTrans.LastSupplierStatus.String
+		if len(fwStatus) > 0 && fwStatus != string(iso18626.TypeStatusExpectToSupply) {
+			resData.Note = "status WillSupply already communicated and will be ignored"
+			return events.EventStatusSuccess, &resData
+		}
 	}
-	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier, defaultStatus)
 
+	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier, defaultStatus)
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
 		MessageInfo: c.createMessageInfo(),
