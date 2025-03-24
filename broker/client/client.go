@@ -88,7 +88,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	} else if locSupplier.LastStatus.String == string(iso18626.TypeStatusWillSupply) {
 		fwStatus := illTrans.LastSupplierStatus.String
 		if len(fwStatus) > 0 && fwStatus != string(iso18626.TypeStatusExpectToSupply) {
-			resData.CustomData["note"] = "status WillSupply already communicated and will be ignored"
+			resData.Note = "status WillSupply already communicated and will be ignored"
 			return events.EventStatusSuccess, &resData
 		}
 	}

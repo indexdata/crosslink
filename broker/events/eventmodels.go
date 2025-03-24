@@ -55,6 +55,7 @@ type CommonEventData struct {
 	OutgoingMessage *iso18626.ISO18626Message `json:"outgoingMessage,omitempty"`
 	HttpFailure     *httpclient.HttpError     `json:"httpFailure,omitempty"`
 	EventError      *EventError               `json:"eventError,omitempty"`
+	Note            string                    `json:"note,omitempty"`
 }
 
 type EventError struct {
