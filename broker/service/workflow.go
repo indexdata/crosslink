@@ -52,6 +52,9 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
+	if event.EventStatus != events.EventStatusSuccess {
+		return
+	}
 	if event.EventData.IncomingMessage == nil || event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
@@ -82,9 +85,11 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	extctx.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
-	}, "")
+	if event.EventStatus == events.EventStatusSuccess {
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+		}, "")
+	}
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {

@@ -402,6 +402,45 @@ func TestIso18626PostRequestingMessageReqFailToSave(t *testing.T) {
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
 
+func TestIso18626PostHandlerInvalidAction(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-invalid-action.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
+	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedActionType</errorType>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>WeCancelThisMessage is not a valid action</errorValue>")
+}
+
+func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-invalid-status.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
+	assert.Contains(t, rr.Body.String(), "<errorType>UnrecognisedDataValue</errorType>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>WeCouldLoan is not a valid status</errorValue>")
+}
+
+func TestIso18626PostHandlerInvalidReason(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-invalid-reason.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
+	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedReasonForMessageType</errorType>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>NoGoodReason is not a valid reason</errorValue>")
+}
+
 type MockRepositoryOnlyPeersOK struct {
 	test.MockIllRepositoryError
 }
