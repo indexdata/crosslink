@@ -356,12 +356,18 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 			OutgoingMessage: resmsg,
 		},
 	}
-	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 	status := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
 	if status == "" {
 		return
 	}
-	updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
+	err = updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
+	if err != nil {
+		ctx.Logger().Error("failed to update located supplier status", "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return
+	}
 	if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess) == "" {
 		return
 	}
@@ -390,31 +396,36 @@ func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *i
 	return status
 }
 
-func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction, symbol string, status iso18626.TypeStatus) {
-	peer, err := repo.GetPeerBySymbol(ctx, symbol)
-	if err != nil {
-		ctx.Logger().Error("failed to locate peer for symbol: "+symbol, "error", err)
-		return
-	}
-	locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplier(ctx, ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams{
-		IllTransactionID: illTrans.ID,
-		SupplierID:       peer.ID,
+func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
+	symbol string, status iso18626.TypeStatus) error {
+	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		peer, err := repo.GetPeerBySymbol(ctx, symbol)
+		if err != nil {
+			ctx.Logger().Error("failed to locate peer for symbol: "+symbol, "error", err)
+			return err
+		}
+		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx,
+			ill_db.GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams{
+				IllTransactionID: illTrans.ID,
+				SupplierID:       peer.ID,
+			})
+		if err != nil {
+			ctx.Logger().Error("failed to get located supplier with peer id: "+peer.ID, "error", err)
+			return err
+		}
+		locSup.PrevStatus = locSup.LastStatus
+		locSup.LastStatus = createPgText(string(status))
+		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
+		if err != nil {
+			ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err)
+			return err
+		}
+		if status == iso18626.TypeStatusLoaned {
+			updatePeerLoanCount(ctx, repo, peer)
+			updatePeerBorrowCount(ctx, repo, illTrans)
+		}
+		return nil
 	})
-	if err != nil {
-		ctx.Logger().Error("failed to get located supplier with peer id: "+peer.ID, "error", err)
-		return
-	}
-	locSup.PrevStatus = locSup.LastStatus
-	locSup.LastStatus = createPgText(string(status))
-	_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
-	if err != nil {
-		ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err)
-		return
-	}
-	if status == iso18626.TypeStatusLoaned {
-		updatePeerLoanCount(ctx, repo, peer)
-		updatePeerBorrowCount(ctx, repo, illTrans)
-	}
 }
 
 func updatePeerLoanCount(ctx extctx.ExtendedContext, repo ill_db.IllRepo, peer ill_db.Peer) {

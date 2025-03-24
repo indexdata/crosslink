@@ -226,7 +226,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 
 func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
 	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locsup, err := repo.GetSelectedSupplierForIllTransaction(ctx, id)
+		locsup, err := repo.GetSelectedSupplierForIllTransactionForUpdate(ctx, id)
 		if err != nil {
 			return err // transaction gone meanwhile
 		}

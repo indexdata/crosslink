@@ -106,11 +106,19 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_status = $2;
 
--- name: GetLocatedSupplierByIllTransactionAndSupplier :one
+-- name: GetLocatedSupplierByIllTransactionAndStatusForUpdate :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
-  and supplier_id = $2;
+  and supplier_status = $2
+FOR UPDATE;
+
+-- name: GetLocatedSupplierByIllTransactionAndSupplierForUpdate :one
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+WHERE ill_transaction_id = $1
+  and supplier_id = $2
+FOR UPDATE;
 
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, ordinal, supplier_status, prev_action, prev_status,
