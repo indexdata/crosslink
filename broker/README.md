@@ -25,6 +25,7 @@ Configuration is provided via environment variables:
 | HOLDINGS_ADAPTER      | Holdings lookup method: `mock` or `sru`    | `mock`                            |
 | SRU_URL               | URL when HOLDINGS_ADAPTER is `sru`         | `http://localhost:8081/sru`       |
 | PEER_REFRESH_INTERVAL | Peer refresh interval                      | `5m`                              |
+| FORWARD_WILL_SUPPLY   | Forward WillSupply from first supplier     | `false`                           |
 
 # Build
 
