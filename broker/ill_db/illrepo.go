@@ -28,8 +28,7 @@ type IllRepo interface {
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
-	GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error)
-	// TODO: GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 
 	GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -146,13 +145,8 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveL
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error) {
-	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplier(ctx, r.GetConnOrTx(), params)
-	return row.LocatedSupplier, err
-}
-
-func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierParams) (LocatedSupplier, error) {
-	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplier(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
+	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
 }
 

@@ -69,7 +69,7 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndStatusFo
 	}}, nil
 }
 
-func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams) (ill_db.LocatedSupplier, error) {
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{
 		ID:               uuid.New().String(),
 		IllTransactionID: params.IllTransactionID,
@@ -166,7 +166,7 @@ func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndStatusForU
 	return []ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSupplier(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams) (ill_db.LocatedSupplier, error) {
+func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 

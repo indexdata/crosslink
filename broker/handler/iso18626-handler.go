@@ -404,8 +404,8 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 			ctx.Logger().Error("failed to locate peer for symbol: "+symbol, "error", err)
 			return err
 		}
-		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplier(ctx,
-			ill_db.GetLocatedSupplierByIllTransactionAndSupplierParams{
+		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx,
+			ill_db.GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams{
 				IllTransactionID: illTrans.ID,
 				SupplierID:       peer.ID,
 			})
