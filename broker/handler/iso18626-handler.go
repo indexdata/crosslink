@@ -267,37 +267,24 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 			return nil
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
-		illTrans.LastRequesterAction = createPgText(string(illMessage.RequestingAgencyMessage.Action))
-		action = illTrans.LastRequesterAction.String
+		illTrans.LastRequesterAction = createPgText(string(action))
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
 			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
 			return
 		}
-		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
-	}
-	ctx.Logger().Info("CROSSLINK-83: handleIso18626RequestingAgencyMessage SAVE", "action", action)
-	eventData := events.EventData{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: illMessage,
-		},
-	}
-
-	action := validateAction(ctx, illMessage, w, eventData, eventBus, illTrans)
-	if action == "" {
-		return
-	}
-
-	if err != nil {
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
+	if action == "" {
+		return
+	}
+	ctx.Logger().Info("CROSSLINK-83: handleIso18626RequestingAgencyMessage SAVE", "action", action)
 
 	eventId := createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
 	if eventId == "" {
