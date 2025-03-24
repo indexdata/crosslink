@@ -19,7 +19,7 @@
             <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f341</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>UNFILLED;WILLSUPPLY_LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>WILLSUPPLY_UNFILLED;WILLSUPPLY_LOANED</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>

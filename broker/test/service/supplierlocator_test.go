@@ -596,7 +596,7 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(supMsgNotice) == 4
+		return len(supMsgNotice) == 5
 	}) {
 		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
 	}
@@ -621,7 +621,7 @@ func TestSuccessfulFlow(t *testing.T) {
 		t.Errorf("should have finished 4 message supplier tasks, but got %d", len(mesSupTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesReqTask) == 3
+		return len(mesReqTask) == 4
 	}) {
 		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
 	}
