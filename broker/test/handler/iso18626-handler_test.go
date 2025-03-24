@@ -412,7 +412,7 @@ func TestIso18626PostHandlerInvalidAction(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedActionType</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>WeCancelThisMessage is not valid action</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>WeCancelThisMessage is not a valid action</errorValue>")
 }
 
 func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
@@ -425,7 +425,7 @@ func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnrecognisedDataValue</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>WeCouldLoan is not valid status</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>WeCouldLoan is not a valid status</errorValue>")
 }
 
 func TestIso18626PostHandlerInvalidReason(t *testing.T) {
@@ -438,7 +438,7 @@ func TestIso18626PostHandlerInvalidReason(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedReasonForMessageType</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>NoGoodReason is not valid reason</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>NoGoodReason is not a valid reason</errorValue>")
 }
 
 type MockRepositoryOnlyPeersOK struct {

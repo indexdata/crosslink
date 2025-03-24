@@ -33,9 +33,9 @@ const (
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
 	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
-	InvalidAction          ErrorValue = "%v is not valid action"
-	InvalidStatus          ErrorValue = "%v is not valid status"
-	InvalidReason          ErrorValue = "%v is not valid reason"
+	InvalidAction          ErrorValue = "%v is not a valid action"
+	InvalidStatus          ErrorValue = "%v is not a valid status"
+	InvalidReason          ErrorValue = "%v is not a valid reason"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -168,10 +168,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			OutgoingMessage: resmsg,
 		},
 	}
-	_, err = eventBus.CreateNotice(id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
-		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+	if createNoticeAndCheckDBError(ctx, w, eventBus, id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess) == "" {
 		return
 	}
 	writeResponse(ctx, resmsg, w)
@@ -302,10 +299,8 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 		return
 	}
 
-	eventId, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
-		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+	eventId := createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
+	if eventId == "" {
 		return
 	}
 	var wg sync.WaitGroup
@@ -322,10 +317,7 @@ func validateAction(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Mes
 	if !ok {
 		resp := handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(fmt.Sprintf(string(InvalidAction), illMessage.RequestingAgencyMessage.Action)))
 		eventData.OutgoingMessage = resp
-		_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
-		if err != nil {
-			ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem) == "" {
 			return ""
 		}
 		return ""
@@ -383,10 +375,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		return
 	}
 	updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
-	if err != nil {
-		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+	if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess) == "" {
 		return
 	}
 	writeResponse(ctx, resmsg, w)
@@ -397,10 +386,7 @@ func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *i
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(fmt.Sprintf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)))
 		eventData.OutgoingMessage = resp
-		_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
-		if err != nil {
-			ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
 			return ""
 		}
 		return ""
@@ -409,10 +395,7 @@ func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *i
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(fmt.Sprintf(string(InvalidReason), illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)))
 		eventData.OutgoingMessage = resp
-		_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
-		if err != nil {
-			ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
-			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
 			return ""
 		}
 		return ""
@@ -485,6 +468,16 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
 	writeResponse(ctx, resmsg, w)
 	return resmsg
+}
+
+func createNoticeAndCheckDBError(ctx extctx.ExtendedContext, w http.ResponseWriter, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) string {
+	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus)
+	if err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return ""
+	}
+	return id
 }
 
 func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
