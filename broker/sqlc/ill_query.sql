@@ -106,6 +106,13 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_status = $2;
 
+-- name: GetLocatedSupplierByIllTransactionAndStatusForUpdate :many
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+WHERE ill_transaction_id = $1
+  and supplier_status = $2
+FOR UPDATE;
+
 -- name: GetLocatedSupplierByIllTransactionAndSupplier :one
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
