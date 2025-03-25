@@ -2,71 +2,23 @@ package service
 
 import (
 	"context"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/test"
-	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
-
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
-	test.Expect(err, "failed to start db container")
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	test.Expect(err, "failed to get conn string")
-
-	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
-	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
-
-	go func() {
-		var mockApp mockapp.MockApp
-		test.Expect(mockApp.Run(), "failed to start illmock client")
-	}()
-	app.ConnectionString = connStr
-	app.MigrationsFolder = "file://../../migrations"
-	app.FORWARD_WILL_SUPPLY = true
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, eventRepo = test.StartApp(ctx)
-	test.WaitForServiceUp(app.HTTP_PORT)
-
-	code := m.Run()
-
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
-	os.Exit(code)
-}
 
 func TestLocateSuppliersAndSelect(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)

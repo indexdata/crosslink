@@ -5,17 +5,65 @@ import (
 	"context"
 	"fmt"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 )
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	pgContainer, err := postgres.Run(ctx, "postgres",
+		postgres.WithDatabase("crosslink"),
+		postgres.WithUsername("crosslink"),
+		postgres.WithPassword("crosslink"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+	)
+	test.Expect(err, "failed to start db container")
+
+	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	test.Expect(err, "failed to get conn string")
+
+	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
+	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
+
+	go func() {
+		var mockApp mockapp.MockApp
+		test.Expect(mockApp.Run(), "failed to start illmock client")
+	}()
+	app.ConnectionString = connStr
+	app.MigrationsFolder = "file://../../migrations"
+	app.FORWARD_WILL_SUPPLY = true
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	eventBus, illRepo, eventRepo = test.StartApp(ctx)
+	test.WaitForServiceUp(app.HTTP_PORT)
+
+	code := m.Run()
+
+	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	os.Exit(code)
+}
 
 var eventRecordFormat = "%v, %v = %v"
 
@@ -190,7 +238,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 func TestRequestUNFILLED_LOANED(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f341"
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
