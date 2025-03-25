@@ -270,12 +270,12 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 		newId := prevId
 		if state.newid {
 			var header iso18626.Header = supplyingAgencyMessage.Header
-			header.RequestingAgencyRequestId = prevId
-			requester.delete(&header)
-
 			newId = uuid.NewString()
 			header.RequestingAgencyRequestId = newId
 			requester.store(&header, state)
+
+			header.RequestingAgencyRequestId = prevId
+			requester.delete(&header)
 		}
 		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo, prevId, newId)
 	}
