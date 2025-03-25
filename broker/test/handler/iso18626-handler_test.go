@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestIso18626PostHandlerSuccess(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongMethod(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("GET", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 }
 
 func TestIso18626PostHandlerWrongContentType(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -136,7 +136,7 @@ func norm(in string) string {
 }
 
 func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -153,7 +153,7 @@ func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
 }
 
 func TestIso18626PostHandlerFailToSave(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
@@ -197,7 +197,7 @@ func TestIso18626PostRequestNoSuppUniqRecId(t *testing.T) {
 }
 
 func TestIso18626PostRequestExists(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
