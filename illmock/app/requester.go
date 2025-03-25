@@ -16,6 +16,7 @@ import (
 type requesterInfo struct {
 	cancel      bool
 	renew       bool
+	newid       bool
 	received    bool
 	supplierUrl string
 	request     *iso18626.Request
@@ -76,6 +77,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	// ServiceInfo != nil already
 	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
 	renew := illRequest.ServiceInfo.Note == "#RENEW#"
+	newid := illRequest.ServiceInfo.Note == "#NEWID#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -97,7 +99,13 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 
 	app.logIncomingReq(role.Requester, header, illMessage)
 
-	requesterInfo := &requesterInfo{supplierUrl: app.peerUrl, cancel: cancel, renew: renew, request: msg.Request}
+	requesterInfo := &requesterInfo{
+		supplierUrl: app.peerUrl,
+		cancel:      cancel,
+		renew:       renew,
+		newid:       newid,
+		request:     msg.Request,
+	}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
 		if strings.HasPrefix(description, "http://") || strings.HasPrefix(description, "https://") {
@@ -186,14 +194,17 @@ func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
-func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo) {
+func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo, prevId string, newId string) {
 	msg := &iso18626.Iso18626MessageNS{}
-	msg.Request = illRequest
+	msg.Request = &iso18626.Request{}
+	*msg.Request = *illRequest
 	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
-	if msg.Request.ServiceInfo != nil {
+	if illRequest.ServiceInfo != nil {
 		*msg.Request.ServiceInfo = *illRequest.ServiceInfo
 	}
-	msg.Request.ServiceInfo.RequestingAgencyPreviousRequestId = illRequest.Header.RequestingAgencyRequestId
+	msg.Request.Header = illRequest.Header
+	msg.Request.Header.RequestingAgencyRequestId = newId
+	msg.Request.ServiceInfo.RequestingAgencyPreviousRequestId = prevId
 	requestType := iso18626.TypeRequestTypeRetry
 	msg.Request.ServiceInfo.RequestType = &requestType
 	if messageInfo.ReasonRetry != nil && messageInfo.ReasonRetry.Text == string(iso18626.ReasonRetryCostExceedsMaxCost) {
@@ -201,7 +212,7 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 		msg.Request.BillingInfo = &iso18626.BillingInfo{}
 		msg.Request.BillingInfo.MaximumCosts = &offered
 	}
-	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &illRequest.Header)
+	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &msg.Request.Header)
 	if err != nil {
 		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())
 	}
@@ -255,6 +266,17 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			}
 		}
 	case iso18626.TypeStatusRetryPossible:
-		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo)
+		prevId := header.RequestingAgencyRequestId
+		newId := prevId
+		if state.newid {
+			var header iso18626.Header = supplyingAgencyMessage.Header
+			header.RequestingAgencyRequestId = prevId
+			requester.delete(&header)
+
+			newId = uuid.NewString()
+			header.RequestingAgencyRequestId = newId
+			requester.store(&header, state)
+		}
+		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo, prevId, newId)
 	}
 }

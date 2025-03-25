@@ -84,6 +84,9 @@ The following values are recognized:
   * `#RENEW#` the requester will send a `Renew` request to the supplier upon receiving an `Overdue` message.
   For a sample, refer to `examples/renew-req.xml`.
 
+  * `#NEWID` the requester creates a new RequestingAgencyRequestId when sending a retry request.
+  If not given, the same RequestingAgencyRequestId is used (thus being equal to RequestingAgencyPreviousRequestId)
+
 # ILL flows
 
 History of ILL messages can be retrieved at the `/api/flows` endpoint.
