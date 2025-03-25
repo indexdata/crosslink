@@ -782,6 +782,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry LoanCondition", func(t *testing.T) {
 		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RETRYKEEPID#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COND_LOANED", 16)
 
 		m := ret[1].Message
@@ -811,6 +812,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry CostExceedsMaxCost", func(t *testing.T) {
 		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RETRYKEEPID#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COST_LOANED", 16)
 
 		m := ret[1].Message
@@ -843,6 +845,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry OnLoan", func(t *testing.T) {
 		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RETRYKEEPID#"
 		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:ONLOAN_LOANED", 16)
 
 		m := ret[1].Message
@@ -872,7 +875,6 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request retry OnLoan newid", func(t *testing.T) {
 		msg := createPatronRequest()
-		msg.Request.ServiceInfo.Note = "#NEWID#"
 		ret := runScenario2(t, isoUrl, apiUrl, msg, "RETRY:ONLOAN_LOANED", 16)
 
 		assert.Len(t, ret, 2)

@@ -16,7 +16,7 @@ import (
 type requesterInfo struct {
 	cancel      bool
 	renew       bool
-	newid       bool
+	retryKeepId bool
 	received    bool
 	supplierUrl string
 	request     *iso18626.Request
@@ -77,7 +77,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	// ServiceInfo != nil already
 	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
 	renew := illRequest.ServiceInfo.Note == "#RENEW#"
-	newid := illRequest.ServiceInfo.Note == "#NEWID#"
+	retryKeepId := illRequest.ServiceInfo.Note == "#RETRYKEEPID#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -103,7 +103,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 		supplierUrl: app.peerUrl,
 		cancel:      cancel,
 		renew:       renew,
-		newid:       newid,
+		retryKeepId: retryKeepId,
 		request:     msg.Request,
 	}
 	for _, supplierInfo := range illRequest.SupplierInfo {
@@ -268,7 +268,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	case iso18626.TypeStatusRetryPossible:
 		prevId := header.RequestingAgencyRequestId
 		newId := prevId
-		if state.newid {
+		if !state.retryKeepId {
 			header.RequestingAgencyRequestId = prevId
 			requester.delete(header)
 
