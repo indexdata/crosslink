@@ -888,8 +888,11 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
 		assert.Equal(t, string(iso18626.ReasonRetryOnLoan), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
 		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
-		log.Info("AD:", "rid", rid)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.RetryAfter)
+
+		m = ret[0].Message[5].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 
 		m = ret[1].Message[0].Message
 		assert.NotNil(t, m.Request)
@@ -901,6 +904,7 @@ func TestService(t *testing.T) {
 		m = ret[1].Message[8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, newid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 
 		m = ret[1].Message[9].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
