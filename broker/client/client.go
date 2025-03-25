@@ -69,6 +69,11 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		}
 	}
 
+	if locSupplier == nil {
+		ctx.Logger().Info("AD:createAndSendSupplyingAgencyMessage", "locSupplier", "nil")
+	} else {
+		ctx.Logger().Info("AD:createAndSendSupplyingAgencyMessage", "loc.ID", locSupplier.ID, "status", locSupplier.LastStatus.String)
+	}
 	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier, defaultStatus)
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
