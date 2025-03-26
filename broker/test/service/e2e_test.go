@@ -507,6 +507,51 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 		eventsToCompareString(appCtx, t, illTrans.ID, 21))
 }
 
+func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "f8ef7750-982d-41bc-a123-0e18169a0018"
+	data, err := os.ReadFile("../testdata/request-retry-onloan-loaned.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "" &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 21))
+}
+
 func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId string, messageCount int) string {
 	var eventList []events.Event
 	var err error
