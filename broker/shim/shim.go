@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -40,9 +41,13 @@ type Iso18626AlmaShim struct {
 }
 
 func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
-	if message != nil && message.SupplyingAgencyMessage != nil &&
-		message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
-		message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+	if message != nil && message.SupplyingAgencyMessage != nil {
+		if message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusWillSupply {
+			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+		}
+		if message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
+			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+		}
 	}
 	return xml.Marshal(message)
 }
