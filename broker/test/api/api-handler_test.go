@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/indexdata/crosslink/iso18626"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -115,6 +116,45 @@ func TestGetIllTransactionsId(t *testing.T) {
 	}
 	if resp.ID != illId {
 		t.Errorf("did not find the same ILL transaction")
+	}
+}
+
+func TestGetLocatedSuppliers(t *testing.T) {
+	illId := test.GetIllTransId(t, illRepo)
+	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
+	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, string(iso18626.TypeStatusLoaned))
+	body := getResponseBody(t, "/located_suppliers")
+	var resp []oapi.LocatedSupplier
+	err := json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("Failed to unmarshal json: %s", err)
+	}
+	if len(resp) == 0 {
+		t.Errorf("Did not find located suppliers")
+	}
+	if resp[0].ID != locSup.ID {
+		t.Errorf("Did not find created located supplier")
+	}
+
+	body = getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("failed to unmarshal json: %s", err)
+	}
+	if len(resp) == 0 {
+		t.Errorf("did not find located suppliers")
+	}
+	if resp[0].ID != locSup.ID {
+		t.Errorf("did not find created located supplier ")
+	}
+
+	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("failed to unmarshal json: %s", err)
+	}
+	if len(resp) > 0 {
+		t.Errorf("should not find located suppliers")
 	}
 }
 
@@ -365,6 +405,15 @@ func TestPutPeersSymbolDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handlerMock.PutPeersSymbol(rr, req, "s")
+	if status := rr.Code; status != http.StatusInternalServerError {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusInternalServerError)
+	}
+}
+func TestGetLocatedSuppliersDbError(t *testing.T) {
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handlerMock.GetLocatedSuppliers(rr, req, oapi.GetLocatedSuppliersParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)

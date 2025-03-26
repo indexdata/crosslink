@@ -1,77 +1,28 @@
 package service
 
 import (
-	"bytes"
 	"context"
-	"net/http"
-	"os"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/test"
-	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("crosslink"),
-		postgres.WithUsername("crosslink"),
-		postgres.WithPassword("crosslink"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
-	)
-	test.Expect(err, "failed to start db container")
-
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	test.Expect(err, "failed to get conn string")
-	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
-	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
-
-	go func() {
-		var mockApp mockapp.MockApp
-		test.Expect(mockApp.Run(), "failed to start illmock client")
-	}()
-	app.ConnectionString = connStr
-	app.MigrationsFolder = "file://../../migrations"
-	app.FORWARD_WILL_SUPPLY = true
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	eventBus, illRepo, eventRepo = test.StartApp(ctx)
-	test.WaitForServiceUp(app.HTTP_PORT)
-
-	code := m.Run()
-
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
-	os.Exit(code)
-}
-
 func TestLocateSuppliersAndSelect(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "sup-test-1")
+	illTrId := getIllTransId(t, illRepo, "return-ISIL:SUP-TEST-1")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
@@ -87,8 +38,8 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	yesterday := time.Now().Add(-24 * time.Hour)
 	toChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
-		Symbol:        "ISIL:SUP1",
-		Name:          "ISIL:SUP1",
+		Symbol:        "ISIL:SUP-TEST-1",
+		Name:          "ISIL:SUP-TEST-1",
 		RefreshPolicy: ill_db.RefreshPolicyTransaction,
 		RefreshTime: pgtype.Timestamp{
 			Time:  yesterday,
@@ -529,327 +480,6 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	_, err = illRepo.GetPeerBySymbol(appCtx, supSymbol)
 	if err != nil {
 		t.Error("expected to have new peer created")
-	}
-}
-
-func TestSuccessfulFlow(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := ""
-	var reqNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		reqNotice = append(reqNotice, event)
-		illTrId = event.IllTransactionID
-	})
-	var supMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			supMsgNotice = append(supMsgNotice, event)
-		}
-	})
-	var reqMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			reqMsgNotice = append(reqMsgNotice, event)
-		}
-	})
-	var locateTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			locateTask = append(locateTask, event)
-		}
-	})
-	var selectTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			selectTask = append(selectTask, event)
-		}
-	})
-	var mesSupTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesSupTask = append(mesSupTask, event)
-		}
-	})
-	var mesReqTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesReqTask = append(mesReqTask, event)
-		}
-	})
-
-	data, _ := os.ReadFile("../testdata/request-ok.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqNotice) == 1
-	}) {
-		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(supMsgNotice) == 5
-	}) {
-		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqMsgNotice) == 2
-	}) {
-		t.Errorf("should have received 2 requester messages, but got %d", len(reqMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(locateTask) == 1
-	}) {
-		t.Errorf("should have finished locate supplier task, but got %d", len(locateTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(selectTask) == 2
-	}) {
-		t.Errorf("should have 2 finished select supplier tasks, but got %d", len(selectTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesSupTask) == 4
-	}) {
-		t.Errorf("should have finished 4 message supplier tasks, but got %d", len(mesSupTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesReqTask) == 4
-	}) {
-		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
-	}
-	illId := mesReqTask[0].IllTransactionID
-	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
-	if illTrans.LastRequesterAction.String != "ShippedReturn" {
-		t.Errorf("ILL transaction last requester status should be ShippedReturn not %s",
-			illTrans.LastRequesterAction.String)
-	}
-	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-
-	if supplier.LastStatus.String != "LoanCompleted" {
-		t.Errorf("selected supplier last status should be LoanCompleted not %s",
-			supplier.LastStatus.String)
-	}
-}
-
-func TestLoanedOverdue(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := ""
-	var reqNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		reqNotice = append(reqNotice, event)
-		illTrId = event.IllTransactionID
-	})
-	var supMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			supMsgNotice = append(supMsgNotice, event)
-		}
-	})
-	var reqMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			reqMsgNotice = append(reqMsgNotice, event)
-		}
-	})
-	var locateTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			locateTask = append(locateTask, event)
-		}
-	})
-	var selectTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			selectTask = append(selectTask, event)
-		}
-	})
-	var mesSupTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesSupTask = append(mesSupTask, event)
-		}
-	})
-	var mesReqTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesReqTask = append(mesReqTask, event)
-		}
-	})
-
-	data, _ := os.ReadFile("../testdata/request-loaned-overdue.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqNotice) == 1
-	}) {
-		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(supMsgNotice) == 3
-	}) {
-		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqMsgNotice) == 2
-	}) {
-		t.Errorf("should have received 2 requester messages, but got %d", len(reqMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(locateTask) == 1
-	}) {
-		t.Errorf("should have finished locate supplier task, but got %d", len(locateTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(selectTask) == 1
-	}) {
-		t.Errorf("should have 1 finished select supplier tasks, but got %d", len(selectTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesSupTask) == 3
-	}) {
-		t.Errorf("should have finished 3 message supplier tasks, but got %d", len(mesSupTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesReqTask) == 3
-	}) {
-		t.Errorf("should have finished 3 message requester tasks, but got %d", len(mesReqTask))
-	}
-	illId := mesReqTask[0].IllTransactionID
-	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
-	if illTrans.LastRequesterAction.String != "ShippedReturn" {
-		t.Errorf("ILL transaction last requester status should be ShippedReturn not %s",
-			illTrans.LastRequesterAction.String)
-	}
-	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-
-	if supplier.LastStatus.String != "LoanCompleted" {
-		t.Errorf("selected supplier last status should be LoanCompleted not %s",
-			supplier.LastStatus.String)
-	}
-}
-
-func TestRetryLoaned(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := ""
-	var reqNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		reqNotice = append(reqNotice, event)
-		illTrId = event.IllTransactionID
-	})
-	var supMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			supMsgNotice = append(supMsgNotice, event)
-		}
-	})
-	var reqMsgNotice []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			reqMsgNotice = append(reqMsgNotice, event)
-		}
-	})
-	var locateTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			locateTask = append(locateTask, event)
-		}
-	})
-	var selectTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			selectTask = append(selectTask, event)
-		}
-	})
-	var mesSupTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesSupTask = append(mesSupTask, event)
-		}
-	})
-	var mesReqTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		if illTrId == event.IllTransactionID {
-			mesReqTask = append(mesReqTask, event)
-		}
-	})
-
-	data, _ := os.ReadFile("../testdata/request-retry-loaned.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
-
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqNotice) == 1
-	}) {
-		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(supMsgNotice) == 3
-	}) {
-		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqMsgNotice) == 3
-	}) {
-		t.Errorf("should have received 3 requester messages, but got %d", len(reqMsgNotice))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(locateTask) == 1
-	}) {
-		t.Errorf("should have 1 finished locate supplier task, but got %d", len(locateTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(selectTask) == 1
-	}) {
-		t.Errorf("should have 1 finished select supplier tasks, but got %d", len(selectTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesSupTask) == 4
-	}) {
-		t.Errorf("should have finished 4 message supplier tasks, but got %d", len(mesSupTask))
-	}
-	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(mesReqTask) == 3
-	}) {
-		t.Errorf("should have finished 3 message requester tasks, but got %d", len(mesReqTask))
-	}
-	illId := mesReqTask[1].IllTransactionID
-	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)
-	if illTrans.LastRequesterAction.String != "ShippedReturn" {
-		t.Errorf("ILL transaction last requester status should be ShippedReturn not %s",
-			illTrans.LastRequesterAction.String)
-	}
-	supplier, _ := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-
-	if supplier.LastStatus.String != "LoanCompleted" {
-		t.Errorf("selected supplier last status should be LoanCompleted not %s",
-			supplier.LastStatus.String)
 	}
 }
 

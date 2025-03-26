@@ -16,10 +16,10 @@
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-11-28T10:25:11.136Z</timestamp>
-            <requestingAgencyRequestId>f4d8f81d-9c6b-4a42-a793-c488cdcb4257</requestingAgencyRequestId>
+            <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f345</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>RETRY:COND_LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>WILLSUPPLY_LOANED</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>
@@ -34,6 +34,7 @@
             <requestType>New</requestType>
             <requestSubType>PatronRequest</requestSubType>
             <serviceType>Loan</serviceType>
+            <note>#CANCEL#</note>
         </serviceInfo>
         <supplierInfo></supplierInfo>
         <requestedDeliveryInfo>

@@ -130,6 +130,13 @@ func (r *MockIllRepositorySuccess) GetCachedPeersBySymbols(ctx extctx.ExtendedCo
 	return []ill_db.Peer{{ID: uuid.NewString()}}
 }
 
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]ill_db.LocatedSupplier, error) {
+	return []ill_db.LocatedSupplier{{ID: uuid.NewString(), IllTransactionID: illTransactionID}}, nil
+}
+func (r *MockIllRepositorySuccess) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]ill_db.LocatedSupplier, error) {
+	return []ill_db.LocatedSupplier{{ID: uuid.NewString()}}, nil
+}
+
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -210,4 +217,11 @@ func (r *MockIllRepositoryError) GetSelectedSupplierForIllTransactionForUpdate(c
 
 func (r *MockIllRepositoryError) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
 	return []ill_db.Peer{}
+}
+
+func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]ill_db.LocatedSupplier, error) {
+	return []ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]ill_db.LocatedSupplier, error) {
+	return []ill_db.LocatedSupplier{}, errors.New("DB error")
 }

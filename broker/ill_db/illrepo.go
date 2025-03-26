@@ -27,6 +27,8 @@ type IllRepo interface {
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
+	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error)
+	ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -147,6 +149,27 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveL
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error) {
+	rows, err := r.queries.GetLocatedSupplierByIllTransition(ctx, r.GetConnOrTx(), illTransactionID)
+	var suppliers []LocatedSupplier
+	if err == nil {
+		for _, r := range rows {
+			suppliers = append(suppliers, r.LocatedSupplier)
+		}
+	}
+	return suppliers, err
+}
+func (r *PgIllRepo) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error) {
+	rows, err := r.queries.ListLocatedSuppliers(ctx, r.GetConnOrTx())
+	var suppliers []LocatedSupplier
+	if err == nil {
+		for _, r := range rows {
+			suppliers = append(suppliers, r.LocatedSupplier)
+		}
+	}
+	return suppliers, err
 }
 
 func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {

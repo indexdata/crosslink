@@ -211,6 +211,32 @@ func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 	writeJsonResponse(w, toApiPeer(peer))
 }
 
+func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
+	logParams := map[string]string{"method": "GetLocatedSuppliers"}
+	if params.IllTransactionId != nil {
+		logParams["IllTransactionId"] = *params.IllTransactionId
+	}
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: logParams,
+	})
+	resp := []oapi.LocatedSupplier{}
+	var supList []ill_db.LocatedSupplier
+	var err error
+	if params.IllTransactionId != nil {
+		supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, *params.IllTransactionId)
+	} else {
+		supList, err = a.illRepo.ListLocatedSuppliers(ctx)
+	}
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	for _, event := range supList {
+		resp = append(resp, toApiLocatedSupplier(event))
+	}
+	writeJsonResponse(w, resp)
+}
+
 func writeJsonResponse(w http.ResponseWriter, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -255,6 +281,21 @@ func toApiEvent(event events.Event) oapi.Event {
 	resultData := utils.Must(structToMap(event.ResultData))
 	api.ResultData = &resultData
 	return api
+}
+
+func toApiLocatedSupplier(sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
+	return oapi.LocatedSupplier{
+		ID:               sup.ID,
+		IllTransactionID: sup.IllTransactionID,
+		SupplierID:       sup.SupplierID,
+		Ordinal:          sup.Ordinal,
+		SupplierStatus:   toString(sup.SupplierStatus),
+		PrevAction:       toString(sup.PrevAction),
+		PrevStatus:       toString(sup.PrevStatus),
+		LastAction:       toString(sup.LastAction),
+		LastStatus:       toString(sup.LastStatus),
+		LocalID:          toString(sup.LocalID),
+	}
 }
 
 func structToMap(obj interface{}) (map[string]interface{}, error) {

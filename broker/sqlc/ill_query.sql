@@ -100,6 +100,11 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
+-- name: ListLocatedSuppliers :many
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+ORDER BY ill_transaction_id, ordinal;
+
 -- name: GetLocatedSupplierByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier

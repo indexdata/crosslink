@@ -8,7 +8,8 @@ CREATE TABLE peer
     url            VARCHAR   NOT NULL,
     loans_count    INTEGER   NOT NULL DEFAULT 0,
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
-    vendor         VARCHAR   NOT NULL
+    vendor         VARCHAR   NOT NULL,
+    UNIQUE(symbol)
 );
 
 CREATE TABLE ill_transaction
