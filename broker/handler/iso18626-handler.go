@@ -148,10 +148,10 @@ func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, r
 		}
 		selSup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 		if err != nil {
-			return err
+			return pgx.ErrNoRows
 		}
 		if selSup.LastStatus.String != string(iso18626.TypeStatusRetryPossible) {
-			return errors.New("lastStatus is not RetryPossible")
+			return pgx.ErrNoRows
 		}
 		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
 		illTrans.RequesterRequestID = requesterRequestId
