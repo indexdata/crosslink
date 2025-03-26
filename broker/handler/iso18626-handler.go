@@ -155,8 +155,8 @@ func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, r
 		}
 		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
 		illTrans.RequesterRequestID = requesterRequestId
+		illTrans.PrevRequesterRequestID = createPgText(previusRequestId)
 		id = illTrans.ID
-		// set previous requester request ID here
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
