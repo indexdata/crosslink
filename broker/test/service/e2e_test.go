@@ -427,6 +427,27 @@ func TestRequestRETRY_NON_EXISTING(t *testing.T) {
 	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
+func TestRequestREMINDER(t *testing.T) {
+	data, err := os.ReadFile("../testdata/request-reminder.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, _ := http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, "unsupported request type", msg.RequestConfirmation.ErrorData.ErrorValue)
+}
+
 func TestRequestRETRY_COST(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "fc60b4fa-5f98-49a8-a2a0-f17b76fa16a8"
