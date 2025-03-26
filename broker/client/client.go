@@ -58,7 +58,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
-	lastSentStatus := illTrans.LastSupplierStatus.String
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
 	} else {
@@ -73,16 +72,16 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			return events.EventStatusError, &resData
 		}
 		if status == iso18626.TypeStatusWillSupply {
+			lastSentStatus := illTrans.LastSupplierStatus.String
 			if len(lastSentStatus) > 0 && lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
 				resData.Note = "status WillSupply already communicated and will be ignored"
 				return events.EventStatusSuccess, &resData
 			}
 		}
 	}
-
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
-		MessageInfo: c.createMessageInfo(lastSentStatus),
+		MessageInfo: c.createMessageInfo(illTrans.LastRequesterAction.String),
 		StatusInfo:  c.createStatusInfo(illTrans, locSupplier, status),
 	}
 	resData.OutgoingMessage = message
@@ -283,12 +282,21 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 	}
 }
 
-func (c *Iso18626Client) createMessageInfo(lastSentStatus string) iso18626.MessageInfo {
+func (c *Iso18626Client) createMessageInfo(requesterAction string) iso18626.MessageInfo {
 	var reason iso18626.TypeReasonForMessage
-	if len(lastSentStatus) > 0 {
-		reason = iso18626.TypeReasonForMessageStatusChange
-	} else {
+	switch requesterAction {
+	case ill_db.RequestAction:
 		reason = iso18626.TypeReasonForMessageRequestResponse
+	case string(iso18626.TypeActionStatusRequest):
+		reason = iso18626.TypeReasonForMessageStatusRequestResponse
+	case string(iso18626.TypeActionNotification):
+		reason = iso18626.TypeReasonForMessageNotification
+	case string(iso18626.TypeActionRenew):
+		reason = iso18626.TypeReasonForMessageRenewResponse
+	case string(iso18626.TypeActionCancel):
+		reason = iso18626.TypeReasonForMessageCancelResponse
+	default:
+		reason = iso18626.TypeReasonForMessageStatusChange
 	}
 	return iso18626.MessageInfo{
 		ReasonForMessage: reason,
