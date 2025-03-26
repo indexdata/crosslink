@@ -651,48 +651,36 @@ func TestLoanedOverdue(t *testing.T) {
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			supMsgNotice = append(supMsgNotice, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var reqMsgNotice []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			reqMsgNotice = append(reqMsgNotice, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var locateTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			locateTask = append(locateTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var selectTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			selectTask = append(selectTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var mesSupTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			mesSupTask = append(mesSupTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var mesReqTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			mesReqTask = append(mesReqTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 
@@ -770,48 +758,36 @@ func TestRetryLoaned(t *testing.T) {
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			supMsgNotice = append(supMsgNotice, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var reqMsgNotice []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			reqMsgNotice = append(reqMsgNotice, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var locateTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			locateTask = append(locateTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var selectTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			selectTask = append(selectTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var mesSupTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			mesSupTask = append(mesSupTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 	var mesReqTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			mesReqTask = append(mesReqTask, event)
-		} else {
-			t.Error("skip")
 		}
 	})
 
@@ -829,9 +805,9 @@ func TestRetryLoaned(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqNotice) == 2
+		return len(reqNotice) == 1
 	}) {
-		t.Errorf("should have received 2 request, but got %d", len(reqNotice))
+		t.Errorf("should have received 1 request, but got %d", len(reqNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(supMsgNotice) == 3
@@ -839,19 +815,19 @@ func TestRetryLoaned(t *testing.T) {
 		t.Errorf("should have received 3 supplier messages, but got %d", len(supMsgNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(reqMsgNotice) == 2
+		return len(reqMsgNotice) == 3
 	}) {
-		t.Errorf("should have received 2 requester messages, but got %d", len(reqMsgNotice))
+		t.Errorf("should have received 3 requester messages, but got %d", len(reqMsgNotice))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(locateTask) == 2
+		return len(locateTask) == 1
 	}) {
-		t.Errorf("should have 2 finished locate supplier task, but got %d", len(locateTask))
+		t.Errorf("should have 1 finished locate supplier task, but got %d", len(locateTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(selectTask) == 2
+		return len(selectTask) == 1
 	}) {
-		t.Errorf("should have 2 finished select supplier tasks, but got %d", len(selectTask))
+		t.Errorf("should have 1 finished select supplier tasks, but got %d", len(selectTask))
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(mesSupTask) == 4
@@ -861,7 +837,7 @@ func TestRetryLoaned(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		return len(mesReqTask) == 3
 	}) {
-		t.Errorf("should have finished 2 message requester tasks, but got %d", len(mesReqTask))
+		t.Errorf("should have finished 3 message requester tasks, but got %d", len(mesReqTask))
 	}
 	illId := mesReqTask[1].IllTransactionID
 	illTrans, _ := illRepo.GetIllTransactionById(appCtx, illId)

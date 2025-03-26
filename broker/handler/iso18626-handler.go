@@ -30,6 +30,7 @@ const (
 	ReqIdAlreadyExists     ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
 	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
+	UnsupportedRequestType ErrorValue = "unsupported request type"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
 	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
@@ -104,7 +105,6 @@ func handleRetryRequest(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1862
 	// ServiceInfo already nil checked in handleIso18626Request
 	previusRequestId := request.ServiceInfo.RequestingAgencyPreviousRequestId
 
-	ctx.Logger().Info("AD: handleRetryRequest", "pid", previusRequestId)
 	var id string
 	err := repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(previusRequestId))
@@ -160,12 +160,21 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
 		return
 	}
+
 	var err error
 	var id string
-	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil &&
-		*request.ServiceInfo.RequestType == iso18626.TypeRequestTypeReminder { // Should be Retry
+	var event events.EventName
+
+	requestType := iso18626.TypeRequestTypeNew
+	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil {
+		requestType = *request.ServiceInfo.RequestType
+	}
+	switch requestType {
+	case iso18626.TypeRequestTypeRetry:
+		event = events.EventNameRequesterMsgReceived
 		id, err = handleRetryRequest(ctx, illMessage, repo)
-	} else {
+	case iso18626.TypeRequestTypeNew:
+		event = events.EventNameRequestReceived
 		supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
 		requestAction := createPgText("Request")
 		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
@@ -198,6 +207,9 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			SupplierRequestID:   supplierRequestId,
 			IllTransactionData:  illTransactionData,
 		})
+	default:
+		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
+		return
 	}
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -219,7 +231,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			OutgoingMessage: resmsg,
 		},
 	}
-	if createNoticeAndCheckDBError(ctx, w, eventBus, id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess) == "" {
+	if createNoticeAndCheckDBError(ctx, w, eventBus, id, event, eventData, events.EventStatusSuccess) == "" {
 		return
 	}
 	writeResponse(ctx, resmsg, w)
@@ -383,7 +395,6 @@ func handleRequestingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrit
 }
 
 func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
-	ctx.Logger().Info("AD:handleIso18626SupplyingAgencyMessage begin")
 	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
 		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
@@ -411,7 +422,6 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 	status := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
-	ctx.Logger().Info("AD:handleIso18626SupplyingAgencyMessage", "status", status)
 	if status == "" {
 		return
 	}
@@ -425,7 +435,6 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		return
 	}
 	writeResponse(ctx, resmsg, w)
-	ctx.Logger().Info("AD:handleIso18626SupplyingAgencyMessage end")
 }
 
 func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeStatus {
@@ -467,7 +476,6 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 			ctx.Logger().Error("failed to get located supplier with peer id: "+peer.ID, "error", err)
 			return err
 		}
-		ctx.Logger().Info("AD:updateLocatedSupplierStatus", "loc.ID", locSup.ID, "status", status)
 		locSup.PrevStatus = locSup.LastStatus
 		locSup.LastStatus = createPgText(string(status))
 		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
