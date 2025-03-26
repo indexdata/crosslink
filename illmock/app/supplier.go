@@ -232,6 +232,7 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 }
 
 func (app *MockApp) sendSupplyingAgencyOverdue(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusOverdue
@@ -239,6 +240,7 @@ func (app *MockApp) sendSupplyingAgencyOverdue(header *iso18626.Header, state *s
 }
 
 func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
@@ -248,6 +250,7 @@ func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *sup
 }
 
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
 	// cancel by default
@@ -294,13 +297,13 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 	}
 	switch requestingAgencyMessage.Action {
 	case iso18626.TypeActionCancel:
-		app.sendSupplyingAgencyCancel(header, state)
+		go app.sendSupplyingAgencyCancel(header, state)
 	case iso18626.TypeActionRenew:
-		app.sendSupplyingAgencyRenew(header, state)
+		go app.sendSupplyingAgencyRenew(header, state)
 	case iso18626.TypeActionReceived:
 		if state.overdue {
 			state.overdue = false
-			app.sendSupplyingAgencyOverdue(header, state)
+			go app.sendSupplyingAgencyOverdue(header, state)
 		}
 	case iso18626.TypeActionShippedReturn:
 		go app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted})
