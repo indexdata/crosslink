@@ -404,7 +404,7 @@ func TestRequestRETRY_NON_EXISTING(t *testing.T) {
 	assert.NotNil(t, msg.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "requestingAgencyPreviousRequestId: request with a given ID not found", msg.RequestConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestRETRY_COST(t *testing.T) {
@@ -459,7 +459,7 @@ func TestRequestRETRY_COST(t *testing.T) {
 	assert.NotNil(t, msg.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "requestingAgencyPreviousRequestId: request with a given ID not found", msg.RequestConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestRETRY_COST_LOANED(t *testing.T) {

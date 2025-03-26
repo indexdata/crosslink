@@ -27,17 +27,17 @@ import (
 type ErrorValue string
 
 const (
-	ReqIdAlreadyExists     ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
-	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
-	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
-	ReqPrevIdNotFound      ErrorValue = "requestingAgencyPreviousRequestId: request with a given ID not found"
-	UnsupportedRequestType ErrorValue = "unsupported request type"
-	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
-	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
-	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
-	InvalidAction          ErrorValue = "%v is not a valid action"
-	InvalidStatus          ErrorValue = "%v is not a valid status"
-	InvalidReason          ErrorValue = "%v is not a valid reason"
+	ReqIdAlreadyExists        ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
+	ReqIdIsEmpty              ErrorValue = "requestingAgencyRequestId: cannot be empty"
+	ReqIdNotFound             ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
+	NoRetryableIllTransaction ErrorValue = "no retryable ILL transaction"
+	UnsupportedRequestType    ErrorValue = "unsupported request type"
+	SuppUniqueRecIdIsEmpty    ErrorValue = "supplierUniqueRecordId: cannot be empty"
+	ReqAgencyNotFound         ErrorValue = "requestingAgencyId: requesting agency not found"
+	CouldNotSendReqToPeer     ErrorValue = "Could not send request to peer"
+	InvalidAction             ErrorValue = "%v is not a valid action"
+	InvalidStatus             ErrorValue = "%v is not a valid status"
+	InvalidReason             ErrorValue = "%v is not a valid reason"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -221,7 +221,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 		} else if errors.Is(err, pgx.ErrNoRows) {
 			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
-			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqPrevIdNotFound)
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, NoRetryableIllTransaction)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
