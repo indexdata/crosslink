@@ -57,23 +57,33 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
-	var defaultStatus *iso18626.TypeStatus
+	var status iso18626.TypeStatus
+	lastSentStatus := illTrans.LastSupplierStatus.String
 	if locSupplier == nil {
-		dStatus := iso18626.TypeStatusUnfilled
-		defaultStatus = &dStatus
-	} else if locSupplier.LastStatus.String == string(iso18626.TypeStatusWillSupply) {
-		fwStatus := illTrans.LastSupplierStatus.String
-		if len(fwStatus) > 0 && fwStatus != string(iso18626.TypeStatusExpectToSupply) {
-			resData.Note = "status WillSupply already communicated and will be ignored"
-			return events.EventStatusSuccess, &resData
+		status = iso18626.TypeStatusUnfilled
+	} else {
+		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
+			status = s
+		} else {
+			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
+			resData.EventError = &events.EventError{
+				Message: msg,
+			}
+			ctx.Logger().Error(msg)
+			return events.EventStatusError, &resData
+		}
+		if status == iso18626.TypeStatusWillSupply {
+			if len(lastSentStatus) > 0 && lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
+				resData.Note = "status WillSupply already communicated and will be ignored"
+				return events.EventStatusSuccess, &resData
+			}
 		}
 	}
 
-	statusInfo, statusErr := c.createStatusInfo(illTrans, locSupplier, defaultStatus)
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header:      c.createMessageHeader(illTrans, peer, false),
-		MessageInfo: c.createMessageInfo(),
-		StatusInfo:  statusInfo,
+		MessageInfo: c.createMessageInfo(lastSentStatus),
+		StatusInfo:  c.createStatusInfo(illTrans, locSupplier, status),
 	}
 	resData.OutgoingMessage = message
 
@@ -84,14 +94,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			Cause:   err.Error(),
 		}
 		ctx.Logger().Error("failed to get requester", "error", err)
-		return events.EventStatusError, &resData
-	}
-	if statusErr != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to get status",
-			Cause:   statusErr.Error(),
-		}
-		ctx.Logger().Error("failed to get status", "error", statusErr)
 		return events.EventStatusError, &resData
 	}
 	response, err := c.SendHttpPost(&requester, message, "")
@@ -281,30 +283,25 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 	}
 }
 
-func (c *Iso18626Client) createMessageInfo() iso18626.MessageInfo {
+func (c *Iso18626Client) createMessageInfo(lastSentStatus string) iso18626.MessageInfo {
+	var reason iso18626.TypeReasonForMessage
+	if len(lastSentStatus) > 0 {
+		reason = iso18626.TypeReasonForMessageStatusChange
+	} else {
+		reason = iso18626.TypeReasonForMessageRequestResponse
+	}
 	return iso18626.MessageInfo{
-		ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		ReasonForMessage: reason,
 	}
 }
 
-func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier, defaultStatus *iso18626.TypeStatus) (iso18626.StatusInfo, error) {
-	var status *iso18626.TypeStatus
-	if supplier != nil {
-		if s, ok := iso18626.StatusMap[supplier.LastStatus.String]; ok {
-			status = &s
-		}
-	} else {
-		status = defaultStatus
-	}
-	if status == nil {
-		return iso18626.StatusInfo{}, errors.New("failed to resolve status for value")
-	}
+func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier, status iso18626.TypeStatus) iso18626.StatusInfo {
 	return iso18626.StatusInfo{
-		Status: *status,
+		Status: status,
 		LastChange: utils.XSDDateTime{
 			Time: transaction.Timestamp.Time,
 		},
-	}, nil
+	}
 }
 
 func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
