@@ -48,16 +48,17 @@ func (s *Supplier) delete(header *iso18626.Header) {
 
 func getScenarioForRequest(illRequest *iso18626.Request) string {
 	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	var idx int = -1
-	if strings.HasPrefix(scenario, "RETRY") {
-		idx = strings.Index(scenario, "_")
+	if !strings.HasPrefix(scenario, "RETRY") {
+		return scenario
 	}
+	idx := strings.Index(scenario, "_")
 	// if request is already a retry, do not send retry again
 	if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.RequestType != nil &&
 		*illRequest.ServiceInfo.RequestType == iso18626.TypeRequestTypeRetry {
 		if idx > 0 {
 			return scenario[idx+1:]
 		}
+		return ""
 	} else if idx > 0 {
 		scenario = scenario[0:idx]
 	}
@@ -84,6 +85,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	var reasonRetry *iso18626.ReasonRetry
 
 	switch scenario {
+	case "": // retry done and no further scenarios
 	case "RETRY:COST":
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryCostExceedsMaxCost
@@ -155,7 +157,9 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 
 	var resmsg = createRequestResponse(&illRequest.Header, iso18626.TypeMessageStatusOK, nil, nil)
 	app.writeIso18626Response(resmsg, w, role.Supplier, &illRequest.Header)
-	go app.sendSupplyingAgencyLater(&illRequest.Header, status)
+	if len(status) > 0 {
+		go app.sendSupplyingAgencyLater(&illRequest.Header, status)
+	}
 }
 
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {

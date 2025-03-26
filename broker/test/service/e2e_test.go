@@ -3,7 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -384,21 +386,94 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 		eventsToCompareString(appCtx, t, illTrans.ID, 21))
 }
 
-func TestRequestRETRY_COST(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	reqId := "5636c993-c41c-48f4-a285-470545f6f346"
-	data, _ := os.ReadFile("../testdata/request-retry-cost.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+func TestRequestRETRY_NON_EXISTING(t *testing.T) {
+	data, err := os.ReadFile("../testdata/request-retry-non-existing.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, _ := http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, "requestingAgencyPreviousRequestId: request with a given ID not found", msg.RequestConfirmation.ErrorData.ErrorValue)
+}
+
+func TestRequestRETRY_COST(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "fc60b4fa-5f98-49a8-a2a0-f17b76fa16a8"
+	data, err := os.ReadFile("../testdata/request-retry-1.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "" &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 8))
+
+	data, err = os.ReadFile("../testdata/request-retry-non-existing.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, err = http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client = &http.Client{}
+	res, err = client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, "requestingAgencyPreviousRequestId: request with a given ID not found", msg.RequestConfirmation.ErrorData.ErrorValue)
+}
+
+func TestRequestRETRY_COST_LOANED(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-470545f6f346"
+	data, err := os.ReadFile("../testdata/request-retry-cost-loaned.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
@@ -429,7 +504,7 @@ func TestRequestRETRY_COST(t *testing.T) {
 			"TASK, confirm-requester-msg = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		eventsToCompareString(appCtx, t, illTrans.ID, 5))
+		eventsToCompareString(appCtx, t, illTrans.ID, 21))
 }
 
 func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId string, messageCount int) string {

@@ -30,6 +30,7 @@ const (
 	ReqIdAlreadyExists     ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
 	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
+	ReqPrevIdNotFound      ErrorValue = "requestingAgencyPreviousRequestId: request with a given ID not found"
 	UnsupportedRequestType ErrorValue = "unsupported request type"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
@@ -100,8 +101,42 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 	}
 }
 
-func handleRetryRequest(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, repo ill_db.IllRepo) (string, error) {
-	request := illMessage.Request
+func handleNewRequest(ctx extctx.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, error) {
+	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
+	requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
+	supplierRequestId := createPgText(request.Header.SupplyingAgencyRequestId)
+
+	illTransactionData := ill_db.IllTransactionData{
+		BibliographicInfo:     request.BibliographicInfo,
+		PublicationInfo:       request.PublicationInfo,
+		ServiceInfo:           request.ServiceInfo,
+		SupplierInfo:          request.SupplierInfo,
+		RequestedDeliveryInfo: request.RequestedDeliveryInfo,
+		RequestingAgencyInfo:  request.RequestingAgencyInfo,
+		PatronInfo:            request.PatronInfo,
+		BillingInfo:           request.BillingInfo,
+	}
+
+	id := uuid.New().String()
+	timestamp := pgtype.Timestamp{
+		Time:  request.Header.Timestamp.Time,
+		Valid: true,
+	}
+	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+		ID:                  id,
+		Timestamp:           timestamp,
+		RequesterSymbol:     requesterSymbol,
+		RequesterID:         createPgText(peers[0].ID),
+		LastRequesterAction: createPgText("Request"),
+		SupplierSymbol:      supplierSymbol,
+		RequesterRequestID:  requesterRequestId,
+		SupplierRequestID:   supplierRequestId,
+		IllTransactionData:  illTransactionData,
+	})
+	return id, err
+}
+
+func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, error) {
 	// ServiceInfo already nil checked in handleIso18626Request
 	previusRequestId := request.ServiceInfo.RequestingAgencyPreviousRequestId
 
@@ -172,41 +207,10 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	switch requestType {
 	case iso18626.TypeRequestTypeRetry:
 		event = events.EventNameRequesterMsgReceived
-		id, err = handleRetryRequest(ctx, illMessage, repo)
+		id, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
 		event = events.EventNameRequestReceived
-		supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
-		requestAction := createPgText("Request")
-		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
-		supplierRequestId := createPgText(request.Header.SupplyingAgencyRequestId)
-
-		illTransactionData := ill_db.IllTransactionData{
-			BibliographicInfo:     request.BibliographicInfo,
-			PublicationInfo:       request.PublicationInfo,
-			ServiceInfo:           request.ServiceInfo,
-			SupplierInfo:          request.SupplierInfo,
-			RequestedDeliveryInfo: request.RequestedDeliveryInfo,
-			RequestingAgencyInfo:  request.RequestingAgencyInfo,
-			PatronInfo:            request.PatronInfo,
-			BillingInfo:           request.BillingInfo,
-		}
-
-		id = uuid.New().String()
-		timestamp := pgtype.Timestamp{
-			Time:  request.Header.Timestamp.Time,
-			Valid: true,
-		}
-		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
-			ID:                  id,
-			Timestamp:           timestamp,
-			RequesterSymbol:     requesterSymbol,
-			RequesterID:         createPgText(peers[0].ID),
-			LastRequesterAction: requestAction,
-			SupplierSymbol:      supplierSymbol,
-			RequesterRequestID:  requesterRequestId,
-			SupplierRequestID:   supplierRequestId,
-			IllTransactionData:  illTransactionData,
-		})
+		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
 	default:
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
 		return
@@ -217,7 +221,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 		} else if errors.Is(err, pgx.ErrNoRows) {
 			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
-			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqPrevIdNotFound)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
