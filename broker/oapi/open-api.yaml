@@ -130,6 +130,46 @@ components:
         - RefreshPolicy
         - Vendor
 
+    LocatedSupplier:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Generate ID
+        IllTransactionID:
+          type: string
+          description: Ill Transaction ID
+        SupplierID:
+          type: string
+          description: Supplier ID from peer table
+        Ordinal:
+          type: integer
+          format: int32
+          description: Ordinal number for ordering
+        SupplierStatus:
+          type: string
+          description: Supplier status, possible values (new, selected, skipped)
+        PrevAction:
+          type: string
+          description: Previous requester action
+        PrevStatus:
+          type: string
+          description: Previous supplier transaction status
+        LastAction:
+          type: string
+          description: Latest requester action
+        LastStatus:
+          type: string
+          description: Latest supplier transaction status
+        LocalID:
+          type: string
+          description: Item local ID
+      required:
+        - ID
+        - IllTransactionID
+        - SupplierID
+        - Ordinal
+
 paths:
   /events:
     get:
@@ -327,3 +367,41 @@ paths:
           description: Peer not found
         '500':
           description: Internal server error
+  /located_suppliers:
+    get:
+      summary: Retrieve located suppliers
+      parameters:
+        - in: query
+          name: ill_transaction_id
+          schema:
+            type: string
+          description: Filter located suppliers by ILL transaction ID
+      responses:
+        '200':
+          description: Successful retrieval of located suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocatedSupplier'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
