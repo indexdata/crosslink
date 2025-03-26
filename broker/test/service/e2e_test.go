@@ -169,7 +169,6 @@ func TestRequestUNFILLED(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
 	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
-
 }
 
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
