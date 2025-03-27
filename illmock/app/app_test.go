@@ -236,6 +236,26 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso1
 	return nil
 }
 
+func checkCancel(t *testing.T, ret []flows.FlowMessage) (int, int, int) {
+	var ramg int
+	var sam int
+	var samc int
+	for i := 7; i <= 9; i++ {
+		m := ret[i].Message
+		if m.RequestingAgencyMessageConfirmation != nil {
+			ramg = i
+		}
+		if m.SupplyingAgencyMessage != nil {
+			sam = i
+		}
+		if m.SupplyingAgencyMessageConfirmation != nil {
+			samc = i
+		}
+	}
+	assert.Less(t, sam, samc)
+	return ramg, sam, samc
+}
+
 func TestService(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi() // FlowsApi.ParseEnv is not called
@@ -665,16 +685,8 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.RequestingAgencyMessage)
 		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
 
-		ramg := 7
-		sam := 8
-		samc := 9
-		m = ret[ramg].Message
-		if m.RequestingAgencyMessageConfirmation == nil {
-			t.Log("switching order in Patron request willsupply")
-			sam = 7
-			samc = 8
-			ramg = 9
-		}
+		ramg, sam, samc := checkCancel(t, ret)
+
 		m = ret[ramg].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
@@ -759,16 +771,8 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.RequestingAgencyMessage)
 		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
 
-		ramg := 7
-		sam := 8
-		samc := 9
-		m = ret[ramg].Message
-		if m.RequestingAgencyMessageConfirmation == nil {
-			t.Log("switching order in Patron request cancel no")
-			sam = 7
-			samc = 8
-			ramg = 9
-		}
+		ramg, sam, samc := checkCancel(t, ret)
+
 		m = ret[ramg].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
@@ -808,16 +812,8 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.RequestingAgencyMessage)
 		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
 
-		ramg := 7
-		sam := 8
-		samc := 9
-		m = ret[ramg].Message
-		if m.RequestingAgencyMessageConfirmation == nil {
-			t.Log("switching order in Patron request cancel yes")
-			sam = 7
-			ramg = 8
-			samc = 9
-		}
+		ramg, sam, samc := checkCancel(t, ret)
+
 		m = ret[ramg].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
