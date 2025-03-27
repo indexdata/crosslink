@@ -770,11 +770,6 @@ func TestService(t *testing.T) {
 			ramg = 9
 		}
 		m = ret[ramg].Message
-		if m.RequestingAgencyMessageConfirmation == nil {
-			bytes, err := xml.MarshalIndent(&m, "  ", "  ")
-			assert.Nil(t, err)
-			t.Logf("m: %s", string(bytes))
-		}
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
