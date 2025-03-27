@@ -667,7 +667,7 @@ func TestService(t *testing.T) {
 
 		m = ret[7].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
-		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 
 		m = ret[8].Message
@@ -777,6 +777,7 @@ func TestService(t *testing.T) {
 
 		m = ret[7].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 
 		m = ret[8].Message
