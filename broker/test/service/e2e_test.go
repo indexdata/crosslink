@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
@@ -168,7 +169,7 @@ func TestRequestUNFILLED(t *testing.T) {
 	assert.NotNil(t, msg.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, string(handler.RetryNotPossible), msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
@@ -424,7 +425,7 @@ func TestRequestRETRY_NON_EXISTING(t *testing.T) {
 	assert.NotNil(t, msg.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "no retryable ILL transaction", msg.RequestConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, string(handler.RetryNotPossible), msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestREMINDER(t *testing.T) {
@@ -445,7 +446,7 @@ func TestRequestREMINDER(t *testing.T) {
 	assert.NotNil(t, msg.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "unsupported request type", msg.RequestConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, string(handler.UnsupportedRequestType), msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestRETRY_COST(t *testing.T) {
