@@ -136,26 +136,28 @@ func handleNewRequest(ctx extctx.ExtendedContext, request *iso18626.Request, rep
 	return id, err
 }
 
+var ErrRetryNotPossible = errors.New(string(NoRetryableIllTransaction))
+
 func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, error) {
 	// ServiceInfo already nil checked in handleIso18626Request
-	previusRequestId := request.ServiceInfo.RequestingAgencyPreviousRequestId
+	prevReqId := createPgText(request.ServiceInfo.RequestingAgencyPreviousRequestId)
 
 	var id string
 	err := repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(previusRequestId))
+		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, prevReqId)
 		if err != nil {
-			return err
+			return ErrRetryNotPossible
 		}
 		selSup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 		if err != nil {
-			return pgx.ErrNoRows
+			return ErrRetryNotPossible
 		}
 		if selSup.LastStatus.String != string(iso18626.TypeStatusRetryPossible) {
-			return pgx.ErrNoRows
+			return ErrRetryNotPossible
 		}
 		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
 		illTrans.RequesterRequestID = requesterRequestId
-		illTrans.PrevRequesterRequestID = createPgText(previusRequestId)
+		illTrans.PrevRequesterRequestID = prevReqId
 		id = illTrans.ID
 
 		illTrans.LastRequesterAction = createPgText("Request")
@@ -226,7 +228,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
-		} else if errors.Is(err, pgx.ErrNoRows) {
+		} else if errors.Is(err, ErrRetryNotPossible) {
 			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, NoRetryableIllTransaction)
 		} else {
