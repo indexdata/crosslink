@@ -239,19 +239,19 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
 	if state.cancel {
 		state.cancel = false
-		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionCancel)
+		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
 		return
 	}
 	switch supplyingAgencyMessage.StatusInfo.Status {
 	case iso18626.TypeStatusLoaned:
 		if !state.received {
 			state.received = true
-			go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionReceived)
+			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
 		}
 	case iso18626.TypeStatusOverdue:
 		if state.renew {
 			state.renew = false
-			go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionRenew)
+			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
 		}
 	case iso18626.TypeStatusCopyCompleted:
 		requester.delete(header)
