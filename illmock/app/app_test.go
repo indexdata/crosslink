@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -667,6 +668,8 @@ func TestService(t *testing.T) {
 
 		m = ret[7].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		out, _ := xml.Marshal(&m.RequestingAgencyMessageConfirmation)
+		fmt.Printf("%s", out)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 
