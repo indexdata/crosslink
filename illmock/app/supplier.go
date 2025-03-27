@@ -248,6 +248,7 @@ func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *sup
 }
 
 func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay / 2)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
 	// cancel by default

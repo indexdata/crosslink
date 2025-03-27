@@ -230,8 +230,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 11))
 }

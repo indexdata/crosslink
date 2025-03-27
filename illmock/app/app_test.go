@@ -253,6 +253,9 @@ func checkCancel(t *testing.T, ret []flows.FlowMessage) (int, int, int) {
 		}
 	}
 	assert.Less(t, sam, samc)
+	assert.Equal(t, 7, ramg)
+	assert.Equal(t, 8, sam)
+	assert.Equal(t, 9, samc)
 	return ramg, sam, samc
 }
 
