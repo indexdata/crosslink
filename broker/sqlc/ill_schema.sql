@@ -8,7 +8,8 @@ CREATE TABLE peer
     url            VARCHAR   NOT NULL,
     loans_count    INTEGER   NOT NULL DEFAULT 0,
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
-    vendor         VARCHAR   NOT NULL
+    vendor         VARCHAR   NOT NULL,
+    UNIQUE (symbol)
 );
 
 CREATE TABLE ill_transaction
@@ -41,6 +42,9 @@ CREATE TABLE located_supplier
     last_action        VARCHAR,
     last_status        VARCHAR,
     local_id           VARCHAR,
+    prev_reason         VARCHAR,
+    last_reason         VARCHAR,
+    supplier_request_id VARCHAR,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );

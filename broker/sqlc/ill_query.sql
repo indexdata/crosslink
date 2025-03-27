@@ -43,7 +43,7 @@ LIMIT 1;
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
 WHERE id = $1
-FOR UPDATE
+    FOR UPDATE
 LIMIT 1;
 
 -- name: GetIllTransactionByRequesterRequestId :one
@@ -56,7 +56,7 @@ LIMIT 1;
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
 WHERE requester_request_id = $1
-FOR UPDATE
+    FOR UPDATE
 LIMIT 1;
 
 -- name: ListIllTransactions :many
@@ -118,29 +118,32 @@ SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_status = $2
-FOR UPDATE;
+    FOR UPDATE;
 
 -- name: GetLocatedSupplierByIllTransactionAndSupplierForUpdate :one
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_id = $2
-FOR UPDATE;
+    FOR UPDATE;
 
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, ordinal, supplier_status, prev_action, prev_status,
-                              last_action, last_status, local_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                              last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE
-    SET ill_transaction_id = EXCLUDED.ill_transaction_id,
-        supplier_id        = EXCLUDED.supplier_id,
-        ordinal            = EXCLUDED.ordinal,
-        supplier_status    = EXCLUDED.supplier_status,
-        prev_action        = EXCLUDED.prev_action,
-        prev_status        = EXCLUDED.prev_status,
-        last_action        = EXCLUDED.last_action,
-        last_status        = EXCLUDED.last_status,
-        local_id           = EXCLUDED.local_id
+    SET ill_transaction_id  = EXCLUDED.ill_transaction_id,
+        supplier_id         = EXCLUDED.supplier_id,
+        ordinal             = EXCLUDED.ordinal,
+        supplier_status     = EXCLUDED.supplier_status,
+        prev_action         = EXCLUDED.prev_action,
+        prev_status         = EXCLUDED.prev_status,
+        last_action         = EXCLUDED.last_action,
+        last_status         = EXCLUDED.last_status,
+        local_id            = EXCLUDED.local_id,
+        prev_reason         = EXCLUDED.prev_reason,
+        last_reason         = EXCLUDED.last_reason,
+        supplier_request_id = EXCLUDED.supplier_request_id
 RETURNING sqlc.embed(located_supplier);
 
 -- name: DeleteLocatedSupplier :exec

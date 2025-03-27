@@ -164,6 +164,15 @@ components:
         LocalID:
           type: string
           description: Item local ID
+        PrevReason:
+          type: string
+          description: Previous requester reason
+        LastReason:
+          type: string
+          description: Latest requester reason
+        SupplierRequestID:
+          type: string
+          description: Supplier request ID
       required:
         - ID
         - IllTransactionID

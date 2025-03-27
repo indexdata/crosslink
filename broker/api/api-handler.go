@@ -285,16 +285,19 @@ func toApiEvent(event events.Event) oapi.Event {
 
 func toApiLocatedSupplier(sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 	return oapi.LocatedSupplier{
-		ID:               sup.ID,
-		IllTransactionID: sup.IllTransactionID,
-		SupplierID:       sup.SupplierID,
-		Ordinal:          sup.Ordinal,
-		SupplierStatus:   toString(sup.SupplierStatus),
-		PrevAction:       toString(sup.PrevAction),
-		PrevStatus:       toString(sup.PrevStatus),
-		LastAction:       toString(sup.LastAction),
-		LastStatus:       toString(sup.LastStatus),
-		LocalID:          toString(sup.LocalID),
+		ID:                sup.ID,
+		IllTransactionID:  sup.IllTransactionID,
+		SupplierID:        sup.SupplierID,
+		Ordinal:           sup.Ordinal,
+		SupplierStatus:    toString(sup.SupplierStatus),
+		PrevAction:        toString(sup.PrevAction),
+		PrevStatus:        toString(sup.PrevStatus),
+		LastAction:        toString(sup.LastAction),
+		LastStatus:        toString(sup.LastStatus),
+		LocalID:           toString(sup.LocalID),
+		PrevReason:        toString(sup.PrevReason),
+		LastReason:        toString(sup.LastReason),
+		SupplierRequestID: toString(sup.SupplierRequestID),
 	}
 }
 

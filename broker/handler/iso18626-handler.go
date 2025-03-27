@@ -434,11 +434,12 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	status := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
+	supReqId := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId
+	status, reason := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
 	if status == "" {
 		return
 	}
-	err = updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status)
+	err = updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status, reason, supReqId)
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier status", "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -450,30 +451,30 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	writeResponse(ctx, resmsg, w)
 }
 
-func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeStatus {
+func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage) {
 	status, ok := iso18626.StatusMap[string(illMessage.SupplyingAgencyMessage.StatusInfo.Status)]
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(fmt.Sprintf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)))
 		eventData.OutgoingMessage = resp
 		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
-			return ""
+			return "", ""
 		}
-		return ""
+		return "", ""
 	}
-	_, ok = iso18626.ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
+	reason, ok := iso18626.ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
 	if !ok {
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(fmt.Sprintf(string(InvalidReason), illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)))
 		eventData.OutgoingMessage = resp
 		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
-			return ""
+			return "", ""
 		}
-		return ""
+		return "", ""
 	}
-	return status
+	return status, reason
 }
 
 func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
-	symbol string, status iso18626.TypeStatus) error {
+	symbol string, status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string) error {
 	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		peer, err := repo.GetPeerBySymbol(ctx, symbol)
 		if err != nil {
@@ -491,6 +492,11 @@ func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo
 		}
 		locSup.PrevStatus = locSup.LastStatus
 		locSup.LastStatus = createPgText(string(status))
+		locSup.PrevReason = locSup.LastReason
+		locSup.LastReason = createPgText(string(reason))
+		if supReqId != "" {
+			locSup.SupplierRequestID = createPgText(supReqId)
+		}
 		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 		if err != nil {
 			ctx.Logger().Error("failed to update located supplier with id: "+locSup.ID, "error", err)
