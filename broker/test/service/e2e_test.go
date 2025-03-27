@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -18,11 +24,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net/http"
-	"os"
-	"strconv"
-	"testing"
-	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -230,8 +231,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n",
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 11))
 }
 
@@ -322,8 +323,8 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
@@ -368,13 +369,13 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
