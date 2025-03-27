@@ -1,8 +1,9 @@
 package shim
 
 import (
-	"github.com/indexdata/crosslink/iso18626"
 	"testing"
+
+	"github.com/indexdata/crosslink/iso18626"
 )
 
 func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
@@ -39,7 +40,7 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 				Status: iso18626.TypeStatusLoaned,
 			},
 			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
 			},
 		},
 	}
