@@ -282,7 +282,8 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 		return
 	}
 	var resmsg = createRequestingAgencyConfirmation(&requestingAgencyMessage.Header, iso18626.TypeMessageStatusOK, nil, nil)
-	resmsg.RequestingAgencyMessageConfirmation.Action = &requestingAgencyMessage.Action
+	action := iso18626.TypeAction(requestingAgencyMessage.Action)
+	resmsg.RequestingAgencyMessageConfirmation.Action = &action
 	app.writeIso18626Response(resmsg, w, role.Supplier, &requestingAgencyMessage.Header)
 
 	header := &requestingAgencyMessage.Header

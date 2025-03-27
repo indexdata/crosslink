@@ -665,17 +665,27 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.RequestingAgencyMessage)
 		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
 
-		m = ret[7].Message
+		ramg := 7
+		sam := 8
+		samc := 9
+		m = ret[ramg].Message
+		if m.RequestingAgencyMessageConfirmation == nil {
+			t.Log("switching order in Patron request willsupply")
+			sam = 7
+			samc = 8
+			ramg = 9
+		}
+		m = ret[ramg].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 
-		m = ret[8].Message
+		m = ret[sam].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 
-		m = ret[9].Message
+		m = ret[samc].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
@@ -745,10 +755,38 @@ func TestService(t *testing.T) {
 		m = ret[1].Message
 		assert.Nil(t, m.Request.ServiceInfo.RequestSubType)
 
-		m = ret[8].Message
+		m = ret[6].Message
+		assert.NotNil(t, m.RequestingAgencyMessage)
+		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
+
+		ramg := 7
+		sam := 8
+		samc := 9
+		m = ret[ramg].Message
+		if m.RequestingAgencyMessageConfirmation == nil {
+			t.Log("switching order in Patron request cancel no")
+			sam = 7
+			samc = 8
+			ramg = 9
+		}
+		m = ret[ramg].Message
+		if m.RequestingAgencyMessageConfirmation == nil {
+			bytes, err := xml.MarshalIndent(&m, "  ", "  ")
+			assert.Nil(t, err)
+			t.Logf("m: %s", string(bytes))
+		}
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
+		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
+
+		m = ret[sam].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoN, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+
+		m = ret[samc].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 
 		m = ret[14].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
@@ -775,17 +813,27 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.RequestingAgencyMessage)
 		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
 
-		m = ret[7].Message
+		ramg := 7
+		sam := 8
+		samc := 9
+		m = ret[ramg].Message
+		if m.RequestingAgencyMessageConfirmation == nil {
+			t.Log("switching order in Patron request cancel yes")
+			sam = 7
+			ramg = 8
+			samc = 9
+		}
+		m = ret[ramg].Message
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
 		assert.NotNil(t, m.RequestingAgencyMessageConfirmation.Action)
 		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 
-		m = ret[8].Message
+		m = ret[sam].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 
-		m = ret[9].Message
+		m = ret[samc].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
