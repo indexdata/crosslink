@@ -253,8 +253,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n",
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 11))
 }
 
@@ -345,8 +345,8 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
@@ -391,13 +391,13 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+

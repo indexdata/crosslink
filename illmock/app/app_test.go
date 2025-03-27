@@ -661,18 +661,23 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 
+		m = ret[6].Message
+		assert.NotNil(t, m.RequestingAgencyMessage)
+		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
+
 		m = ret[7].Message
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
+
+		m = ret[8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 
-		m = ret[8].Message
+		m = ret[9].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
-
-		m = ret[9].Message
-		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
-		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 	})
 
 	t.Run("Patron request unfilled", func(t *testing.T) {
@@ -754,7 +759,7 @@ func TestService(t *testing.T) {
 		m = ret[1].Message
 		assert.Nil(t, m.Request.ServiceInfo.RequestSubType)
 
-		m = ret[7].Message
+		m = ret[8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoN, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
@@ -780,18 +785,22 @@ func TestService(t *testing.T) {
 		m = ret[1].Message
 		assert.Nil(t, m.Request.ServiceInfo.RequestSubType)
 
+		m = ret[6].Message
+		assert.NotNil(t, m.RequestingAgencyMessage)
+		assert.Equal(t, iso18626.TypeActionCancel, m.RequestingAgencyMessage.Action)
+
 		m = ret[7].Message
+		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
+
+		m = ret[8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.NotNil(t, m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 		assert.Equal(t, iso18626.TypeYesNoY, *m.SupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 
-		m = ret[8].Message
+		m = ret[9].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
-
-		m = ret[9].Message
-		assert.NotNil(t, m.RequestingAgencyMessageConfirmation)
-		assert.Equal(t, iso18626.TypeActionCancel, *m.RequestingAgencyMessageConfirmation.Action)
 	})
 
 	t.Run("Patron request retry LoanCondition", func(t *testing.T) {

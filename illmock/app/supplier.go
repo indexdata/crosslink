@@ -298,13 +298,13 @@ func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.I
 	}
 	switch requestingAgencyMessage.Action {
 	case iso18626.TypeActionCancel:
-		app.sendSupplyingAgencyCancel(header, state)
+		go app.sendSupplyingAgencyCancel(header, state)
 	case iso18626.TypeActionRenew:
-		app.sendSupplyingAgencyRenew(header, state)
+		go app.sendSupplyingAgencyRenew(header, state)
 	case iso18626.TypeActionReceived:
 		if state.overdue {
 			state.overdue = false
-			app.sendSupplyingAgencyOverdue(header, state)
+			go app.sendSupplyingAgencyOverdue(header, state)
 		}
 	case iso18626.TypeActionShippedReturn:
 		go app.sendSupplyingAgencyLater(header, []iso18626.TypeStatus{iso18626.TypeStatusLoanCompleted})
