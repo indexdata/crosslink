@@ -718,6 +718,20 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
+	// same as unfilled at the moment.. Perhaps it should be an error in the future
+	t.Run("Patron request unknown", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "UNKNOWN", 6)
+
+		m := ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusUnfilled, m.SupplyingAgencyMessage.StatusInfo.Status)
+
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
 	t.Run("Patron request willsupply unfilled", func(t *testing.T) {
 		msg := createPatronRequest()
 		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY_UNFILLED", 8)
@@ -860,6 +874,22 @@ func TestService(t *testing.T) {
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request retry only", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RETRYKEEPID#"
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:COND", 8)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[4].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryLoanCondition), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, rid, m.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		assert.Equal(t, "NoReproduction", m.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
 	})
 
 	t.Run("Patron request retry CostExceedsMaxCost", func(t *testing.T) {

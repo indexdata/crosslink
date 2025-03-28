@@ -30,6 +30,8 @@ const (
 	ReqIdAlreadyExists     ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
 	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
+	RetryNotPossible       ErrorValue = "requestType: Retry not possible"
+	UnsupportedRequestType ErrorValue = "requestType: unsupported value"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
 	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
@@ -42,6 +44,8 @@ const PublicFailedToProcessReqMsg = "failed to process request"
 const InternalFailedToLookupTx = "failed to lookup ILL transaction"
 const InternalFailedToSaveTx = "failed to save ILL transaction"
 const InternalFailedToCreateNotice = "failed to create notice event"
+
+var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
 
 var requestMapping = map[string]RequestWait{}
 
@@ -99,42 +103,25 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 	}
 }
 
-func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
-	if illMessage.Request.Header.RequestingAgencyRequestId == "" {
-		handleRequestError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
-		return
-	}
-
-	if illMessage.Request.BibliographicInfo.SupplierUniqueRecordId == "" {
-		handleRequestError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SuppUniqueRecIdIsEmpty)
-		return
-	}
-
-	requesterSymbol := createPgText(illMessage.Request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.RequestingAgencyId.AgencyIdValue)
-	peers := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
-	if len(peers) != 1 {
-		handleRequestError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
-		return
-	}
-	supplierSymbol := createPgText(illMessage.Request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + illMessage.Request.Header.SupplyingAgencyId.AgencyIdValue)
-	requestAction := createPgText("Request")
-	requesterRequestId := createPgText(illMessage.Request.Header.RequestingAgencyRequestId)
-	supplierRequestId := createPgText(illMessage.Request.Header.SupplyingAgencyRequestId)
+func handleNewRequest(ctx extctx.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo, requesterSymbol pgtype.Text, peers []ill_db.Peer) (string, error) {
+	supplierSymbol := createPgText(request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue)
+	requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
+	supplierRequestId := createPgText(request.Header.SupplyingAgencyRequestId)
 
 	illTransactionData := ill_db.IllTransactionData{
-		BibliographicInfo:     illMessage.Request.BibliographicInfo,
-		PublicationInfo:       illMessage.Request.PublicationInfo,
-		ServiceInfo:           illMessage.Request.ServiceInfo,
-		SupplierInfo:          illMessage.Request.SupplierInfo,
-		RequestedDeliveryInfo: illMessage.Request.RequestedDeliveryInfo,
-		RequestingAgencyInfo:  illMessage.Request.RequestingAgencyInfo,
-		PatronInfo:            illMessage.Request.PatronInfo,
-		BillingInfo:           illMessage.Request.BillingInfo,
+		BibliographicInfo:     request.BibliographicInfo,
+		PublicationInfo:       request.PublicationInfo,
+		ServiceInfo:           request.ServiceInfo,
+		SupplierInfo:          request.SupplierInfo,
+		RequestedDeliveryInfo: request.RequestedDeliveryInfo,
+		RequestingAgencyInfo:  request.RequestingAgencyInfo,
+		PatronInfo:            request.PatronInfo,
+		BillingInfo:           request.BillingInfo,
 	}
 
 	id := uuid.New().String()
 	timestamp := pgtype.Timestamp{
-		Time:  illMessage.Request.Header.Timestamp.Time,
+		Time:  request.Header.Timestamp.Time,
 		Valid: true,
 	}
 	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
@@ -142,33 +129,122 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		Timestamp:           timestamp,
 		RequesterSymbol:     requesterSymbol,
 		RequesterID:         createPgText(peers[0].ID),
-		LastRequesterAction: requestAction,
+		LastRequesterAction: createPgText("Request"),
 		SupplierSymbol:      supplierSymbol,
 		RequesterRequestID:  requesterRequestId,
 		SupplierRequestID:   supplierRequestId,
 		IllTransactionData:  illTransactionData,
 	})
+	return id, err
+}
+
+func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, error) {
+	// ServiceInfo already nil checked in handleIso18626Request
+	prevReqId := createPgText(request.ServiceInfo.RequestingAgencyPreviousRequestId)
+
+	var id string
+	err := repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, prevReqId)
+		if err != nil {
+			return ErrRetryNotPossible
+		}
+		selSup, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+		if err != nil {
+			return ErrRetryNotPossible
+		}
+		if selSup.LastStatus.String != string(iso18626.TypeStatusRetryPossible) {
+			return ErrRetryNotPossible
+		}
+		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)
+		illTrans.RequesterRequestID = requesterRequestId
+		illTrans.PrevRequesterRequestID = prevReqId
+		id = illTrans.ID
+
+		illTrans.LastRequesterAction = createPgText("Request")
+
+		illTransactionData := ill_db.IllTransactionData{
+			BibliographicInfo:     request.BibliographicInfo,
+			PublicationInfo:       request.PublicationInfo,
+			ServiceInfo:           request.ServiceInfo,
+			SupplierInfo:          request.SupplierInfo,
+			RequestedDeliveryInfo: request.RequestedDeliveryInfo,
+			RequestingAgencyInfo:  request.RequestingAgencyInfo,
+			PatronInfo:            request.PatronInfo,
+			BillingInfo:           request.BillingInfo,
+		}
+		illTrans.IllTransactionData = illTransactionData
+
+		timestamp := pgtype.Timestamp{
+			Time:  request.Header.Timestamp.Time,
+			Valid: true,
+		}
+		illTrans.Timestamp = timestamp
+
+		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		return err
+	})
+	return id, err
+}
+
+func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
+	request := illMessage.Request
+	if request.Header.RequestingAgencyRequestId == "" {
+		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
+		return
+	}
+
+	if request.BibliographicInfo.SupplierUniqueRecordId == "" {
+		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, SuppUniqueRecIdIsEmpty)
+		return
+	}
+
+	requesterSymbol := createPgText(request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue)
+	peers := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
+	if len(peers) != 1 {
+		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
+		return
+	}
+
+	var err error
+	var id string
+	var event events.EventName
+
+	requestType := iso18626.TypeRequestTypeNew
+	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil {
+		requestType = *request.ServiceInfo.RequestType
+	}
+	switch requestType {
+	case iso18626.TypeRequestTypeRetry:
+		event = events.EventNameRequesterMsgReceived
+		id, err = handleRetryRequest(ctx, request, repo)
+	case iso18626.TypeRequestTypeNew:
+		event = events.EventNameRequestReceived
+		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
+	default:
+		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
+		return
+	}
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
-			handleRequestError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
-			return
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
+		} else if errors.Is(err, ErrRetryNotPossible) {
+			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, RetryNotPossible)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 			http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-			return
 		}
+		return
 	}
-
-	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
-
+	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: illMessage,
 			OutgoingMessage: resmsg,
 		},
 	}
-	if createNoticeAndCheckDBError(ctx, w, eventBus, id, events.EventNameRequestReceived, eventData, events.EventStatusSuccess) == "" {
+	if createNoticeAndCheckDBError(ctx, w, eventBus, id, event, eventData, events.EventStatusSuccess) == "" {
 		return
 	}
 	writeResponse(ctx, resmsg, w)
@@ -186,8 +262,8 @@ func writeResponse(ctx extctx.ExtendedContext, resmsg *iso18626.ISO18626Message,
 	w.Write(output)
 }
 
-func handleRequestError(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
-	var resmsg = createRequestResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
+func handleRequestError(ctx extctx.ExtendedContext, w http.ResponseWriter, request *iso18626.Request, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
+	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	ctx.Logger().Warn("request confirmation error", "errorType", errorType, "errorValue", errorValue)
 	writeResponse(ctx, resmsg, w)
 }
@@ -200,9 +276,9 @@ func createPgText(value string) pgtype.Text {
 	return textValue
 }
 
-func createRequestResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorType *iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
+func createRequestResponse(request *iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorType *iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
 	var resmsg = &iso18626.ISO18626Message{}
-	header := createConfirmationHeader(&illMessage.Request.Header, messageStatus)
+	header := createConfirmationHeader(&request.Header, messageStatus)
 	errorData := createErrorData(errorType, errorValue)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
 		ConfirmationHeader: *header,
