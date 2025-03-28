@@ -236,6 +236,7 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 }
 
 func (app *MockApp) sendSupplyingAgencyOverdue(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay / 3)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
 	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusOverdue
@@ -243,6 +244,7 @@ func (app *MockApp) sendSupplyingAgencyOverdue(header *iso18626.Header, state *s
 }
 
 func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *supplierInfo) {
+	time.Sleep(app.messageDelay / 3)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
 	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
