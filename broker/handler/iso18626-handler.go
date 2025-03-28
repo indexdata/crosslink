@@ -439,7 +439,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	if status == "" {
 		return
 	}
-	err = updateLocatedSupplierStatus(ctx, repo, illTrans, symbol, status, reason, supReqId)
+	err = updateLocatedSupplier(ctx, repo, illTrans, symbol, status, reason, supReqId)
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier status", "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -473,7 +473,7 @@ func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *i
 	return status, reason
 }
 
-func updateLocatedSupplierStatus(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
+func updateLocatedSupplier(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
 	symbol string, status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string) error {
 	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		peer, err := repo.GetPeerBySymbol(ctx, symbol)
