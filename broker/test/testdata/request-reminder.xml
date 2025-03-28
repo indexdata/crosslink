@@ -1,0 +1,50 @@
+<ISO18626Message
+    xmlns="http://illtransactions.org/2013/iso18626"
+    xmlns:ill="http://illtransactions.org/2013/iso18626"
+    ill:version="1.2"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://illtransactions.org/2013/iso18626 http://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <request>
+        <header>
+            <supplyingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>BROKER</agencyIdValue>
+            </supplyingAgencyId>
+            <requestingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>REQ</agencyIdValue>
+            </requestingAgencyId>
+            <multipleItemRequestId></multipleItemRequestId>
+            <timestamp>2024-11-28T10:25:11.136Z</timestamp>
+            <requestingAgencyRequestId>2481f2a6-eca9-41ce-bc16-1d6397ac809d</requestingAgencyRequestId>
+        </header>
+        <bibliographicInfo>
+            <supplierUniqueRecordId>RETRY:COST_LOANED</supplierUniqueRecordId>
+            <title>Lord of the Rings</title>
+            <author>JRR Tolkien</author>
+            <bibliographicItemId>
+                <bibliographicItemIdentifier>1983</bibliographicItemIdentifier>
+                <bibliographicItemIdentifierCode>ISBN</bibliographicItemIdentifierCode>
+            </bibliographicItemId>
+        </bibliographicInfo>
+        <publicationInfo>
+            <publicationDate>1954</publicationDate>
+        </publicationInfo>
+        <serviceInfo>
+            <requestType>Reminder</requestType>
+            <requestingAgencyPreviousRequestId>2b0d77db-464e-4c7f-b486-c705658a56f3</requestingAgencyPreviousRequestId>
+            <serviceType>Loan</serviceType>
+        </serviceInfo>
+        <supplierInfo></supplierInfo>
+        <requestedDeliveryInfo>
+            <address>
+                <physicalAddress>
+                    <line1>The Prancing Pony Inn, Bree</line1>
+                </physicalAddress>
+            </address>
+        </requestedDeliveryInfo>
+        <patronInfo>
+            <patronId>123</patronId>
+        </patronInfo>
+    </request>
+</ISO18626Message>

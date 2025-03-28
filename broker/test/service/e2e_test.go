@@ -3,11 +3,20 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
@@ -18,11 +27,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net/http"
-	"os"
-	"strconv"
-	"testing"
-	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -146,6 +150,26 @@ func TestRequestUNFILLED(t *testing.T) {
 			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
 			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 7))
+
+	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, err = http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client = &http.Client{}
+	res, err = client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, string(handler.RetryNotPossible), msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
@@ -229,9 +253,9 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n",
+			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 11))
 }
 
@@ -322,8 +346,8 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
@@ -368,13 +392,13 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"TASK, confirm-requester-msg = SUCCESS\n"+
@@ -383,21 +407,60 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 		eventsToCompareString(appCtx, t, illTrans.ID, 21))
 }
 
-func TestRequestRETRY_COST(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	reqId := "5636c993-c41c-48f4-a285-470545f6f346"
-	data, _ := os.ReadFile("../testdata/request-retry-cost.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+func TestRequestRETRY_NON_EXISTING(t *testing.T) {
+	data, err := os.ReadFile("../testdata/request-retry-non-existing.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, _ := http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, string(handler.RetryNotPossible), msg.RequestConfirmation.ErrorData.ErrorValue)
+}
+
+func TestRequestREMINDER(t *testing.T) {
+	data, err := os.ReadFile("../testdata/request-reminder.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, _ := http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.RequestConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, msg.RequestConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, string(handler.UnsupportedRequestType), msg.RequestConfirmation.ErrorData.ErrorValue)
+}
+
+func TestRequestRETRY_COST(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "fc60b4fa-5f98-49a8-a2a0-f17b76fa16a8"
+	data, err := os.ReadFile("../testdata/request-retry-1.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
@@ -414,8 +477,101 @@ func TestRequestRETRY_COST(t *testing.T) {
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n",
-		eventsToCompareString(appCtx, t, illTrans.ID, 5))
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 8))
+}
+
+func TestRequestRETRY_COST_LOANED(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-470545f6f346"
+	data, err := os.ReadFile("../testdata/request-retry-cost-loaned.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "" &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 21))
+}
+
+func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "f8ef7750-982d-41bc-a123-0e18169a0018"
+	data, err := os.ReadFile("../testdata/request-retry-onloan-loaned.xml")
+	assert.Nil(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "" &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"TASK, confirm-requester-msg = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 21))
 }
 
 func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId string, messageCount int) string {

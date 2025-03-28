@@ -75,6 +75,7 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		iso18626.TypeStatusOverdue,
 		iso18626.TypeStatusRecalled,
 		iso18626.TypeStatusCancelled,
+		iso18626.TypeStatusRetryPossible,
 		iso18626.TypeStatusCopyCompleted,
 		iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusCompletedWithoutReturn:
