@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dustin/go-humanize"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/client"
@@ -39,6 +40,9 @@ var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 var FORWARD_WILL_SUPPLY, _ = utils.GetEnvBool("FORWARD_WILL_SUPPLY", false)
+var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", uint64(100*1024), func(val string) (uint64, error) {
+	return humanize.ParseBytes(val)
+})
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
@@ -102,7 +106,7 @@ func StartServer(context Context) error {
 	mux.Handle("/", serviceHandler)
 	mux.HandleFunc("/healthz", HandleHealthz)
 
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter))
+	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
 	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
 		http.ServeFile(w, r, "handler/open-api.yaml")

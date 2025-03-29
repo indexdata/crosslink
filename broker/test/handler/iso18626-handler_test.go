@@ -86,7 +86,7 @@ func TestIso18626PostHandlerSuccess(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>OK</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
@@ -97,7 +97,7 @@ func TestIso18626PostHandlerWrongMethod(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
 	assert.Equal(t, "only POST allowed\n", rr.Body.String())
 }
@@ -107,7 +107,7 @@ func TestIso18626PostHandlerWrongContentType(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusUnsupportedMediaType, rr.Code)
 	assert.Equal(t, "only application/xml or text/xml accepted\n", rr.Body.String())
 }
@@ -116,9 +116,19 @@ func TestIso18626PostHandlerInvalidBody(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader([]byte("Invalid")))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "failure parsing request\n", rr.Body.String())
+}
+
+func TestIso18626PostHandlerTooLarge(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, 1)(rr, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
+	assert.Equal(t, "request body too large\n", rr.Body.String())
 }
 
 func TestIso18626PostHandlerInvalid(t *testing.T) {
@@ -126,7 +136,7 @@ func TestIso18626PostHandlerInvalid(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "invalid ISO18626 message\n", rr.Body.String())
 }
@@ -141,7 +151,7 @@ func TestIso18626PostHandlerFailToLocateRequesterSymbol(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	errStatus := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), errStatus)
@@ -158,7 +168,7 @@ func TestIso18626PostHandlerFailToSave(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 	var mockRepo = &MockRepositoryOnlyPeersOK{}
-	handler.Iso18626PostHandler(mockRepo, eventBussError, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockRepo, eventBussError, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
@@ -169,7 +179,7 @@ func TestIso18626PostHandlerMissingRequestingId(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	errStatus := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), errStatus)
@@ -185,7 +195,7 @@ func TestIso18626PostRequestNoSuppUniqRecId(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
@@ -201,7 +211,7 @@ func TestIso18626PostRequestExists(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
@@ -217,7 +227,7 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>OK</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
@@ -228,7 +238,7 @@ func TestIso18626PostSupplyingMessageDBFailure(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
@@ -239,7 +249,7 @@ func TestIso18626PostSupplyingMessageNoReqId(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
@@ -255,7 +265,7 @@ func TestIso18626PostSupplyingMessageReqNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	errStatus := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), errStatus)
@@ -355,7 +365,7 @@ func TestIso18626PostRequestingMessageDBFailure(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoError, eventBussError, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
@@ -365,7 +375,7 @@ func TestIso18626PostRequestingMessageNoReqId(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	errStatus := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), errStatus)
@@ -381,7 +391,7 @@ func TestIso18626PostRequestingMessageReqNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(&MockRepositoryReqNotFound{}, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	errStatus := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), errStatus)
@@ -397,7 +407,7 @@ func TestIso18626PostRequestingMessageReqFailToSave(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(&MockRepositoryReqExists{}, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Equal(t, "failed to process request\n", rr.Body.String())
 }
@@ -408,7 +418,7 @@ func TestIso18626PostHandlerInvalidAction(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedActionType</errorType>")
@@ -421,7 +431,7 @@ func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnrecognisedDataValue</errorType>")
@@ -434,7 +444,7 @@ func TestIso18626PostHandlerInvalidReason(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter)(rr, req)
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedReasonForMessageType</errorType>")
