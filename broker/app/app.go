@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -40,8 +41,13 @@ var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 var FORWARD_WILL_SUPPLY, _ = utils.GetEnvBool("FORWARD_WILL_SUPPLY", false)
-var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", uint64(100*1024), func(val string) (uint64, error) {
-	return humanize.ParseBytes(val)
+var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), func(val string) (int, error) {
+	v, err := humanize.ParseBytes(val)
+	if err != nil && v > uint64(math.MaxInt) {
+		appCtx.Logger().Error("MAX_MESSAGE_SIZE value is too large, using default")
+		return 0, fmt.Errorf("value %s is too large", val)
+	}
+	return int(v), err
 })
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 

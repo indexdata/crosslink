@@ -61,7 +61,7 @@ func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo)
 	}
 }
 
-func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize uint64) http.HandlerFunc {
+func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
 		if r.Method != http.MethodPost {
