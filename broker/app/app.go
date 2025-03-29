@@ -74,7 +74,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
