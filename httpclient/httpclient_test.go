@@ -203,3 +203,19 @@ func TestCustomHeader(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "OK", response.Msg)
 }
+
+func TestMaxSize(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusOK)
+		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	var response myType
+	err := NewClient().WithMaxSize(1).
+		GetXml(http.DefaultClient, server.URL, &response)
+	assert.NotNil(t, err)
+	assert.ErrorContains(t, err, "response body too large")
+}
