@@ -7,6 +7,29 @@ See individual components docs for details:
 * [broker](broker/README.md): ISO18626 transaction broker
 * [illmock](illmock/README.md): ISO18626 + SRU mocking service
 
+## Setting up local development environment
+
+`go` CLI requires additional config to resolve private module dependencies for this repo.
+
+1. Add the following to your env:
+
+```
+export GOPRIVATE="github.com/indexdata/*"
+```
+
+this ensures `go` will fetch private modules without the public proxy.
+
+2. Add the following to you `~/.gitconfig`:
+
+```
+[url "git@github-id:indexdata"]
+        insteadOf = https://github.com/indexdata
+```
+
+this ensures `go` will fetch modules using SSH and rely on your imported GitHub keys.
+
+Note that, to avoid failures for auto-generated package dependencies when tidying use `go mod tidy -e`
+
 ## Development environment
 
 The broker is available at: https://broker.crosslink-dev.indexdata.com.
