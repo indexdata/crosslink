@@ -90,7 +90,8 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
 	if event.EventStatus == events.EventStatusSuccess {
 		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
 		}, "")
 	}
 }

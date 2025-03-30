@@ -195,10 +195,14 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			ctx.Logger().Error("failed to create message", "error", internalErr)
 			return events.EventStatusError, &resData
 		}
+		var note = ""
+		if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
+			note = event.EventData.IncomingMessage.RequestingAgencyMessage.Note
+		}
 		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 			Header: c.createMessageHeader(illTrans, peer, true),
 			Action: found,
-			Note:   "",
+			Note:   note,
 		}
 		action = string(found)
 	}
