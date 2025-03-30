@@ -64,7 +64,8 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 	case iso18626.TypeStatusWillSupply:
 		if w.config.ForwardWillSupply {
 			extctx.Must(ctx, func() (string, error) {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+					events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
 			}, "")
 		}
 	case iso18626.TypeStatusUnfilled:
@@ -80,7 +81,8 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusCompletedWithoutReturn:
 		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
 		}, "")
 	}
 }

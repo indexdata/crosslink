@@ -57,7 +57,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	resData := events.EventResult{}
 
-	var message = &iso18626.ISO18626Message{}
 	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
 	if locSupplier == nil {
@@ -81,11 +80,19 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			}
 		}
 	}
-	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
-		Header:      c.createMessageHeader(illTrans, peer, false),
-		MessageInfo: c.createMessageInfo(illTrans.LastRequesterAction.String),
-		StatusInfo:  c.createStatusInfo(illTrans, locSupplier, status),
+	var message *iso18626.ISO18626Message
+	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
+		message = event.EventData.IncomingMessage
+	} else {
+		message = &iso18626.ISO18626Message{}
+		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	}
+
+	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, peer, false)
+	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.getReasonFromAction(illTrans.LastRequesterAction.String)
+	message.SupplyingAgencyMessage.StatusInfo.Status = status
+	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
+
 	resData.OutgoingMessage = message
 
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -284,7 +291,7 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 	}
 }
 
-func (c *Iso18626Client) createMessageInfo(requesterAction string) iso18626.MessageInfo {
+func (c *Iso18626Client) getReasonFromAction(requesterAction string) iso18626.TypeReasonForMessage {
 	var reason iso18626.TypeReasonForMessage
 	switch requesterAction {
 	case ill_db.RequestAction:
@@ -300,18 +307,7 @@ func (c *Iso18626Client) createMessageInfo(requesterAction string) iso18626.Mess
 	default:
 		reason = iso18626.TypeReasonForMessageStatusChange
 	}
-	return iso18626.MessageInfo{
-		ReasonForMessage: reason,
-	}
-}
-
-func (c *Iso18626Client) createStatusInfo(transaction ill_db.IllTransaction, supplier *ill_db.LocatedSupplier, status iso18626.TypeStatus) iso18626.StatusInfo {
-	return iso18626.StatusInfo{
-		Status: status,
-		LastChange: utils.XSDDateTime{
-			Time: transaction.Timestamp.Time,
-		},
-	}
+	return reason
 }
 
 func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
