@@ -3,6 +3,7 @@ package httpclient
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,8 @@ const (
 	ContentType               string = "Content-Type"
 )
 
+const DefaultMaxResponseSize int64 = 1024 * 1024 * 10 // 10MB
+
 type HttpError struct {
 	StatusCode int
 	Body       []byte
@@ -25,11 +28,17 @@ func (e *HttpError) Error() string {
 }
 
 type HttpClient struct {
-	Headers http.Header
+	Headers         http.Header
+	MaxResponseSize int64
 }
 
 func NewClient() *HttpClient {
-	return &HttpClient{Headers: http.Header{}}
+	return &HttpClient{Headers: http.Header{}, MaxResponseSize: DefaultMaxResponseSize}
+}
+
+func (c *HttpClient) WithMaxSize(maxResponseSize int64) *HttpClient {
+	c.MaxResponseSize = maxResponseSize
+	return c
 }
 
 func (c *HttpClient) WithHeaders(headers ...string) *HttpClient {
@@ -59,13 +68,12 @@ func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		buf, _ := io.ReadAll(resp.Body)
-		return nil, &HttpError{resp.StatusCode, buf}
-	}
-	buf, err := io.ReadAll(resp.Body)
+	buf, err := c.readResponse(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, &HttpError{resp.StatusCode, buf}
 	}
 	contentType := strings.ToLower(resp.Header.Get(ContentType))
 	for _, ctype := range contentTypes {
@@ -74,6 +82,34 @@ func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes
 		}
 	}
 	return nil, fmt.Errorf("header Content-Type must be one of: %s", strings.Join(contentTypes, ", "))
+}
+
+func (c *HttpClient) readResponse(body io.Reader) ([]byte, error) {
+	if c.MaxResponseSize > 0 {
+		body = NewLimitErrorReader(body, c.MaxResponseSize)
+	}
+	buf, err := io.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+type LimitErrorReader struct {
+	reader *io.LimitedReader
+}
+
+func NewLimitErrorReader(r io.Reader, limit int64) *LimitErrorReader {
+	return &LimitErrorReader{
+		reader: &io.LimitedReader{R: r, N: limit},
+	}
+}
+
+func (ler *LimitErrorReader) Read(p []byte) (int, error) {
+	if ler.reader.N <= 0 {
+		return 0, errors.New("response body too large")
+	}
+	return ler.reader.Read(p)
 }
 
 func (c *HttpClient) GetXml(client *http.Client, url string, res any) error {

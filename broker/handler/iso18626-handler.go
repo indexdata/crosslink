@@ -61,7 +61,7 @@ func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo)
 	}
 }
 
-func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) http.HandlerFunc {
+func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
 		if r.Method != http.MethodPost {
@@ -75,8 +75,15 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 			http.Error(w, "only application/xml or text/xml accepted", http.StatusUnsupportedMediaType)
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, int64(maxMsgSize))
 		byteReq, err := io.ReadAll(r.Body)
 		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				ctx.Logger().Error("request body too large", "error", err)
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			ctx.Logger().Error("failure reading request", "error", err, "body", string(byteReq))
 			http.Error(w, "failure reading request", http.StatusBadRequest)
 			return

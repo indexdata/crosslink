@@ -20,16 +20,18 @@ import (
 var BrokerSymbol = "ISIL:BROKER"
 
 type Iso18626Client struct {
-	eventBus events.EventBus
-	illRepo  ill_db.IllRepo
-	client   *http.Client
+	eventBus   events.EventBus
+	illRepo    ill_db.IllRepo
+	client     *http.Client
+	maxMsgSize int
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int) Iso18626Client {
 	return Iso18626Client{
-		eventBus: eventBus,
-		illRepo:  illRepo,
-		client:   http.DefaultClient,
+		eventBus:   eventBus,
+		illRepo:    illRepo,
+		client:     http.DefaultClient,
+		maxMsgSize: maxMsgSize,
 	}
 }
 
@@ -322,7 +324,7 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
-	httpClient := httpclient.NewClient()
+	httpClient := httpclient.NewClient().WithMaxSize(int64(c.maxMsgSize))
 	if len(tenant) > 0 {
 		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
