@@ -257,14 +257,18 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 				ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
 			} else {
 				for _, dir := range dirEntries {
-					peer, loopErr := r.GetPeerBySymbol(ctx, dir.Symbol)
+					var peer Peer
+					var loopErr error
+					for _, sym := range dir.Symbol {
+						peer, loopErr = r.GetPeerBySymbol(ctx, sym)
+					}
 					if loopErr != nil {
 						if errors.Is(loopErr, pgx.ErrNoRows) {
 							err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
 								peer, err = illRepo.SavePeer(ctx, SavePeerParams{
 									ID:            uuid.New().String(),
 									Url:           dir.URL,
-									Name:          dir.Symbol,
+									Name:          dir.Name,
 									RefreshPolicy: RefreshPolicyTransaction,
 									RefreshTime:   GetPgNow(),
 									Vendor:        dir.Vendor,
@@ -272,10 +276,15 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 								if err != nil {
 									return err
 								}
-								_, err := illRepo.SaveSymbol(ctx, SaveSymbolParams{
-									SymbolValue: dir.Symbol,
-									PeerID:      peer.ID,
-								})
+								for _, sym := range dir.Symbol {
+									_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{
+										SymbolValue: sym,
+										PeerID:      peer.ID,
+									})
+									if err != nil {
+										break
+									}
+								}
 								if err != nil {
 									return err
 								}
