@@ -42,14 +42,18 @@ type Iso18626AlmaShim struct {
 
 func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
 	if message != nil && message.SupplyingAgencyMessage != nil {
-		if message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusWillSupply {
-			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
-		}
-		if message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
-			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
-		}
-		if message.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoanCompleted {
-			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+		reason := message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage
+		if reason == iso18626.TypeReasonForMessageRequestResponse || reason == iso18626.TypeReasonForMessageStatusChange {
+			status := message.SupplyingAgencyMessage.StatusInfo.Status
+			if status == iso18626.TypeStatusWillSupply {
+				message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+			}
+			if status == iso18626.TypeStatusLoaned {
+				message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+			}
+			if status == iso18626.TypeStatusLoanCompleted {
+				message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+			}
 		}
 	}
 	return xml.Marshal(message)
