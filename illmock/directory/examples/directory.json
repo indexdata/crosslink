@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "e45ee5cc-a5a5-44f4-b281-459e1c7801b0",
+      "name": "ttty",
+      "description": "Test tenant TTTY"
+    },
+    {
+      "id": "74e099de-c6a5-4a47-be81-5214d2737c9b",
+      "name": "tttz",
+      "description": "Test tenant TTTZ"
+    }
+  ],
+  "resultInfo": {
+    "totalRecords": 2
+  }
+}
