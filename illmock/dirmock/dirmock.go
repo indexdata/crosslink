@@ -2,11 +2,13 @@ package dirmock
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
+	"github.com/indexdata/go-utils/utils"
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/directory"
 )
@@ -14,6 +16,11 @@ import (
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
 
 type DirectoryMock struct{}
+
+//go:embed directories.json
+var defaultDirectories string
+
+var DIRECTORY_ENTRIES = utils.GetEnv("MOCK_DIRECTORY_ENTRIES", defaultDirectories)
 
 func New() *DirectoryMock {
 	return &DirectoryMock{}
@@ -33,7 +40,7 @@ func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) 
 		case cql.ANY:
 			for _, t := range tSymbols {
 				for _, s := range *symbols {
-					if s.Symbol == t {
+					if fullSymbol(s) == t {
 						return true, nil
 					}
 				}
@@ -43,7 +50,7 @@ func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) 
 			for _, t := range tSymbols {
 				found := false
 				for _, s := range *symbols {
-					if s.Symbol == t {
+					if fullSymbol(s) == t {
 						found = true
 					}
 				}
@@ -58,7 +65,7 @@ func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) 
 				return false, nil
 			}
 			for i, t := range tSymbols {
-				if t != (*symbols)[i].Symbol {
+				if t != fullSymbol((*symbols)[i]) {
 					return false, nil
 				}
 			}
@@ -96,6 +103,10 @@ func matchQuery(query *cql.Query, symbols *[]directory.Symbol) (bool, error) {
 	return matchClause(&query.Clause, symbols)
 }
 
+func fullSymbol(symbol directory.Symbol) string {
+	return symbol.Authority + ":" + symbol.Symbol
+}
+
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
 	var query *cql.Query
 	if request.Params.Cql != nil {
@@ -107,32 +118,24 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		query = &tmp
 	}
 
-	id := uuid.New()
-	symbols := []directory.Symbol{
-		{
-			Symbol: "sym1",
-		},
-		{
-			Symbol: "sym2",
-		},
-	}
-	entry := directory.Entry{
-		Name:    "diku",
-		Id:      &id,
-		Symbols: &symbols,
-	}
-
 	var entries []directory.Entry
-	match, err := matchQuery(query, entry.Symbols)
+	var filtered []directory.Entry
+	err := json.Unmarshal([]byte(DIRECTORY_ENTRIES), &entries)
 	if err != nil {
 		return directory.GetEntries400TextResponse(err.Error()), nil
 	}
-	if match {
-		entries = append(entries, entry)
+	for _, entry := range entries {
+		match, err := matchQuery(query, entry.Symbols)
+		if err != nil {
+			return directory.GetEntries400TextResponse(err.Error()), nil
+		}
+		if match {
+			filtered = append(filtered, entry)
+		}
 	}
 	var response directory.GetEntries200JSONResponse
-	response.Items = entries
-	total := len(entries)
+	response.Items = filtered
+	total := len(filtered)
 	response.ResultInfo = &directory.ResultInfo{
 		TotalRecords: &total,
 	}

@@ -1246,9 +1246,9 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 1)
-		assert.Equal(t, 1, *response.ResultInfo.TotalRecords)
-		assert.Equal(t, "diku", response.Items[0].Name)
+		assert.Len(t, response.Items, 3)
+		assert.Equal(t, 3, *response.ResultInfo.TotalRecords)
+		assert.Equal(t, "Supplier 1", response.Items[0].Name)
 	})
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {
