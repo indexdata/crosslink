@@ -102,7 +102,12 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, p := range peers {
-		resp = append(resp, toApiPeer(p))
+		symbols, e := a.illRepo.GetSymbolByPeerId(ctx, p.ID)
+		if e != nil {
+			addInternalError(ctx, w, e)
+			return
+		}
+		resp = append(resp, toApiPeer(p, symbols))
 	}
 	writeJsonResponse(w, resp)
 }
@@ -117,24 +122,45 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
-	if newPeer.Symbol == "" || !strings.Contains(newPeer.Symbol, ":") {
-		resp := ErrorMessage{
-			Error: "Symbol should be in \"ISIL:SYMBOL\" format but got " + newPeer.Symbol,
+	for _, s := range newPeer.Symbols {
+		if s == "" || !strings.Contains(s, ":") {
+			resp := ErrorMessage{
+				Error: "Symbol should be in \"ISIL:SYMBOL\" format but got " + s,
+			}
+			ctx.Logger().Error("error serving api request", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(resp)
+			return
 		}
-		ctx.Logger().Error("error serving api request", "error", err.Error())
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(resp)
-		return
 	}
-	peer, err := a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(toDbPeer(newPeer)))
+	var peer ill_db.Peer
+	var symbols = []ill_db.Symbol{}
+	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(toDbPeer(newPeer)))
+		if err != nil {
+			return err
+		}
+		for _, s := range newPeer.Symbols {
+			sym, e := repo.SaveSymbol(ctx, ill_db.SaveSymbolParams{
+				SymbolValue: s,
+				PeerID:      peer.ID,
+			})
+			if e != nil {
+				return e
+			}
+			symbols = append(symbols, sym)
+		}
+		return nil
+	})
+
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPeer(peer))
+	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols))
 }
 
 func (a *ApiHandler) DeletePeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
@@ -173,7 +199,12 @@ func (a *ApiHandler) GetPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 			return
 		}
 	}
-	writeJsonResponse(w, toApiPeer(peer))
+	symbols, err := a.illRepo.GetSymbolByPeerId(ctx, peer.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	writeJsonResponse(w, toApiPeer(peer, symbols))
 }
 
 func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
@@ -203,12 +234,34 @@ func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 		peer.Url = update.Url
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
-	peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+	var symbols = []ill_db.Symbol{}
+	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+		if err != nil {
+			return err
+		}
+		err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		for _, s := range update.Symbols {
+			sym, e := repo.SaveSymbol(ctx, ill_db.SaveSymbolParams{
+				SymbolValue: s,
+				PeerID:      peer.ID,
+			})
+			if e != nil {
+				return e
+			}
+			symbols = append(symbols, sym)
+		}
+		return nil
+	})
+
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer))
+	writeJsonResponse(w, toApiPeer(peer, symbols))
 }
 
 func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
@@ -288,6 +341,7 @@ func toApiLocatedSupplier(sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 		ID:                sup.ID,
 		IllTransactionID:  sup.IllTransactionID,
 		SupplierID:        sup.SupplierID,
+		SupplierSymbol:    sup.SupplierSymbol,
 		Ordinal:           sup.Ordinal,
 		SupplierStatus:    toString(sup.SupplierStatus),
 		PrevAction:        toString(sup.PrevAction),
@@ -393,10 +447,14 @@ func toApiIllTransactionData(trans ill_db.IllTransactionData) map[string]interfa
 	return api
 }
 
-func toApiPeer(peer ill_db.Peer) oapi.Peer {
+func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
+	list := make([]string, len(symbols))
+	for i, s := range symbols {
+		list[i] = s.SymbolValue
+	}
 	return oapi.Peer{
 		ID:            peer.ID,
-		Symbol:        peer.Symbol,
+		Symbols:       list,
 		Name:          peer.Name,
 		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
@@ -415,7 +473,6 @@ func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) oapi.PeerRefreshPolicy 
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
 	db := ill_db.Peer{
 		ID:            peer.ID,
-		Symbol:        peer.Symbol,
 		Name:          peer.Name,
 		Url:           peer.Url,
 		Vendor:        peer.Vendor,

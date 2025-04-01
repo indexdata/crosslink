@@ -38,7 +38,6 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	yesterday := time.Now().Add(-24 * time.Hour)
 	toChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
-		Symbol:        "ISIL:SUP-TEST-1",
 		Name:          "ISIL:SUP-TEST-1",
 		RefreshPolicy: ill_db.RefreshPolicyTransaction,
 		RefreshTime: pgtype.Timestamp{
@@ -50,6 +49,13 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	)
 	if err != nil {
 		t.Error("Failed to create peer " + err.Error())
+	}
+	_, err = illRepo.SaveSymbol(appCtx, ill_db.SaveSymbolParams{
+		SymbolValue: "ISIL:SUP-TEST-1",
+		PeerID:      toChange.ID,
+	})
+	if err != nil {
+		t.Error("Failed to create symbol " + err.Error())
 	}
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -109,7 +115,6 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 	noChange, err := illRepo.SavePeer(appCtx, ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
-		Symbol:        "ISIL:NOCHANGE",
 		Name:          "No Change",
 		RefreshPolicy: ill_db.RefreshPolicyNever,
 		RefreshTime: pgtype.Timestamp{
@@ -121,6 +126,13 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 	)
 	if err != nil {
 		t.Error("Failed to create peer " + err.Error())
+	}
+	_, err = illRepo.SaveSymbol(appCtx, ill_db.SaveSymbolParams{
+		SymbolValue: "ISIL:NOCHANGE",
+		PeerID:      noChange.ID,
+	})
+	if err != nil {
+		t.Error("Failed to create symbol " + err.Error())
 	}
 	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -507,7 +519,6 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 	if err != nil {
 		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams{
 			ID:            uuid.NewString(),
-			Symbol:        symbol,
 			Name:          symbol,
 			RefreshPolicy: ill_db.RefreshPolicyTransaction,
 			RefreshTime: pgtype.Timestamp{
@@ -520,6 +531,14 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 		})
 		if err != nil {
 			t.Errorf("Failed to save peer: %s", err)
+		}
+
+		_, err = illRepo.SaveSymbol(ctx, ill_db.SaveSymbolParams{
+			SymbolValue: symbol,
+			PeerID:      peer.ID,
+		})
+		if err != nil {
+			t.Error("Failed to create symbol " + err.Error())
 		}
 		return peer
 	} else {

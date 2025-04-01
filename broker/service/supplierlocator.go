@@ -69,14 +69,19 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	peers := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
 	for _, peer := range peers {
-		if localId, ok := symLocalIdMapping[peer.Symbol]; ok {
-			suppliersToAdd = append(suppliersToAdd, SupplierToAdd{
-				Peer:            peer,
-				LocalIdentifier: localId,
-				Ratio:           getPeerRatio(peer),
-			})
-		} else {
-			ctx.Logger().Error("could not find local id for symbol", "symbol", peer.Symbol)
+		symList, err := s.illRepo.GetSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return logErrorAndReturnResult(ctx, "failed to read symbols", err)
+		}
+		for _, sym := range symList {
+			if localId, ok := symLocalIdMapping[sym.SymbolValue]; ok {
+				suppliersToAdd = append(suppliersToAdd, SupplierToAdd{
+					Peer:            peer,
+					LocalIdentifier: localId,
+					Ratio:           getPeerRatio(peer),
+					Symbol:          sym.SymbolValue,
+				})
+			}
 		}
 	}
 
@@ -89,7 +94,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	})
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	for i, sup := range suppliersToAdd {
-		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Peer)
+		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Symbol, sup.Peer)
 		if loopErr == nil {
 			locatedSuppliers = append(locatedSuppliers, added)
 		} else {
@@ -102,11 +107,12 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	}
 }
 
-func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, locId string, symbol string, peer ill_db.Peer) (*ill_db.LocatedSupplier, error) {
 	supplier, err := s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: transId,
 		SupplierID:       peer.ID,
+		SupplierSymbol:   symbol,
 		Ordinal:          ordinal,
 		SupplierStatus: pgtype.Text{
 			String: "new",
@@ -190,6 +196,7 @@ type SupplierToAdd struct {
 	LocalIdentifier string
 	Peer            ill_db.Peer
 	Ratio           float32
+	Symbol          string
 }
 
 func getPeerRatio(peer ill_db.Peer) float32 {
