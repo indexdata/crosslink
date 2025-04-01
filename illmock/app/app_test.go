@@ -31,6 +31,11 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	si := iso18626.TypeRequestTypeNew
 	msg.Request.ServiceInfo.RequestType = &si
 	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
+	deliveryInfo := iso18626.RequestedDeliveryInfo{}
+	deliveryInfo.Address = &iso18626.Address{}
+	deliveryInfo.Address.PhysicalAddress = &iso18626.PhysicalAddress{}
+	deliveryInfo.Address.PhysicalAddress.Line1 = "123 Main St"
+	msg.Request.RequestedDeliveryInfo = append(msg.Request.RequestedDeliveryInfo, deliveryInfo)
 	return msg
 }
 
