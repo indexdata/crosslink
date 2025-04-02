@@ -122,7 +122,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 	var filtered []directory.Entry
 	err := json.Unmarshal([]byte(DIRECTORY_ENTRIES), &entries)
 	if err != nil {
-		return directory.GetEntries400TextResponse(err.Error()), nil
+		return directory.GetEntries500TextResponse(err.Error()), nil
 	}
 	for _, entry := range entries {
 		match, err := matchQuery(query, entry.Symbols)
