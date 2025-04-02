@@ -148,14 +148,15 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 
 # Environment variables
 
-| Name                  | Description                                                          | Default value                  |
-|-----------------------|----------------------------------------------------------------------|--------------------------------|
-|`HTTP_PORT`            | Listening `address:port` or just port, for example: `127.0.0.1:8090` |`8081`                          |
-|`PEER_URL`             | Fallback URL of the peer                                             |`http://localhost:8081/iso18626`|
-|`AGENCY_TYPE`          | Fallback message header agency type value                            |`MOCK`                          |
-|`SUPPLYING_AGENCY_ID`  | Fallback supplier agency ID (symbol)                                 |`SUP`                           |
-|`REQUESTING_AGENCY_ID` | Fallback requester agency ID (symbol)                                |`REQ`                           |
-|`CLEAN_TIMEOUT`        | Specifies how long a flow is kept in memory before being removed     |`10m`                           |
-|`MESSAGE_DELAY`        | Supplier: delay between each SupplyingAgencyMessage.                 |`100ms`                         |
-|                       | Requester: delay before sending ShippedReturn.                       |                                |
-|`HTTP_HEADERS`         | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                           |
+| Name                    | Description                                                          | Default value                                |
+|-------------------------|----------------------------------------------------------------------|----------------------------------------------|
+| `HTTP_PORT`             | Listening `address:port` or just port, for example: `127.0.0.1:8090` | `8081`                                       |
+| `PEER_URL`              | Fallback URL of the peer                                             | `http://localhost:8081/iso18626`             |
+| `AGENCY_TYPE`           | Fallback message header agency type value                            | `MOCK`                                       |
+| `SUPPLYING_AGENCY_ID`   | Fallback supplier agency ID (symbol)                                 | `SUP`                                        |
+| `REQUESTING_AGENCY_ID`  | Fallback requester agency ID (symbol)                                | `REQ`                                        |
+| `CLEAN_TIMEOUT`         | Specifies how long a flow is kept in memory before being removed     | `10m`                                        |
+| `MESSAGE_DELAY`         | Supplier: delay between each SupplyingAgencyMessage.                 | `100ms`                                      |
+|                         | Requester: delay before sending ShippedReturn.                       |                                              |
+| `HTTP_HEADERS`          | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
+| `MOCK_DIRECTORY_ENTRIES`| JSON format list of direcotry entries                                | [directories.json](dirmock/directories.json) |
