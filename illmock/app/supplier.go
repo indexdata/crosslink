@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,7 +20,7 @@ type supplierInfo struct {
 	requesterUrl      string                // requester URL
 	presentResponse   bool                  // if it's first supplying message
 	reasonRetry       *iso18626.ReasonRetry // used on retry
-
+	deliveryMethod    iso18626.SentVia      // delivery method
 }
 
 type Supplier struct {
@@ -132,13 +133,37 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-
+	deliveryMethod := iso18626.SentViaMail
+	if len(illRequest.RequestedDeliveryInfo) > 0 {
+		var sortOrder int64 = math.MaxInt64
+		for _, deliveryInfo := range illRequest.RequestedDeliveryInfo {
+			if deliveryInfo.SortOrder < sortOrder {
+				if deliveryInfo.Address != nil {
+					if deliveryInfo.Address.PhysicalAddress != nil {
+						deliveryMethod = iso18626.SentViaMail
+						sortOrder = deliveryInfo.SortOrder
+					}
+					if deliveryInfo.Address.ElectronicAddress != nil {
+						if deliveryInfo.Address.ElectronicAddress.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeEmail) {
+							deliveryMethod = iso18626.SentViaEmail
+							sortOrder = deliveryInfo.SortOrder
+						}
+						if deliveryInfo.Address.ElectronicAddress.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeFtp) {
+							deliveryMethod = iso18626.SentViaFtp
+							sortOrder = deliveryInfo.SortOrder
+						}
+					}
+				}
+			}
+		}
+	}
 	supplierInfo := &supplierInfo{
 		supplierRequestId: uuid.NewString(),
 		requesterUrl:      app.peerUrl,
 		overdue:           overdue,
 		presentResponse:   true,
 		reasonRetry:       reasonRetry,
+		deliveryMethod:    deliveryMethod,
 	}
 	requestingAgencyInfo := illRequest.RequestingAgencyInfo
 	if requestingAgencyInfo != nil {
@@ -222,6 +247,10 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	switch status {
 	case iso18626.TypeStatusLoaned:
 		state.loaned = true
+		if msg.SupplyingAgencyMessage.DeliveryInfo == nil {
+			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
+		}
+		msg.SupplyingAgencyMessage.DeliveryInfo.SentVia = &iso18626.TypeSchemeValuePair{Text: string(state.deliveryMethod)}
 	case iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusUnfilled,
 		iso18626.TypeStatusRetryPossible,
