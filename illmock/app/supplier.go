@@ -196,12 +196,14 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 	var msg = iso18626.NewIso18626MessageNS()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
+	msg.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 	return msg
 }
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.Iso18626MessageNS) bool {
 	msg.SupplyingAgencyMessage.Header = *header
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
+	msg.SupplyingAgencyMessage.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
@@ -253,6 +255,7 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	switch status {
 	case iso18626.TypeStatusLoaned:
 		state.loaned = true
+		msg.SupplyingAgencyMessage.StatusInfo.DueDate = &utils.XSDDateTime{Time: time.Now().Add(time.Hour * 24 * 14)}
 		if msg.SupplyingAgencyMessage.DeliveryInfo == nil {
 			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 		}

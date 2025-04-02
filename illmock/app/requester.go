@@ -146,6 +146,7 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 	}
 	msg := createRequestingAgencyMessage()
 	msg.RequestingAgencyMessage.Header = *header
+	msg.RequestingAgencyMessage.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	msg.RequestingAgencyMessage.Action = action
 
 	responseMsg, err := app.sendReceive(state.supplierUrl, msg, "requester", header)
