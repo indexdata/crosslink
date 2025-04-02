@@ -1,19 +1,15 @@
 CREATE TABLE peer
 (
     id             VARCHAR PRIMARY KEY,
+    symbol         VARCHAR   NOT NULL,
     name           VARCHAR   NOT NULL,
     refresh_policy VARCHAR   NOT NULL,
     refresh_time   TIMESTAMP NOT NULL DEFAULT now(),
     url            VARCHAR   NOT NULL,
     loans_count    INTEGER   NOT NULL DEFAULT 0,
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
-    vendor         VARCHAR   NOT NULL
-);
-
-CREATE TABLE symbol
-(
-    symbol_value VARCHAR PRIMARY KEY,
-    peer_id VARCHAR   NOT NULL
+    vendor         VARCHAR   NOT NULL,
+    UNIQUE (symbol)
 );
 
 CREATE TABLE ill_transaction
@@ -81,7 +77,6 @@ CREATE TABLE located_supplier
     id                  VARCHAR PRIMARY KEY,
     ill_transaction_id  VARCHAR NOT NULL,
     supplier_id         VARCHAR NOT NULL,
-    supplier_symbol     VARCHAR NOT NULL,
     ordinal             INT     NOT NULL DEFAULT 0,
     supplier_status     VARCHAR,
     prev_action         VARCHAR,
@@ -95,4 +90,3 @@ CREATE TABLE located_supplier
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
-

@@ -36,7 +36,7 @@ type IllRepo interface {
 	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer
 	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
 	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
-	GetSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
+	GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
 }
 
 type PgIllRepo struct {
@@ -202,8 +202,8 @@ func (r *PgIllRepo) SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolPara
 	return sym.Symbol, err
 }
 
-func (r *PgIllRepo) GetSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error) {
-	rows, err := r.queries.GetSymbolByPeerId(ctx, r.GetConnOrTx(), peerId)
+func (r *PgIllRepo) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error) {
+	rows, err := r.queries.GetSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
 	var symbols []Symbol
 	if err == nil {
 		for _, r := range rows {

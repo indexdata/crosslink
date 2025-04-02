@@ -45,7 +45,7 @@ INSERT INTO symbol (symbol_value, peer_id)
 VALUES ($1, $2)
 RETURNING sqlc.embed(symbol);
 
--- name: GetSymbolByPeerId :many
+-- name: GetSymbolsByPeerId :many
 SELECT sqlc.embed(symbol)
 FROM symbol
 WHERE peer_id = $1;

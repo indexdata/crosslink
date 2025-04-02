@@ -102,7 +102,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, p := range peers {
-		symbols, e := a.illRepo.GetSymbolByPeerId(ctx, p.ID)
+		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
 			addInternalError(ctx, w, e)
 			return
@@ -199,7 +199,7 @@ func (a *ApiHandler) GetPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 			return
 		}
 	}
-	symbols, err := a.illRepo.GetSymbolByPeerId(ctx, peer.ID)
+	symbols, err := a.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return

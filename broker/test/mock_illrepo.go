@@ -141,7 +141,7 @@ func (r *MockIllRepositorySuccess) SaveSymbol(ctx extctx.ExtendedContext, params
 func (r *MockIllRepositorySuccess) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
 	return nil
 }
-func (r *MockIllRepositorySuccess) GetSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
+func (r *MockIllRepositorySuccess) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
 	return []ill_db.Symbol{{
 		SymbolValue: "ISIL:SUP1",
 		PeerID:      peerId,
@@ -242,6 +242,6 @@ func (r *MockIllRepositoryError) SaveSymbol(ctx extctx.ExtendedContext, params i
 func (r *MockIllRepositoryError) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
 	return errors.New("DB error")
 }
-func (r *MockIllRepositoryError) GetSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
+func (r *MockIllRepositoryError) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
 	return []ill_db.Symbol{}, errors.New("DB error")
 }
