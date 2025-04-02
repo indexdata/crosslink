@@ -9,5 +9,5 @@ CREATE TABLE symbol
 );
 INSERT INTO symbol (symbol_value, peer_id) SELECT peer.id, peer.symbol FROM peer;
 
-DROP INDEX IF EXISTS peer_symbol_key;
+ALTER TABLE peer DROP CONSTRAINT IF EXISTS peer_symbol_key;
 ALTER TABLE peer DROP COLUMN symbol;
