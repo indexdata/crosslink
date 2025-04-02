@@ -21,6 +21,7 @@ type supplierInfo struct {
 	presentResponse   bool                  // if it's first supplying message
 	reasonRetry       *iso18626.ReasonRetry // used on retry
 	deliveryMethod    iso18626.SentVia      // delivery method
+	serviceType       iso18626.TypeServiceType
 }
 
 type Supplier struct {
@@ -157,6 +158,10 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 			}
 		}
 	}
+	serviceType := iso18626.TypeServiceTypeCopyOrLoan
+	if illRequest.ServiceInfo != nil {
+		serviceType = illRequest.ServiceInfo.ServiceType
+	}
 	supplierInfo := &supplierInfo{
 		supplierRequestId: uuid.NewString(),
 		requesterUrl:      app.peerUrl,
@@ -164,6 +169,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		presentResponse:   true,
 		reasonRetry:       reasonRetry,
 		deliveryMethod:    deliveryMethod,
+		serviceType:       serviceType,
 	}
 	requestingAgencyInfo := illRequest.RequestingAgencyInfo
 	if requestingAgencyInfo != nil {
@@ -254,6 +260,28 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 		}
 		msg.SupplyingAgencyMessage.DeliveryInfo.SentVia = &iso18626.TypeSchemeValuePair{Text: string(state.deliveryMethod)}
+		var idOrUri string
+		var format iso18626.Format
+		switch state.deliveryMethod {
+		case iso18626.SentViaEmail:
+			idOrUri = "123456789"
+			format = iso18626.FormatPdf
+		case iso18626.SentViaFtp:
+			idOrUri = "ftp://ftp.example.com/1234567889"
+			format = iso18626.FormatPdf
+		case iso18626.SentViaMail:
+			idOrUri = "123456789"
+			if state.serviceType == iso18626.TypeServiceTypeCopy {
+				format = iso18626.FormatPaperCopy
+			} else {
+				format = iso18626.FormatPrinted
+			}
+		case iso18626.SentViaUrl:
+			idOrUri = "http://example.com/123456789"
+			format = iso18626.FormatPdf
+		}
+		msg.SupplyingAgencyMessage.DeliveryInfo.ItemId = idOrUri
+		msg.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat = &iso18626.TypeSchemeValuePair{Text: string(format)}
 	case iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusUnfilled,
 		iso18626.TypeStatusRetryPossible,
