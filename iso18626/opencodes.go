@@ -24,3 +24,11 @@ const (
 	ElectronicAddressTypeEmail ElectronicAddressType = "Email"
 	ElectronicAddressTypeFtp   ElectronicAddressType = "FTP"
 )
+
+type Format string
+
+const (
+	FormatPdf       Format = "PDF"
+	FormatPrinted   Format = "Printed"
+	FormatPaperCopy Format = "PaperCopy"
+)
