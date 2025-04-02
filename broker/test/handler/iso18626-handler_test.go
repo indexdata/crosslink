@@ -457,9 +457,8 @@ type MockRepositoryOnlyPeersOK struct {
 
 func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []ill_db.Peer {
 	return []ill_db.Peer{{
-		ID:     "peer1",
-		Name:   symbols[0],
-		Symbol: symbols[0],
+		ID:   "peer1",
+		Name: symbols[0],
 	}}
 }
 

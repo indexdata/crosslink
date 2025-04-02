@@ -106,8 +106,10 @@ components:
         ID:
           type: string
           description: Unique identifier for the peer
-        Symbol:
-          type: string
+        Symbols:
+          type: array
+          items:
+            type: string
           description: Unique symbol representing the peer
         Name:
           type: string
@@ -124,7 +126,7 @@ components:
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
       required:
         - ID
-        - Symbol
+        - Symbols
         - Name
         - Url
         - RefreshPolicy
@@ -142,6 +144,9 @@ components:
         SupplierID:
           type: string
           description: Supplier ID from peer table
+        SupplierSymbol:
+          type: string
+          description: Supplier symbol to use for communication
         Ordinal:
           type: integer
           format: int32
@@ -177,6 +182,7 @@ components:
         - ID
         - IllTransactionID
         - SupplierID
+        - SupplierSymbol
         - Ordinal
 
 paths:

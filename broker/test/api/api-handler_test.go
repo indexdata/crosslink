@@ -164,7 +164,7 @@ func TestPeersCRUD(t *testing.T) {
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
-		Symbol:        "ISIL:PEER",
+		Symbols:       []string{"ISIL:PEER"},
 		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
@@ -202,7 +202,7 @@ func TestPeersCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error marshaling JSON: %s", err)
 	}
-	req, err = http.NewRequest("PUT", getLocalhostWithPort()+"/peers/"+toCreate.Symbol, bytes.NewBuffer(jsonBytes))
+	req, err = http.NewRequest("PUT", getLocalhostWithPort()+"/peers/"+toCreate.Symbols[0], bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		t.Errorf("Error creating put peer request: %s", err)
 	}
@@ -230,7 +230,7 @@ func TestPeersCRUD(t *testing.T) {
 		t.Errorf("expected same peer name 'Updated' got %s", respPeer.Name)
 	}
 	// Get peer
-	respPeer = getPeerBySymbol(t, toCreate.Symbol)
+	respPeer = getPeerBySymbol(t, toCreate.Symbols[0])
 	if toCreate.ID != respPeer.ID {
 		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
 	}
@@ -240,7 +240,7 @@ func TestPeersCRUD(t *testing.T) {
 		t.Errorf("Did not find peers")
 	}
 	// Delete peer
-	req, err = http.NewRequest("DELETE", getLocalhostWithPort()+"/peers/"+toCreate.Symbol, nil)
+	req, err = http.NewRequest("DELETE", getLocalhostWithPort()+"/peers/"+toCreate.Symbols[0], nil)
 	if err != nil {
 		t.Errorf("Error creating delete peer request: %s", err)
 	}
@@ -358,7 +358,7 @@ func TestPostPeersDbError(t *testing.T) {
 		ID:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
-		Symbol:        "ISIL:PEER",
+		Symbols:       []string{"ISIL:PEER"},
 		RefreshPolicy: oapi.Transaction,
 	}
 	jsonBytes, err := json.Marshal(toCreate)

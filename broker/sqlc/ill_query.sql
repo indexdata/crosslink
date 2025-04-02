@@ -7,7 +7,8 @@ LIMIT 1;
 -- name: GetPeerBySymbol :one
 SELECT sqlc.embed(peer)
 FROM peer
-WHERE symbol = $1
+JOIN symbol ON peer_id = id
+WHERE symbol_value = $1
 LIMIT 1;
 
 -- name: ListPeers :many
@@ -16,8 +17,8 @@ FROM peer
 ORDER BY name;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, symbol, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
         url            = EXCLUDED.url,
@@ -38,6 +39,21 @@ SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
 WHERE id = $1
 LIMIT 1;
+
+-- name: SaveSymbol :one
+INSERT INTO symbol (symbol_value, peer_id)
+VALUES ($1, $2)
+RETURNING sqlc.embed(symbol);
+
+-- name: GetSymbolsByPeerId :many
+SELECT sqlc.embed(symbol)
+FROM symbol
+WHERE peer_id = $1;
+
+-- name: DeleteSymbolByPeerId :exec
+DELETE
+FROM symbol
+WHERE peer_id = $1;
 
 -- name: GetIllTransactionByIdForUpdate :one
 SELECT sqlc.embed(ill_transaction)
@@ -128,12 +144,13 @@ WHERE ill_transaction_id = $1
     FOR UPDATE;
 
 -- name: SaveLocatedSupplier :one
-INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, ordinal, supplier_status, prev_action, prev_status,
+INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status, prev_action, prev_status,
                               last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (id) DO UPDATE
     SET ill_transaction_id  = EXCLUDED.ill_transaction_id,
         supplier_id         = EXCLUDED.supplier_id,
+        supplier_symbol     = EXCLUDED.supplier_symbol,
         ordinal             = EXCLUDED.ordinal,
         supplier_status     = EXCLUDED.supplier_status,
         prev_action         = EXCLUDED.prev_action,
