@@ -35,6 +35,7 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	deliveryInfo.Address = &iso18626.Address{}
 	deliveryInfo.Address.PhysicalAddress = &iso18626.PhysicalAddress{}
 	deliveryInfo.Address.PhysicalAddress.Line1 = "123 Main St"
+	deliveryInfo.SortOrder = 1
 	msg.Request.RequestedDeliveryInfo = append(msg.Request.RequestedDeliveryInfo, deliveryInfo)
 	return msg
 }
@@ -657,7 +658,57 @@ func TestService(t *testing.T) {
 	t.Run("Patron request loaned", func(t *testing.T) {
 		msg := createPatronRequest()
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
-		m := ret[len(ret)-2].Message
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaMail), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request loaned e-mail", func(t *testing.T) {
+		msg := createPatronRequest()
+		emailDelivery := iso18626.RequestedDeliveryInfo{}
+		emailDelivery.Address = &iso18626.Address{}
+		emailAddr := iso18626.ElectronicAddress{}
+		emailAddr.ElectronicAddressType.Text = string(iso18626.ElectronicAddressTypeEmail)
+		emailAddr.ElectronicAddressData = "box@email.com"
+		emailDelivery.Address.ElectronicAddress = &emailAddr
+		emailDelivery.SortOrder = 0
+		msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, emailDelivery)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaEmail), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request loaned ftp", func(t *testing.T) {
+		msg := createPatronRequest()
+		emailDelivery := iso18626.RequestedDeliveryInfo{}
+		emailDelivery.Address = &iso18626.Address{}
+		emailAddr := iso18626.ElectronicAddress{}
+		emailAddr.ElectronicAddressType.Text = string(iso18626.ElectronicAddressTypeFtp)
+		emailAddr.ElectronicAddressData = "ftp://address.com"
+		emailDelivery.Address.ElectronicAddress = &emailAddr
+		emailDelivery.SortOrder = 0
+		msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, emailDelivery)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaFtp), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		m = ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
 		m = ret[len(ret)-1].Message
