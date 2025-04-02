@@ -31,13 +31,27 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	si := iso18626.TypeRequestTypeNew
 	msg.Request.ServiceInfo.RequestType = &si
 	msg.Request.ServiceInfo.RequestSubType = []iso18626.TypeRequestSubType{iso18626.TypeRequestSubTypePatronRequest}
+	return msg
+}
+
+func addPhysicalAddress(msg *iso18626.Iso18626MessageNS, sortOrder int64) {
 	deliveryInfo := iso18626.RequestedDeliveryInfo{}
 	deliveryInfo.Address = &iso18626.Address{}
 	deliveryInfo.Address.PhysicalAddress = &iso18626.PhysicalAddress{}
 	deliveryInfo.Address.PhysicalAddress.Line1 = "123 Main St"
-	deliveryInfo.SortOrder = 1
+	deliveryInfo.SortOrder = sortOrder
 	msg.Request.RequestedDeliveryInfo = append(msg.Request.RequestedDeliveryInfo, deliveryInfo)
-	return msg
+}
+
+func addElectronicAddress(msg *iso18626.Iso18626MessageNS, addrType iso18626.ElectronicAddressType, addrValue string, sortOrder int64) {
+	electronicDelivery := iso18626.RequestedDeliveryInfo{}
+	electronicDelivery.Address = &iso18626.Address{}
+	emailAddr := iso18626.ElectronicAddress{}
+	emailAddr.ElectronicAddressType.Text = string(addrType)
+	emailAddr.ElectronicAddressData = addrValue
+	electronicDelivery.Address.ElectronicAddress = &emailAddr
+	electronicDelivery.SortOrder = sortOrder
+	msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, electronicDelivery)
 }
 
 func TestParseEnv(t *testing.T) {
@@ -655,8 +669,24 @@ func TestService(t *testing.T) {
 		}
 	})
 
-	t.Run("Patron request loaned", func(t *testing.T) {
+	t.Run("Patron request loaned default delivery", func(t *testing.T) {
 		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaUrl), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request physical address", func(t *testing.T) {
+		msg := createPatronRequest()
+		addPhysicalAddress(msg, 1)
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
 		m := ret[len(ret)-8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
@@ -672,14 +702,8 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request loaned e-mail", func(t *testing.T) {
 		msg := createPatronRequest()
-		emailDelivery := iso18626.RequestedDeliveryInfo{}
-		emailDelivery.Address = &iso18626.Address{}
-		emailAddr := iso18626.ElectronicAddress{}
-		emailAddr.ElectronicAddressType.Text = string(iso18626.ElectronicAddressTypeEmail)
-		emailAddr.ElectronicAddressData = "box@email.com"
-		emailDelivery.Address.ElectronicAddress = &emailAddr
-		emailDelivery.SortOrder = 0
-		msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, emailDelivery)
+		addPhysicalAddress(msg, 1)
+		addElectronicAddress(msg, iso18626.ElectronicAddressTypeEmail, "box@email.com", 0)
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
 		m := ret[len(ret)-8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
@@ -695,14 +719,8 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request loaned ftp", func(t *testing.T) {
 		msg := createPatronRequest()
-		emailDelivery := iso18626.RequestedDeliveryInfo{}
-		emailDelivery.Address = &iso18626.Address{}
-		emailAddr := iso18626.ElectronicAddress{}
-		emailAddr.ElectronicAddressType.Text = string(iso18626.ElectronicAddressTypeFtp)
-		emailAddr.ElectronicAddressData = "ftp://address.com"
-		emailDelivery.Address.ElectronicAddress = &emailAddr
-		emailDelivery.SortOrder = 0
-		msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, emailDelivery)
+		addPhysicalAddress(msg, 1)
+		addElectronicAddress(msg, iso18626.ElectronicAddressTypeFtp, "ftp://ftp.example.com", 0)
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
 		m := ret[len(ret)-8].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)

@@ -133,13 +133,13 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-	deliveryMethod := iso18626.SentViaMail
+	deliveryMethod := iso18626.SentViaUrl //assume digital delivery if no address is specified
 	if len(illRequest.RequestedDeliveryInfo) > 0 {
 		var sortOrder int64 = math.MaxInt64
 		for _, deliveryInfo := range illRequest.RequestedDeliveryInfo {
 			if deliveryInfo.SortOrder < sortOrder {
 				if deliveryInfo.Address != nil {
-					if deliveryInfo.Address.PhysicalAddress != nil {
+					if deliveryInfo.Address.PhysicalAddress != nil && deliveryInfo.Address.PhysicalAddress.Line1 != "" {
 						deliveryMethod = iso18626.SentViaMail
 						sortOrder = deliveryInfo.SortOrder
 					}
