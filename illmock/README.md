@@ -72,6 +72,14 @@ following values are recognized:
 |`RETRY:COST_` ...          | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
 |`RETRY:ONLOAN_` ...        | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
 
+### Delivery method
+
+When acting as a supplier, the mock will look at the `<requestedDeliverInfo>` section to determine if the item should
+be shipped physically or electronically. If only a `<physicalAddress>` is provided, or if it has a `<sortOrder>` higher than
+the one of an `<electronicAddress>`, the item sent via `Mail`. Otherwise, the item will be sent via the electronic method of
+choice (either `Email` or `FTP`) or, if no address is provided, it will be sent via `URL`. The `deliveryFormat` will be selected
+appropriately to the method.
+
 ## Requester behavior
 
 The PatronRequest's `<serviceInfo>/<note>` field is used to control the requester behavior.
