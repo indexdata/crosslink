@@ -112,7 +112,7 @@ func uploadTextFile(t *testing.T, contents string) app.Uploaded {
 	var data app.Uploaded
 	err = json.Unmarshal(w.Body.Bytes(), &data)
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("Error parsing response from POST to upload endpoint: %s", err)
 	}
 
 	return data
