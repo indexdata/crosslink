@@ -34,6 +34,26 @@ func createPatronRequest() *iso18626.Iso18626MessageNS {
 	return msg
 }
 
+func addPhysicalAddress(msg *iso18626.Iso18626MessageNS, sortOrder int64) {
+	deliveryInfo := iso18626.RequestedDeliveryInfo{}
+	deliveryInfo.Address = &iso18626.Address{}
+	deliveryInfo.Address.PhysicalAddress = &iso18626.PhysicalAddress{}
+	deliveryInfo.Address.PhysicalAddress.Line1 = "123 Main St"
+	deliveryInfo.SortOrder = sortOrder
+	msg.Request.RequestedDeliveryInfo = append(msg.Request.RequestedDeliveryInfo, deliveryInfo)
+}
+
+func addElectronicAddress(msg *iso18626.Iso18626MessageNS, addrType iso18626.ElectronicAddressType, addrValue string, sortOrder int64) {
+	electronicDelivery := iso18626.RequestedDeliveryInfo{}
+	electronicDelivery.Address = &iso18626.Address{}
+	emailAddr := iso18626.ElectronicAddress{}
+	emailAddr.ElectronicAddressType.Text = string(addrType)
+	emailAddr.ElectronicAddressData = addrValue
+	electronicDelivery.Address.ElectronicAddress = &emailAddr
+	electronicDelivery.SortOrder = sortOrder
+	msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, electronicDelivery)
+}
+
 func TestParseEnv(t *testing.T) {
 	os.Setenv("HTTP_PORT", "8082")
 	os.Setenv("PEER_URL", "https://localhost:8082")
@@ -649,10 +669,87 @@ func TestService(t *testing.T) {
 		}
 	})
 
-	t.Run("Patron request loaned", func(t *testing.T) {
+	t.Run("Patron request loaned default delivery", func(t *testing.T) {
 		msg := createPatronRequest()
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
-		m := ret[len(ret)-2].Message
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaUrl), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPdf), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request physical address", func(t *testing.T) {
+		msg := createPatronRequest()
+		addPhysicalAddress(msg, 1)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaMail), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPrinted), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request loaned e-mail", func(t *testing.T) {
+		msg := createPatronRequest()
+		addPhysicalAddress(msg, 1)
+		addElectronicAddress(msg, iso18626.ElectronicAddressTypeEmail, "box@email.com", 0)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaEmail), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPdf), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request loaned ftp", func(t *testing.T) {
+		msg := createPatronRequest()
+		addPhysicalAddress(msg, 1)
+		addElectronicAddress(msg, iso18626.ElectronicAddressTypeFtp, "ftp://ftp.example.com", 0)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaFtp), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPdf), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request loaned copy", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.ISO18626Message.Request.ServiceInfo.ServiceType = iso18626.TypeServiceTypeCopy
+		addPhysicalAddress(msg, 0)
+		addElectronicAddress(msg, iso18626.ElectronicAddressTypeFtp, "ftp://ftp.example.com", 1)
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
+		m := ret[len(ret)-8].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaMail), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPaperCopy), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
 		m = ret[len(ret)-1].Message
@@ -1149,9 +1246,9 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 1)
-		assert.Equal(t, 1, *response.ResultInfo.TotalRecords)
-		assert.Equal(t, "diku", response.Items[0].Name)
+		assert.Len(t, response.Items, 3)
+		assert.Equal(t, 3, *response.ResultInfo.TotalRecords)
+		assert.Equal(t, "Supplier 1", response.Items[0].Name)
 	})
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {

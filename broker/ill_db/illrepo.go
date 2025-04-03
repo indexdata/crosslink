@@ -34,6 +34,9 @@ type IllRepo interface {
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer
+	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
+	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
+	GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
 }
 
 type PgIllRepo struct {
@@ -194,6 +197,26 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.Ext
 	return getSelectedSupplierForIllTransactionForCommon(selSup, illTransId)
 }
 
+func (r *PgIllRepo) SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error) {
+	sym, err := r.queries.SaveSymbol(ctx, r.GetConnOrTx(), params)
+	return sym.Symbol, err
+}
+
+func (r *PgIllRepo) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error) {
+	rows, err := r.queries.GetSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
+	var symbols []Symbol
+	if err == nil {
+		for _, r := range rows {
+			symbols = append(symbols, r.Symbol)
+		}
+	}
+	return symbols, err
+}
+
+func (r *PgIllRepo) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
+	return r.queries.DeleteSymbolByPeerId(ctx, r.GetConnOrTx(), peerId)
+}
+
 func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, illTransId string) (LocatedSupplier, error) {
 	if len(selSup) == 1 {
 		return selSup[0], nil
@@ -237,14 +260,26 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 					peer, loopErr := r.GetPeerBySymbol(ctx, dir.Symbol)
 					if loopErr != nil {
 						if errors.Is(loopErr, pgx.ErrNoRows) {
-							peer, err = r.SavePeer(ctx, SavePeerParams{
-								ID:            uuid.New().String(),
-								Symbol:        dir.Symbol,
-								Url:           dir.URL,
-								Name:          dir.Symbol,
-								RefreshPolicy: RefreshPolicyTransaction,
-								RefreshTime:   GetPgNow(),
-								Vendor:        dir.Vendor,
+							err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
+								peer, err = illRepo.SavePeer(ctx, SavePeerParams{
+									ID:            uuid.New().String(),
+									Url:           dir.URL,
+									Name:          dir.Symbol,
+									RefreshPolicy: RefreshPolicyTransaction,
+									RefreshTime:   GetPgNow(),
+									Vendor:        dir.Vendor,
+								})
+								if err != nil {
+									return err
+								}
+								_, err := illRepo.SaveSymbol(ctx, SaveSymbolParams{
+									SymbolValue: dir.Symbol,
+									PeerID:      peer.ID,
+								})
+								if err != nil {
+									return err
+								}
+								return nil
 							})
 							if err != nil {
 								ctx.Logger().Error("failed to save peer", "symbol", dir.Symbol, "error", err)

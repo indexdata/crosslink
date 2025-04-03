@@ -90,4 +90,3 @@ CREATE TABLE located_supplier
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
-

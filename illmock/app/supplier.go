@@ -1,6 +1,7 @@
 package app
 
 import (
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,7 +20,8 @@ type supplierInfo struct {
 	requesterUrl      string                // requester URL
 	presentResponse   bool                  // if it's first supplying message
 	reasonRetry       *iso18626.ReasonRetry // used on retry
-
+	deliveryMethod    iso18626.SentVia      // delivery method
+	serviceType       iso18626.TypeServiceType
 }
 
 type Supplier struct {
@@ -132,13 +134,42 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	default:
 		status = append(status, iso18626.TypeStatusUnfilled)
 	}
-
+	deliveryMethod := iso18626.SentViaUrl //assume digital delivery if no address is specified
+	if len(illRequest.RequestedDeliveryInfo) > 0 {
+		var sortOrder int64 = math.MaxInt64
+		for _, deliveryInfo := range illRequest.RequestedDeliveryInfo {
+			if deliveryInfo.SortOrder < sortOrder {
+				if deliveryInfo.Address != nil {
+					if deliveryInfo.Address.PhysicalAddress != nil && deliveryInfo.Address.PhysicalAddress.Line1 != "" {
+						deliveryMethod = iso18626.SentViaMail
+						sortOrder = deliveryInfo.SortOrder
+					}
+					if deliveryInfo.Address.ElectronicAddress != nil {
+						if deliveryInfo.Address.ElectronicAddress.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeEmail) {
+							deliveryMethod = iso18626.SentViaEmail
+							sortOrder = deliveryInfo.SortOrder
+						}
+						if deliveryInfo.Address.ElectronicAddress.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeFtp) {
+							deliveryMethod = iso18626.SentViaFtp
+							sortOrder = deliveryInfo.SortOrder
+						}
+					}
+				}
+			}
+		}
+	}
+	serviceType := iso18626.TypeServiceTypeCopyOrLoan
+	if illRequest.ServiceInfo != nil {
+		serviceType = illRequest.ServiceInfo.ServiceType
+	}
 	supplierInfo := &supplierInfo{
 		supplierRequestId: uuid.NewString(),
 		requesterUrl:      app.peerUrl,
 		overdue:           overdue,
 		presentResponse:   true,
 		reasonRetry:       reasonRetry,
+		deliveryMethod:    deliveryMethod,
+		serviceType:       serviceType,
 	}
 	requestingAgencyInfo := illRequest.RequestingAgencyInfo
 	if requestingAgencyInfo != nil {
@@ -165,12 +196,14 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
 	var msg = iso18626.NewIso18626MessageNS()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
+	msg.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 	return msg
 }
 
 func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.Iso18626MessageNS) bool {
 	msg.SupplyingAgencyMessage.Header = *header
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
+	msg.SupplyingAgencyMessage.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	responseMsg, err := app.sendReceive(state.requesterUrl, msg, role.Supplier, header)
 	if err != nil {
 		log.Warn("sendSupplyingAgencyCancel", "error", err.Error())
@@ -222,6 +255,33 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 	switch status {
 	case iso18626.TypeStatusLoaned:
 		state.loaned = true
+		msg.SupplyingAgencyMessage.StatusInfo.DueDate = &utils.XSDDateTime{Time: time.Now().Add(time.Hour * 24 * 14)}
+		if msg.SupplyingAgencyMessage.DeliveryInfo == nil {
+			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
+		}
+		msg.SupplyingAgencyMessage.DeliveryInfo.SentVia = &iso18626.TypeSchemeValuePair{Text: string(state.deliveryMethod)}
+		var idOrUri string
+		var format iso18626.Format
+		switch state.deliveryMethod {
+		case iso18626.SentViaEmail:
+			idOrUri = "123456789"
+			format = iso18626.FormatPdf
+		case iso18626.SentViaFtp:
+			idOrUri = "ftp://ftp.example.com/1234567889"
+			format = iso18626.FormatPdf
+		case iso18626.SentViaMail:
+			idOrUri = "123456789"
+			if state.serviceType == iso18626.TypeServiceTypeCopy {
+				format = iso18626.FormatPaperCopy
+			} else {
+				format = iso18626.FormatPrinted
+			}
+		case iso18626.SentViaUrl:
+			idOrUri = "http://example.com/123456789"
+			format = iso18626.FormatPdf
+		}
+		msg.SupplyingAgencyMessage.DeliveryInfo.ItemId = idOrUri
+		msg.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat = &iso18626.TypeSchemeValuePair{Text: string(format)}
 	case iso18626.TypeStatusLoanCompleted,
 		iso18626.TypeStatusUnfilled,
 		iso18626.TypeStatusRetryPossible,

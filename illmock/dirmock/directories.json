@@ -1,0 +1,44 @@
+[
+  {
+    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec1",
+    "name" : "Supplier 1",
+    "symbols" : [
+      {
+        "authority": "ISIL",
+        "symbol": "SUP1"
+      },
+      {
+        "authority": "ZFL",
+        "symbol": "SUP1"
+      }
+    ]
+  },
+  {
+    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec2",
+    "name" : "Supplier 2",
+    "symbols" : [
+      {
+        "authority": "ISIL",
+        "symbol": "SUP2"
+      },
+      {
+        "authority": "ZFL",
+        "symbol": "SUP2"
+      }
+    ]
+  },
+  {
+    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec3",
+    "name" : "Supplier 3",
+    "symbols" : [
+      {
+        "authority": "ISIL",
+        "symbol": "SUP3"
+      },
+      {
+        "authority": "ZFL",
+        "symbol": "SUP3"
+      }
+    ]
+  }
+]

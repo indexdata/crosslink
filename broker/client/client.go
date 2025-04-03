@@ -57,7 +57,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	resData := events.EventResult{}
 
-	locSupplier, peer, _ := c.getSupplier(ctx, illTrans)
+	locSupplier, _, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
@@ -88,7 +88,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	}
 
-	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, peer, false)
+	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false)
 	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.getReasonFromAction(illTrans.LastRequesterAction.String)
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
@@ -172,7 +172,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var action string
 	if isRequest {
 		message.Request = &iso18626.Request{
-			Header:                c.createMessageHeader(illTrans, peer, true),
+			Header:                c.createMessageHeader(illTrans, selected, true),
 			BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
 			PublicationInfo:       illTrans.IllTransactionData.PublicationInfo,
 			ServiceInfo:           illTrans.IllTransactionData.ServiceInfo,
@@ -200,7 +200,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			note = event.EventData.IncomingMessage.RequestingAgencyMessage.Note
 		}
 		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-			Header: c.createMessageHeader(illTrans, peer, true),
+			Header: c.createMessageHeader(illTrans, selected, true),
 			Action: found,
 			Note:   note,
 		}
@@ -266,7 +266,7 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 	return &selectedSupplier, &peer, err
 }
 
-func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, supplier *ill_db.Peer, hideRequester bool) iso18626.Header {
+func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, hideRequester bool) iso18626.Header {
 	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
 	if hideRequester {
 		requesterSymbol = strings.Split(BrokerSymbol, ":")
@@ -275,8 +275,8 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if supplier != nil && hideRequester {
-		supplierSymbol = strings.Split(supplier.Symbol, ":")
+	if sup != nil && sup.SupplierSymbol != "" && hideRequester {
+		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{
 		RequestingAgencyId: iso18626.TypeAgencyId{
