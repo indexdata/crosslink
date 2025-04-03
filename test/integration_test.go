@@ -124,8 +124,7 @@ func TestUpload(t *testing.T) {
 
 	res, err := http.Get(uploadResponse.Url)
 	if err != nil {
-		fmt.Printf("error making http request: %s\n", err)
-		os.Exit(1)
+		t.Errorf("Error attempting to request returned link: %s\n", err)
 	}
 
 	if status := res.StatusCode; status != http.StatusOK {
@@ -158,8 +157,7 @@ func TestDelete(t *testing.T) {
 
 	res, err := http.Get(uploadResponse.Url)
 	if err != nil {
-		fmt.Printf("error making http request: %s\n", err)
-		os.Exit(1)
+		t.Errorf("Error attempting to request returned link: %s\n", err)
 	}
 
 	if status := res.StatusCode; status != http.StatusNotFound {
