@@ -112,8 +112,12 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("Got client for bucket %s", bucket)
 
-	// TODO add create a prefix based on tenant header
 	filename := uuid.NewString()
+	tenant := req.Header.Get("X-Okapi-Tenant")
+	if tenant != "" {
+		// we're behind Okapi, this is not sanitised for arbitrary header values
+		filename = tenant + "/" + filename
+	}
 
 	// TODO http.DetectContentType
 	_, err = minioClient.PutObject(context.Background(), bucket, filename, file, fileHeader.Size, minio.PutObjectOptions{

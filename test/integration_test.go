@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/indexdata/mod-dms/app"
@@ -66,7 +67,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func uploadTextFile(t *testing.T, contents string) app.Uploaded {
+func uploadTextFile(t *testing.T, contents string, tenant string) app.Uploaded {
 	tempFile, err := os.CreateTemp("", "dms-test-*.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -100,6 +101,7 @@ func uploadTextFile(t *testing.T, contents string) app.Uploaded {
 
 	req := httptest.NewRequest("POST", "/upload", &b)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Okapi-Tenant", tenant)
 	w := httptest.NewRecorder()
 
 	handler := app.Handler(context.Background())
@@ -120,11 +122,16 @@ func uploadTextFile(t *testing.T, contents string) app.Uploaded {
 
 func TestUpload(t *testing.T) {
 	expected := "String for testing"
-	uploadResponse := uploadTextFile(t, expected)
+	tenant := "sometenant"
+	uploadResponse := uploadTextFile(t, expected, tenant)
 
 	res, err := http.Get(uploadResponse.Url)
 	if err != nil {
-		t.Errorf("Error attempting to request returned link: %s\n", err)
+		t.Errorf("Error attempting to request returned link: %s", err)
+	}
+
+	if !strings.HasPrefix(uploadResponse.Key, tenant+"/") {
+		t.Errorf("Key not prefixed with tenant: %s", uploadResponse.Key)
 	}
 
 	if status := res.StatusCode; status != http.StatusOK {
@@ -143,7 +150,7 @@ func TestUpload(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	expected := "String for testing"
-	uploadResponse := uploadTextFile(t, expected)
+	uploadResponse := uploadTextFile(t, expected, "")
 
 	req := httptest.NewRequest("DELETE", "/upload/"+uploadResponse.Key, nil)
 	w := httptest.NewRecorder()
