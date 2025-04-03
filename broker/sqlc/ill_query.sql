@@ -7,7 +7,7 @@ LIMIT 1;
 -- name: GetPeerBySymbol :one
 SELECT sqlc.embed(peer)
 FROM peer
-JOIN symbol ON peer_id = id
+         JOIN symbol ON peer_id = id
 WHERE symbol_value = $1
 LIMIT 1;
 
@@ -17,16 +17,17 @@ FROM peer
 ORDER BY name;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_properties)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
-    SET name           = EXCLUDED.name,
-        url            = EXCLUDED.url,
-        refresh_policy = EXCLUDED.refresh_policy,
-        refresh_time   = EXCLUDED.refresh_time,
-        loans_count    = EXCLUDED.loans_count,
-        borrows_count  = EXCLUDED.borrows_count,
-        vendor         = EXCLUDED.vendor
+    SET name              = EXCLUDED.name,
+        url               = EXCLUDED.url,
+        refresh_policy    = EXCLUDED.refresh_policy,
+        refresh_time      = EXCLUDED.refresh_time,
+        loans_count       = EXCLUDED.loans_count,
+        borrows_count     = EXCLUDED.borrows_count,
+        vendor            = EXCLUDED.vendor,
+        custom_properties = EXCLUDED.custom_properties
 RETURNING sqlc.embed(peer);
 
 -- name: DeletePeer :exec
@@ -144,7 +145,8 @@ WHERE ill_transaction_id = $1
     FOR UPDATE;
 
 -- name: SaveLocatedSupplier :one
-INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status, prev_action, prev_status,
+INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
+                              prev_action, prev_status,
                               last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 ON CONFLICT (id) DO UPDATE

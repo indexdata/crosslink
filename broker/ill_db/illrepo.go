@@ -266,12 +266,13 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 						if errors.Is(loopErr, pgx.ErrNoRows) {
 							err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
 								peer, err = illRepo.SavePeer(ctx, SavePeerParams{
-									ID:            uuid.New().String(),
-									Url:           dir.URL,
-									Name:          dir.Name,
-									RefreshPolicy: RefreshPolicyTransaction,
-									RefreshTime:   GetPgNow(),
-									Vendor:        dir.Vendor,
+									ID:               uuid.New().String(),
+									Url:              dir.URL,
+									Name:             dir.Name,
+									RefreshPolicy:    RefreshPolicyTransaction,
+									RefreshTime:      GetPgNow(),
+									Vendor:           dir.Vendor,
+									CustomProperties: dir.CustomProperties,
 								})
 								if err != nil {
 									return err
@@ -300,6 +301,8 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 						}
 					} else {
 						peer.Url = dir.URL
+						peer.CustomProperties = dir.CustomProperties
+						peer.Name = dir.Name
 						peer.RefreshTime = GetPgNow()
 						peer, err = r.SavePeer(ctx, SavePeerParams(peer))
 						if err != nil {

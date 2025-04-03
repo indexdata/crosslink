@@ -56,17 +56,10 @@ func TestLookupEmptyList(t *testing.T) {
 func TestLookupMissingUrl(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := adapter.EntriesResponse{
-			Items: []adapter.Entry{{
-				Name: "Peer",
-				Symbols: &[]adapter.Symbol{{
-					Authority: "ISIL",
-					Symbol:    "PEER",
-				}},
-			}},
-		}
-		respBytes, _ := json.Marshal(resp)
-		w.Write(respBytes)
+		respBody := "{\"items\":[{" +
+			"\"name\":\"Peer\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
+			"\"resultInfo\":{\"totalRecords\":1}}"
+		w.Write([]byte(respBody))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -83,14 +76,10 @@ func TestLookupMissingUrl(t *testing.T) {
 func TestLookupMissingSymbols(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := adapter.EntriesResponse{
-			Items: []adapter.Entry{{
-				Name:      "Peer",
-				Endpoints: &[]adapter.ServiceEndpoint{{Address: "http://localhost:8081/directory"}},
-			}},
-		}
-		respBytes, _ := json.Marshal(resp)
-		w.Write(respBytes)
+		respBody := "{\"items\":[{\"endpoints\":[{\"address\":\"http://localhost:8083/\"}]," +
+			"\"name\":\"Peer\"}]," +
+			"\"resultInfo\":{\"totalRecords\":1}}"
+		w.Write([]byte(respBody))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -107,21 +96,10 @@ func TestLookupMissingSymbols(t *testing.T) {
 func TestLookup(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := adapter.EntriesResponse{
-			Items: []adapter.Entry{{
-				Name: "Peer",
-				Symbols: &[]adapter.Symbol{{
-					Authority: "ISIL",
-					Symbol:    "PEER",
-				}, {
-					Authority: "ZFL",
-					Symbol:    "PEER",
-				}},
-				Endpoints: &[]adapter.ServiceEndpoint{{Address: "http://localhost:8081/directory"}},
-			}},
-		}
-		respBytes, _ := json.Marshal(resp)
-		w.Write(respBytes)
+		respBody := "{\"items\":[{\"endpoints\":[{\"address\":\"http://localhost:8081/directory\"}]," +
+			"\"name\":\"Peer\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"},{\"authority\":\"ZFL\",\"symbol\":\"PEER\"}]}]," +
+			"\"resultInfo\":{\"totalRecords\":1}}"
+		w.Write([]byte(respBody))
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()

@@ -1,0 +1,1 @@
+ALTER TABLE peer DROP COLUMN custom_properties;
