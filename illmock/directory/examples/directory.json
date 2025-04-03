@@ -1,17 +1,49 @@
 {
   "items": [
     {
-      "id": "e45ee5cc-a5a5-44f4-b281-459e1c7801b0",
-      "name": "ttty",
-      "description": "Test tenant TTTY"
+      "id": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+      "name": "Test tenant TTTZ",
+      "description": "tttz",
+      "type": "institution",
+      "email": "test@example.com",
+      "symbols": [
+        {
+          "id": "a804c1db-de17-5bbc-a165-8fd9cd4d8704",
+          "symbol": "AU-TTTZ",
+          "authority": "ISIL"
+        }
+      ],
+      "networks": [
+        {
+          "id": "0a5e88cd-4f63-5bdd-baaf-c007b12de171",
+          "name": "State 1",
+          "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+          "priority": 1
+        },
+        {
+          "id": "a814e0dc-ef42-5716-9aeb-841d88dff066",
+          "name": "State 2",
+          "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+          "priority": 2
+        },
+        {
+          "id": "231f36d2-1497-572f-8361-562ae3391f2c",
+          "name": "National",
+          "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+          "priority": 9
+        }
+      ]
     },
     {
-      "id": "74e099de-c6a5-4a47-be81-5214d2737c9b",
-      "name": "tttz",
-      "description": "Test tenant TTTZ"
+      "id": "69794360-8304-5d8b-9f00-525ab77fc4c0",
+      "name": "Test tenant TTTZ / Default branch",
+      "description": "tttz__a",
+      "type": "branch",
+      "lmsLocationCode": "",
+      "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2"
     }
   ],
   "resultInfo": {
-    "totalRecords": 2
+    "totalRecords": 1
   }
 }
