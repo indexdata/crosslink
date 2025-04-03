@@ -168,3 +168,22 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 |                         | Requester: delay before sending ShippedReturn.                       |                                              |
 | `HTTP_HEADERS`          | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
 | `MOCK_DIRECTORY_ENTRIES`| JSON format list of direcotry entries                                | [directories.json](dirmock/directories.json) |
+
+## Creating a directory secret
+Use these instructions to create a directory secret to override the default directory:
+1. Save the custom directory as a file, directory.json
+1. Use kubectl to create a secret based on the file. We'll use the --dry-run and -o yaml options to output a file but not actually create the secret in the cluster yet:
+    ```bash
+    kubectl create secret generic directory \
+      --from-file=directory.json \
+      --namespace=my-namespace \
+      --dry-run=client -o yaml > directory-secret.yaml
+      ```
+1. Inspect the secret file, and apply it either by commiting it to the flux repository or using kubectl apply -f `directory-secret.yaml`.
+1. Use the following config to mount the secret in the chart values:
+    ```yaml
+      envSecrets:
+        MOCK_DIRECTORY_ENTRIES:
+          key: directory.json
+          name: directory
+    ```
