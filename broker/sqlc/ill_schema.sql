@@ -13,7 +13,8 @@ CREATE TABLE peer
 CREATE TABLE symbol
 (
     symbol_value VARCHAR PRIMARY KEY,
-    peer_id VARCHAR   NOT NULL
+    peer_id VARCHAR   NOT NULL,
+    FOREIGN KEY (peer_id) REFERENCES peer (id)
 );
 
 CREATE TABLE ill_transaction

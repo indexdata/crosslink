@@ -5,9 +5,11 @@ ALTER TABLE located_supplier ALTER COLUMN supplier_symbol SET NOT NULL;
 CREATE TABLE symbol
 (
     symbol_value VARCHAR PRIMARY KEY,
-    peer_id VARCHAR   NOT NULL
+    peer_id VARCHAR   NOT NULL,
+    FOREIGN KEY (peer_id) REFERENCES peer (id)
 );
-INSERT INTO symbol (symbol_value, peer_id) SELECT peer.id, peer.symbol FROM peer;
+
+INSERT INTO symbol (symbol_value, peer_id) SELECT peer.symbol, peer.id FROM peer;
 
 ALTER TABLE peer DROP CONSTRAINT IF EXISTS peer_symbol_key;
 ALTER TABLE peer DROP COLUMN symbol;
