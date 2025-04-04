@@ -3,7 +3,6 @@ package adapter
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/indexdata/crosslink/illmock/slogwrap"
 	"github.com/indexdata/go-utils/utils"
 	"io"
 	"net/http"
@@ -24,8 +23,6 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 		cql += " " + s
 	}
 	fullUrl := a.url + "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
-	log := slogwrap.SlogWrap()
-	log.Info("ApiDir", "url", fullUrl)
 	response, err := a.client.Get(fullUrl)
 	if err != nil {
 		return []DirectoryEntry{}, err
