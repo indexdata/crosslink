@@ -1,0 +1,1 @@
+ALTER TABLE peer ADD COLUMN custom_data jsonb;

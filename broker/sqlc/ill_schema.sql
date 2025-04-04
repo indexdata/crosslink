@@ -7,13 +7,14 @@ CREATE TABLE peer
     url            VARCHAR   NOT NULL,
     loans_count    INTEGER   NOT NULL DEFAULT 0,
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
-    vendor         VARCHAR   NOT NULL
+    vendor         VARCHAR   NOT NULL,
+    custom_data    jsonb
 );
 
 CREATE TABLE symbol
 (
     symbol_value VARCHAR PRIMARY KEY,
-    peer_id VARCHAR   NOT NULL,
+    peer_id      VARCHAR NOT NULL,
     FOREIGN KEY (peer_id) REFERENCES peer (id)
 );
 
@@ -31,23 +32,23 @@ CREATE TABLE ill_transaction
     supplier_request_id       VARCHAR,
     last_supplier_status      VARCHAR,
     prev_supplier_status      VARCHAR,
-    ill_transaction_data      jsonb NOT NULL,
+    ill_transaction_data      jsonb     NOT NULL,
     FOREIGN KEY (requester_id) REFERENCES peer (id)
 );
 
 CREATE TABLE located_supplier
 (
-    id                 VARCHAR PRIMARY KEY,
-    ill_transaction_id VARCHAR NOT NULL,
-    supplier_id        VARCHAR NOT NULL,
-    supplier_symbol    VARCHAR NOT NULL,
-    ordinal            INT     NOT NULL DEFAULT 0,
-    supplier_status    VARCHAR,
-    prev_action        VARCHAR,
-    prev_status        VARCHAR,
-    last_action        VARCHAR,
-    last_status        VARCHAR,
-    local_id           VARCHAR,
+    id                  VARCHAR PRIMARY KEY,
+    ill_transaction_id  VARCHAR NOT NULL,
+    supplier_id         VARCHAR NOT NULL,
+    supplier_symbol     VARCHAR NOT NULL,
+    ordinal             INT     NOT NULL DEFAULT 0,
+    supplier_status     VARCHAR,
+    prev_action         VARCHAR,
+    prev_status         VARCHAR,
+    last_action         VARCHAR,
+    last_status         VARCHAR,
+    local_id            VARCHAR,
     prev_reason         VARCHAR,
     last_reason         VARCHAR,
     supplier_request_id VARCHAR,
