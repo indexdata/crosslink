@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/textproto"
 	"os"
 	"strings"
 	"testing"
@@ -67,8 +68,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func uploadTextFile(t *testing.T, contents string, tenant string) app.Uploaded {
-	tempFile, err := os.CreateTemp("", "dms-test-*.txt")
+func uploadFile(t *testing.T, contents string, tenant string, contentType string) *httptest.ResponseRecorder {
+	tempFile, err := os.CreateTemp("", "dms-test-*")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,12 +84,16 @@ func uploadTextFile(t *testing.T, contents string, tenant string) app.Uploaded {
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
-	// it'd be nice to avoid a temporary file but CreateFormFile is convenient
+	h := make(textproto.MIMEHeader)
 	// mod-dms expects the uploaded file in the "file" field
-	formFile, err := writer.CreateFormFile("file", tempFile.Name())
+	h.Set("Content-Disposition",
+		fmt.Sprintf(`form-data; name="file"; filename="%s"`, tempFile.Name()))
+	h.Set("Content-Type", contentType)
+	formFile, err := writer.CreatePart(h)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	fileData, err := os.ReadFile(tempFile.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -102,17 +107,23 @@ func uploadTextFile(t *testing.T, contents string, tenant string) app.Uploaded {
 	req := httptest.NewRequest("POST", "/upload", &b)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Okapi-Tenant", tenant)
-	w := httptest.NewRecorder()
+	res := httptest.NewRecorder()
 
 	handler := app.Handler(context.Background())
-	handler.ServeHTTP(w, req)
+	handler.ServeHTTP(res, req)
 
-	if status := w.Code; status != http.StatusOK {
+	return res
+}
+
+func uploadFileAndParse(t *testing.T, contents string, tenant string, contentType string) app.Uploaded {
+	res := uploadFile(t, contents, tenant, contentType)
+
+	if status := res.Code; status != http.StatusOK {
 		t.Errorf("Upload handler returned non-OK status: %v", status)
 	}
 
 	var data app.Uploaded
-	err = json.Unmarshal(w.Body.Bytes(), &data)
+	err := json.Unmarshal(res.Body.Bytes(), &data)
 	if err != nil {
 		t.Errorf("Error parsing response from POST to upload endpoint: %s", err)
 	}
@@ -123,7 +134,8 @@ func uploadTextFile(t *testing.T, contents string, tenant string) app.Uploaded {
 func TestUpload(t *testing.T) {
 	expected := "String for testing"
 	tenant := "sometenant"
-	uploadResponse := uploadTextFile(t, expected, tenant)
+	contentType := "image/png"
+	uploadResponse := uploadFileAndParse(t, expected, tenant, contentType)
 
 	res, err := http.Get(uploadResponse.Url)
 	if err != nil {
@@ -138,6 +150,10 @@ func TestUpload(t *testing.T) {
 		t.Errorf("Accessing returned link returned non-OK status: %v", status)
 	}
 
+	if ct := res.Header.Get("Content-Type"); ct != contentType {
+		t.Errorf("Accessing returned link returned unexpected content type: %v", ct)
+	}
+
 	rb, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -149,8 +165,8 @@ func TestUpload(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	expected := "String for testing"
-	uploadResponse := uploadTextFile(t, expected, "")
+	content := "String for testing"
+	uploadResponse := uploadFileAndParse(t, content, "", "application/pdf")
 
 	req := httptest.NewRequest("DELETE", "/upload/"+uploadResponse.Key, nil)
 	w := httptest.NewRecorder()
@@ -169,5 +185,25 @@ func TestDelete(t *testing.T) {
 
 	if status := res.StatusCode; status != http.StatusNotFound {
 		t.Errorf("Accessing link after delete returned non-404 status: %v", status)
+	}
+}
+
+func TestRestrictContentType(t *testing.T) {
+	content := "String for testing"
+	validTypeString := "image/png,application/pdf"
+	os.Setenv("MOD_DMS_TYPES", validTypeString)
+
+	res := uploadFile(t, content, "", "application/pdf")
+	if status := res.Code; status != http.StatusOK {
+		t.Errorf("Upload handler returned non-OK status for content type expected to be accepted: %v", status)
+	}
+
+	res = uploadFile(t, content, "", "application/javascript")
+	if status := res.Code; status != http.StatusUnsupportedMediaType {
+		t.Errorf("Upload handler returned non-415 status for content type expected to be accepted: %v", status)
+	}
+
+	if res.Result().Header.Get("Accept-Post") != strings.Join(strings.Split(validTypeString, ","), ", ") {
+		t.Error("Upload handler returned 415 status without supplying configured types in Accept-Post")
 	}
 }

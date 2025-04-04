@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -103,6 +104,26 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("Received file")
 
+	fileType := fileHeader.Header.Get("Content-Type")
+
+	validTypeString, hasValidTypes := os.LookupEnv("MOD_DMS_TYPES")
+	validTypes := strings.Split(validTypeString, ",")
+	if hasValidTypes && !slices.Contains(validTypes, fileType) {
+		h := w.Header()
+
+		// http.Error does this so we will too
+		h.Del("Content-Length")
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("X-Content-Type-Options", "nosniff")
+
+		// Politely inform the client what we accept
+		h.Set("Accept-Post", strings.Join(validTypes, ", "))
+
+		w.WriteHeader(http.StatusUnsupportedMediaType)
+		fmt.Fprintln(w, "Unsupported file type")
+		return
+	}
+
 	bucket, minioClient, err := getBucketClient()
 	if err != nil {
 		fmt.Fprintf(w, "Error obtaining client for S3 bucket: %v", err)
@@ -119,9 +140,8 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 		filename = tenant + "/" + filename
 	}
 
-	// TODO http.DetectContentType
 	_, err = minioClient.PutObject(context.Background(), bucket, filename, file, fileHeader.Size, minio.PutObjectOptions{
-		ContentType: "text/html",
+		ContentType: fileType,
 	})
 	if err != nil {
 		log.Fatalln(err)
