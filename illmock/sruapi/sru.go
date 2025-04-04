@@ -95,7 +95,7 @@ func (api *SruApi) getMarcXmlRecord(id string) (*marcxml.Record, error) {
 		var lValue string
 		var sValue string
 		if strings.HasPrefix(id, "return-") {
-			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "_", 2)
+			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "::", 2)
 			if len(val) < 1 || len(val[0]) < 1 {
 				return nil, fmt.Errorf("invalid return- value")
 			}
