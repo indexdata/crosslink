@@ -179,7 +179,9 @@ Use these instructions to mount a directory JSON file and override the default d
 
 1. Save the custom directory JSON output as a file, `directory.json`
 
-1. Use kubectl to create a config map based on the file. We'll use the --dry-run and -o yaml options to output a file but not actually create the secret in the cluster yet:
+1. For an update, instead of creating a new map, replace the existing JSON in the directory-configmap.yaml.
+
+1. For a new configmap, use kubectl to create a config map based on the file. We'll use the --dry-run and -o yaml options to output a file but not actually create the secret in the cluster yet:
 
 ```bash
 kubectl create configmap directory-config \
@@ -198,3 +200,4 @@ envConfigMaps:
     key: directory.json
     name: directory-config
 ```
+1. Restart the deployment to apply the new config map. For example, `kubectl -n trove-dev rollout restart deployment crosslink-illmock`.
