@@ -1,20 +1,20 @@
 CREATE TABLE peer
 (
-    id                VARCHAR PRIMARY KEY,
-    name              VARCHAR   NOT NULL,
-    refresh_policy    VARCHAR   NOT NULL,
-    refresh_time      TIMESTAMP NOT NULL DEFAULT now(),
-    url               VARCHAR   NOT NULL,
-    loans_count       INTEGER   NOT NULL DEFAULT 0,
-    borrows_count     INTEGER   NOT NULL DEFAULT 0,
-    vendor            VARCHAR   NOT NULL,
-    custom_properties jsonb
+    id             VARCHAR PRIMARY KEY,
+    name           VARCHAR   NOT NULL,
+    refresh_policy VARCHAR   NOT NULL,
+    refresh_time   TIMESTAMP NOT NULL DEFAULT now(),
+    url            VARCHAR   NOT NULL,
+    loans_count    INTEGER   NOT NULL DEFAULT 0,
+    borrows_count  INTEGER   NOT NULL DEFAULT 0,
+    vendor         VARCHAR   NOT NULL,
+    custom_data    jsonb
 );
 
 CREATE TABLE symbol
 (
     symbol_value VARCHAR PRIMARY KEY,
-    peer_id VARCHAR   NOT NULL,
+    peer_id      VARCHAR NOT NULL,
     FOREIGN KEY (peer_id) REFERENCES peer (id)
 );
 

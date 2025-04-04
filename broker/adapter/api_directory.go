@@ -45,9 +45,9 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 	}
 	for _, d := range responseList.Items {
 		var symbols []string
-		if listMap, ok := d["symbols"].([]interface{}); ok && len(listMap) > 0 {
+		if listMap, ok := d["symbols"].([]any); ok && len(listMap) > 0 {
 			for _, s := range listMap {
-				if itemMap, castOk := s.(map[string]interface{}); castOk {
+				if itemMap, castOk := s.(map[string]any); castOk {
 					auth, authOk := itemMap["authority"].(string)
 					sym, symOk := itemMap["symbol"].(string)
 					if authOk && symOk {
@@ -57,16 +57,16 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 			}
 		}
 		apiUrl := ""
-		if listMap, ok := d["endpoints"].([]interface{}); ok && len(listMap) > 0 {
-			apiUrl = listMap[0].(map[string]interface{})["address"].(string)
+		if listMap, ok := d["endpoints"].([]any); ok && len(listMap) > 0 {
+			apiUrl = listMap[0].(map[string]any)["address"].(string)
 		}
 		if apiUrl != "" && len(symbols) > 0 {
 			entry := DirectoryEntry{
-				Name:             d["name"].(string),
-				Symbol:           symbols,
-				Vendor:           "api",
-				URL:              apiUrl,
-				CustomProperties: d,
+				Name:       d["name"].(string),
+				Symbol:     symbols,
+				Vendor:     "api",
+				URL:        apiUrl,
+				CustomData: d,
 			}
 			directoryList = append(directoryList, entry)
 		}
@@ -75,5 +75,5 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 }
 
 type EntriesResponse struct {
-	Items []map[string]interface{} `json:"items"`
+	Items []map[string]any `json:"items"`
 }

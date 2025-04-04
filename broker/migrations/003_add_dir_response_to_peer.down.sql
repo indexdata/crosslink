@@ -1,1 +1,1 @@
-ALTER TABLE peer DROP COLUMN custom_properties;
+ALTER TABLE peer DROP COLUMN custom_data;

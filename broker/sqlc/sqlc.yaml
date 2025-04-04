@@ -19,9 +19,9 @@ sql:
           - column: "peer.refresh_policy"
             go_type:
               type: "RefreshPolicy"
-          - column: "peer.custom_properties"
+          - column: "peer.custom_data"
             go_type:
-              type: "map[string]interface{}"
+              type: "map[string]any"
   - engine: "postgresql"
     queries: "event_query.sql"
     schema: "event_schema.sql"

@@ -9,9 +9,9 @@ type DirectoryLookupParams struct {
 }
 
 type DirectoryEntry struct {
-	Symbol           []string
-	Name             string
-	URL              string
-	Vendor           string
-	CustomProperties map[string]interface{}
+	Symbol     []string
+	Name       string
+	URL        string
+	Vendor     string
+	CustomData map[string]any
 }

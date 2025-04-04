@@ -1,1 +1,1 @@
-ALTER TABLE peer ADD COLUMN custom_properties jsonb;
+ALTER TABLE peer ADD COLUMN custom_data jsonb;
