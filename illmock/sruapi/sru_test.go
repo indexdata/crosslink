@@ -314,7 +314,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: return-foo_bar", func(t *testing.T) {
-		cqlQuery := "id%3Dreturn-foo_bar"
+		cqlQuery := "id%3Dreturn-foo::bar"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
