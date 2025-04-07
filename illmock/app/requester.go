@@ -168,7 +168,10 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 			"got", responseMsg.RequestingAgencyMessageConfirmation.Action)
 		return
 	}
-	if action == iso18626.TypeActionReceived {
+	if action == iso18626.TypeActionReceived && !state.renew {
+		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
+	}
+	if action == iso18626.TypeActionRenew {
 		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
 	}
 }
