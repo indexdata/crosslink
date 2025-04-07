@@ -47,7 +47,10 @@ func TestMain(m *testing.M) {
 		log.Fatalln(err)
 	}
 
-	minioClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: region})
+	err = minioClient.MakeBucket(ctx, bucket, minio.MakeBucketOptions{Region: region})
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	// configure the bucket as sufficiently public that we can follow the URL we get back
 	policy := fmt.Sprintf(`{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Principal": {"AWS": ["*"]},"Resource": ["arn:aws:s3:::%s/*"],"Sid": ""}]}`, bucket)
@@ -62,21 +65,24 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	os.Exit(code)
 }
-func TestUpload(t *testing.T) {
-	// it'd be nice to avoid a temporary file but CreateFormFile is convenient
-	expected := "String for testing"
+
+func uploadTextFile(t *testing.T, contents string) app.Uploaded {
 	tempFile, err := os.CreateTemp("", "dms-test-*.txt")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tempFile.Name())
-	tempFile.Write([]byte(expected))
+	_, err = tempFile.Write([]byte(contents))
+	if err != nil {
+		t.Fatal(err)
+	}
 	tempFile.Close()
 
 	// buffer to hold multipart
 	var b bytes.Buffer
 	writer := multipart.NewWriter(&b)
 
+	// it'd be nice to avoid a temporary file but CreateFormFile is convenient
 	// mod-dms expects the uploaded file in the "file" field
 	formFile, err := writer.CreateFormFile("file", tempFile.Name())
 	if err != nil {
@@ -86,7 +92,10 @@ func TestUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	formFile.Write(fileData)
+	_, err = formFile.Write(fileData)
+	if err != nil {
+		t.Fatal(err)
+	}
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/upload", &b)
@@ -100,17 +109,22 @@ func TestUpload(t *testing.T) {
 		t.Errorf("Upload handler returned non-OK status: %v", status)
 	}
 
-	var data map[string]any
+	var data app.Uploaded
 	err = json.Unmarshal(w.Body.Bytes(), &data)
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("Error parsing response from POST to upload endpoint: %s", err)
 	}
 
-	t.Log(data["url"])
-	res, err := http.Get((data["url"].(string)))
+	return data
+}
+
+func TestUpload(t *testing.T) {
+	expected := "String for testing"
+	uploadResponse := uploadTextFile(t, expected)
+
+	res, err := http.Get(uploadResponse.Url)
 	if err != nil {
-		fmt.Printf("error making http request: %s\n", err)
-		os.Exit(1)
+		t.Errorf("Error attempting to request returned link: %s\n", err)
 	}
 
 	if status := res.StatusCode; status != http.StatusOK {
@@ -124,5 +138,29 @@ func TestUpload(t *testing.T) {
 
 	if string(rb) != expected {
 		t.Errorf("Accessing returned link returned unexpected body: %v", rb)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	expected := "String for testing"
+	uploadResponse := uploadTextFile(t, expected)
+
+	req := httptest.NewRequest("DELETE", "/upload/"+uploadResponse.Key, nil)
+	w := httptest.NewRecorder()
+
+	handler := app.Handler(context.Background())
+	handler.ServeHTTP(w, req)
+
+	if status := w.Code; status != http.StatusOK {
+		t.Errorf("Delete handler returned non-OK status: %v", status)
+	}
+
+	res, err := http.Get(uploadResponse.Url)
+	if err != nil {
+		t.Errorf("Error attempting to request returned link: %s\n", err)
+	}
+
+	if status := res.StatusCode; status != http.StatusNotFound {
+		t.Errorf("Accessing link after delete returned non-404 status: %v", status)
 	}
 }

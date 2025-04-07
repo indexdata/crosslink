@@ -43,7 +43,7 @@ func Start(ctx context.Context) {
 func Handler(ctx context.Context) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /upload", handleUpload)
-	mux.HandleFunc("DELETE /upload/{id}", handleDelete)
+	mux.HandleFunc("DELETE /upload/{key}", handleDelete)
 	return mux
 }
 
@@ -65,8 +65,25 @@ func GetCreds() (BucketCreds, error) {
 	}, nil
 }
 
+func getBucketClient() (string, *minio.Client, error) {
+	b, err := GetCreds()
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Can we pool these?
+	minioClient, err := minio.New(b.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(b.Access, b.Secret, ""),
+		Region: b.Region,
+		Secure: !b.Insecure,
+	})
+
+	return b.Bucket, minioClient, err
+}
+
 type Uploaded struct {
 	Url string `json:"url"`
+	Key string `json:"key"`
 }
 
 func handleUpload(w http.ResponseWriter, req *http.Request) {
@@ -86,30 +103,20 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("Received file")
 
-	b, err := GetCreds()
+	bucket, minioClient, err := getBucketClient()
 	if err != nil {
-		fmt.Fprintf(w, "Error obtaining S3 bucket: %v", err)
-		http.Error(w, "Error obtaining S3 bucket", http.StatusBadRequest)
+		fmt.Fprintf(w, "Error obtaining client for S3 bucket: %v", err)
+		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
-	log.Printf("Got credentials")
-
-	// Can we pool these?
-	minioClient, err := minio.New(b.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(b.Access, b.Secret, ""),
-		Region: b.Region,
-		Secure: !b.Insecure,
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
+	log.Printf("Got client for bucket %s", bucket)
 
 	// TODO add create a prefix based on tenant header
 	filename := uuid.NewString()
 
 	// TODO http.DetectContentType
-	_, err = minioClient.PutObject(context.Background(), b.Bucket, filename, file, fileHeader.Size, minio.PutObjectOptions{
+	_, err = minioClient.PutObject(context.Background(), bucket, filename, file, fileHeader.Size, minio.PutObjectOptions{
 		ContentType: "text/html",
 	})
 	if err != nil {
@@ -119,13 +126,33 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 	log.Printf("Uploaded file")
 
 	log.Println(minioClient.EndpointURL())
-	response := Uploaded{Url: minioClient.EndpointURL().String() + "/" + b.Bucket + "/" + filename}
-	json.NewEncoder(w).Encode(response)
+	response := Uploaded{
+		Url: minioClient.EndpointURL().String() + "/" + bucket + "/" + filename,
+		Key: filename,
+	}
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func handleDelete(w http.ResponseWriter, req *http.Request) {
-	if req.Method != "DELETE" {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+	key := req.PathValue("key")
+	err := uuid.Validate(key)
+	if err != nil {
+		http.Error(w, "Invalid key, can only delete UUIDs with optional prefix", http.StatusBadRequest)
 		return
+	}
+
+	bucket, minioClient, err := getBucketClient()
+	if err != nil {
+		fmt.Fprintf(w, "Error obtaining client for S3 bucket: %v", err)
+		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	err = minioClient.RemoveObject(context.Background(), bucket, key, minio.RemoveObjectOptions{})
+	if err != nil {
+		log.Fatalln(err)
 	}
 }
