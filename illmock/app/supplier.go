@@ -110,12 +110,16 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusWillSupply)
 	case "WILLSUPPLY_LOANED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned)
+	case "WILLSUPPLY_LOANED_RECALLED":
+		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusLoaned, iso18626.TypeStatusRecalled)
 	case "WILLSUPPLY_UNFILLED":
 		status = append(status, iso18626.TypeStatusWillSupply, iso18626.TypeStatusUnfilled)
 	case "UNFILLED":
 		status = append(status, iso18626.TypeStatusUnfilled)
 	case "LOANED":
 		status = append(status, iso18626.TypeStatusLoaned)
+	case "LOANED_RECALLED":
+		status = append(status, iso18626.TypeStatusLoaned, iso18626.TypeStatusRecalled)
 	case "LOANED_OVERDUE":
 		status = append(status, iso18626.TypeStatusLoaned)
 		overdue = true
