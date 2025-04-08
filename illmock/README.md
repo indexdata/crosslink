@@ -55,22 +55,24 @@ invoke a particular scenario when acting as the supplier.
 The scenario is used by the supplier to perform a particular workflow. The
 following values are recognized:
 
-| Scenario                  | Workflow                                                                            |
-|---------------------------|-------------------------------------------------------------------------------------|
-|`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`                         |
-|`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
-|`UNFILLED`                 | Respond with `Unfilled` message                                                     |
-|`WILLSUPPLY`               | Respond with `WillSupply` only                                                      |
-|`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
-|`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
-|`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
-|`COMPLETED`                | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
-|`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error                      |
-|`HTTP-ERROR-400`           | Respond with HTTP `400` status                                                      |
-|`HTTP-ERROR-500`           | Respond with HTTP `500` status                                                      |
-|`RETRY:COND_` ...          | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
-|`RETRY:COST_` ...          | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
-|`RETRY:ONLOAN_` ...        | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
+| Scenario                    | Workflow                                                                            |
+|-----------------------------|-------------------------------------------------------------------------------------|
+|`LOANED`                     | Respond with a `Loaned` message, finish with `LoanComplete`                         |
+|`LOANED_RECALLED`            | Respond with a `Loaned`, then `Recalled`, finish with `LoanComplete`                |
+|`LOANED_OVERDUE`             | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
+|`UNFILLED`                   |  Respond with `Unfilled` message                                                    |
+|`WILLSUPPLY`                 | Respond with `WillSupply` only                                                      |
+|`WILLSUPPLY_LOANED`          | Respond with `WillSupply` then send `Loaned`                                        |
+|`WILLSUPPLY_LOANED_RECALLED` | Respond with `WillSupply` then send `Loaned`  and `Recalled`                        |
+|`WILLSUPPLY_UNFILLED`        | Respond with `WillSupply` then send `Unfilled`                                      |
+|`WILLSUPPLY_LOANED_OVERDUE`  | Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
+|`COMPLETED`                  | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
+|`ERROR`                      | Respond with a `BadlyFormedMessage` message confirmation error                      |
+|`HTTP-ERROR-400`             | Respond with HTTP `400` status                                                      |
+|`HTTP-ERROR-500`             | Respond with HTTP `500` status                                                      |
+|`RETRY:COND_` ...            | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
+|`RETRY:COST_` ...            | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
+|`RETRY:ONLOAN_` ...          | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
 
 ### Delivery method
 
@@ -88,6 +90,8 @@ The following values are recognized:
 
   * `#CANCEL#` the requester will send a `Cancel` action to the supplier upon receiving the first SupplyingAgencyMessage.
   For a sample, refer to `examples/cancel-req.xml`.
+
+  * `#RECALL` the requester will not send Shipped Return upon Loaned. Rather it will wait for Recall to happen.
 
   * `#RENEW#` the requester will send a `Renew` request to the supplier upon receiving an `Overdue` message.
   For a sample, refer to `examples/renew-req.xml`.
