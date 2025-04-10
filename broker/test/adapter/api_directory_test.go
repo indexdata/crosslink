@@ -1,15 +1,29 @@
 package adapter
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/indexdata/crosslink/broker/adapter"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/test"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
+
+var dirEntries adapter.EntriesResponse
+
+func TestMain(m *testing.M) {
+	respBody, _ := os.ReadFile("../testdata/api-directory-response.json")
+	err := json.Unmarshal(respBody, &dirEntries)
+	test.Expect(err, "failed to read directory entries")
+	code := m.Run()
+	os.Exit(code)
+}
 
 func TestLookup400(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -118,15 +132,39 @@ func TestLookup(t *testing.T) {
 }
 
 func TestFilterAndSort(t *testing.T) {
-	requesterData := map[string]any{}
-	requesterData["networks"] = []map[string]any{{"name": "NSW & ACT", "priority": 1}, {"name": "Victoria", "priority": 2}}
-	supData1 := map[string]any{}
-	supData1["networks"] = []map[string]any{{"name": "NSW & ACT", "priority": 1}, {"name": "Victoria", "priority": 2}}
-	supData1["tiers"] = []map[string]any{{"name": "Reciprocal Peer to Peer - Core", "services": []map[string]any{{"cost": 0, "level": "Core", "type": "Loan"}, {"cost": 0, "level": "Core", "type": "Copy"}}}, {"name": "Premium Pay for Peer - Core", "services": []map[string]any{{"cost": 34.4, "level": "Core", "type": "Loan"}, {"cost": 34.4, "level": "Core", "type": "Copy"}}}}
-	supData2 := map[string]any{}
-	supData2["networks"] = []map[string]any{{"name": "NSW & ACT", "priority": 1}, {"name": "Victoria", "priority": 2}}
-	supData2["tiers"] = []map[string]any{{"name": "Reciprocal Peer to Peer - Core", "services": []map[string]any{{"cost": 1, "level": "Core", "type": "Loan"}, {"cost": 1, "level": "Core", "type": "Copy"}}}, {"name": "Premium Pay for Peer - Core", "services": []map[string]any{{"cost": 34.4, "level": "Core", "type": "Loan"}, {"cost": 34.4, "level": "Core", "type": "Copy"}}}}
-	entries := []adapter.SupplierToAdd{{PeerId: "1", Ratio: 0.5, CustomData: supData1}, {PeerId: "2", Ratio: 0.7, CustomData: supData2}}
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{
+		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeCopy,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 3)
+	assert.Equal(t, "1", entries[0].PeerId)
+	assert.Equal(t, "3", entries[1].PeerId)
+	assert.Equal(t, "2", entries[2].PeerId)
+}
+
+func TestFilterAndSortFilterByCost(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -136,12 +174,145 @@ func TestFilterAndSort(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 1150,
+				Base: 1000,
 				Exp:  2,
 			},
 		},
 	}
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
-	entries = ad.FilterAndSort(entries, requesterData, &serviceInfo, &billingInfo)
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
+}
+
+func TestFilterAndSortFilterByCost0(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 000,
+				Exp:  2,
+			},
+		},
+	}
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "1", entries[0].PeerId)
+}
+
+func TestFilterAndSortByType(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{
+		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 2)
+	assert.Equal(t, "1", entries[0].PeerId)
+	assert.Equal(t, "2", entries[1].PeerId)
+}
+
+func TestFilterAndSortByLevel(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{
+		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Rush",
+		},
+		ServiceType: iso18626.TypeServiceTypeCopy,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "3", entries[0].PeerId)
+}
+
+func TestFilterAndSortNoFilters(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	requesterData := dirEntries.Items[0]
+	entries := []adapter.Supplier{
+		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+	entries = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
+	assert.Len(t, entries, 3)
+	assert.Equal(t, "1", entries[0].PeerId)
+	assert.Equal(t, "3", entries[1].PeerId)
+	assert.Equal(t, "2", entries[2].PeerId)
+}
+
+func TestCompareSuppliers(t *testing.T) {
+	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}) == 0)
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) == 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 0, NetworkPriority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 0, NetworkPriority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 0}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 0}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 0},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 2, NetworkPriority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 2, Ratio: 1},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 2},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
 }

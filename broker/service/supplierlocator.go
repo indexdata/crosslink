@@ -65,7 +65,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	symbols := make([]string, 0, len(holdings))
 	symLocalIdMapping := make(map[string]string, len(holdings))
-	suppliersToAdd := make([]adapter.SupplierToAdd, 0, len(holdings))
+	suppliersToAdd := make([]adapter.Supplier, 0, len(holdings))
 	for _, holding := range holdings {
 		symbols = append(symbols, holding.Symbol)
 		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
@@ -79,7 +79,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		}
 		for _, sym := range symList {
 			if localId, ok := symLocalIdMapping[sym.SymbolValue]; ok {
-				suppliersToAdd = append(suppliersToAdd, adapter.SupplierToAdd{
+				suppliersToAdd = append(suppliersToAdd, adapter.Supplier{
 					PeerId:          peer.ID,
 					CustomData:      peer.CustomData,
 					LocalIdentifier: localId,
@@ -94,7 +94,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(symbols, ","))
 	}
 
-	suppliersToAdd = s.dirAdapter.FilterAndSort(suppliersToAdd, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	suppliersToAdd = s.dirAdapter.FilterAndSort(ctx, suppliersToAdd, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	for i, sup := range suppliersToAdd {
 		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Symbol, sup.PeerId)

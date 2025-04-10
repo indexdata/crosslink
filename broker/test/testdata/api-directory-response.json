@@ -1,0 +1,273 @@
+{
+  "items": [
+    {
+      "description": "nalb",
+      "email": "interlibrary@alburycity.nsw.gov.au",
+      "id": "30191a94-9588-5b53-808a-58d843706d1b",
+      "name": "Albury City Libraries",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+          "name": "NSW & ACT",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+          "name": "Queensland",
+          "priority": 3
+        }
+      ],
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "69ee5e27-f787-5cc7-9f8d-af0f7ddb16c2",
+          "symbol": "AU-NALB"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "21c84597-e3f6-5ebd-b644-986b67999b9c",
+          "name": "Reciprocal Peer to Peer - Core",
+          "services": [
+            {
+              "cost": 0,
+              "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+              "level": "Core",
+              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
+              "type": "Loan"
+            },
+            {
+              "cost": 0,
+              "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+              "level": "Core",
+              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
+              "type": "Copy"
+            }
+          ]
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+          "name": "Premium Pay for Peer - Core",
+          "services": [
+            {
+              "cost": 34.4,
+              "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+              "level": "Core",
+              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+              "type": "Loan"
+            },
+            {
+              "cost": 22.4,
+              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+              "level": "Core",
+              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+              "type": "Copy"
+            }
+          ]
+        }
+      ],
+      "type": "institution",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/"
+        }
+      ]
+    },
+    {
+      "description": "nu",
+      "email": "library.resourcesharing@sydney.edu.au",
+      "id": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+      "name": "University of Sydney",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+          "name": "NSW & ACT",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+          "name": "Queensland",
+          "priority": 3
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
+          "name": "South Australia",
+          "priority": 4
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+          "name": "Western Australia",
+          "priority": 5
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+          "name": "National",
+          "priority": 9
+        }
+      ],
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "449b46f7-8c5e-5b24-998c-d064f809ed60",
+          "symbol": "AU-NU"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+          "name": "Premium Pay for Peer - Core",
+          "services": [
+            {
+              "cost": 34.4,
+              "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+              "level": "Core",
+              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+              "type": "Loan"
+            },
+            {
+              "cost": 22.4,
+              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+              "level": "Core",
+              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+              "type": "Copy"
+            }
+          ]
+        }
+      ],
+      "type": "institution",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/"
+        }
+      ]
+    },
+    {
+      "description": "vvwa",
+      "email": "library@worksafe.vic.gov.au",
+      "id": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+      "name": "WorkSafe Victoria",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "60612a26-68dc-5a93-a356-b4eee7d4567f",
+          "name": "Victoria Govt & Arts",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "af2e044f-3b22-597e-bd10-20d949ede45c",
+          "name": "Victoria Health",
+          "priority": 3
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+          "name": "National",
+          "priority": 9
+        }
+      ],
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "1dbf6067-0b98-5114-aeac-dba4755d67d2",
+          "symbol": "AU-VVWA"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "21c84597-e3f6-5ebd-b644-986b67999b9c",
+          "name": "Reciprocal Peer to Peer - Core",
+          "services": [
+            {
+              "cost": 0,
+              "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+              "level": "Core",
+              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
+              "type": "Copy"
+            }
+          ]
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "6baee891-0b61-5c75-a75e-6a0b03d4bfd9",
+          "name": "Reciprocal Peer to Peer - Rush",
+          "services": [
+            {
+              "cost": 0,
+              "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+              "level": "Rush",
+              "tier": "6baee891-0b61-5c75-a75e-6a0b03d4bfd9",
+              "type": "Copy"
+            }
+          ]
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+          "name": "Premium Pay for Peer - Core",
+          "services": [
+            {
+              "cost": 22.4,
+              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+              "level": "Core",
+              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
+              "type": "Copy"
+            }
+          ]
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "6d1b8ecf-23e9-5ffd-9b5f-687816014bfa",
+          "name": "Premium Pay for Peer - Rush",
+          "services": [
+            {
+              "cost": 44.5,
+              "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+              "level": "Rush",
+              "tier": "6d1b8ecf-23e9-5ffd-9b5f-687816014bfa",
+              "type": "Copy"
+            }
+          ]
+        }
+      ],
+      "type": "institution",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/"
+        }
+      ]
+    }
+  ],
+  "resultInfo": {
+    "totalRecords": 3
+  }
+}

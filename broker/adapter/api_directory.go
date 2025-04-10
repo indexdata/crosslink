@@ -4,10 +4,10 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -76,8 +76,8 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 	return directoryList, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(entries []SupplierToAdd, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []SupplierToAdd {
-	filtered := []SupplierToAdd{}
+func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
+	filtered := []Supplier{}
 	requesterNetworks := getPeerNetworks(requesterData)
 	var sType *string
 	var sLevel *string
@@ -90,23 +90,21 @@ func (a *ApiDirectory) FilterAndSort(entries []SupplierToAdd, requesterData map[
 		}
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
-		floatV, err := strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32)
-		if err == nil {
-			maxCost = &floatV
-		}
+		floatV := utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32))
+		maxCost = &floatV
 	}
 	for _, e := range entries {
 		eNetworks := getPeerNetworks(e.CustomData)
-		priority := int32(math.MaxInt32)
-		for name, _ := range requesterNetworks {
+		var priority *float64
+		for name := range requesterNetworks {
 			if net, ok := eNetworks[name]; ok {
-				if priority > net.Priority {
-					priority = net.Priority
+				if priority == nil || *priority > net.Priority {
+					priority = &net.Priority
 				}
 			}
 		}
-		if priority < int32(math.MaxInt32) {
-			e.NetworkPriority = priority
+		if priority != nil {
+			e.NetworkPriority = *priority
 			tiers := getPeerTiers(e.CustomData)
 			var cost *float64
 			for _, t := range tiers {
@@ -122,18 +120,20 @@ func (a *ApiDirectory) FilterAndSort(entries []SupplierToAdd, requesterData map[
 			}
 		}
 	}
-	slices.SortFunc(filtered, func(a, b SupplierToAdd) int {
-		sort := cmp.Compare(a.Cost, b.Cost)
-		if sort != 0 {
-			return sort
-		}
-		sort = cmp.Compare(a.NetworkPriority, b.NetworkPriority)
-		if sort != 0 {
-			return sort
-		}
-		return cmp.Compare(a.Ratio, b.Ratio)
-	})
+	slices.SortFunc(filtered, CompareSuppliers)
 	return filtered
+}
+
+func CompareSuppliers(a, b Supplier) int {
+	sort := cmp.Compare(a.Cost, b.Cost)
+	if sort != 0 {
+		return sort
+	}
+	sort = cmp.Compare(a.NetworkPriority, b.NetworkPriority)
+	if sort != 0 {
+		return sort
+	}
+	return cmp.Compare(a.Ratio, b.Ratio)
 }
 
 func getPeerNetworks(peerData map[string]any) map[string]Network {
@@ -141,9 +141,9 @@ func getPeerNetworks(peerData map[string]any) map[string]Network {
 	if listMap, ok := peerData["networks"].([]any); ok && len(listMap) > 0 {
 		for _, s := range listMap {
 			if itemMap, castOk := s.(map[string]any); castOk {
-				name, authOk := itemMap["name"].(string)
-				priority, symOk := itemMap["priority"].(int32)
-				if authOk && symOk {
+				name, nameOk := itemMap["name"].(string)
+				priority, priorityOk := itemMap["priority"].(float64)
+				if nameOk && priorityOk {
 					networks[name] = Network{
 						Name:     name,
 						Priority: priority,
@@ -191,8 +191,8 @@ type EntriesResponse struct {
 }
 
 type Network struct {
-	Name     string `json:"name"`
-	Priority int32  `json:"priority"`
+	Name     string  `json:"name"`
+	Priority float64 `json:"priority"`
 }
 
 type Tier struct {

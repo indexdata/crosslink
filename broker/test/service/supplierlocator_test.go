@@ -496,6 +496,7 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 }
 
 func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
+	requester := getOrCreatePeer(t, illRepo, "ISIL:REQ", 4, 2)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: supplierRecordId,
@@ -506,6 +507,10 @@ func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
+		RequesterID: pgtype.Text{
+			String: requester.ID,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
