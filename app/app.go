@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"slices"
@@ -30,6 +31,13 @@ type BucketCreds struct {
 }
 
 func Start(ctx context.Context) {
+	InitLogger()
+
+	_, err := Creds()
+	if err != nil {
+		log.Fatalf("Bucket configuration failed: %s", err)
+	}
+
 	handler := Handler(ctx)
 	addr := fmt.Sprintf("%s:%s", Host, Port)
 	log.Printf("Starting mod-dms at %s...", addr)
@@ -41,20 +49,51 @@ func Start(ctx context.Context) {
 	log.Fatal(s.ListenAndServe())
 }
 
+func InitLogger() {
+	logger, err := Logger()
+	if err != nil {
+		log.Fatalf("Logger configuration failed: %s", err)
+	}
+	slog.SetDefault(logger)
+}
+
+func Logger() (*slog.Logger, error) {
+	var logger *slog.Logger
+	logLevel := &slog.LevelVar{}
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+	}
+
+	if os.Getenv("LOG_JSON") == "true" {
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	} else {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, opts))
+	}
+
+	desiredLevel, levelSet := os.LookupEnv("LOG_LEVEL")
+	if levelSet {
+		var newLevel slog.Level
+		if err := newLevel.UnmarshalText([]byte(desiredLevel)); err != nil {
+			return nil, fmt.Errorf("unsupported log level '%s'", desiredLevel)
+		}
+		logLevel.Set(newLevel)
+	}
+
+	return logger, nil
+}
+
 func Handler(ctx context.Context) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /upload", handleUpload)
-	mux.HandleFunc("DELETE /upload/{key}", handleDelete)
+	mux.HandleFunc("POST /dms/upload", handleUpload)
+	mux.HandleFunc("DELETE /dms/upload/{key...}", handleDelete)
 	return mux
 }
 
-func GetCreds() (BucketCreds, error) {
+func Creds() (BucketCreds, error) {
 	splitEnv := strings.Split(os.Getenv("MOD_DMS_BUCKET"), ",")
 	if len(splitEnv) < 5 {
 		return BucketCreds{}, errors.New("environment not configured")
 	}
-
-	_, insecure := os.LookupEnv("MOD_DMS_INSECURE")
 
 	return BucketCreds{
 		Bucket:   splitEnv[0],
@@ -62,12 +101,12 @@ func GetCreds() (BucketCreds, error) {
 		Endpoint: splitEnv[2],
 		Access:   splitEnv[3],
 		Secret:   splitEnv[4],
-		Insecure: insecure,
+		Insecure: os.Getenv("MOD_DMS_INSECURE") == "true",
 	}, nil
 }
 
 func getBucketClient() (string, *minio.Client, error) {
-	b, err := GetCreds()
+	b, err := Creds()
 	if err != nil {
 		return "", nil, err
 	}
@@ -88,21 +127,22 @@ type Uploaded struct {
 }
 
 func handleUpload(w http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+	if contentType := req.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "multipart/form-data") {
+		slog.Warn("Unexpected content type", "contentType", contentType)
+		http.Error(w, "Expected multipart/form-data", http.StatusUnsupportedMediaType)
 		return
 	}
 
 	// Ultimately better to stream via MultipartReader...
 	file, fileHeader, err := req.FormFile("file")
 	if err != nil {
-		fmt.Fprintf(w, "Error retrieving the file: %v", err)
+		slog.Warn("Error retrieving the file from multipart", "error", slog.Any("error", err))
 		http.Error(w, "Error receiving file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	log.Printf("Received file")
+	slog.Debug("Received file")
 
 	fileType := fileHeader.Header.Get("Content-Type")
 
@@ -116,22 +156,20 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 		h.Set("Content-Type", "text/plain; charset=utf-8")
 		h.Set("X-Content-Type-Options", "nosniff")
 
-		// Politely inform the client what we accept
-		h.Set("Accept-Post", strings.Join(validTypes, ", "))
-
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		fmt.Fprintln(w, "Unsupported file type")
+		// h.Set("Accept-Post", strings.Join(validTypes, ", "))
 		return
 	}
 
 	bucket, minioClient, err := getBucketClient()
 	if err != nil {
-		fmt.Fprintf(w, "Error obtaining client for S3 bucket: %v", err)
+		slog.Error("Error obtaining client for S3 bucket", "error", slog.Any("error", err), "bucket", bucket)
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
-	log.Printf("Got client for bucket %s", bucket)
+	slog.Debug("Got client for bucket", "bucket", bucket)
 
 	filename := uuid.NewString()
 	tenant := req.Header.Get("X-Okapi-Tenant")
@@ -144,10 +182,10 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 		ContentType: fileType,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("Error sending to bucket", "error", slog.Any("error", err), "bucket", bucket, "key", filename)
 	}
 
-	log.Printf("Uploaded file")
+	slog.Debug("Uploaded file")
 
 	log.Println(minioClient.EndpointURL())
 	response := Uploaded{
@@ -156,27 +194,32 @@ func handleUpload(w http.ResponseWriter, req *http.Request) {
 	}
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("Error encoding response", "error", slog.Any("error", err))
 	}
 }
 
 func handleDelete(w http.ResponseWriter, req *http.Request) {
 	key := req.PathValue("key")
-	err := uuid.Validate(key)
-	if err != nil {
-		http.Error(w, "Invalid key, can only delete UUIDs with optional prefix", http.StatusBadRequest)
+	tenant := req.Header.Get("X-Okapi-Tenant")
+
+	k := strings.Split(key, "/")
+	if uuid.Validate(k[len(k)-1]) != nil || (tenant != "" && tenant != k[0]) {
+		slog.Warn("Attempt to delete object with unexpected key", "key", key)
+		http.Error(w, "Invalid key, can only delete UUIDs with optional tenant prefix", http.StatusBadRequest)
 		return
 	}
 
 	bucket, minioClient, err := getBucketClient()
 	if err != nil {
-		fmt.Fprintf(w, "Error obtaining client for S3 bucket: %v", err)
+		slog.Error("Error obtaining client for S3 bucket", "error", slog.Any("error", err), "bucket", bucket)
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
+	// NB this does not error when the object does not exist, just silently is fine with it,
+	// perhaps to prevent using it for discovery?
 	err = minioClient.RemoveObject(context.Background(), bucket, key, minio.RemoveObjectOptions{})
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("Error removing objecct", "error", slog.Any("error", err), "bucket", bucket, "key", key)
 	}
 }

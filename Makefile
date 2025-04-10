@@ -5,11 +5,13 @@ OS ?= $(shell uname)
 DOCKER ?= docker
 GOFILES := $(shell find . -name "*.go")
 BINARY=mod-dms
+DESCRIPTOR=ModuleDescriptor.json
 MAIN_PACKAGE=main.go
 COMMIT_ID=commit.txt
 COVERAGE=coverage.out
+VERSION ?= `$(GIT) describe --tags --abbrev=0 | sed 's/^v\([0-9]\)/\1/'`
 
-all: $(BINARY)
+all: $(BINARY) $(DESCRIPTOR)
 
 docker:
 	cd .. && $(DOCKER) build -f ./$(MODULE)/Dockerfile .
@@ -22,6 +24,9 @@ $(COMMIT_ID):
 
 $(BINARY):  $(COMMIT_ID) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
+
+$(DESCRIPTOR): ModuleDescriptor-template.json
+	sed "s/@version@/$(VERSION)/g" $< > $@
 
 check:
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
@@ -40,5 +45,6 @@ lint:
 
 clean:
 	rm -f $(BINARY)
+	rm -f $(DESCRIPTOR)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)

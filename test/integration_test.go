@@ -22,6 +22,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	app.InitLogger()
 	ctx := context.Background()
 
 	con, err := minioContainer.Run(ctx, "minio/minio:RELEASE.2025-03-12T18-04-18Z")
@@ -104,7 +105,7 @@ func uploadFile(t *testing.T, contents string, tenant string, contentType string
 	}
 	writer.Close()
 
-	req := httptest.NewRequest("POST", "/upload", &b)
+	req := httptest.NewRequest("POST", "/dms/upload", &b)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Okapi-Tenant", tenant)
 	res := httptest.NewRecorder()
@@ -168,7 +169,7 @@ func TestDelete(t *testing.T) {
 	content := "String for testing"
 	uploadResponse := uploadFileAndParse(t, content, "", "application/pdf")
 
-	req := httptest.NewRequest("DELETE", "/upload/"+uploadResponse.Key, nil)
+	req := httptest.NewRequest("DELETE", "/dms/upload/"+uploadResponse.Key, nil)
 	w := httptest.NewRecorder()
 
 	handler := app.Handler(context.Background())
@@ -188,6 +189,43 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestDeleteErr(t *testing.T) {
+	handler := app.Handler(context.Background())
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("DELETE", "/dms/upload/nonsense", nil)
+	handler.ServeHTTP(w, req)
+
+	if status := w.Code; status != http.StatusBadRequest {
+		t.Errorf("Delete handler failed to return 400 on attempt to delete non-uuid named file: %v", status)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("DELETE", "/dms/upload/d8290e68-bfbb-3bc8-b621-5a9590aa29fd", nil)
+	handler.ServeHTTP(w, req)
+
+	if status := w.Code; status != http.StatusOK {
+		t.Errorf("Delete handler returned non-OK status attempting to delete validly named (but non-existing) object: %v", status)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("DELETE", "/dms/upload/different/d8290e68-bfbb-3bc8-b621-5a9590aa29fd", nil)
+	req.Header.Set("X-Okapi-Tenant", "sometenant")
+	handler.ServeHTTP(w, req)
+
+	if status := w.Code; status != http.StatusBadRequest {
+		t.Errorf("Delete handler failed to return 400 on attempt to delete file not matching tenant: %v", status)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("DELETE", "/dms/upload/sometenant/d8290e68-bfbb-3bc8-b621-5a9590aa29fd", nil)
+	handler.ServeHTTP(w, req)
+
+	if status := w.Code; status != http.StatusOK {
+		t.Errorf("Delete handler returned non-OK status attempting to delete (with tenant) validly named (but non-existing) object: %v", status)
+	}
+}
+
 func TestRestrictContentType(t *testing.T) {
 	content := "String for testing"
 	validTypeString := "image/png,application/pdf"
@@ -200,10 +238,15 @@ func TestRestrictContentType(t *testing.T) {
 
 	res = uploadFile(t, content, "", "application/javascript")
 	if status := res.Code; status != http.StatusUnsupportedMediaType {
-		t.Errorf("Upload handler returned non-415 status for content type expected to be accepted: %v", status)
+		t.Errorf("Upload handler returned non-415 status for unsupported file part content type: %v", status)
 	}
 
-	if res.Result().Header.Get("Accept-Post") != strings.Join(strings.Split(validTypeString, ","), ", ") {
-		t.Error("Upload handler returned 415 status without supplying configured types in Accept-Post")
+	handler := app.Handler(context.Background())
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/dms/upload", nil)
+	req.Header.Set("Content-Type", "not/right")
+	handler.ServeHTTP(w, req)
+	if status := w.Code; status != http.StatusUnsupportedMediaType {
+		t.Errorf("Upload handler returned non-415 status for invalid request content type: %v", status)
 	}
 }
