@@ -31,7 +31,7 @@ $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(PROGRAMS): $(GOFILES) generate
+$(PROGRAMS): $(GOFILES) $(COMMIT_ID) $(OAPI_GEN)
 	$(GO) build -v -o $@ ./cmd/$@
 
 check: generate
