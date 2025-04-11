@@ -1,8 +1,12 @@
 package adapter
 
 import (
+	"cmp"
 	"errors"
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"slices"
 	"strings"
 )
 
@@ -35,4 +39,11 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		})
 	}
 	return dirs, nil
+}
+
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
+	slices.SortFunc(entries, func(a, b Supplier) int {
+		return cmp.Compare(a.Ratio, b.Ratio)
+	})
+	return entries
 }

@@ -587,7 +587,7 @@ func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId st
 			return false
 		}
 		for _, e := range eventList {
-			if e.EventStatus == events.EventStatusProcessing {
+			if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
 				return false
 			}
 		}

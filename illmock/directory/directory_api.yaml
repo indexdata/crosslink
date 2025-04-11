@@ -99,6 +99,9 @@ components:
         - id
         - consortium
         - name
+        - type
+        - level
+        - cost
       properties:
         id:
           readOnly: true
@@ -111,8 +114,6 @@ components:
         name:
           type: string
         type:
-          type: string
-        deliveryMethod:
           type: string
         level:
           type: string
