@@ -1,78 +1,2268 @@
 [
   {
-    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec1",
-    "name" : "Supplier 1",
-    "symbols" : [
+    "id": "30191a94-9588-5b53-808a-58d843706d1b",
+    "name": "Albury City Libraries",
+    "description": "nalb",
+    "type": "institution",
+    "email": "interlibrary@alburycity.nsw.gov.au",
+    "symbols": [
       {
-        "authority": "ISIL",
-        "symbol": "SUP1"
-      },
-      {
-        "authority": "ZFL",
-        "symbol": "SUP1"
+        "id": "69ee5e27-f787-5cc7-9f8d-af0f7ddb16c2",
+        "symbol": "AU-NALB",
+        "authority": "ISIL"
       }
     ],
     "endpoints": [
       {
-        "address": "http://localhost:8083/"
+        "id": "4ded1655-cc7e-59d1-bcaa-98bc3fe10588",
+        "entry": "30191a94-9588-5b53-808a-58d843706d1b",
+        "name": "NALB ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "42062a50-d866-56f1-a9e0-cdb6cd52a93f",
+        "entry": "30191a94-9588-5b53-808a-58d843706d1b",
+        "name": "NALB Statistics Service",
+        "type": "http",
+        "address": "https://nalb-okapi.au.reshare.indexdata.com/_/invoke/tenant/nalb/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
       }
     ]
   },
   {
-    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec2",
-    "name" : "Supplier 2",
-    "symbols" : [
+    "id": "69b6f9c5-5c42-54b8-bb2f-75667457b55a",
+    "name": "Albury City Libraries / Albury City Libraries",
+    "description": "nalb_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "30191a94-9588-5b53-808a-58d843706d1b"
+  },
+  {
+    "id": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+    "name": "University of Sydney",
+    "description": "nu",
+    "type": "institution",
+    "email": "library.resourcesharing@sydney.edu.au",
+    "symbols": [
       {
-        "authority": "ISIL",
-        "symbol": "SUP2"
-      },
-      {
-        "authority": "ZFL",
-        "symbol": "SUP2"
+        "id": "449b46f7-8c5e-5b24-998c-d064f809ed60",
+        "symbol": "AU-NU",
+        "authority": "ISIL"
       }
     ],
     "endpoints": [
       {
-        "address": "http://localhost:8083/"
+        "id": "be711bb5-7ffc-5b3d-8019-7122c2177545",
+        "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+        "name": "NU ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "7acc2e14-25f1-5868-a034-48e041ec7f1e",
+        "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+        "name": "NU Statistics Service",
+        "type": "http",
+        "address": "https://nu-okapi.au.reshare.indexdata.com/_/invoke/tenant/nu/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
+        "name": "South Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+        "name": "Western Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
       }
     ]
   },
   {
-    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec3",
-    "name" : "Supplier 3",
-    "symbols" : [
+    "id": "8733dd66-6554-5759-a127-2fe61fefdaf5",
+    "name": "University of Sydney / The University of Sydney Library",
+    "description": "nu_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "8a1be802-4431-5a56-bb17-ea7d23d5a234"
+  },
+  {
+    "id": "4d32b8cb-63a0-5033-94bd-77ddda1946e1",
+    "name": "Upper Lachlan Shire Library Service",
+    "description": "nuls",
+    "type": "institution",
+    "email": "library@upperlachlan.nsw.gov.au",
+    "symbols": [
       {
-        "authority": "ISIL",
-        "symbol": "SUP3"
-      },
-      {
-        "authority": "ZFL",
-        "symbol": "SUP3"
+        "id": "e9e16d89-a674-5d87-af71-5a1f36e3e3e6",
+        "symbol": "AU-NULS",
+        "authority": "ISIL"
       }
     ],
     "endpoints": [
       {
-        "address": "http://localhost:8083/"
+        "id": "439bdc2a-225e-5bef-98ab-4d14e8ddab99",
+        "entry": "4d32b8cb-63a0-5033-94bd-77ddda1946e1",
+        "name": "NULS ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "87752ea6-3069-5c14-9cb6-533fc7b925b8",
+        "entry": "4d32b8cb-63a0-5033-94bd-77ddda1946e1",
+        "name": "NULS Statistics Service",
+        "type": "http",
+        "address": "https://nuls-okapi.au.reshare.indexdata.com/_/invoke/tenant/nuls/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
+        "name": "NSW & ACT Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
+        "name": "Queensland Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "50f29d43-fada-5afe-a185-510833e01af8",
+        "name": "Victoria Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
       }
     ]
   },
   {
-    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec4",
-    "name" : "Requester",
-    "symbols" : [
+    "id": "545c8bc3-ec72-5889-bb92-96893c6cfe7c",
+    "name": "Upper Lachlan Shire Library Service / Default branch",
+    "description": "nuls_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "4d32b8cb-63a0-5033-94bd-77ddda1946e1"
+  },
+  {
+    "id": "b10ccbda-b4a5-59be-9560-cf990da11c5b",
+    "name": "University of New England",
+    "description": "nune",
+    "type": "institution",
+    "email": "nunereshare@une.edu.au",
+    "symbols": [
       {
-        "authority": "ISIL",
-        "symbol": "REQ"
-      },
-      {
-        "authority": "ZFL",
-        "symbol": "REQ"
+        "id": "98223c8c-13c7-5a10-b720-32df922d2f01",
+        "symbol": "AU-NUNE",
+        "authority": "ISIL"
       }
     ],
     "endpoints": [
       {
-        "address": "http://localhost:8083/"
+        "id": "6f9c171d-64ff-51d5-b174-03da4f93a74b",
+        "entry": "b10ccbda-b4a5-59be-9560-cf990da11c5b",
+        "name": "NUNE ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "49c1aa11-a080-5067-b772-c62572c348bb",
+        "entry": "b10ccbda-b4a5-59be-9560-cf990da11c5b",
+        "name": "NUNE Statistics Service",
+        "type": "http",
+        "address": "https://nune-okapi.au.reshare.indexdata.com/_/invoke/tenant/nune/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+        "name": "Queensland Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+        "name": "Western Australia Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
       }
     ]
+  },
+  {
+    "id": "fbfaf052-3953-5276-be45-0985e680a5e8",
+    "name": "University of New England / Dixson Library",
+    "description": "nune_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "b10ccbda-b4a5-59be-9560-cf990da11c5b"
+  },
+  {
+    "id": "d46ceb6f-166a-5d44-b60c-4a810bbb137d",
+    "name": "Woollahra Library and Information Service",
+    "description": "nwool",
+    "type": "institution",
+    "email": "ill@woollahra.nsw.gov.au",
+    "symbols": [
+      {
+        "id": "6c43fadb-36e0-53ee-881e-e3dc29135c40",
+        "symbol": "AU-NWOOL",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "e26ac877-6c27-53bc-82d6-69bbba08d572",
+        "entry": "d46ceb6f-166a-5d44-b60c-4a810bbb137d",
+        "name": "NWOOL ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "ec350c62-8c41-5d25-affa-34c7f68d1f77",
+        "entry": "d46ceb6f-166a-5d44-b60c-4a810bbb137d",
+        "name": "NWOOL Statistics Service",
+        "type": "http",
+        "address": "https://nwool-okapi.au.reshare.indexdata.com/_/invoke/tenant/nwool/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
+        "name": "NSW & ACT Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
+        "name": "Queensland Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "50f29d43-fada-5afe-a185-510833e01af8",
+        "name": "Victoria Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "7a763dd2-53ed-580a-bfd4-6cdb8a91eebf",
+        "name": "Sydney Metro",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "e1b30b08-4650-518a-bda1-e49687f5c447",
+    "name": "Woollahra Library and Information Service / Double Bay Central Library",
+    "description": "nwool_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "d46ceb6f-166a-5d44-b60c-4a810bbb137d"
+  },
+  {
+    "id": "375cb706-55d3-5735-9134-3b404ac1afe1",
+    "name": "Queensland Griffith University",
+    "description": "qgu",
+    "type": "institution",
+    "email": "ill@griffith.edu.au",
+    "symbols": [
+      {
+        "id": "820f0ef1-0741-5890-a7a3-17bef9104f4d",
+        "symbol": "AU-QGU",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "87f0313b-29a0-57e5-b024-115d01c861e9",
+        "entry": "375cb706-55d3-5735-9134-3b404ac1afe1",
+        "name": "QGU ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "682a4603-2f06-58f7-a434-fac236614096",
+        "entry": "375cb706-55d3-5735-9134-3b404ac1afe1",
+        "name": "QGU Statistics Service",
+        "type": "http",
+        "address": "https://qgu-okapi.au.reshare.indexdata.com/_/invoke/tenant/qgu/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+        "name": "Queensland Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
+        "name": "South Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+        "name": "Western Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      }
+    ]
+  },
+  {
+    "id": "352c2646-0b18-59b1-91e9-38a88cc46278",
+    "name": "Queensland Griffith University / Library and Learning Services",
+    "description": "qgu_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "375cb706-55d3-5735-9134-3b404ac1afe1"
+  },
+  {
+    "id": "f6d16209-cc7b-5b75-91cc-6b660f8052a8",
+    "name": "University of the Sunshine Coast Library",
+    "description": "qscuc",
+    "type": "institution",
+    "email": "iil@usc.edu.au",
+    "symbols": [
+      {
+        "id": "b8355629-2a48-5741-b70a-bc6872b7ae32",
+        "symbol": "AU-QSCUC",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "70d5b430-63a0-5032-a550-0e5aea4e11df",
+        "entry": "f6d16209-cc7b-5b75-91cc-6b660f8052a8",
+        "name": "QSCUC ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "376d3a0f-268c-5994-85b6-440d2960d062",
+        "entry": "f6d16209-cc7b-5b75-91cc-6b660f8052a8",
+        "name": "QSCUC Statistics Service",
+        "type": "http",
+        "address": "https://qscuc-okapi.au.reshare.indexdata.com/_/invoke/tenant/qscuc/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+        "name": "Queensland Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "39a8ee32-d038-5c8d-a1a4-a26246f3882f",
+        "name": "Queensland Health",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
+  },
+  {
+    "id": "f9a36051-9bfb-5ec7-bf83-1da646977af4",
+    "name": "University of the Sunshine Coast Library / Default branch",
+    "description": "qscuc_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "f6d16209-cc7b-5b75-91cc-6b660f8052a8"
+  },
+  {
+    "id": "5944afd7-6086-58c8-94c2-d6cc89c96335",
+    "name": "Toowoomba Regional Council",
+    "description": "qtol",
+    "type": "institution",
+    "email": "interlibraryloan@tr.qld.gov.au",
+    "symbols": [
+      {
+        "id": "39da01e3-6646-5e1c-9f08-0dfcd342fc0e",
+        "symbol": "AU-QTOL",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "f8e8c67f-b29e-5099-8f9f-0d79cca10587",
+        "entry": "5944afd7-6086-58c8-94c2-d6cc89c96335",
+        "name": "QTOL ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "d8c72640-f39b-5027-a2f9-2f800f191e3c",
+        "entry": "5944afd7-6086-58c8-94c2-d6cc89c96335",
+        "name": "QTOL Statistics Service",
+        "type": "http",
+        "address": "https://qtol-okapi.au.reshare.indexdata.com/_/invoke/tenant/qtol/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
+        "name": "Queensland Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
+        "name": "NSW & ACT Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "50f29d43-fada-5afe-a185-510833e01af8",
+        "name": "Victoria Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "23971837-c8da-5584-8978-40fc08829f08",
+    "name": "Toowoomba Regional Council / Toowoomba City Library",
+    "description": "qtol_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "5944afd7-6086-58c8-94c2-d6cc89c96335"
+  },
+  {
+    "id": "4bf192de-0e92-52bb-a636-730cf9addf2b",
+    "name": "University of Adelaide",
+    "description": "sua",
+    "type": "institution",
+    "email": "library-ill@adelaide.edu.au",
+    "symbols": [
+      {
+        "id": "45dcb0a8-63d9-539e-8bc4-666a06bbe570",
+        "symbol": "AU-SUA",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "99618e14-d7ae-52fd-a777-f515434c31e1",
+        "entry": "4bf192de-0e92-52bb-a636-730cf9addf2b",
+        "name": "SUA ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "9c0782c9-96d7-55f4-947f-9586508d7f28",
+        "entry": "4bf192de-0e92-52bb-a636-730cf9addf2b",
+        "name": "SUA Statistics Service",
+        "type": "http",
+        "address": "https://sua-okapi.au.reshare.indexdata.com/_/invoke/tenant/sua/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
+        "name": "South Australia Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+        "name": "Queensland Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+        "name": "Western Australia Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      }
+    ]
+  },
+  {
+    "id": "e5858aa8-319a-5d84-91b3-f2a1f8bf360f",
+    "name": "University of Adelaide / Barr Smith Library",
+    "description": "sua_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "4bf192de-0e92-52bb-a636-730cf9addf2b"
+  },
+  {
+    "id": "1d6d72f8-31de-538f-bf3c-9efa80c6af82",
+    "name": "University of South Australia Library",
+    "description": "susa",
+    "type": "institution",
+    "email": "ILL@unisa.edu.au",
+    "symbols": [
+      {
+        "id": "3ea4c2d1-9e66-52a2-8ccb-2cdfaeeadf07",
+        "symbol": "AU-SUSA",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "2201bc07-97b7-5206-95c0-dfdfa8e9a50d",
+        "entry": "1d6d72f8-31de-538f-bf3c-9efa80c6af82",
+        "name": "SUSA ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "94ce9784-775b-598a-a7b5-b943e26109a8",
+        "entry": "1d6d72f8-31de-538f-bf3c-9efa80c6af82",
+        "name": "SUSA Statistics Service",
+        "type": "http",
+        "address": "https://susa-okapi.au.reshare.indexdata.com/_/invoke/tenant/susa/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
+        "name": "South Australia Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "89e1e4e4-d77e-5c68-b64b-96bafc830836",
+    "name": "University of South Australia Library / Default branch",
+    "description": "susa_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "1d6d72f8-31de-538f-bf3c-9efa80c6af82"
+  },
+  {
+    "id": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c",
+    "name": "Test TTTA",
+    "description": "ttta",
+    "type": "institution",
+    "email": "reshare-admin@indexdata.com",
+    "symbols": [
+      {
+        "id": "1c55a71d-2695-5fb9-b74a-13c80c3b059e",
+        "symbol": "AU-TTTA",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "65d9a5aa-1028-5912-98b9-1b6cd6be436b",
+        "entry": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c",
+        "name": "TTTA ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "a7a5a07d-ad2c-5cbd-8a21-8229528f88eb",
+        "entry": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c",
+        "name": "TTTA Statistics Service",
+        "type": "http",
+        "address": "https://ttta-okapi.au.reshare.indexdata.com/_/invoke/tenant/ttta/rs/externalApi/statistics"
+      }
+    ]
+  },
+  {
+    "id": "b497b347-18c7-5d54-aca0-25f7ef216e8d",
+    "name": "Test TTTA / Circulation Desk",
+    "description": "ttta_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "74eb1b77-c00e-560e-a1fd-9a9a848ade6c"
+  },
+  {
+    "id": "ea1c40f0-907f-5c08-8601-fb319bae3a2d",
+    "name": "Test TTTB",
+    "description": "tttb",
+    "type": "institution",
+    "email": "reshare-admin@indexdata.com",
+    "symbols": [
+      {
+        "id": "eb07f804-931a-5459-9402-5c30c7c66646",
+        "symbol": "AU-TTTB",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "f4d97169-f803-54a6-8fd6-7984922f3d75",
+        "entry": "ea1c40f0-907f-5c08-8601-fb319bae3a2d",
+        "name": "TTTB ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "2d53354b-2c0b-57b0-a43a-b2877dabefe5",
+        "entry": "ea1c40f0-907f-5c08-8601-fb319bae3a2d",
+        "name": "TTTB Statistics Service",
+        "type": "http",
+        "address": "https://tttb-okapi.au.reshare.indexdata.com/_/invoke/tenant/tttb/rs/externalApi/statistics"
+      }
+    ]
+  },
+  {
+    "id": "40526dca-c7c8-5991-8efc-4a48d535cc3a",
+    "name": "Test TTTB / Circulation Desk",
+    "description": "tttb_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "ea1c40f0-907f-5c08-8601-fb319bae3a2d"
+  },
+  {
+    "id": "56544812-dabe-5eab-93c2-6dc640d8f74e",
+    "name": "Test TTTC",
+    "description": "tttc",
+    "type": "institution",
+    "email": "reshare-admin@indexdata.com",
+    "symbols": [
+      {
+        "id": "badf77c2-9a64-57e6-9d80-ce35b5911807",
+        "symbol": "AU-TTTC",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "88393be8-4038-50ad-9f6c-f3df776670d7",
+        "entry": "56544812-dabe-5eab-93c2-6dc640d8f74e",
+        "name": "TTTC ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "6638ffbe-3be1-579d-80aa-ed9e2bcfbf0f",
+        "entry": "56544812-dabe-5eab-93c2-6dc640d8f74e",
+        "name": "TTTC Statistics Service",
+        "type": "http",
+        "address": "https://tttc-okapi.au.reshare.indexdata.com/_/invoke/tenant/tttc/rs/externalApi/statistics"
+      }
+    ]
+  },
+  {
+    "id": "d6759dbf-254b-5afb-b049-90308d890a88",
+    "name": "Test TTTC / Circulation Desk",
+    "description": "tttc_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "56544812-dabe-5eab-93c2-6dc640d8f74e"
+  },
+  {
+    "id": "4acf0364-f054-533e-9d7d-b1e3be2df8f8",
+    "name": "University of Tasmania Library",
+    "description": "tu",
+    "type": "institution",
+    "email": "docdel.hbt@lib.utas.edu.au",
+    "symbols": [
+      {
+        "id": "1b327dfd-c134-58cd-a60a-48b52fd3db0d",
+        "symbol": "AU-TU",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "bb1431f3-d4b4-57dc-b4ee-c1547066e7de",
+        "entry": "4acf0364-f054-533e-9d7d-b1e3be2df8f8",
+        "name": "TU ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "47e5d0a4-5096-5970-835c-33ea40d79e8c",
+        "entry": "4acf0364-f054-533e-9d7d-b1e3be2df8f8",
+        "name": "TU Statistics Service",
+        "type": "http",
+        "address": "https://tu-okapi.au.reshare.indexdata.com/_/invoke/tenant/tu/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+        "name": "Queensland Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "50f29d43-fada-5afe-a185-510833e01af8",
+        "name": "Victoria Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
+        "name": "NSW & ACT Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "12e1ecd4-2177-52af-ae84-3161e4eceb46",
+        "name": "Tasmania Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 6
+      },
+      {
+        "id": "dd9217f1-07b5-5545-8bb5-7c9f5fd571fd",
+        "name": "Tasmania Health",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 7
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      }
+    ]
+  },
+  {
+    "id": "edc7c1c9-08d4-501f-a47e-c87345739eba",
+    "name": "University of Tasmania Library / Default branch",
+    "description": "tu_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "4acf0364-f054-533e-9d7d-b1e3be2df8f8"
+  },
+  {
+    "id": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d",
+    "name": "CARM Centre",
+    "description": "vcarm",
+    "type": "institution",
+    "email": "carm@caval.edu.au",
+    "symbols": [
+      {
+        "id": "eca47f4f-398a-5347-8b67-f258e81875fa",
+        "symbol": "AU-VCARM",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "b89165fc-11a3-54e4-b6c4-6d50e33b24b9",
+        "entry": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d",
+        "name": "VCARM ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "262580dd-0cc1-5bb0-ab3b-d3f8e26195c1",
+        "entry": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d",
+        "name": "VCARM Statistics Service",
+        "type": "http",
+        "address": "https://vcarm-okapi.au.reshare.indexdata.com/_/invoke/tenant/vcarm/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "406f6876-3aef-596f-a4fa-fa5c35e22a17",
+        "name": "Reciprocal Peer to Peer - Express Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Express",
+        "cost": 0.0
+      },
+      {
+        "id": "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f",
+        "name": "Reciprocal Peer to Peer - Express Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Express",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      },
+      {
+        "id": "940d6a2e-7e5d-5841-83ae-0152312cdfe7",
+        "name": "Premium Pay for Peer - Express Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Express",
+        "cost": 85.0
+      },
+      {
+        "id": "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2",
+        "name": "Premium Pay for Peer - Express Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Express",
+        "cost": 67.0
+      }
+    ]
+  },
+  {
+    "id": "9e2c9dd8-f5ad-506a-b358-fb57094ae4a5",
+    "name": "CARM Centre / Default branch",
+    "description": "vcarm_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "6740f25e-cef5-5ba0-a1a8-e0a64bf0d29d"
+  },
+  {
+    "id": "c93376a2-49ff-5d92-9329-1a454a024315",
+    "name": "Wellington Shire Library",
+    "description": "vcgr",
+    "type": "institution",
+    "email": "illo@wellington.vic.gov.au",
+    "symbols": [
+      {
+        "id": "a1206810-b8f5-5c8c-bd35-71cc5d9188f1",
+        "symbol": "AU-VCGR",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "ec0b34f0-c244-5b38-a253-7c2c68d18347",
+        "entry": "c93376a2-49ff-5d92-9329-1a454a024315",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "af80fe14-dc0f-55f5-9019-3ac3c10f370a",
+        "entry": "c93376a2-49ff-5d92-9329-1a454a024315",
+        "name": "VCGR Statistics Service",
+        "type": "http",
+        "address": "https://vcgr-okapi.au.reshare.indexdata.com/_/invoke/tenant/vcgr/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+        "name": "Western Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
+        "name": "South Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "4d536248-0e7f-5b9b-b70b-dc6f8cc348a1",
+    "name": "Wellington Shire Library / Default branch",
+    "description": "vcgr_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "c93376a2-49ff-5d92-9329-1a454a024315"
+  },
+  {
+    "id": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a",
+    "name": "Museums Victoria",
+    "description": "vnmu",
+    "type": "institution",
+    "email": "library@museum.vic.gov.au",
+    "symbols": [
+      {
+        "id": "257a81f5-329f-53aa-8720-f647ef1ceaed",
+        "symbol": "AU-VNMU",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "0bc04467-023e-5776-86ec-27bde9c359d4",
+        "entry": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a",
+        "name": "VNMU ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "afbd9f70-cfc0-5441-86fd-a7445d21c338",
+        "entry": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a",
+        "name": "VNMU Statistics Service",
+        "type": "http",
+        "address": "https://vnmu-okapi.au.reshare.indexdata.com/_/invoke/tenant/vnmu/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "60612a26-68dc-5a93-a356-b4eee7d4567f",
+        "name": "Victoria Govt & Arts",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "9e953640-2e7f-5184-9f8e-e825a4049d10",
+    "name": "Museums Victoria / Museums Victoria Library",
+    "description": "vnmu_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "b9a54a13-6c01-5079-a882-acf9d3b1fc6a"
+  },
+  {
+    "id": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+    "name": "WorkSafe Victoria",
+    "description": "vvwa",
+    "type": "institution",
+    "email": "library@worksafe.vic.gov.au",
+    "symbols": [
+      {
+        "id": "1dbf6067-0b98-5114-aeac-dba4755d67d2",
+        "symbol": "AU-VVWA",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "642f0a1e-4dff-5f7d-97f8-abcc15852487",
+        "entry": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+        "name": "VVWA ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "ad97fce2-af45-53ca-8ef6-fef27af2c145",
+        "entry": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+        "name": "VVWA Statistics Service",
+        "type": "http",
+        "address": "https://vvwa-okapi.au.reshare.indexdata.com/_/invoke/tenant/vvwa/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "60612a26-68dc-5a93-a356-b4eee7d4567f",
+        "name": "Victoria Govt & Arts",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "af2e044f-3b22-597e-bd10-20d949ede45c",
+        "name": "Victoria Health",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      }
+    ]
+  },
+  {
+    "id": "253271d4-e754-5049-8db8-d03962820f07",
+    "name": "WorkSafe Victoria / WorkSafe Victoria",
+    "description": "vvwa_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b"
+  },
+  {
+    "id": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39",
+    "name": "Wyndham City Council Library Service",
+    "description": "vwyn",
+    "type": "institution",
+    "email": "illgroup@wyndham.vic.gov.au",
+    "symbols": [
+      {
+        "id": "0534848e-5585-585f-849f-bf0524e7cc75",
+        "symbol": "AU-VWYN",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "da7366fa-3161-5ac1-8d68-4b9c41102889",
+        "entry": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39",
+        "name": "VWYN ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "74e517d0-1818-5368-b2bc-c1c3e0994484",
+        "entry": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39",
+        "name": "VWYN Statistics Service",
+        "type": "http",
+        "address": "https://vwyn-okapi.au.reshare.indexdata.com/_/invoke/tenant/vwyn/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "50f29d43-fada-5afe-a185-510833e01af8",
+        "name": "Victoria Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "e4680812-e622-5f8d-b420-36a6bc33e6c8",
+        "name": "NSW & ACT Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "cf3a39cf-4596-5c23-aa81-3b289c052c08",
+        "name": "Queensland Public",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+        "name": "Victoria Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+        "name": "NSW & ACT Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      }
+    ]
+  },
+  {
+    "id": "5cc2d931-e8cd-5ac5-9eae-8770f1ab7fa9",
+    "name": "Wyndham City Council Library Service / Wyndham Library Service",
+    "description": "vwyn_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "ebb4d6d4-af40-51c5-9744-f3dab9c3fc39"
+  },
+  {
+    "id": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0",
+    "name": "WA Dept of Biodiversity - Conservation and Attractions",
+    "description": "wclm",
+    "type": "institution",
+    "email": "library@dbca.wa.gov.au",
+    "symbols": [
+      {
+        "id": "3fe541a8-7ed0-5736-ac5d-cff381c11af1",
+        "symbol": "AU-WCLM",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "e31bb069-e0b2-5e16-950c-402413e12571",
+        "entry": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0",
+        "name": "WCLM ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "c2180875-4d0c-5943-a944-1376359fb641",
+        "entry": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0",
+        "name": "WCLM Statistics Service",
+        "type": "http",
+        "address": "https://wclm-okapi.au.reshare.indexdata.com/_/invoke/tenant/wclm/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+        "name": "Western Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "a6a1451d-c0d0-5416-bfce-bcefa310cc78",
+        "name": "Queensland",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "b191dac1-f9f6-51c1-8599-f6c795d4f6f9",
+        "name": "South Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 3
+      },
+      {
+        "id": "7d0f82de-905f-57de-b041-928fddd0f6b1",
+        "name": "Tasmania",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 4
+      },
+      {
+        "id": "de90f131-08e8-5df6-a069-c1c34131884f",
+        "name": "Northern Territory",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 5
+      },
+      {
+        "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+        "name": "Victoria",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 6
+      },
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "NSW & ACT",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 7
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "406f6876-3aef-596f-a4fa-fa5c35e22a17",
+        "name": "Reciprocal Peer to Peer - Express Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Express",
+        "cost": 0.0
+      },
+      {
+        "id": "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f",
+        "name": "Reciprocal Peer to Peer - Express Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Express",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      },
+      {
+        "id": "940d6a2e-7e5d-5841-83ae-0152312cdfe7",
+        "name": "Premium Pay for Peer - Express Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Express",
+        "cost": 85.0
+      },
+      {
+        "id": "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2",
+        "name": "Premium Pay for Peer - Express Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Express",
+        "cost": 67.0
+      }
+    ]
+  },
+  {
+    "id": "d6d5fc7c-063d-5687-842f-64f7d79ec6a8",
+    "name": "WA Dept of Biodiversity - Conservation and Attractions / Default branch",
+    "description": "wclm_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "19527a13-429d-5ba9-b6e1-5df3d3d9e6f0"
+  },
+  {
+    "id": "7a877fa7-9055-5a34-a224-237e5a9d185f",
+    "name": "University of Western Australia Library",
+    "description": "wu",
+    "type": "institution",
+    "email": "doc-del-lib@uwa.edu.au",
+    "symbols": [
+      {
+        "id": "25e5176a-4de1-5325-a0aa-13ad49809e09",
+        "symbol": "AU-WU",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "2e9e0c67-f8d8-576b-93e1-47132a419b53",
+        "entry": "7a877fa7-9055-5a34-a224-237e5a9d185f",
+        "name": "WU ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      },
+      {
+        "id": "5b208126-1b32-5aa3-bb3f-0947d42901fc",
+        "entry": "7a877fa7-9055-5a34-a224-237e5a9d185f",
+        "name": "WU Statistics Service",
+        "type": "http",
+        "address": "https://wu-okapi.au.reshare.indexdata.com/_/invoke/tenant/wu/rs/externalApi/statistics"
+      }
+    ],
+    "networks": [
+      {
+        "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+        "name": "Western Australia Higher Education",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      },
+      {
+        "id": "36801e6d-ed11-5203-99f5-4736107adceb",
+        "name": "Western Australia",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 2
+      },
+      {
+        "id": "94964646-3266-588d-90a9-408e40055216",
+        "name": "National Academic and Research",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 8
+      },
+      {
+        "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+        "name": "National",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 9
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+        "name": "Reciprocal Peer to Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 0.0
+      },
+      {
+        "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+        "name": "Reciprocal Peer to Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+        "name": "Reciprocal Peer to Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 0.0
+      },
+      {
+        "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+        "name": "Premium Pay for Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 34.4
+      },
+      {
+        "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+        "name": "Premium Pay for Peer - Core Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Core",
+        "cost": 22.4
+      },
+      {
+        "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+        "name": "Premium Pay for Peer - Rush Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Rush",
+        "cost": 62.8
+      },
+      {
+        "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+        "name": "Premium Pay for Peer - Rush Copy",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Copy",
+        "level": "Rush",
+        "cost": 44.5
+      }
+    ]
+  },
+  {
+    "id": "ba5b24f4-8f86-505e-8968-b481496b7979",
+    "name": "University of Western Australia Library / Default branch",
+    "description": "wu_a",
+    "type": "branch",
+    "lmsLocationCode": "",
+    "parent": "7a877fa7-9055-5a34-a224-237e5a9d185f"
   }
 ]

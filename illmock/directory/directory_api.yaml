@@ -97,6 +97,9 @@ components:
         - id
         - consortium
         - name
+        - type
+        - level
+        - cost
       properties:
         id:
           readOnly: true
@@ -108,28 +111,7 @@ components:
           format: uuid
         name:
           type: string
-        services:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/TierService'
-    TierService:
-      type: object
-      required:
-        - id
-        - tier
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        tier:
-          type: string
-          format: uuid
         type:
-          type: string
-        deliveryMethod:
           type: string
         level:
           type: string
