@@ -70,5 +70,26 @@
       </address>
     </requestingAgencyInfo>
     -->
+    <requestedDeliveryInfo>
+      <sortOrder>1</sortOrder>
+      <address>
+        <electronicAddress>
+          <electronicAddressType>Email</electronicAddressType>
+          <electronicAddressData>library.ill@xyz.edu</electronicAddressData>
+        </electronicAddress>
+      </address>
+    </requestedDeliveryInfo>
+    <requestedDeliveryInfo>
+      <sortOrder>2</sortOrder>
+      <address>
+        <physicalAddress>
+          <line1>123 Main St</line1>
+          <locality>Chicago</locality>
+          <postalCode>60601</postalCode>
+          <region ill:scheme="">IL</region>
+          <country ill:scheme="">USA</country>
+        </physicalAddress>
+      </address>
+    </requestedDeliveryInfo>
   </request>
 </ISO18626Message>

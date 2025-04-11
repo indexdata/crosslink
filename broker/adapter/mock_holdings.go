@@ -22,7 +22,7 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 			return []Holding{}, nil
 		}
 		if strings.Index(id, "return-") == 0 {
-			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "_", 2)
+			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "::", 2)
 			if len(val) < 1 || len(val[0]) < 1 {
 				return nil, fmt.Errorf("invalid return- value")
 			}

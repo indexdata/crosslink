@@ -55,22 +55,32 @@ invoke a particular scenario when acting as the supplier.
 The scenario is used by the supplier to perform a particular workflow. The
 following values are recognized:
 
-| Scenario                  | Workflow                                                                            |
-|---------------------------|-------------------------------------------------------------------------------------|
-|`LOANED`                   | Respond with a `Loaned` message, finish with `LoanComplete`                         |
-|`LOANED_OVERDUE`           | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
-|`UNFILLED`                 | Respond with `Unfilled` message                                                     |
-|`WILLSUPPLY`               | Respond with `WillSupply` only                                                      |
-|`WILLSUPPLY_LOANED`        | Respond with `WillSupply` then send `Loaned`                                        |
-|`WILLSUPPLY_UNFILLED`      | Respond with `WillSupply` then send `Unfilled`                                      |
-|`WILLSUPPLY_LOANED_OVERDUE`| Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
-|`COMPLETED`                | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
-|`ERROR`                    | Respond with a `BadlyFormedMessage` message confirmation error                      |
-|`HTTP-ERROR-400`           | Respond with HTTP `400` status                                                      |
-|`HTTP-ERROR-500`           | Respond with HTTP `500` status                                                      |
-|`RETRY:COND_` ...          | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
-|`RETRY:COST_` ...          | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
-|`RETRY:ONLOAN_` ...        | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
+| Scenario                    | Workflow                                                                            |
+|-----------------------------|-------------------------------------------------------------------------------------|
+|`LOANED`                     | Respond with a `Loaned` message, finish with `LoanComplete`                         |
+|`LOANED_RECALLED`            | Respond with a `Loaned`, then `Recalled`, finish with `LoanComplete`                |
+|`LOANED_OVERDUE`             | Respond with `Loaned`, then with a an `Overdue` and expect a `Renew`                |
+|`UNFILLED`                   |  Respond with `Unfilled` message                                                    |
+|`WILLSUPPLY`                 | Respond with `WillSupply` only                                                      |
+|`WILLSUPPLY_LOANED`          | Respond with `WillSupply` then send `Loaned`                                        |
+|`WILLSUPPLY_LOANED_RECALLED` | Respond with `WillSupply` then send `Loaned`  and `Recalled`                        |
+|`WILLSUPPLY_UNFILLED`        | Respond with `WillSupply` then send `Unfilled`                                      |
+|`WILLSUPPLY_LOANED_OVERDUE`  | Respond with `WillSupply` then send `Loaned` followed by `Overdue`                  |
+|`COMPLETED`                  | Respond with `CopyCompleted` if ServiceType=`Copy`; otherwise `LoanCompleted`       |
+|`ERROR`                      | Respond with a `BadlyFormedMessage` message confirmation error                      |
+|`HTTP-ERROR-400`             | Respond with HTTP `400` status                                                      |
+|`HTTP-ERROR-500`             | Respond with HTTP `500` status                                                      |
+|`RETRY:COND_` ...            | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
+|`RETRY:COST_` ...            | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
+|`RETRY:ONLOAN_` ...          | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
+
+### Delivery method
+
+When acting as a supplier, the mock will look at the `<requestedDeliverInfo>` section to determine if the item should
+be shipped physically or electronically. If only a `<physicalAddress>` is provided, or if it has a `<sortOrder>` higher than
+the one of an `<electronicAddress>`, the item sent via `Mail`. Otherwise, the item will be sent via the electronic method of
+choice (either `Email` or `FTP`) or, if no address is provided, it will be sent via `URL`. The `deliveryFormat` will be selected
+appropriately to the method.
 
 ## Requester behavior
 
@@ -80,6 +90,8 @@ The following values are recognized:
 
   * `#CANCEL#` the requester will send a `Cancel` action to the supplier upon receiving the first SupplyingAgencyMessage.
   For a sample, refer to `examples/cancel-req.xml`.
+
+  * `#RECALL` the requester will not send Shipped Return upon Loaned. Rather it will wait for Recall to happen.
 
   * `#RENEW#` the requester will send a `Renew` request to the supplier upon receiving an `Overdue` message.
   For a sample, refer to `examples/renew-req.xml`.
@@ -116,7 +128,7 @@ in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` s
 By default each substring is taken verbatim, except for some special cases:
 
   * `error`: produces an SRU error (non-surrogate diagnostic).
-  * `return-$s_$l` prefix: produces a holdings entry with `$l` as local ID and `$s` as symbol
+  * `return-$s::$l` prefix: produces a holdings entry with `$l` as local ID and `$s` as symbol
   * `record-error`: produces SRU response with a diagnostic record.
   * `not-found` or empty: omits generating a holdings `$l`, `$s` entry.
 
@@ -160,3 +172,36 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 |                         | Requester: delay before sending ShippedReturn.                       |                                              |
 | `HTTP_HEADERS`          | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
 | `MOCK_DIRECTORY_ENTRIES`| JSON format list of direcotry entries                                | [directories.json](dirmock/directories.json) |
+
+# Deploying on Kubernetes
+
+See general instructions in the top-level README.
+
+## Mounting a directory JSON file
+
+Use these instructions to mount a directory JSON file and override the default directory entries:
+
+1. Save the custom directory JSON output as a file, `directory.json`
+
+1. For an update, instead of creating a new map, replace the existing JSON in the directory-configmap.yaml.
+
+1. For a new configmap, use kubectl to create a config map based on the file. We'll use the --dry-run and -o yaml options to output a file but not actually create the secret in the cluster yet:
+
+```bash
+kubectl create configmap directory-config \
+  --from-file=directory.json \
+  --namespace=my-namespace \
+  --dry-run=client -o yaml > directory-config.yaml
+```
+
+1. Inspect the config file, and apply it either by committing it to the flux repository or using `kubectl apply -f directory-config.yaml`.
+
+1. Use the following values in the `illmock` chart to mount the config:
+
+```yaml
+envConfigMaps:
+  MOCK_DIRECTORY_ENTRIES:
+    key: directory.json
+    name: directory-config
+```
+1. Restart the deployment to apply the new config map. For example, `kubectl -n trove-dev rollout restart deployment crosslink-illmock`.

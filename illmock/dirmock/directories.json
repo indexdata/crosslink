@@ -11,6 +11,11 @@
         "authority": "ZFL",
         "symbol": "SUP1"
       }
+    ],
+    "endpoints": [
+      {
+        "address": "http://localhost:8083/"
+      }
     ]
   },
   {
@@ -25,6 +30,11 @@
         "authority": "ZFL",
         "symbol": "SUP2"
       }
+    ],
+    "endpoints": [
+      {
+        "address": "http://localhost:8083/"
+      }
     ]
   },
   {
@@ -38,6 +48,30 @@
       {
         "authority": "ZFL",
         "symbol": "SUP3"
+      }
+    ],
+    "endpoints": [
+      {
+        "address": "http://localhost:8083/"
+      }
+    ]
+  },
+  {
+    "id" : "13dffea5-2a69-42b6-8e8c-efde106b9ec4",
+    "name" : "Requester",
+    "symbols" : [
+      {
+        "authority": "ISIL",
+        "symbol": "REQ"
+      },
+      {
+        "authority": "ZFL",
+        "symbol": "REQ"
+      }
+    ],
+    "endpoints": [
+      {
+        "address": "http://localhost:8083/"
       }
     ]
   }

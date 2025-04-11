@@ -177,6 +177,11 @@ func (a *ApiHandler) DeletePeersSymbol(w http.ResponseWriter, r *http.Request, s
 			return
 		}
 	}
+	err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
 	err = a.illRepo.DeletePeer(ctx, peer.ID)
 	if err != nil {
 		addInternalError(ctx, w, err)

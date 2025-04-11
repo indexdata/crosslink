@@ -23,6 +23,12 @@ env: {}
 #   key: secret-key
 envSecrets: {}
 
+# envvars passed to the container as configMapKeyRef, format
+# VARIABLE:
+#   name: config-map-name
+#   key: config-map-key
+envConfigMaps: {}
+
 imagePullSecrets:
   - name: ghcr-secret
 nameOverride: ""

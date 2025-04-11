@@ -757,10 +757,51 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
 	})
 
+	t.Run("Patron request loaned recalled", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RECALL#"
+		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED_RECALLED", 14)
+		m := ret[len(ret)-10].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoaned, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.SentViaUrl), m.SupplyingAgencyMessage.DeliveryInfo.SentVia.Text)
+		assert.Equal(t, string(iso18626.FormatPdf), m.SupplyingAgencyMessage.DeliveryInfo.DeliveredFormat.Text)
+		m = ret[len(ret)-6].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRecalled, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-4].Message
+		assert.NotNil(t, m.RequestingAgencyMessage)
+		assert.Equal(t, iso18626.TypeActionShippedReturn, m.RequestingAgencyMessage.Action)
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
 	t.Run("Patron request willsupply loaned", func(t *testing.T) {
 		msg := createPatronRequest()
 		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY_LOANED", 14)
 		m := ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
+	t.Run("Patron request willsupply loaned recalled", func(t *testing.T) {
+		msg := createPatronRequest()
+		msg.Request.ServiceInfo.Note = "#RECALL#"
+		ret := runScenario(t, isoUrl, apiUrl, msg, "WILLSUPPLY_LOANED_RECALLED", 16)
+		m := ret[len(ret)-6].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRecalled, m.SupplyingAgencyMessage.StatusInfo.Status)
+		m = ret[len(ret)-4].Message
+		assert.NotNil(t, m.RequestingAgencyMessage)
+		assert.Equal(t, iso18626.TypeActionShippedReturn, m.RequestingAgencyMessage.Action)
+		m = ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusLoanCompleted, m.SupplyingAgencyMessage.StatusInfo.Status)
 		m = ret[len(ret)-1].Message
@@ -1246,8 +1287,8 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 3)
-		assert.Equal(t, 3, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 4)
+		assert.Equal(t, 4, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Supplier 1", response.Items[0].Name)
 	})
 

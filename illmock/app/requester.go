@@ -18,6 +18,7 @@ type requesterInfo struct {
 	renew       bool
 	retryKeepId bool
 	received    bool
+	recall      bool
 	supplierUrl string
 	request     *iso18626.Request
 }
@@ -78,6 +79,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
 	renew := illRequest.ServiceInfo.Note == "#RENEW#"
 	retryKeepId := illRequest.ServiceInfo.Note == "#RETRYKEEPID#"
+	recall := illRequest.ServiceInfo.Note == "#RECALL#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -102,6 +104,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, 
 	requesterInfo := &requesterInfo{
 		supplierUrl: app.peerUrl,
 		cancel:      cancel,
+		recall:      recall,
 		renew:       renew,
 		retryKeepId: retryKeepId,
 		request:     msg.Request,
@@ -168,7 +171,10 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 			"got", responseMsg.RequestingAgencyMessageConfirmation.Action)
 		return
 	}
-	if action == iso18626.TypeActionReceived {
+	if action == iso18626.TypeActionReceived && !state.renew && !state.recall {
+		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
+	}
+	if action == iso18626.TypeActionRenew {
 		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
 	}
 }
@@ -254,6 +260,9 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			state.renew = false
 			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
 		}
+	case iso18626.TypeStatusRecalled:
+		state.recall = false
+		go app.sendRequestingAgencyMessageDelay(header, iso18626.TypeActionShippedReturn)
 	case iso18626.TypeStatusCopyCompleted:
 		requester.delete(header)
 	case iso18626.TypeStatusLoanCompleted:

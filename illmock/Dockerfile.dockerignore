@@ -12,6 +12,9 @@ illmock/*
 !illmock/reqform/*.xml
 !illmock/reqform/*.html
 
+# include embeds
+!illmock/dirmock/directories.json
+
 # Exclude tests
 illmock/test
 illmock/**/*_test.go
