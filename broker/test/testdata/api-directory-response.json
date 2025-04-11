@@ -3,6 +3,22 @@
     {
       "description": "nalb",
       "email": "interlibrary@alburycity.nsw.gov.au",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/iso18626",
+          "entry": "30191a94-9588-5b53-808a-58d843706d1b",
+          "id": "4ded1655-cc7e-59d1-bcaa-98bc3fe10588",
+          "name": "NALB ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://nalb-okapi.au.reshare.indexdata.com/_/invoke/tenant/nalb/rs/externalApi/statistics",
+          "entry": "30191a94-9588-5b53-808a-58d843706d1b",
+          "id": "42062a50-d866-56f1-a9e0-cdb6cd52a93f",
+          "name": "NALB Statistics Service",
+          "type": "http"
+        }
+      ],
       "id": "30191a94-9588-5b53-808a-58d843706d1b",
       "name": "Albury City Libraries",
       "networks": [
@@ -35,57 +51,58 @@
       "tiers": [
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "21c84597-e3f6-5ebd-b644-986b67999b9c",
-          "name": "Reciprocal Peer to Peer - Core",
-          "services": [
-            {
-              "cost": 0,
-              "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
-              "level": "Core",
-              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
-              "type": "Loan"
-            },
-            {
-              "cost": 0,
-              "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
-              "level": "Core",
-              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
-              "type": "Copy"
-            }
-          ]
+          "cost": 0,
+          "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+          "level": "Core",
+          "name": "Reciprocal Peer to Peer - Core Loan",
+          "type": "Loan"
         },
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-          "name": "Premium Pay for Peer - Core",
-          "services": [
-            {
-              "cost": 34.4,
-              "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
-              "level": "Core",
-              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-              "type": "Loan"
-            },
-            {
-              "cost": 22.4,
-              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
-              "level": "Core",
-              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-              "type": "Copy"
-            }
-          ]
+          "cost": 0,
+          "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+          "level": "Core",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 34.4,
+          "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+          "level": "Core",
+          "name": "Premium Pay for Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Core",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
         }
       ],
-      "type": "institution",
-      "endpoints": [
-        {
-          "address": "http://localhost:8083/"
-        }
-      ]
+      "type": "institution"
     },
     {
       "description": "nu",
       "email": "library.resourcesharing@sydney.edu.au",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/iso18626",
+          "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+          "id": "be711bb5-7ffc-5b3d-8019-7122c2177545",
+          "name": "NU ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://nu-okapi.au.reshare.indexdata.com/_/invoke/tenant/nu/rs/externalApi/statistics",
+          "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+          "id": "7acc2e14-25f1-5868-a034-48e041ec7f1e",
+          "name": "NU Statistics Service",
+          "type": "http"
+        }
+      ],
       "id": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
       "name": "University of Sydney",
       "networks": [
@@ -136,36 +153,58 @@
       "tiers": [
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-          "name": "Premium Pay for Peer - Core",
-          "services": [
-            {
-              "cost": 34.4,
-              "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
-              "level": "Core",
-              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-              "type": "Loan"
-            },
-            {
-              "cost": 22.4,
-              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
-              "level": "Core",
-              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-              "type": "Copy"
-            }
-          ]
+          "cost": 34.4,
+          "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+          "level": "Core",
+          "name": "Premium Pay for Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Core",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 62.8,
+          "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 44.5,
+          "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Copy",
+          "type": "Copy"
         }
       ],
-      "type": "institution",
-      "endpoints": [
-        {
-          "address": "http://localhost:8083/"
-        }
-      ]
+      "type": "institution"
     },
     {
       "description": "vvwa",
       "email": "library@worksafe.vic.gov.au",
+      "endpoints": [
+        {
+          "address": "http://localhost:8083/iso18626",
+          "entry": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+          "id": "642f0a1e-4dff-5f7d-97f8-abcc15852487",
+          "name": "VVWA ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://vvwa-okapi.au.reshare.indexdata.com/_/invoke/tenant/vvwa/rs/externalApi/statistics",
+          "entry": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+          "id": "ad97fce2-af45-53ca-8ef6-fef27af2c145",
+          "name": "VVWA Statistics Service",
+          "type": "http"
+        }
+      ],
       "id": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
       "name": "WorkSafe Victoria",
       "networks": [
@@ -204,67 +243,38 @@
       "tiers": [
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "21c84597-e3f6-5ebd-b644-986b67999b9c",
-          "name": "Reciprocal Peer to Peer - Core",
-          "services": [
-            {
-              "cost": 0,
-              "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
-              "level": "Core",
-              "tier": "21c84597-e3f6-5ebd-b644-986b67999b9c",
-              "type": "Copy"
-            }
-          ]
+          "cost": 0,
+          "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+          "level": "Core",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "type": "Copy"
         },
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "6baee891-0b61-5c75-a75e-6a0b03d4bfd9",
-          "name": "Reciprocal Peer to Peer - Rush",
-          "services": [
-            {
-              "cost": 0,
-              "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
-              "level": "Rush",
-              "tier": "6baee891-0b61-5c75-a75e-6a0b03d4bfd9",
-              "type": "Copy"
-            }
-          ]
+          "cost": 0,
+          "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Copy",
+          "type": "Copy"
         },
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-          "name": "Premium Pay for Peer - Core",
-          "services": [
-            {
-              "cost": 22.4,
-              "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
-              "level": "Core",
-              "tier": "5adb23ad-2c92-50bf-96e6-4c02cd616a20",
-              "type": "Copy"
-            }
-          ]
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Core",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
         },
         {
           "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
-          "id": "6d1b8ecf-23e9-5ffd-9b5f-687816014bfa",
-          "name": "Premium Pay for Peer - Rush",
-          "services": [
-            {
-              "cost": 44.5,
-              "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
-              "level": "Rush",
-              "tier": "6d1b8ecf-23e9-5ffd-9b5f-687816014bfa",
-              "type": "Copy"
-            }
-          ]
+          "cost": 44.5,
+          "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Copy",
+          "type": "Copy"
         }
       ],
-      "type": "institution",
-      "endpoints": [
-        {
-          "address": "http://localhost:8083/"
-        }
-      ]
+      "type": "institution"
     }
   ],
   "resultInfo": {

@@ -15,10 +15,11 @@ import (
 	"testing"
 )
 
+var respBody []byte
 var dirEntries adapter.EntriesResponse
 
 func TestMain(m *testing.M) {
-	respBody, _ := os.ReadFile("../testdata/api-directory-response.json")
+	respBody, _ = os.ReadFile("../testdata/api-directory-response.json")
 	err := json.Unmarshal(respBody, &dirEntries)
 	test.Expect(err, "failed to read directory entries")
 	code := m.Run()
@@ -112,10 +113,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 func TestLookup(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		respBody := "{\"items\":[{\"endpoints\":[{\"address\":\"http://localhost:8081/directory\"}]," +
-			"\"name\":\"Peer\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"},{\"authority\":\"ZFL\",\"symbol\":\"PEER\"}]}]," +
-			"\"resultInfo\":{\"totalRecords\":1}}"
-		w.Write([]byte(respBody))
+		w.Write(respBody)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -126,9 +124,9 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err := ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 1)
-	assert.Equal(t, entries[0].Name, "Peer")
-	assert.Len(t, entries[0].Symbol, 2)
+	assert.Len(t, entries, 3)
+	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Len(t, entries[0].Symbol, 1)
 }
 
 func TestFilterAndSort(t *testing.T) {
@@ -270,7 +268,7 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
 		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[2]}}
 	entries = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)

@@ -60,7 +60,15 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 		}
 		apiUrl := ""
 		if listMap, ok := d["endpoints"].([]any); ok && len(listMap) > 0 {
-			apiUrl = listMap[0].(map[string]any)["address"].(string)
+			for _, s := range listMap {
+				if itemMap, castOk := s.(map[string]any); castOk {
+					typeS, typeOk := itemMap["type"].(string)
+					add, addOk := itemMap["address"].(string)
+					if typeOk && addOk && typeS == "ISO18626" {
+						apiUrl = add
+					}
+				}
+			}
 		}
 		if apiUrl != "" && len(symbols) > 0 {
 			entry := DirectoryEntry{
@@ -160,25 +168,17 @@ func getPeerTiers(peerData map[string]any) []Tier {
 	if listMap, ok := peerData["tiers"].([]any); ok && len(listMap) > 0 {
 		for _, s := range listMap {
 			if itemMap, castOk := s.(map[string]any); castOk {
-				name, authOk := itemMap["name"].(string)
-				if authOk {
-					if lMap, lOk := itemMap["services"].([]any); lOk && len(lMap) > 0 {
-						for _, ser := range lMap {
-							if iMap, cOk := ser.(map[string]any); cOk {
-								level, levelOk := iMap["level"].(string)
-								t, tOk := iMap["type"].(string)
-								cost, costOk := iMap["cost"].(float64)
-								if levelOk && tOk && costOk {
-									tiers = append(tiers, Tier{
-										Name:  name,
-										Level: level,
-										Type:  t,
-										Cost:  cost,
-									})
-								}
-							}
-						}
-					}
+				name, nameOk := itemMap["name"].(string)
+				level, levelOk := itemMap["level"].(string)
+				t, tOk := itemMap["type"].(string)
+				cost, costOk := itemMap["cost"].(float64)
+				if nameOk && levelOk && tOk && costOk {
+					tiers = append(tiers, Tier{
+						Name:  name,
+						Level: level,
+						Type:  t,
+						Cost:  cost,
+					})
 				}
 			}
 		}
