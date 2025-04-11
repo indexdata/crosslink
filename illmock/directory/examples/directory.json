@@ -13,6 +13,22 @@
           "authority": "ISIL"
         }
       ],
+      "endpoints": [
+        {
+          "id": "e39242b4-3437-5c7e-976c-b80b8fff17af",
+          "entry": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+          "name": "TTTZ ISO18626 Service",
+          "type": "ISO18626",
+          "address": "https://tttz-okapi.au.reshare.indexdata.com/_/invoke/tenant/tttz/rs/externalApi/iso18626"
+        },
+        {
+          "id": "5fa5974c-3277-5821-b8c1-848c44f435a1",
+          "entry": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+          "name": "TTTZ Statistics Service",
+          "type": "http",
+          "address": "https://tttz-okapi.au.reshare.indexdata.com/_/invoke/tenant/tttz/rs/externalApi/statistics"
+        }
+      ],
       "networks": [
         {
           "id": "0a5e88cd-4f63-5bdd-baaf-c007b12de171",
@@ -32,12 +48,30 @@
           "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
           "priority": 9
         }
+      ],
+      "tiers": [
+        {
+          "id": "ef400d60-d6a7-59a6-b85d-804b51ffd871",
+          "name": "Reciprocal Peer to Peer - Core Loan",
+          "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+          "type": "Loan",
+          "level": "Core",
+          "cost": 0.0
+        },
+        {
+          "id": "419d4b63-ac25-50ef-a7fd-d16bb8521baf",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+          "type": "Copy",
+          "level": "Core",
+          "cost": 0.0
+        }
       ]
     },
     {
       "id": "69794360-8304-5d8b-9f00-525ab77fc4c0",
       "name": "Test tenant TTTZ / Default branch",
-      "description": "tttz__a",
+      "description": "tttz_a",
       "type": "branch",
       "lmsLocationCode": "",
       "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2"
