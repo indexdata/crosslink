@@ -79,14 +79,14 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
 	filtered := []Supplier{}
 	requesterNetworks := getPeerNetworks(requesterData)
-	var sType *string
-	var sLevel *string
+	sType := ""
+	sLevel := ""
 	var maxCost *float64
 	if serviceInfo != nil {
 		t := string(serviceInfo.ServiceType)
-		sType = &t
+		sType = t
 		if serviceInfo.ServiceLevel != nil {
-			sLevel = &serviceInfo.ServiceLevel.Text
+			sLevel = serviceInfo.ServiceLevel.Text
 		}
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
@@ -108,7 +108,7 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			tiers := getPeerTiers(e.CustomData)
 			var cost *float64
 			for _, t := range tiers {
-				if (sType == nil || *sType == t.Type) && (sLevel == nil || *sLevel == t.Level) && (maxCost == nil || *maxCost >= t.Cost) {
+				if (sType == "" || sType == t.Type) && (sLevel == "" || sLevel == t.Level) && (maxCost == nil || *maxCost >= t.Cost) {
 					if cost == nil || *cost > t.Cost {
 						cost = &t.Cost
 					}
