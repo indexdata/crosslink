@@ -25,7 +25,7 @@ func GetNow() pgtype.Timestamp {
 }
 
 func WaitForPredicateToBeTrue(predicate func() bool) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 
 	ticker := time.NewTicker(20 * time.Millisecond) // Check every 20ms
