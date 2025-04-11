@@ -119,8 +119,10 @@ The program offers an SRU service at URI path `/sru`. Only version 2.0
 is supported. It is substantially different from version 1.1, 1.2 -
 for example different namespace and different semantics for recordPacking.
 
-The service produces a MARCXML record if a query of format "id = value" is
-used. If the index (`id`) is omitted a SRU diagnostic is returned.
+The service produces a MARCXML record if a query of format "rec.id = value" is
+used. If the index (`rec.id`) is omitted a SRU diagnostic is returned.
+The `rec` prefix refers to the
+[Record metadata](https://www.loc.gov/standards/sru/cql/contextSets/listOfContextSets.html) context set.
 
 The identifier value is split by semicolon and each substring generates a holdings record entry
 in the `999#11` field with subfield `$l` set to the local ID and subfield `$s` set to library ISIL.

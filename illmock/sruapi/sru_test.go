@@ -60,22 +60,22 @@ func TestSruService(t *testing.T) {
 	url := server.URL
 
 	t.Run("cql ok", func(t *testing.T) {
-		res, err := api.getIdFromQuery("id=1")
+		res, err := api.getIdFromQuery("rec.id=1")
 		assert.Nil(t, err)
 		assert.Equal(t, "1", res)
 	})
 
 	t.Run("cql ok", func(t *testing.T) {
-		res, diag := api.getIdFromQuery("id==1")
+		res, diag := api.getIdFromQuery("rec.id==1")
 		assert.Nil(t, diag)
 		assert.Equal(t, "1", res)
 	})
 
 	t.Run("cql syntax error 1", func(t *testing.T) {
-		_, diag := api.getIdFromQuery("id=")
+		_, diag := api.getIdFromQuery("rec.id=")
 		assert.NotNil(t, diag)
 		assert.Equal(t, "Query syntax error", diag.Message)
-		assert.Equal(t, "search term expected at position 3: id=̰", diag.Details)
+		assert.Equal(t, "search term expected at position 7: rec.id=̰", diag.Details)
 	})
 
 	t.Run("cql bool", func(t *testing.T) {
@@ -92,7 +92,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("cql unsupported relation", func(t *testing.T) {
-		_, diag := api.getIdFromQuery("id > a")
+		_, diag := api.getIdFromQuery("rec.id > a")
 		assert.NotNil(t, diag)
 		assert.Equal(t, "Unsupported relation", diag.Message)
 		assert.Equal(t, ">", diag.Details)
@@ -105,7 +105,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.1", func(t *testing.T) {
-		cqlQuery := "id%3D1"
+		cqlQuery := "rec.id%3D1"
 		sruResp := getSr(t, url+"?version=1.1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
@@ -114,7 +114,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr1.2", func(t *testing.T) {
-		cqlQuery := "id%3D1"
+		cqlQuery := "rec.id%3D1"
 		sruResp := getSr(t, url+"?version=1.2&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
@@ -123,7 +123,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 no records", func(t *testing.T) {
-		cqlQuery := "id%3D1"
+		cqlQuery := "rec.id%3D1"
 		sruResp := getSr(t, url+"?query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
@@ -132,7 +132,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad maximumRecords", func(t *testing.T) {
-		cqlQuery := "id%3D1"
+		cqlQuery := "rec.id%3D1"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=x&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
@@ -141,7 +141,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 bad startRecord", func(t *testing.T) {
-		cqlQuery := "id%3D1"
+		cqlQuery := "rec.id%3D1"
 		sruResp := getSr(t, url+"?version=2.0&startRecord=x&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 1)
@@ -150,7 +150,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with one holding", func(t *testing.T) {
-		cqlQuery := "id%3D42"
+		cqlQuery := "rec.id%3D42"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -179,7 +179,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 with two holdings", func(t *testing.T) {
-		cqlQuery := "id%3D42%3B43"
+		cqlQuery := "rec.id%3D42%3B43"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -215,7 +215,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: not found", func(t *testing.T) {
-		cqlQuery := "id%3Dnot-found"
+		cqlQuery := "rec.id%3Dnot-found"
 		sruResp := getSr(t, url+"?maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
@@ -239,7 +239,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: empty", func(t *testing.T) {
-		cqlQuery := "id%3D%22%22"
+		cqlQuery := "rec.id%3D%22%22"
 		sruResp := getSr(t, url+"?maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Len(t, sruResp.Diagnostics.Diagnostic, 0)
@@ -263,7 +263,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: error", func(t *testing.T) {
-		cqlQuery := "id%3Derror"
+		cqlQuery := "rec.id%3Derror"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 1, len(sruResp.Diagnostics.Diagnostic))
@@ -274,7 +274,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: return-foo", func(t *testing.T) {
-		cqlQuery := "id%3Dreturn-foo"
+		cqlQuery := "rec.id%3Dreturn-foo"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -302,7 +302,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: return-", func(t *testing.T) {
-		cqlQuery := "id%3Dreturn-"
+		cqlQuery := "rec.id%3Dreturn-"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -314,7 +314,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: return-foo_bar", func(t *testing.T) {
-		cqlQuery := "id%3Dreturn-foo::bar"
+		cqlQuery := "rec.id%3Dreturn-foo::bar"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))
@@ -342,7 +342,7 @@ func TestSruService(t *testing.T) {
 	})
 
 	t.Run("sr2.0 magic: record-error", func(t *testing.T) {
-		cqlQuery := "id%3Drecord-error"
+		cqlQuery := "rec.id%3Drecord-error"
 		sruResp := getSr(t, url+"?version=2.0&maximumRecords=1&query="+cqlQuery)
 		assert.Equal(t, sru.VersionDefinition2_0, *sruResp.Version)
 		assert.Equal(t, 0, len(sruResp.Diagnostics.Diagnostic))

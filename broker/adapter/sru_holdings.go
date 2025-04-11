@@ -67,7 +67,7 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 }
 
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
-	cql := "id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
+	cql := "rec.id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
 	query := url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
