@@ -59,7 +59,7 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	if sc == nil {
 		return "", nil
 	}
-	if sc.Index != "id" {
+	if sc.Index != "rec.id" {
 		return "", getSruDiag("16", "Unsupported index", sc.Index)
 	}
 	if sc.Relation != cql.EQ && sc.Relation != "==" {

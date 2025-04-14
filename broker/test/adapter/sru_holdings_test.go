@@ -365,6 +365,9 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 
 func TestSruMarcxmlWithHoldings(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+		query := r.URL.Query().Get("query")
+		assert.Equal(t, "rec.id=\"123\"", query)
 		w.Header().Set("Content-Type", "application/xml")
 		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
 			Type: "Bibliographic",
