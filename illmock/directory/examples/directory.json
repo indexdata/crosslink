@@ -75,6 +75,12 @@
       "type": "branch",
       "lmsLocationCode": "",
       "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2"
+    },
+    {
+      "id": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+      "name": "Test1 consortium",
+      "description": "test1",
+      "type": "consortium"
     }
   ],
   "resultInfo": {
