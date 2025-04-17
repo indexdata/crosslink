@@ -54,7 +54,7 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 		}
 		return errors.New("surrogate diagnostic: " + diagnostic.Message + ": " + diagnostic.Details)
 	}
-	if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" {
+	if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" && record.RecordSchema != "marcxml" {
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
 	var rec marcxml.Record
@@ -71,7 +71,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 	query := url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
-	err := httpclient.NewClient().GetXml(s.client, s.sruUrl+"?maximumRecords=1000&query="+query, &sruResponse)
+	err := httpclient.NewClient().GetXml(s.client, s.sruUrl+"?maximumRecords=1000&recordSchema=marcxml&query="+query, &sruResponse)
 	if err != nil {
 		return nil, err
 	}
