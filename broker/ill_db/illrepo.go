@@ -20,6 +20,7 @@ type IllRepo interface {
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
+	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
@@ -33,6 +34,9 @@ type IllRepo interface {
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
+	DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
+	GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]LocatedSupplier, error)
+	GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
 	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer
 	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
 	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
@@ -90,6 +94,10 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransa
 		}
 	}
 	return transactions, err
+}
+
+func (r *PgIllRepo) DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error {
+	return r.queries.DeleteIllTransaction(ctx, r.GetConnOrTx(), id)
 }
 
 func (r *PgIllRepo) GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error) {
@@ -197,6 +205,10 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.Ext
 	return getSelectedSupplierForIllTransactionForCommon(selSup, illTransId)
 }
 
+func (r *PgIllRepo) DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
+	return r.queries.DeleteLocatedSupplierByIllTransaction(ctx, r.GetConnOrTx(), illTransId)
+}
+
 func (r *PgIllRepo) SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error) {
 	sym, err := r.queries.SaveSymbol(ctx, r.GetConnOrTx(), params)
 	return sym.Symbol, err
@@ -215,6 +227,28 @@ func (r *PgIllRepo) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string
 
 func (r *PgIllRepo) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
 	return r.queries.DeleteSymbolByPeerId(ctx, r.GetConnOrTx(), peerId)
+}
+
+func (r *PgIllRepo) GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error) {
+	rows, err := r.queries.GetIllTransactionByRequesterId(ctx, r.GetConnOrTx(), peerId)
+	var trans []IllTransaction
+	if err == nil {
+		for _, r := range rows {
+			trans = append(trans, r.IllTransaction)
+		}
+	}
+	return trans, err
+}
+
+func (r *PgIllRepo) GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]LocatedSupplier, error) {
+	rows, err := r.queries.GetLocatedSupplierByPeerId(ctx, r.GetConnOrTx(), peerId)
+	var suppliers []LocatedSupplier
+	if err == nil {
+		for _, r := range rows {
+			suppliers = append(suppliers, r.LocatedSupplier)
+		}
+	}
+	return suppliers, err
 }
 
 func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, illTransId string) (LocatedSupplier, error) {

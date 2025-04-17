@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"testing"
@@ -117,6 +118,20 @@ func TestGetIllTransactionsId(t *testing.T) {
 	if resp.ID != illId {
 		t.Errorf("did not find the same ILL transaction")
 	}
+	// Delete peer
+	req, err := http.NewRequest("DELETE", getLocalhostWithPort()+"/ill_transactions/"+illId, nil)
+	if err != nil {
+		t.Errorf("Error creating delete transaction request: %s", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	delResp, err := client.Do(req)
+	if err != nil {
+		t.Errorf("Error deleting peer request: %s", err)
+	}
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Errorf("Expected response 204 got %d", delResp.StatusCode)
+	}
 }
 
 func TestGetLocatedSuppliers(t *testing.T) {
@@ -196,13 +211,21 @@ func TestPeersCRUD(t *testing.T) {
 	if toCreate.ID != respPeer.ID {
 		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
 	}
+	// Cannot post same again
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Errorf("Error posting peer request: %s", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("Expected response 400 got %d", resp.StatusCode)
+	}
 	// Update peer
 	toCreate.Name = "Updated"
 	jsonBytes, err = json.Marshal(toCreate)
 	if err != nil {
 		t.Errorf("Error marshaling JSON: %s", err)
 	}
-	req, err = http.NewRequest("PUT", getLocalhostWithPort()+"/peers/"+toCreate.Symbols[0], bytes.NewBuffer(jsonBytes))
+	req, err = http.NewRequest("PUT", getLocalhostWithPort()+"/peers/"+toCreate.ID, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		t.Errorf("Error creating put peer request: %s", err)
 	}
@@ -230,7 +253,7 @@ func TestPeersCRUD(t *testing.T) {
 		t.Errorf("expected same peer name 'Updated' got %s", respPeer.Name)
 	}
 	// Get peer
-	respPeer = getPeerBySymbol(t, toCreate.Symbols[0])
+	respPeer = getPeerById(t, toCreate.ID)
 	if toCreate.ID != respPeer.ID {
 		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
 	}
@@ -239,8 +262,17 @@ func TestPeersCRUD(t *testing.T) {
 	if len(respPeers) < 1 {
 		t.Errorf("Did not find peers")
 	}
+	// Query peers
+	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
+	err = json.Unmarshal(body, &respPeers)
+	if err != nil {
+		t.Errorf("Failed to unmarshal json: %s", err)
+	}
+	if toCreate.ID != respPeers[0].ID {
+		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeers[0].ID)
+	}
 	// Delete peer
-	req, err = http.NewRequest("DELETE", getLocalhostWithPort()+"/peers/"+toCreate.Symbols[0], nil)
+	req, err = http.NewRequest("DELETE", getLocalhostWithPort()+"/peers/"+toCreate.ID, nil)
 	if err != nil {
 		t.Errorf("Error creating delete peer request: %s", err)
 	}
@@ -347,7 +379,7 @@ func TestGetIllTransactionsIdDbError(t *testing.T) {
 func TestGetPeersDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetPeers(rr, req)
+	handlerMock.GetPeers(rr, req, oapi.GetPeersParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -386,7 +418,7 @@ func TestPostPeersError(t *testing.T) {
 func TestDeletePeersSymbolDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.DeletePeersSymbol(rr, req, "s")
+	handlerMock.DeletePeersId(rr, req, "s")
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -395,7 +427,7 @@ func TestDeletePeersSymbolDbError(t *testing.T) {
 func TestGetPeersSymbolDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetPeersSymbol(rr, req, "s")
+	handlerMock.GetPeersId(rr, req, "s")
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -404,7 +436,7 @@ func TestGetPeersSymbolDbError(t *testing.T) {
 func TestPutPeersSymbolDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.PutPeersSymbol(rr, req, "s")
+	handlerMock.PutPeersId(rr, req, "s")
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -430,7 +462,7 @@ func getPeers(t *testing.T) []oapi.Peer {
 	return respPeers
 }
 
-func getPeerBySymbol(t *testing.T, symbol string) oapi.Peer {
+func getPeerById(t *testing.T, symbol string) oapi.Peer {
 	body := getResponseBody(t, "/peers/"+symbol)
 	var resp oapi.Peer
 	err := json.Unmarshal(body, &resp)
