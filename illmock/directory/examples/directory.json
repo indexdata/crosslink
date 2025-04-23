@@ -55,7 +55,7 @@
           "name": "Reciprocal Peer to Peer - Core Loan",
           "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
           "type": "Loan",
-          "level": "Core",
+          "level": "Standard",
           "cost": 0.0
         },
         {
@@ -63,7 +63,7 @@
           "name": "Reciprocal Peer to Peer - Core Copy",
           "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
           "type": "Copy",
-          "level": "Core",
+          "level": "Standard",
           "cost": 0.0
         }
       ]
