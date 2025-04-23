@@ -363,7 +363,10 @@ func (app *MockApp) Run() error {
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
 
-	dir := dirmock.New()
+	dir, err := dirmock.NewEnv()
+	if err != nil {
+		return err
+	}
 	dir.HandlerFromMux(mux)
 
 	app.server = &http.Server{Addr: addr, Handler: mux}

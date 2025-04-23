@@ -14,7 +14,6 @@ type WorkflowManager struct {
 }
 
 type WorkflowConfig struct {
-	ForwardWillSupply bool
 }
 
 func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, config WorkflowConfig) WorkflowManager {
@@ -61,18 +60,14 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 	}
 	status := event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status
 	switch status {
-	case iso18626.TypeStatusWillSupply:
-		if w.config.ForwardWillSupply {
-			extctx.Must(ctx, func() (string, error) {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-					events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
-			}, "")
-		}
 	case iso18626.TypeStatusUnfilled:
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
-	case iso18626.TypeStatusLoaned,
+	case
+		iso18626.TypeStatusExpectToSupply,
+		iso18626.TypeStatusWillSupply,
+		iso18626.TypeStatusLoaned,
 		iso18626.TypeStatusOverdue,
 		iso18626.TypeStatusRecalled,
 		iso18626.TypeStatusCancelled,

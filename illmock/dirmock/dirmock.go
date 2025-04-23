@@ -5,9 +5,10 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/indexdata/go-utils/utils"
 	"net/http"
 	"strings"
+
+	"github.com/indexdata/go-utils/utils"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/directory"
@@ -15,15 +16,25 @@ import (
 
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)
 
-type DirectoryMock struct{}
+type DirectoryMock struct {
+	entries []directory.Entry
+}
 
 //go:embed directories.json
 var defaultDirectories string
 
-var DIRECTORY_ENTRIES = utils.GetEnv("MOCK_DIRECTORY_ENTRIES", defaultDirectories)
+func NewEnv() (*DirectoryMock, error) {
+	var entries = utils.GetEnv("MOCK_DIRECTORY_ENTRIES", defaultDirectories)
+	return NewJson(entries)
+}
 
-func New() *DirectoryMock {
-	return &DirectoryMock{}
+func NewJson(entries string) (*DirectoryMock, error) {
+	mock := &DirectoryMock{}
+	err := json.Unmarshal([]byte(entries), &mock.entries)
+	if err != nil {
+		return nil, err
+	}
+	return mock, nil
 }
 
 func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) {
@@ -118,20 +129,29 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		query = &tmp
 	}
 
-	var entries []directory.Entry
 	var filtered []directory.Entry
-	err := json.Unmarshal([]byte(DIRECTORY_ENTRIES), &entries)
-	if err != nil {
-		return directory.GetEntries500TextResponse(err.Error()), nil
+	parentmap := make(map[string][]directory.Entry)
+	for _, entry := range d.entries {
+		if entry.Parent == nil {
+			continue
+		}
+		id := *entry.Parent
+		parentmap[id] = append(parentmap[id], entry)
 	}
-	for _, entry := range entries {
+	for _, entry := range d.entries {
 		match, err := matchQuery(query, entry.Symbols)
 		if err != nil {
 			return directory.GetEntries400TextResponse(err.Error()), nil
 		}
-		if match {
-			filtered = append(filtered, entry)
+		if !match {
+			continue
 		}
+		filtered = append(filtered, entry)
+		if entry.Id == nil {
+			continue
+		}
+		id := entry.Id.String()
+		filtered = append(filtered, parentmap[id]...)
 	}
 	var response directory.GetEntries200JSONResponse
 	response.Items = filtered
