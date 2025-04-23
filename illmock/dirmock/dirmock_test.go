@@ -84,3 +84,9 @@ func TestMatchQueries(t *testing.T) {
 		})
 	}
 }
+
+func TestNewJson(t *testing.T) {
+	_, err := NewJson("{")
+	assert.NotNil(t, err)
+	assert.ErrorContains(t, err, "unexpected end of JSON input")
+}

@@ -86,6 +86,14 @@ func TestAppBadMessageDelay(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid MESSAGE_DELAY: time: ")
 }
 
+func TestAppBadMOCK_DIRECTORY_ENTRIES(t *testing.T) {
+	os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
+	var app MockApp
+	err := app.Run()
+	os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	assert.ErrorContains(t, err, "unexpected end of JSON input")
+}
+
 func TestGetMessageDelay(t *testing.T) {
 	dur, err := getMessageDelay("3ms")
 	assert.Nil(t, err)
@@ -1287,9 +1295,26 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 42)
-		assert.Equal(t, 42, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 63)
+		assert.Equal(t, 63, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Albury City Libraries", response.Items[0].Name)
+	})
+
+	t.Run("directory entries cql=ISIL:AU-NWOOL", func(t *testing.T) {
+		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL")
+		assert.Nil(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		buf, err := io.ReadAll(resp.Body)
+		assert.Nil(t, err)
+		defer resp.Body.Close()
+		var response directory.EntriesResponse
+		err = json.Unmarshal(buf, &response)
+		assert.Nil(t, err)
+		assert.Len(t, response.Items, 2)
+		assert.Equal(t, 2, *response.ResultInfo.TotalRecords)
+		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
+		assert.Equal(t, "Woollahra Library and Information Service / Double Bay Central Library", response.Items[1].Name)
 	})
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {
