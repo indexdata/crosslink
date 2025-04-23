@@ -55,7 +55,6 @@ func TestMain(m *testing.M) {
 	}()
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.FORWARD_WILL_SUPPLY = true
 	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())

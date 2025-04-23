@@ -26,7 +26,6 @@ Configuration is provided via environment variables:
 | SRU_URL               | URL when HOLDINGS_ADAPTER is `sru`         | `http://localhost:8081/sru`               |
 | PEER_REFRESH_INTERVAL | Peer refresh interval                      | `5m`                                      |
 | MAX_MESSAGE_SIZE      | Max ISO18626 message size                  | `100KB`                                   |
-| FORWARD_WILL_SUPPLY   | Forward WillSupply from first supplier     | `false`                                   |
 | DIRECTORY_ADAPTER     | Directory lookup method:`mock` or `api`    | `mock`                                    |
 | DIRECTORY_API_URL     | URL when DIRECTORY_ADAPTER is `api`        | `http://localhost:8081/directory/entries` |
 
