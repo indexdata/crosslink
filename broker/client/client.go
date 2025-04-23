@@ -18,6 +18,8 @@ import (
 )
 
 var BrokerSymbol = "ISIL:BROKER"
+var Transparent = "transparent"
+var ProxyMode = utils.GetEnv("PROXY_MODE", "opaque")
 
 type Iso18626Client struct {
 	eventBus   events.EventBus
@@ -268,14 +270,14 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, hideRequester bool) iso18626.Header {
 	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
-	if hideRequester {
+	if hideRequester && !strings.EqualFold(ProxyMode, Transparent) {
 		requesterSymbol = strings.Split(BrokerSymbol, ":")
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if sup != nil && sup.SupplierSymbol != "" && hideRequester {
+	if sup != nil && sup.SupplierSymbol != "" && (hideRequester || strings.EqualFold(ProxyMode, Transparent)) {
 		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{
