@@ -4,14 +4,16 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
-	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 	"io"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
+
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 )
 
 type ApiDirectory struct {
@@ -92,9 +94,9 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 	var maxCost *float64
 	if serviceInfo != nil {
 		t := string(serviceInfo.ServiceType)
-		sType = t
+		sType = strings.ToLower(t)
 		if serviceInfo.ServiceLevel != nil {
-			sLevel = serviceInfo.ServiceLevel.Text
+			sLevel = strings.ToLower(serviceInfo.ServiceLevel.Text)
 		}
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
@@ -116,7 +118,7 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			tiers := getPeerTiers(e.CustomData)
 			var cost *float64
 			for _, t := range tiers {
-				if (sType == "" || sType == t.Type) && (sLevel == "" || sLevel == t.Level) && (maxCost == nil || *maxCost >= t.Cost) {
+				if (sType == "" || sType == strings.ToLower(t.Type)) && (sLevel == "" || sLevel == strings.ToLower(t.Level)) && (maxCost == nil || *maxCost >= t.Cost) {
 					if cost == nil || *cost > t.Cost {
 						cost = &t.Cost
 					}
