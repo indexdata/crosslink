@@ -42,7 +42,6 @@ var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
-var FORWARD_WILL_SUPPLY, _ = utils.GetEnvBool("FORWARD_WILL_SUPPLY", false)
 var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), func(val string) (int, error) {
 	v, err := humanize.ParseBytes(val)
 	if err != nil && v > uint64(math.MaxInt) {
@@ -94,7 +93,7 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
-	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{ForwardWillSupply: FORWARD_WILL_SUPPLY})
+	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
 	return Context{
