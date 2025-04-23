@@ -95,6 +95,9 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	}
 
 	suppliersToAdd = s.dirAdapter.FilterAndSort(ctx, suppliersToAdd, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	if len(suppliersToAdd) == 0 {
+		return logProblemAndReturnResult(ctx, "no suppliers after filtering")
+	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	for i, sup := range suppliersToAdd {
 		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Symbol, sup.PeerId)
