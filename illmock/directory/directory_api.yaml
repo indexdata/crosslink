@@ -278,7 +278,7 @@ components:
       required:
         - id
         - entry
-        - countryCode
+        - type
       properties:
         id:
           readOnly: true
@@ -288,16 +288,22 @@ components:
         entry:
           type: string
           format: uuid
-        label:
+        type:
           type: string
-        countryCode:
-          type: string
-    AddressLine:
+          enum:
+            - Default
+            - Shipping
+            - Billing
+            - Other
+        addressComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressComponent'
+    AddressComponent:
       type: object
       required:
         - id
         - address
-        - seq
         - type
         - value
       properties:
@@ -309,10 +315,14 @@ components:
         address:
           type: string
           format: uuid
-        seq:
-          type: integer
         type:
           type: string
+          enum:
+            - Thoroughfare
+            - Locality
+            - AdministrativeArea
+            - PostalCode
+            - CountryCode
+            - Other
         value:
           type: string
-
