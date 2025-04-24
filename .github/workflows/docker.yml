@@ -41,7 +41,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}-mod-dms
+          images: ghcr.io/${{ github.repository }}
 
       - name: Cache Docker layers
         uses: actions/cache@v3
