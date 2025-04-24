@@ -122,7 +122,7 @@ func TestGetIllTransactionsId(t *testing.T) {
 func TestGetLocatedSuppliers(t *testing.T) {
 	illId := test.GetIllTransId(t, illRepo)
 	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
-	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, string(iso18626.TypeStatusLoaned))
+	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
 	body := getResponseBody(t, "/located_suppliers")
 	var resp []oapi.LocatedSupplier
 	err := json.Unmarshal(body, &resp)

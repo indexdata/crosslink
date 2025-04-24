@@ -19,19 +19,28 @@ import (
 
 var BrokerSymbol = "ISIL:BROKER"
 
+type BrokerMode string
+
+const (
+	BrokerModeOpaque      BrokerMode = "opaque"
+	BrokerModeTransparent BrokerMode = "transparent"
+)
+
 type Iso18626Client struct {
 	eventBus   events.EventBus
 	illRepo    ill_db.IllRepo
 	client     *http.Client
 	maxMsgSize int
+	brokerMode BrokerMode
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, brokerMode BrokerMode) Iso18626Client {
 	return Iso18626Client{
 		eventBus:   eventBus,
 		illRepo:    illRepo,
 		client:     http.DefaultClient,
 		maxMsgSize: maxMsgSize,
+		brokerMode: brokerMode,
 	}
 }
 
@@ -266,16 +275,16 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 	return &selectedSupplier, &peer, err
 }
 
-func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, hideRequester bool) iso18626.Header {
-	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
-	if hideRequester {
-		requesterSymbol = strings.Split(BrokerSymbol, ":")
+func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool) iso18626.Header {
+	requesterSymbol := strings.Split(BrokerSymbol, ":")
+	if !isRequestingMessage || c.brokerMode == BrokerModeTransparent {
+		requesterSymbol = strings.Split(transaction.RequesterSymbol.String, ":")
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if sup != nil && sup.SupplierSymbol != "" && hideRequester {
+	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || c.brokerMode == BrokerModeTransparent) {
 		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{
