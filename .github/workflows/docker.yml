@@ -7,7 +7,7 @@ on:
   workflow_run:
     workflows: ['build-test']
     types: [completed]
-    branches: ['main', 'ILLDEV-12-mod-dms-ci-improvements']
+    branches: ['main']
 
 env:
   REGISTRY: ghcr.io
