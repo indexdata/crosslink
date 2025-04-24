@@ -292,6 +292,10 @@ components:
           type: string
         countryCode:
           type: string
+        addressLines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressLine'
     AddressLine:
       type: object
       required:
@@ -315,4 +319,3 @@ components:
           type: string
         value:
           type: string
-
