@@ -275,16 +275,16 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 	return &selectedSupplier, &peer, err
 }
 
-func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, hideRequester bool) iso18626.Header {
-	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
-	if hideRequester && c.brokerMode != BrokerModeTransparent {
-		requesterSymbol = strings.Split(BrokerSymbol, ":")
+func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool) iso18626.Header {
+	requesterSymbol := strings.Split(BrokerSymbol, ":")
+	if !isRequestingMessage || c.brokerMode == BrokerModeTransparent {
+		requesterSymbol = strings.Split(transaction.RequesterSymbol.String, ":")
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if sup != nil && sup.SupplierSymbol != "" && (hideRequester || c.brokerMode == BrokerModeTransparent) {
+	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || c.brokerMode == BrokerModeTransparent) {
 		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{
