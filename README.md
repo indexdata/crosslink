@@ -12,7 +12,7 @@ Objects are named with a UUID and optionally prefixed with the contents of the `
 
 Configuration is through the following environment variables:
 
-- `HOST` (default `localhost`)
+- `HOST` (default `` equivalent to any)
 
 - `PORT` (default `8086`)
 

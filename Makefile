@@ -31,8 +31,14 @@ $(DESCRIPTOR): ModuleDescriptor-template.json
 check:
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
+check-coverage:
+	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+
 run: $(BINARY)
 	$(GO) run -buildvcs=true ./$(MAIN_PACKAGE)
+
+docker:
+	docker build -t indexdata/mod-dms:latest .
 
 fmt:
 	$(GOFMT) -w $(GOFILES)

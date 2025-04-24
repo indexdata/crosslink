@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to start minio: %s", err))
 	}
-	defer con.Terminate(ctx)
+	defer func() { _ = con.Terminate(ctx) }()
 
 	conStr, err := con.ConnectionString(ctx)
 	if err != nil {

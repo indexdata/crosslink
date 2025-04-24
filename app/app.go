@@ -18,7 +18,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-var Host = cmp.Or(os.Getenv("HOST"), "localhost")
+var Host = cmp.Or(os.Getenv("HOST"), "")
 var Port = cmp.Or(os.Getenv("PORT"), "8086")
 
 type BucketCreds struct {
