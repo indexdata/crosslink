@@ -29,7 +29,6 @@ env:
 on:
   workflow_dispatch:
   push:
-    branches: ['DEVOPS-5467-api-lint-doc']
     paths:
       - 'illmock/directory/**'
       - 'broker/oapi/**'
