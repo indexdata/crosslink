@@ -91,7 +91,7 @@ func Handler(ctx context.Context) http.Handler {
 }
 
 func handleHealthz(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
 
 func Creds() (BucketCreds, error) {
