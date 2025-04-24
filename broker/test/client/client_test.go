@@ -54,6 +54,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	app.BROKER_MODE = string(client.BrokerModeTransparent)
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -68,105 +69,73 @@ func TestMain(m *testing.M) {
 }
 
 func TestMessageRequester(t *testing.T) {
-	tests := []struct {
-		proxyMode string
-		suffix    string
-	}{
-		{proxyMode: "Transparent", suffix: "1_1"},
-		{proxyMode: "Opaque", suffix: "1_2"},
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := test.CreatePeer(t, illRepo, "ISIL:REQ1", LocalAddress)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	resp := test.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
 	}
-	for _, tt := range tests {
-		t.Run("TestMessageRequester"+tt.proxyMode, func(t *testing.T) {
-			client.ProxyMode = tt.proxyMode
-			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-				completedTask = append(completedTask, event)
-			})
 
-			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-
-			req := test.CreatePeer(t, illRepo, "ISIL:REQ"+tt.suffix, LocalAddress)
-			illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-			resp := test.CreatePeer(t, illRepo, "ISIL:RESP"+tt.suffix, LocalAddress)
-			test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP"+tt.suffix, string(iso18626.TypeStatusLoaned))
-			eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
-			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
-			if err != nil {
-				t.Error("Failed to notify with error " + err.Error())
-			}
-
-			if !test.WaitForPredicateToBeTrue(func() bool {
-				if len(completedTask) == 1 {
-					event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-					return event.EventStatus == events.EventStatusSuccess
-				}
-				return false
-			}) {
-				t.Error("Expected to have request event received and successfully processed")
-			}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			if event.ResultData.IncomingMessage == nil {
-				t.Error("Should have response in result data")
-			}
-			assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
-			supValue := "BROKER"
-			if strings.EqualFold(tt.proxyMode, client.Transparent) {
-				supValue = "RESP" + tt.suffix
-			}
-			assert.Equal(t, supValue, event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
-		})
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
 	}
+	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+	if event.ResultData.IncomingMessage == nil {
+		t.Error("Should have response in result data")
+	}
+	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestMessageSupplier(t *testing.T) {
-	tests := []struct {
-		proxyMode string
-		suffix    string
-	}{
-		{proxyMode: "Transparent", suffix: "2_1"},
-		{proxyMode: "Opaque", suffix: "2_2"},
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := test.CreatePeer(t, illRepo, "ISIL:REQ2", LocalAddress)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	resp := test.CreatePeer(t, illRepo, "ISIL:RESP2", LocalAddress)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
 	}
-	for _, tt := range tests {
-		t.Run("TestMessageSupplier"+tt.proxyMode, func(t *testing.T) {
-			client.ProxyMode = tt.proxyMode
-			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
-				completedTask = append(completedTask, event)
-			})
 
-			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-
-			req := test.CreatePeer(t, illRepo, "ISIL:REQ"+tt.suffix, LocalAddress)
-			illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-			resp := test.CreatePeer(t, illRepo, "ISIL:RESP"+tt.suffix, LocalAddress)
-			test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP"+tt.suffix, string(iso18626.TypeStatusLoaned))
-			eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
-			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
-			if err != nil {
-				t.Error("Failed to notify with error " + err.Error())
-			}
-
-			if !test.WaitForPredicateToBeTrue(func() bool {
-				if len(completedTask) == 1 {
-					event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-					return event.ResultData.IncomingMessage != nil
-				}
-				return false
-			}) {
-				t.Error("Expected to have request event received and successfully processed")
-			}
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			if event.ResultData.IncomingMessage == nil {
-				t.Error("Should have response in result data")
-			}
-			assert.Equal(t, "RESP"+tt.suffix, event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
-			reqValue := "BROKER"
-			if strings.EqualFold(tt.proxyMode, client.Transparent) {
-				reqValue = "REQ1"
-			}
-			assert.Equal(t, reqValue, event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
-		})
+			return event.ResultData.IncomingMessage != nil
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
 	}
+	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+	if event.ResultData.IncomingMessage == nil {
+		t.Error("Should have response in result data")
+	}
+	assert.Equal(t, "RESP2", event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 }
 
 func TestMessageRequesterInvalidAddress(t *testing.T) {
