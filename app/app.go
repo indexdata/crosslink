@@ -84,9 +84,14 @@ func Logger() (*slog.Logger, error) {
 
 func Handler(ctx context.Context) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.HandleFunc("POST /dms/upload", handleUpload)
 	mux.HandleFunc("DELETE /dms/upload/{key...}", handleDelete)
 	return mux
+}
+
+func handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("OK"))
 }
 
 func Creds() (BucketCreds, error) {
