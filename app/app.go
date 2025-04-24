@@ -19,7 +19,7 @@ import (
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "")
-var Port = cmp.Or(os.Getenv("PORT"), "8086")
+var Port = cmp.Or(os.Getenv("HTTP_PORT"), "8086")
 
 type BucketCreds struct {
 	Bucket   string

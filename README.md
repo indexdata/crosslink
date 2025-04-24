@@ -14,7 +14,7 @@ Configuration is through the following environment variables:
 
 - `HOST` (default `` equivalent to any)
 
-- `PORT` (default `8086`)
+- `HTTP_PORT` (default `8086`)
 
 - `LOG_JSON`, if present and set to `true`, indicates to output structured logs as `JSON`
 

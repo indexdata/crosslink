@@ -38,8 +38,8 @@ COPY --from=build /etc/group /etc/group
 # copy the binary
 COPY --from=build /app/mod-dms /
 
-ENV PORT=8086
-EXPOSE ${PORT}
+ENV HTTP_PORT=8086
+EXPOSE ${HTTP_PORT}
 
 # Run
 USER mod-dms-user:mod-dms-user
