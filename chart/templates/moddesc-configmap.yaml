@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name:  {{ include "..fullname" . }}-md
+data:
+  ModuleDescriptor: |
+    {{ (.Files.Get "ModuleDescriptor-template.json") | replace "@version@" .Chart.Version | nindent 4 }}
