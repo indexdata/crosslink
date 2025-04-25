@@ -11,10 +11,9 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 VERSION ?= `$(GIT) describe --tags --abbrev=0 | sed 's/^v\([0-9]\)/\1/'`
 
-all: $(BINARY) $(DESCRIPTOR)
+.PHONY: all generate check check-coverage run docker fmt fmt-check lint clean
 
-docker:
-	cd .. && $(DOCKER) build -f ./$(MODULE)/Dockerfile .
+all: $(BINARY) $(DESCRIPTOR)
 
 generate:
 	$(GO) generate
@@ -25,7 +24,7 @@ $(COMMIT_ID):
 $(BINARY):  $(COMMIT_ID) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-$(DESCRIPTOR): ModuleDescriptor-template.json
+$(DESCRIPTOR): chart/ModuleDescriptor-template.json
 	sed "s/@version@/$(VERSION)/g" $< > $@
 
 check:
