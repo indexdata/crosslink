@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "..fullname" . }}-okapi-hook-job
+  name: {{ include "..fullname" . }}-okapi-hooks-job
   labels:
     {{- include "..labels" . | nindent 4 }}
   annotations:
@@ -9,13 +9,14 @@ metadata:
 spec:
   template:
     metadata:
-      name: {{ include "..fullname" . }}-okapi-hook-job
+      name: {{ include "..fullname" . }}-okapi-hooks-job
       labels:
         {{- include "..labels" . | nindent 8 }}
     spec:
       restartPolicy: Never
       containers:
-      - image: "{{ .Values.okapiHooks.image.repository }}:{{ .Values.okapiHooks.image.tag }}"
+      - name: okapi-hooks
+        image: "{{ .Values.okapiHooks.image.repository }}:{{ .Values.okapiHooks.image.tag }}"
         pullPolicy: {{ .Values.okapiHooks.image.pullPolicy }}
         env:
           - name: OKAPI_URL
