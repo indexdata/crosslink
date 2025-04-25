@@ -81,11 +81,19 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			ctx.Logger().Error(msg)
 			return events.EventStatusError, &resData
 		}
-		if status == iso18626.TypeStatusWillSupply {
+		//in opaque mode we proxy ExpectToSupply and WillSupply once
+		if c.brokerMode == BrokerModeOpaque {
 			lastSentStatus := illTrans.LastSupplierStatus.String
-			if len(lastSentStatus) > 0 && lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
-				resData.Note = "status WillSupply already communicated and will be ignored"
-				return events.EventStatusSuccess, &resData
+			if len(lastSentStatus) > 0 {
+				if status == iso18626.TypeStatusExpectToSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) {
+					resData.Note = "status ExpectToSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
+				if status == iso18626.TypeStatusWillSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) &&
+					lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
+					resData.Note = "status WillSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
 			}
 		}
 	}
