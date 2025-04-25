@@ -14,6 +14,10 @@ spec:
         {{- include "..labels" . | nindent 8 }}
     spec:
       restartPolicy: Never
+      {{- with .Values.okapiHooks.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
       - name: okapi-hooks
         image: "{{ .Values.okapiHooks.image.repository }}:{{ .Values.okapiHooks.image.tag }}"

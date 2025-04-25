@@ -19,6 +19,8 @@ okapiHooks:
     repository: ghcr.io/indexdata/okapi-hooks
     pullPolicy: Always
     tag: "main"
+  imagePullSecrets:
+    - name: ghcr-secret
   env: {}
   envSecrets: {}
   envConfigMaps: {}
