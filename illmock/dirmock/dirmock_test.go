@@ -1,6 +1,7 @@
 package dirmock
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -89,4 +90,28 @@ func TestNewJson(t *testing.T) {
 	_, err := NewJson("{")
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
+}
+
+func TestNewEnv(t *testing.T) {
+	defer os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	defer os.Unsetenv("MOCK_DIRECTORY_ENTRIES_PATH")
+	os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
+	_, err := NewEnv()
+	assert.ErrorContains(t, err, "unexpected end of JSON input")
+
+	os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", "does-not-exist.json")
+	_, err = NewEnv()
+	assert.ErrorContains(t, err, "no such file or directory")
+
+	file, err := os.CreateTemp("", "test.json")
+	assert.Nil(t, err)
+	defer os.Remove(file.Name())
+	_, err = file.WriteString("[]")
+	assert.Nil(t, err)
+	err = file.Close()
+	assert.Nil(t, err)
+	os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file.Name())
+	_, err = NewEnv()
+	assert.Nil(t, err)
 }
