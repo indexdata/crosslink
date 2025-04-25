@@ -64,17 +64,7 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
-	case
-		iso18626.TypeStatusExpectToSupply,
-		iso18626.TypeStatusWillSupply,
-		iso18626.TypeStatusLoaned,
-		iso18626.TypeStatusOverdue,
-		iso18626.TypeStatusRecalled,
-		iso18626.TypeStatusCancelled,
-		iso18626.TypeStatusRetryPossible,
-		iso18626.TypeStatusCopyCompleted,
-		iso18626.TypeStatusLoanCompleted,
-		iso18626.TypeStatusCompletedWithoutReturn:
+	default:
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)

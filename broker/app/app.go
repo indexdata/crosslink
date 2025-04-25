@@ -50,6 +50,8 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 	}
 	return int(v), err
 })
+var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
+
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
@@ -75,7 +77,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, getBrokerMode(BROKER_MODE))
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
@@ -197,6 +199,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, workflowManager.RequesterMessageReceived)
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, iso18626Client.MessageRequester)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
@@ -219,4 +222,12 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func getBrokerMode(mode string) client.BrokerMode {
+	if strings.EqualFold(mode, string(client.BrokerModeTransparent)) {
+		return client.BrokerModeTransparent
+	} else {
+		return client.BrokerModeOpaque
+	}
 }

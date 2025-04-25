@@ -19,19 +19,28 @@ import (
 
 var BrokerSymbol = "ISIL:BROKER"
 
+type BrokerMode string
+
+const (
+	BrokerModeOpaque      BrokerMode = "opaque"
+	BrokerModeTransparent BrokerMode = "transparent"
+)
+
 type Iso18626Client struct {
 	eventBus   events.EventBus
 	illRepo    ill_db.IllRepo
 	client     *http.Client
 	maxMsgSize int
+	brokerMode BrokerMode
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, brokerMode BrokerMode) Iso18626Client {
 	return Iso18626Client{
 		eventBus:   eventBus,
 		illRepo:    illRepo,
 		client:     http.DefaultClient,
 		maxMsgSize: maxMsgSize,
+		brokerMode: brokerMode,
 	}
 }
 
@@ -64,6 +73,13 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
+		} else if !locSupplier.LastStatus.Valid {
+			if c.brokerMode == BrokerModeTransparent {
+				status = iso18626.TypeStatusExpectToSupply
+			} else {
+				resData.Note = "no need to message requester in broker mode " + string(c.brokerMode)
+				return events.EventStatusSuccess, &resData
+			}
 		} else {
 			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
 			resData.EventError = &events.EventError{
@@ -72,11 +88,19 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			ctx.Logger().Error(msg)
 			return events.EventStatusError, &resData
 		}
-		if status == iso18626.TypeStatusWillSupply {
+		//in opaque mode we proxy ExpectToSupply and WillSupply once
+		if c.brokerMode == BrokerModeOpaque {
 			lastSentStatus := illTrans.LastSupplierStatus.String
-			if len(lastSentStatus) > 0 && lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
-				resData.Note = "status WillSupply already communicated and will be ignored"
-				return events.EventStatusSuccess, &resData
+			if len(lastSentStatus) > 0 {
+				if status == iso18626.TypeStatusExpectToSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) {
+					resData.Note = "status ExpectToSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
+				if status == iso18626.TypeStatusWillSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) &&
+					lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
+					resData.Note = "status WillSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
 			}
 		}
 	}
@@ -129,7 +153,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
-	var action string
 	err := c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByIdForUpdate(ctx, id)
 		if err != nil {
@@ -140,11 +163,9 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 			String: status,
 			Valid:  true,
 		}
-		action = illTrans.LastRequesterAction.String
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	ctx.Logger().Info("CROSSLINK-83: updateSupplierStatus SAVE", "action", action)
 	return err
 }
 
@@ -166,7 +187,6 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		return events.EventStatusError, &resData
 	}
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
-	ctx.Logger().Info("CROSSLINK-83: createAndSendRequestOrRequestingAgencyMessage USE", "action", illTrans.LastRequesterAction.String, "isRequest", isRequest)
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	var action string
@@ -266,16 +286,16 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 	return &selectedSupplier, &peer, err
 }
 
-func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, hideRequester bool) iso18626.Header {
-	requesterSymbol := strings.Split(transaction.RequesterSymbol.String, ":")
-	if hideRequester {
-		requesterSymbol = strings.Split(BrokerSymbol, ":")
+func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool) iso18626.Header {
+	requesterSymbol := strings.Split(BrokerSymbol, ":")
+	if !isRequestingMessage || c.brokerMode == BrokerModeTransparent {
+		requesterSymbol = strings.Split(transaction.RequesterSymbol.String, ":")
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if sup != nil && sup.SupplierSymbol != "" && hideRequester {
+	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || c.brokerMode == BrokerModeTransparent) {
 		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{
