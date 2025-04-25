@@ -1,0 +1,20 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "..fullname" . }}-okapi-hook-job
+  labels:
+    {{- include "..labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+spec:
+  template:
+    metadata:
+      name: {{ include "..fullname" . }}-okapi-hook-job
+      labels:
+        {{- include "..labels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: okapi-hook
+        image: "alpine:latest"
+        command: ["/bin/sh", "-c", "echo 'Hook job for {{ .Release.Name }} completed successfully with chart version {{ .Chart.Version }}' && exit 0"]
