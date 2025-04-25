@@ -24,7 +24,7 @@ spec:
         pullPolicy: {{ .Values.okapiHooks.image.pullPolicy }}
         env:
           - name: OKAPI_URL
-            value: "okapi:9130"
+            value: "http://okapi:9130"
           - name: MD_URL
             value: "http://{{ include "..fullname" . }}:{{ .Values.service.httpPort }}"
           {{- range $k, $v := .Values.okapiHooks.env }}
