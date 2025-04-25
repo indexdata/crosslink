@@ -36,6 +36,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EntriesResponse'
+              example:
+                $ref: './examples/directory.json'
         '400':
           description: Request validation error
           content:
