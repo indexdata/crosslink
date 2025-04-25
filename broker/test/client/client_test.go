@@ -103,6 +103,42 @@ func TestMessageRequester(t *testing.T) {
 	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestMessageRequesterNoLastStatus(t *testing.T) {
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := test.CreatePeer(t, illRepo, "ISIL:REQ1_1", LocalAddress)
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	resp := test.CreatePeer(t, illRepo, "ISIL:RESP1_1", LocalAddress)
+	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "")
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+	if event.ResultData.IncomingMessage == nil {
+		t.Error("Should have response in result data")
+	}
+	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, iso18626.TypeStatusExpectToSupply, event.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+}
+
 func TestMessageSupplier(t *testing.T) {
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {

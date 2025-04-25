@@ -73,6 +73,13 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
+		} else if !locSupplier.LastStatus.Valid {
+			if c.brokerMode == BrokerModeTransparent {
+				status = iso18626.TypeStatusExpectToSupply
+			} else {
+				resData.Note = "no need to message requester in broker mode " + string(c.brokerMode)
+				return events.EventStatusSuccess, &resData
+			}
 		} else {
 			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
 			resData.EventError = &events.EventError{
