@@ -15,6 +15,31 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-      - name: okapi-hook
-        image: "alpine:latest"
-        command: ["/bin/sh", "-c", "echo 'Hook job for {{ .Release.Name }} completed successfully with chart version {{ .Chart.Version }}' && exit 0"]
+      - image: "{{ .Values.okapiHooks.image.repository }}:{{ .Values.okapiHooks.image.tag }}"
+        pullPolicy: {{ .Values.okapiHooks.image.pullPolicy }}
+        env:
+          - name: OKAPI_URL
+            value: "okapi:9130"
+          {{- range $k, $v := .Values.okapiHooks.env }}
+          - name: {{ $k }}
+            value: "{{ $v }}"
+          {{- end }}
+          {{- range $k, $v := .Values.okapiHooks.envSecrets }}
+          - name: {{ $k }}
+            valueFrom:
+              secretKeyRef:
+                name: "{{ $v.name }}"
+                key: "{{ $v.key }}"
+          {{- end }}
+          - name: OKAPI_MD
+            valueFrom:
+              configMapKeyRef:
+                name: {{ include "..fullname" . }}-md
+                key: ModuleDescriptor
+          {{- range $k, $v := .Values.okapiHooks.envConfigMaps }}
+          - name: {{ $k }}
+            valueFrom:
+              configMapKeyRef:
+                name: "{{ $v.name }}"
+                key: "{{ $v.key }}"
+          {{- end }}
