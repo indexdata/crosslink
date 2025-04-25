@@ -22,7 +22,7 @@ spec:
       containers:
       - name: okapi-hooks
         image: "{{ .Values.okapiHooks.image.repository }}:{{ .Values.okapiHooks.image.tag }}"
-        pullPolicy: {{ .Values.okapiHooks.image.pullPolicy }}
+        imagePullPolicy: {{ .Values.okapiHooks.image.pullPolicy }}
         env:
           - name: OKAPI_URL
             value: "http://okapi:9130"
