@@ -6,9 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
-
-	"github.com/indexdata/go-utils/utils"
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/crosslink/illmock/directory"
@@ -24,8 +23,19 @@ type DirectoryMock struct {
 var defaultDirectories string
 
 func NewEnv() (*DirectoryMock, error) {
-	var entries = utils.GetEnv("MOCK_DIRECTORY_ENTRIES", defaultDirectories)
-	return NewJson(entries)
+	var entries = os.Getenv("MOCK_DIRECTORY_ENTRIES")
+	if entries != "" {
+		return NewJson(entries)
+	}
+	path := os.Getenv("MOCK_DIRECTORY_ENTRIES_PATH")
+	if path == "" {
+		return NewJson(defaultDirectories)
+	}
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewJson(string(bytes))
 }
 
 func NewJson(entries string) (*DirectoryMock, error) {
