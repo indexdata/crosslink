@@ -6,6 +6,7 @@
       "description": "tttz",
       "type": "institution",
       "email": "test@example.com",
+      "hrid": "TTTZ",
       "symbols": [
         {
           "id": "a804c1db-de17-5bbc-a165-8fd9cd4d8704",
@@ -112,6 +113,7 @@
       "name": "Test tenant TTTZ / Default branch",
       "description": "tttz_a",
       "type": "branch",
+      "hrid": "TTTZ_A",
       "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
       "symbols": []
     },

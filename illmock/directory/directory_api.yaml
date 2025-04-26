@@ -201,6 +201,8 @@ components:
           type: string
         lmsLocationCode:
           type: string
+        hrid:
+          type: string
         symbols:
           type: array
           items:
