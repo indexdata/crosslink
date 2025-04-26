@@ -66,6 +66,45 @@
           "level": "Standard",
           "cost": 0.0
         }
+      ],
+      "addresses": [
+        {
+          "id": "550127b0-bc08-5915-a393-f63df2dde50a",
+          "entry": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+          "type": "Shipping",
+          "addressComponents": [
+            {
+              "id": "2a7519b6-a417-57fd-b158-8bc40f293787",
+              "address": "550127b0-bc08-5915-a393-f63df2dde50a",
+              "type": "Thoroughfare",
+              "value": "123 University Ave"
+            },
+            {
+              "id": "eb0cc798-fa36-552b-8385-2cc356d99f51",
+              "address": "550127b0-bc08-5915-a393-f63df2dde50a",
+              "type": "Locality",
+              "value": "Canberra"
+            },
+            {
+              "id": "8801ecee-1bad-5ff0-b301-8661f428e7ca",
+              "address": "550127b0-bc08-5915-a393-f63df2dde50a",
+              "type": "AdministrativeArea",
+              "value": "ACT"
+            },
+            {
+              "id": "0740e648-c6ff-5090-9c78-5864a7e22f84",
+              "address": "550127b0-bc08-5915-a393-f63df2dde50a",
+              "type": "PostalCode",
+              "value": "1234"
+            },
+            {
+              "id": "2769a170-c18d-58ad-95f5-5d5cf7f91e22",
+              "address": "550127b0-bc08-5915-a393-f63df2dde50a",
+              "type": "CountryCode",
+              "value": "AUS"
+            }
+          ]
+        }
       ]
     },
     {
@@ -73,8 +112,8 @@
       "name": "Test tenant TTTZ / Default branch",
       "description": "tttz_a",
       "type": "branch",
-      "lmsLocationCode": "",
-      "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2"
+      "parent": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+      "symbols": []
     },
     {
       "id": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
