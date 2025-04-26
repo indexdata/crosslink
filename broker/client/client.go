@@ -73,6 +73,13 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
+		} else if !locSupplier.LastStatus.Valid {
+			if c.brokerMode == BrokerModeTransparent {
+				status = iso18626.TypeStatusExpectToSupply
+			} else {
+				resData.Note = "no need to message requester in broker mode " + string(c.brokerMode)
+				return events.EventStatusSuccess, &resData
+			}
 		} else {
 			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
 			resData.EventError = &events.EventError{
@@ -81,11 +88,19 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			ctx.Logger().Error(msg)
 			return events.EventStatusError, &resData
 		}
-		if status == iso18626.TypeStatusWillSupply {
+		//in opaque mode we proxy ExpectToSupply and WillSupply once
+		if c.brokerMode == BrokerModeOpaque {
 			lastSentStatus := illTrans.LastSupplierStatus.String
-			if len(lastSentStatus) > 0 && lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
-				resData.Note = "status WillSupply already communicated and will be ignored"
-				return events.EventStatusSuccess, &resData
+			if len(lastSentStatus) > 0 {
+				if status == iso18626.TypeStatusExpectToSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) {
+					resData.Note = "status ExpectToSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
+				if status == iso18626.TypeStatusWillSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) &&
+					lastSentStatus != string(iso18626.TypeStatusExpectToSupply) {
+					resData.Note = "status WillSupply may have already been communicated and will be ignored"
+					return events.EventStatusSuccess, &resData
+				}
 			}
 		}
 	}
@@ -138,7 +153,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
-	var action string
 	err := c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByIdForUpdate(ctx, id)
 		if err != nil {
@@ -149,11 +163,9 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 			String: status,
 			Valid:  true,
 		}
-		action = illTrans.LastRequesterAction.String
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	ctx.Logger().Info("CROSSLINK-83: updateSupplierStatus SAVE", "action", action)
 	return err
 }
 
@@ -175,7 +187,6 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		return events.EventStatusError, &resData
 	}
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
-	ctx.Logger().Info("CROSSLINK-83: createAndSendRequestOrRequestingAgencyMessage USE", "action", illTrans.LastRequesterAction.String, "isRequest", isRequest)
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	var action string
