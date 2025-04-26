@@ -367,7 +367,6 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	if action == "" {
 		return
 	}
-	ctx.Logger().Info("CROSSLINK-83: handleIso18626RequestingAgencyMessage SAVE", "action", action)
 
 	eventId := createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusSuccess)
 	if eventId == "" {
