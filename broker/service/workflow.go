@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/indexdata/crosslink/broker/client"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -8,19 +9,21 @@ import (
 )
 
 type WorkflowManager struct {
-	eventBus events.EventBus
-	illRepo  ill_db.IllRepo
-	config   WorkflowConfig
+	eventBus   events.EventBus
+	illRepo    ill_db.IllRepo
+	config     WorkflowConfig
+	brokerMode client.BrokerMode
 }
 
 type WorkflowConfig struct {
 }
 
-func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, config WorkflowConfig) WorkflowManager {
+func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, config WorkflowConfig, brokerMode client.BrokerMode) WorkflowManager {
 	return WorkflowManager{
-		eventBus: eventBus,
-		illRepo:  illRepo,
-		config:   config,
+		eventBus:   eventBus,
+		illRepo:    illRepo,
+		config:     config,
+		brokerMode: brokerMode,
 	}
 }
 
@@ -43,6 +46,12 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, e
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
+			if w.brokerMode == client.BrokerModeTransparent {
+				_, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+				if err != nil {
+					ctx.Logger().Error("failed to create event to message requester", "error", err)
+				}
+			}
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
 		} else {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)

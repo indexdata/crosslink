@@ -30,7 +30,7 @@ type Requester struct {
 }
 
 func (r *Requester) getKey(header *iso18626.Header) string {
-	return header.SupplyingAgencyId.AgencyIdValue + "/" + header.RequestingAgencyRequestId
+	return header.RequestingAgencyId.AgencyIdValue + "/" + header.RequestingAgencyRequestId
 }
 
 func (r *Requester) load(header *iso18626.Header) *requesterInfo {
