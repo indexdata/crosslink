@@ -113,7 +113,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 
 	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false)
-	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.getReasonFromAction(illTrans.LastRequesterAction.String)
+	reason := message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage
+	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.validateReason(reason, illTrans.LastRequesterAction.String, illTrans.LastSupplierStatus.String)
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
@@ -315,23 +316,31 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 	}
 }
 
-func (c *Iso18626Client) getReasonFromAction(requesterAction string) iso18626.TypeReasonForMessage {
-	var reason iso18626.TypeReasonForMessage
+func (c *Iso18626Client) validateReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string) iso18626.TypeReasonForMessage {
+	var expectedReason iso18626.TypeReasonForMessage
 	switch requesterAction {
 	case ill_db.RequestAction:
-		reason = iso18626.TypeReasonForMessageRequestResponse
+		if len(prevStatus) > 0 {
+			expectedReason = iso18626.TypeReasonForMessageStatusChange
+		} else {
+			expectedReason = iso18626.TypeReasonForMessageRequestResponse
+		}
 	case string(iso18626.TypeActionStatusRequest):
-		reason = iso18626.TypeReasonForMessageStatusRequestResponse
+		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
 	case string(iso18626.TypeActionNotification):
-		reason = iso18626.TypeReasonForMessageNotification
+		expectedReason = ""
 	case string(iso18626.TypeActionRenew):
-		reason = iso18626.TypeReasonForMessageRenewResponse
+		expectedReason = iso18626.TypeReasonForMessageRenewResponse
 	case string(iso18626.TypeActionCancel):
-		reason = iso18626.TypeReasonForMessageCancelResponse
+		expectedReason = iso18626.TypeReasonForMessageCancelResponse
 	default:
-		reason = iso18626.TypeReasonForMessageStatusChange
+		expectedReason = iso18626.TypeReasonForMessageStatusChange
 	}
-	return reason
+	if expectedReason != "" {
+		return expectedReason
+	} else {
+		return reason
+	}
 }
 
 func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
