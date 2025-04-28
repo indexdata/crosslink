@@ -23,11 +23,11 @@ Configuration is provided via environment variables:
 | ENABLE_JSON_LOG       | Should JSON log format be enabled                                            | `false`                                   |
 | MOCK_CLIENT_URL       | Mock client URL used for directory entries                                   | `http://localhost:19083/iso18626`         |
 | HOLDINGS_ADAPTER      | Holdings lookup method: `mock` or `sru`                                      | `mock`                                    |
-| SRU_URL               | URL when HOLDINGS_ADAPTER is `sru`                                           | `http://localhost:8081/sru`               |
+| SRU_URL               | Comma separated list of URLs when HOLDINGS_ADAPTER is `sru`                  | `http://localhost:8081/sru`               |
 | PEER_REFRESH_INTERVAL | Peer refresh interval                                                        | `5m`                                      |
 | MAX_MESSAGE_SIZE      | Max ISO18626 message size                                                    | `100KB`                                   |
 | DIRECTORY_ADAPTER     | Directory lookup method:`mock` or `api`                                      | `mock`                                    |
-| DIRECTORY_API_URL     | URL when DIRECTORY_ADAPTER is `api`                                          | `http://localhost:8081/directory/entries` |
+| DIRECTORY_API_URL     | Comma separated list of URLs when DIRECTORY_ADAPTER is `api`                 | `http://localhost:8081/directory/entries` |
 | BROKER_MODE           | Should broker forward supplier/requester symbols: `opaque` or `transparent`  | `opaque`                                  |
 
 # Build

@@ -3,6 +3,7 @@ package adapter
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -20,7 +21,7 @@ func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, 
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", SruUrl)
 		}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, sruUrlVal), nil
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ",")), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil
