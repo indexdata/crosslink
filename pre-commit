@@ -1,0 +1,10 @@
+#!/bin/sh
+# pre-commit: check lint and docker build
+
+set -e
+make lint
+cd broker
+make docker
+cd ../illmock
+make docker
+
