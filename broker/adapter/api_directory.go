@@ -17,19 +17,21 @@ import (
 )
 
 type ApiDirectory struct {
-	url    string
+	urls   []string
 	client *http.Client
 }
 
-func CreateApiDirectory(client *http.Client, url string) DirectoryLookupAdapter {
-	return &ApiDirectory{client: client, url: url}
+func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapter {
+	return &ApiDirectory{client: client, urls: urls}
 }
-func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error) {
+
+func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryEntry, error) {
 	cql := "symbol any"
-	for _, s := range params.Symbols {
+	for _, s := range symbols {
 		cql += " " + s
 	}
-	fullUrl := a.url + "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
+	var directoryList []DirectoryEntry
+	fullUrl := durl + "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
 	response, err := a.client.Get(fullUrl)
 	if err != nil {
 		return []DirectoryEntry{}, err
@@ -41,7 +43,6 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 		return []DirectoryEntry{}, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
-	var directoryList []DirectoryEntry
 	var responseList EntriesResponse
 	err = json.Unmarshal(body, &responseList)
 	if err != nil {
@@ -82,6 +83,18 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, e
 			}
 			directoryList = append(directoryList, entry)
 		}
+	}
+	return directoryList, nil
+}
+
+func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error) {
+	var directoryList []DirectoryEntry
+	for _, durl := range a.urls {
+		d, err := a.GetDirectory(params.Symbols, durl)
+		if err != nil {
+			return []DirectoryEntry{}, err
+		}
+		directoryList = append(directoryList, d...)
 	}
 	return directoryList, nil
 }

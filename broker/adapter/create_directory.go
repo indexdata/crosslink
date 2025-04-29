@@ -3,6 +3,7 @@ package adapter
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -16,11 +17,11 @@ func CreateDirectoryLookupAdapter(cfg map[string]string) (DirectoryLookupAdapter
 		return nil, fmt.Errorf("missing value for %s", DirectoryAdapter)
 	}
 	if directoryAdapterVal == "api" {
-		apiUrlVal, ok := cfg[DirectoryApiUrl]
+		apiUrlsVal, ok := cfg[DirectoryApiUrl]
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", DirectoryApiUrl)
 		}
-		return CreateApiDirectory(http.DefaultClient, apiUrlVal), nil
+		return CreateApiDirectory(http.DefaultClient, strings.Split(apiUrlsVal, ",")), nil
 	}
 	if directoryAdapterVal == "mock" {
 		return &MockDirectoryLookupAdapter{}, nil

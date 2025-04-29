@@ -3,16 +3,17 @@ package adapter
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/test"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"testing"
 )
 
 var respBody []byte
@@ -26,6 +27,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
+	return adapter.CreateApiDirectory(http.DefaultClient, urls)
+}
+
 func TestLookup400(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
@@ -34,7 +39,7 @@ func TestLookup400(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := adapter.CreateApiDirectory(http.DefaultClient, server.URL)
+	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
@@ -43,12 +48,28 @@ func TestLookup400(t *testing.T) {
 }
 
 func TestLookupInvalidUrl(t *testing.T) {
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "invalid")
+	ad := createDirectoryAdapter("invalid")
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
 	_, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
+}
+
+func TestLookupInvalidJson(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("{"))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+	}
+	_, err := ad.Lookup(p)
+	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 
 func TestLookupEmptyList(t *testing.T) {
@@ -61,7 +82,7 @@ func TestLookupEmptyList(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := adapter.CreateApiDirectory(http.DefaultClient, server.URL)
+	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
@@ -81,7 +102,7 @@ func TestLookupMissingUrl(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := adapter.CreateApiDirectory(http.DefaultClient, server.URL)
+	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
@@ -101,7 +122,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := adapter.CreateApiDirectory(http.DefaultClient, server.URL)
+	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
@@ -118,7 +139,7 @@ func TestLookup(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := adapter.CreateApiDirectory(http.DefaultClient, server.URL)
+	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
@@ -127,11 +148,21 @@ func TestLookup(t *testing.T) {
 	assert.Len(t, entries, 3)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
+
+	ad = createDirectoryAdapter(server.URL, server.URL)
+	p = adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+	}
+	entries, err = ad.Lookup(p)
+	assert.Nil(t, err)
+	assert.Len(t, entries, 6)
+	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Len(t, entries[0].Symbol, 1)
 }
 
 func TestFilterAndSort(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
@@ -160,7 +191,7 @@ func TestFilterAndSort(t *testing.T) {
 
 func TestFilterAndSortFilterByCost(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
 	serviceInfo := iso18626.ServiceInfo{
@@ -184,7 +215,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
 	serviceInfo := iso18626.ServiceInfo{
@@ -208,7 +239,7 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 
 func TestFilterAndSortByType(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
@@ -236,7 +267,7 @@ func TestFilterAndSortByType(t *testing.T) {
 
 func TestFilterAndSortByLevel(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
@@ -263,7 +294,7 @@ func TestFilterAndSortByLevel(t *testing.T) {
 
 func TestFilterAndSortNoFilters(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	ad := adapter.CreateApiDirectory(http.DefaultClient, "")
+	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},

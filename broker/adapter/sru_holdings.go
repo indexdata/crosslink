@@ -14,11 +14,11 @@ import (
 )
 
 type SruHoldingsLookupAdapter struct {
-	sruUrl string
+	sruUrl []string
 	client *http.Client
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl string) HoldingsLookupAdapter {
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string) HoldingsLookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
 }
 
@@ -66,12 +66,13 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 	return nil
 }
 
-func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
-	cql := "rec.id=\"" + params.Identifier + "\"" // TODO: should do proper CQL string escaping
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, identifier string) ([]Holding, error) {
+	var holdings []Holding
+	cql := "rec.id=\"" + identifier + "\"" // TODO: should do proper CQL string escaping
 	query := url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
-	err := httpclient.NewClient().GetXml(s.client, s.sruUrl+"?maximumRecords=1000&recordSchema=marcxml&query="+query, &sruResponse)
+	err := httpclient.NewClient().GetXml(s.client, sruUrl+"?maximumRecords=1000&recordSchema=marcxml&query="+query, &sruResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +83,6 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 			return nil, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
-	var holdings []Holding
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
 			err := parseRecord(&record, &holdings)
@@ -90,6 +90,18 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 				return nil, err
 			}
 		}
+	}
+	return holdings, nil
+}
+
+func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
+	var holdings []Holding
+	for _, sruUrl := range s.sruUrl {
+		h, err := s.getHoldings(sruUrl, params.Identifier)
+		if err != nil {
+			return nil, err
+		}
+		holdings = append(holdings, h...)
 	}
 	return holdings, nil
 }
