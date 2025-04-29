@@ -40,4 +40,4 @@ jobs:
           helm package ${{ matrix.chart_path }} --version "${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7)" --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
       - name: helm push
         run: |
-          helm push ${{ matrix.chart_name }}-${{ matrix.chart_version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+          helm push "${{ matrix.chart_name }}-${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7).tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
