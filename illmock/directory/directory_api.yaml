@@ -24,11 +24,17 @@ paths:
             format: int32
         - name: offset
           in: query
-          description: maximum number of results to return
+          description: offset of first entry
           required: false
           schema:
             type: integer
             format: int32
+        - name: peer_url
+          in: query
+          description: override url in result
+          required: false
+          schema:
+            type: string
       responses:
         '200':
           description: Entry list response
