@@ -37,7 +37,7 @@ jobs:
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
       - name: helm package
         run: |
-          helm package ${{ matrix.chart_path }} --version ${{ matrix.chart_version }} --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
+          helm package ${{ matrix.chart_path }} --version "${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7)" --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
       - name: helm push
         run: |
           helm push ${{ matrix.chart_name }}-${{ matrix.chart_version }}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
