@@ -128,6 +128,15 @@ func fullSymbol(symbol directory.Symbol) string {
 	return symbol.Authority + ":" + symbol.Symbol
 }
 
+func fixUpPeerUrl(entry *directory.Entry, peerUrl *string) {
+	if entry.Endpoints == nil || peerUrl == nil {
+		return
+	}
+	for i := range *entry.Endpoints {
+		(*entry.Endpoints)[i].Address = *peerUrl
+	}
+}
+
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
 	var query *cql.Query
 	if request.Params.Cql != nil {
@@ -138,7 +147,12 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		}
 		query = &tmp
 	}
-
+	peerUrl := request.Params.PeerUrl
+	if peerUrl != nil {
+		if !strings.HasPrefix(*peerUrl, "http://") && !strings.HasPrefix(*peerUrl, "https://") {
+			return directory.GetEntries400TextResponse("peerUrl must start with http:// or https://"), nil
+		}
+	}
 	var filtered []directory.Entry
 	parentmap := make(map[string][]directory.Entry)
 	for _, entry := range d.entries {
@@ -146,6 +160,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 			continue
 		}
 		id := *entry.Parent
+		fixUpPeerUrl(&entry, peerUrl)
 		parentmap[id] = append(parentmap[id], entry)
 	}
 	for _, entry := range d.entries {
@@ -156,6 +171,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		if !match {
 			continue
 		}
+		fixUpPeerUrl(&entry, peerUrl)
 		filtered = append(filtered, entry)
 		if entry.Id == nil {
 			continue
