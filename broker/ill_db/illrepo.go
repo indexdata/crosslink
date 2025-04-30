@@ -2,6 +2,7 @@ package ill_db
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -261,94 +262,105 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	}
 }
 
+func symCheck(searchSymbols []string, foundSymbols []string) bool {
+	for _, sym := range foundSymbols {
+		if slices.Contains(searchSymbols, sym) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string) {
 	var peers []Peer
 	var query string
-	if len(symbols) > 0 {
-		var symbolsToFetch []string
-		for _, sym := range symbols {
-			peer, err := r.GetPeerBySymbol(ctx, sym)
-			if err != nil {
-				if errors.Is(err, pgx.ErrNoRows) {
-					symbolsToFetch = append(symbolsToFetch, sym)
-				} else {
-					ctx.Logger().Error("failed to read peer", "symbol", sym, "error", err)
-				}
+	var symbolsToFetch []string
+	for _, sym := range symbols {
+		peer, err := r.GetPeerBySymbol(ctx, sym)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				symbolsToFetch = append(symbolsToFetch, sym)
 			} else {
-				if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
-					symbolsToFetch = append(symbolsToFetch, sym)
-				} else {
-					peers = append(peers, peer)
-				}
+				ctx.Logger().Error("failed to read peer", "symbol", sym, "error", err)
+			}
+		} else {
+			if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
+				symbolsToFetch = append(symbolsToFetch, sym)
+			} else {
+				peers = append(peers, peer)
 			}
 		}
-		if len(symbolsToFetch) > 0 {
-			dirEntries, err, queryVal := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
-				Symbols: symbolsToFetch,
-			})
-			query = queryVal
+	}
+	if len(symbolsToFetch) == 0 {
+		return peers, query
+	}
+	dirEntries, err, queryVal := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
+		Symbols: symbolsToFetch,
+	})
+	query = queryVal
+	if err != nil {
+		ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
+		return peers, query
+	}
+	if len(dirEntries) == 0 {
+		ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
+		return peers, query
+	}
+	for _, dir := range dirEntries {
+		if !symCheck(symbols, dir.Symbol) {
+			continue
+		}
+		var peer Peer
+		var loopErr error
+		for _, sym := range dir.Symbol {
+			peer, loopErr = r.GetPeerBySymbol(ctx, sym)
+		}
+		if loopErr == nil {
+			// cached peer found
+			peer.Url = dir.URL
+			peer.CustomData = dir.CustomData
+			peer.Name = dir.Name
+			peer.RefreshTime = GetPgNow()
+			peer, err = r.SavePeer(ctx, SavePeerParams(peer))
 			if err != nil {
-				ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
-			} else if len(dirEntries) == 0 {
-				ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
+				ctx.Logger().Error("could not update peer", "symbol", dir.Symbol, "error", err)
 			} else {
-				for _, dir := range dirEntries {
-					var peer Peer
-					var loopErr error
-					for _, sym := range dir.Symbol {
-						peer, loopErr = r.GetPeerBySymbol(ctx, sym)
-					}
-					if loopErr != nil {
-						if errors.Is(loopErr, pgx.ErrNoRows) {
-							err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
-								peer, err = illRepo.SavePeer(ctx, SavePeerParams{
-									ID:            uuid.New().String(),
-									Url:           dir.URL,
-									Name:          dir.Name,
-									RefreshPolicy: RefreshPolicyTransaction,
-									RefreshTime:   GetPgNow(),
-									Vendor:        dir.Vendor,
-									CustomData:    dir.CustomData,
-								})
-								if err != nil {
-									return err
-								}
-								for _, sym := range dir.Symbol {
-									_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{
-										SymbolValue: sym,
-										PeerID:      peer.ID,
-									})
-									if err != nil {
-										break
-									}
-								}
-								if err != nil {
-									return err
-								}
-								return nil
-							})
-							if err != nil {
-								ctx.Logger().Error("failed to save peer", "symbol", dir.Symbol, "error", err)
-							} else {
-								peers = append(peers, peer)
-							}
-						} else {
-							ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)
-						}
-					} else {
-						peer.Url = dir.URL
-						peer.CustomData = dir.CustomData
-						peer.Name = dir.Name
-						peer.RefreshTime = GetPgNow()
-						peer, err = r.SavePeer(ctx, SavePeerParams(peer))
-						if err != nil {
-							ctx.Logger().Error("could not update peer", "symbol", dir.Symbol, "error", err)
-						} else {
-							peers = append(peers, peer)
-						}
-					}
+				peers = append(peers, peer)
+			}
+			continue
+		}
+		if !errors.Is(loopErr, pgx.ErrNoRows) {
+			ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)
+			continue
+		}
+		err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
+			peer, err = illRepo.SavePeer(ctx, SavePeerParams{
+				ID:            uuid.New().String(),
+				Url:           dir.URL,
+				Name:          dir.Name,
+				RefreshPolicy: RefreshPolicyTransaction,
+				RefreshTime:   GetPgNow(),
+				Vendor:        dir.Vendor,
+				CustomData:    dir.CustomData,
+			})
+			if err != nil {
+				return err
+			}
+			for _, sym := range dir.Symbol {
+				_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{
+					SymbolValue: sym,
+					PeerID:      peer.ID,
+				})
+				if err != nil {
+					break
 				}
 			}
+			return err
+		})
+		if err != nil {
+			ctx.Logger().Error("failed to save peer", "symbol", dir.Symbol, "error", err)
+		} else {
+			peers = append(peers, peer)
 		}
 	}
 	return peers, query
