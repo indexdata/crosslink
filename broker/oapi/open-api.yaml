@@ -312,6 +312,12 @@ paths:
   /ill_transactions:
     get:
       summary: Get all ILL transactions
+      parameters:
+        - in: query
+          name: requester_req_id
+          schema:
+            type: string
+          description: Filter Ill transactions by requester request id
       responses:
         '200':
           description: Successful retrieval of the ILL transaction
@@ -349,7 +355,7 @@ paths:
           name: cql
           schema:
             type: string
-          description: Filter events by ILL transaction ID
+          description: Filter peers by symbol
       responses:
         '200':
           description: Successful retrieval of peers

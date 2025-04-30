@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -95,15 +97,39 @@ func TestGetEvents(t *testing.T) {
 }
 
 func TestGetIllTransactions(t *testing.T) {
-	test.GetIllTransId(t, illRepo)
+	id := test.GetIllTransId(t, illRepo)
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	trans, err := illRepo.GetIllTransactionById(ctx, id)
+	if err != nil {
+		t.Errorf("failed to read transaction from DB: %s", err)
+	}
+	reqReqId := "reqReqId1"
+	trans.RequesterRequestID = pgtype.Text{
+		String: reqReqId,
+		Valid:  true,
+	}
+	trans, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(trans))
+	if err != nil {
+		t.Errorf("failed to save transaction in DB: %s", err)
+	}
 	body := getResponseBody(t, "/ill_transactions")
 	var resp []oapi.IllTransaction
-	err := json.Unmarshal(body, &resp)
+	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
 	if len(resp) == 0 {
 		t.Errorf("did not find ILL transaction")
+	}
+
+	// Query
+	body = getResponseBody(t, "/ill_transactions?requester_req_id="+reqReqId)
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("failed to unmarshal json: %s", err)
+	}
+	if reqReqId != resp[0].RequesterRequestID {
+		t.Errorf("expected to find with same requester request id, got: %v, expected %v", resp[0].RequesterRequestID, reqReqId)
 	}
 }
 
@@ -361,7 +387,7 @@ func TestGetEventsDbError(t *testing.T) {
 func TestGetIllTransactionsDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetIllTransactions(rr, req)
+	handlerMock.GetIllTransactions(rr, req, oapi.GetIllTransactionsParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)

@@ -64,18 +64,30 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	writeJsonResponse(w, resp)
 }
 
-func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request) {
+func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	resp := []oapi.IllTransaction{}
-	trans, err := a.illRepo.ListIllTransactions(ctx)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	for _, t := range trans {
-		resp = append(resp, toApiIllTransaction(r, t))
+	if params.RequesterReqId != nil {
+		tran, err := a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{
+			String: *params.RequesterReqId,
+			Valid:  true,
+		})
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		resp = append(resp, toApiIllTransaction(r, tran))
+	} else {
+		trans, err := a.illRepo.ListIllTransactions(ctx)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		for _, t := range trans {
+			resp = append(resp, toApiIllTransaction(r, t))
+		}
 	}
 	writeJsonResponse(w, resp)
 }
@@ -111,8 +123,9 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-
-	err = deleteIllTransaction(ctx, a.illRepo, a.eventRepo, trans.ID)
+	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		return deleteIllTransaction(ctx, repo, a.eventRepo, trans.ID)
+	})
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -300,7 +313,44 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "DeletePeersSymbol", "id": id},
 	})
-	peer, err := a.illRepo.GetPeerById(ctx, id)
+	err := a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		peer, err := repo.GetPeerById(ctx, id)
+		if err != nil {
+			return err
+		}
+		trans, err := repo.GetIllTransactionByRequesterId(ctx, pgtype.Text{
+			String: peer.ID,
+			Valid:  true,
+		})
+		if err != nil {
+			return err
+		}
+		for _, t := range trans {
+			err = deleteIllTransaction(ctx, repo, a.eventRepo, t.ID)
+			if err != nil {
+				return err
+			}
+		}
+		suppliers, err := a.illRepo.GetLocatedSupplierByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		for _, s := range suppliers {
+			err = deleteIllTransaction(ctx, repo, a.eventRepo, s.IllTransactionID)
+			if err != nil {
+				return err
+			}
+		}
+		err = repo.DeleteSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		err = repo.DeletePeer(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -309,46 +359,6 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 			addInternalError(ctx, w, err)
 			return
 		}
-	}
-
-	trans, err := a.illRepo.GetIllTransactionByRequesterId(ctx, pgtype.Text{
-		String: peer.ID,
-		Valid:  true,
-	})
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	for _, t := range trans {
-		err = deleteIllTransaction(ctx, a.illRepo, a.eventRepo, t.ID)
-		if err != nil {
-			addInternalError(ctx, w, err)
-			return
-		}
-	}
-
-	suppliers, err := a.illRepo.GetLocatedSupplierByPeerId(ctx, peer.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	for _, s := range suppliers {
-		err = deleteIllTransaction(ctx, a.illRepo, a.eventRepo, s.IllTransactionID)
-		if err != nil {
-			addInternalError(ctx, w, err)
-			return
-		}
-	}
-
-	err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	err = a.illRepo.DeletePeer(ctx, peer.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -404,11 +414,11 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	var symbols = []ill_db.Symbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			return err
 		}
-		err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
+		err = repo.DeleteSymbolByPeerId(ctx, peer.ID)
 		if err != nil {
 			return err
 		}
@@ -469,17 +479,15 @@ type ErrorMessage struct {
 }
 
 func deleteIllTransaction(ctx extctx.ExtendedContext, illRepo ill_db.IllRepo, eventRepo events.EventRepo, transId string) error {
-	return illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		inErr := eventRepo.DeleteEventByIllTransaction(ctx, transId)
-		if inErr != nil {
-			return inErr
-		}
-		inErr = repo.DeleteLocatedSupplierByIllTransaction(ctx, transId)
-		if inErr != nil {
-			return inErr
-		}
-		return repo.DeleteIllTransaction(ctx, transId)
-	})
+	inErr := eventRepo.DeleteEventsByIllTransaction(ctx, transId)
+	if inErr != nil {
+		return inErr
+	}
+	inErr = illRepo.DeleteLocatedSupplierByIllTransaction(ctx, transId)
+	if inErr != nil {
+		return inErr
+	}
+	return illRepo.DeleteIllTransaction(ctx, transId)
 }
 
 func addInternalError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
