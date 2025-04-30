@@ -36,7 +36,11 @@ func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event even
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			if available, ok := event.ResultData.CustomData["locallyAvailable"].(bool); ok && available {
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+			} else {
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			}
 		} else {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 		}

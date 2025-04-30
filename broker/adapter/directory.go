@@ -30,4 +30,5 @@ type Supplier struct {
 	Symbol          string
 	NetworkPriority float64
 	Cost            float64
+	Selected        bool
 }
