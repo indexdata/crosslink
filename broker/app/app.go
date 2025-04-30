@@ -51,6 +51,7 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 	return int(v), err
 })
 var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
+var LOCAL_SUPPLY = utils.Must(utils.GetEnvBool("LOCAL_SUPPLY", false))
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -94,7 +95,7 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, LOCAL_SUPPLY)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{}, getBrokerMode(BROKER_MODE))
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
