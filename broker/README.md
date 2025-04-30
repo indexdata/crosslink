@@ -7,6 +7,15 @@ Crosslink broker manages inter-library loan (ILL) transactions, specifically:
 * negotiates loans with suppliers via ISO18626
 * forwards settled loan notification to requesters
 
+# API
+
+See the [Broker API Specification](./oapi/open-api.yaml) for details.
+
+The broker's API uses hyperlinks to connect JSON resources.
+If you're using a browser like Chrome to explore the API,
+consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows to easily navigate hyperlinked JSON.
+
+
 # Configuration
 
 Configuration is provided via environment variables:
