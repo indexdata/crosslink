@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/iso18626"
-	"github.com/jackc/pgx/v5/pgtype"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +12,11 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/api"
@@ -34,9 +36,10 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 var mockIllRepoError = new(test.MockIllRepositoryError)
 var mockEventRepoError = new(test.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "")
 
 func TestMain(m *testing.M) {
+	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
@@ -197,6 +200,14 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	if len(resp) > 0 {
 		t.Errorf("should not find located suppliers")
 	}
+}
+
+func TestBrokerCRUD(t *testing.T) {
+	resp := getResponseBody(t, "/broker/peers")
+	var respPeers []oapi.Peer
+	err := json.Unmarshal(resp, &respPeers)
+	assert.NoError(t, err)
+	// assert.Len(t, respPeers, 0)
 }
 
 func TestPeersCRUD(t *testing.T) {
@@ -396,7 +407,7 @@ func TestGetIllTransactionsDbError(t *testing.T) {
 func TestGetIllTransactionsIdDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetIllTransactionsId(rr, req, "id")
+	handlerMock.GetIllTransactionsId(rr, req, "id", oapi.GetIllTransactionsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)

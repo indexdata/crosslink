@@ -5,6 +5,27 @@ info:
   description: API for retrieving broker data
 
 components:
+  parameters:
+    Tenant:
+      name: X-Okapi-Tenant
+      in: header
+      description: Okapi Tenant
+      required: false
+      schema:
+        type: string
+        pattern: '^[_a-z][_a-z0-9]*$'
+    RequesterRequestId:
+      name: requester_req_id
+      in: query
+      description: Filter Ill transactions by requester request id
+      schema:
+        type: string
+    IllTransactionId:
+      name: ill_transaction_id
+      in: query
+      schema:
+        type: string
+      description: Filter by ILL transaction ID
   schemas:
     Event:
       type: object
@@ -222,11 +243,9 @@ paths:
     get:
       summary: Retrieve events
       parameters:
-        - in: query
-          name: ill_transaction_id
-          schema:
-            type: string
-          description: Filter events by ILL transaction ID
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterRequestId'
+        - $ref: '#/components/parameters/IllTransactionId'
       responses:
         '200':
           description: Successful retrieval of events
@@ -260,6 +279,7 @@ paths:
     get:
       summary: Get an ILL transaction by ID
       parameters:
+        - $ref: '#/components/parameters/Tenant'
         - in: path
           name: id
           schema:
@@ -313,11 +333,8 @@ paths:
     get:
       summary: Get all ILL transactions
       parameters:
-        - in: query
-          name: requester_req_id
-          schema:
-            type: string
-          description: Filter Ill transactions by requester request id
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterRequestId'
       responses:
         '200':
           description: Successful retrieval of the ILL transaction
@@ -446,11 +463,9 @@ paths:
     get:
       summary: Retrieve located suppliers
       parameters:
-        - in: query
-          name: ill_transaction_id
-          schema:
-            type: string
-          description: Filter located suppliers by ILL transaction ID
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterRequestId'
+        - $ref: '#/components/parameters/IllTransactionId'
       responses:
         '200':
           description: Successful retrieval of located suppliers

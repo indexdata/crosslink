@@ -52,6 +52,7 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 })
 var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
 var LOCAL_SUPPLY = utils.Must(utils.GetEnvBool("LOCAL_SUPPLY", false))
+var TENANT_TO_SYMBOL = os.Getenv("TENANT_TO_SYMBOL")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -128,8 +129,12 @@ func StartServer(context Context) error {
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo)
+	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, "")
 	oapi.HandlerFromMux(&apiHandler, mux)
+	if TENANT_TO_SYMBOL != "" {
+		apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, TENANT_TO_SYMBOL)
+		oapi.HandlerFromMuxWithBaseURL(&apiHandler, mux, "/broker")
+	}
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
 	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
