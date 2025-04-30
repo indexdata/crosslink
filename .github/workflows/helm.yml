@@ -32,6 +32,12 @@ jobs:
       - name: helm login
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
+      - name: helm dependency
+        run: |
+          helm dependency build ${{ matrix.chart_path }}
+      - name: Set okapi-hooks values
+        run: |
+          sed -i '' "s/moduleVersion: @version@/moduleVersion: ${{ matrix.chart_version }}/" chart/values.yaml
       - name: helm package
         run: |
           helm package ${{ matrix.chart_path }} --version "${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7)" --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
