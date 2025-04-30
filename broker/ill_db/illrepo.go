@@ -37,7 +37,7 @@ type IllRepo interface {
 	DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
 	GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]LocatedSupplier, error)
 	GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
-	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer
+	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string)
 	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
 	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
 	GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
@@ -261,8 +261,9 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	}
 }
 
-func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) []Peer {
+func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string) {
 	var peers []Peer
+	var query string
 	if len(symbols) > 0 {
 		var symbolsToFetch []string
 		for _, sym := range symbols {
@@ -282,9 +283,10 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			}
 		}
 		if len(symbolsToFetch) > 0 {
-			dirEntries, err := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
+			dirEntries, err, queryVal := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 				Symbols: symbolsToFetch,
 			})
+			query = queryVal
 			if err != nil {
 				ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
 			} else if len(dirEntries) == 0 {
@@ -349,7 +351,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			}
 		}
 	}
-	return peers
+	return peers, query
 }
 
 func GetPgNow() pgtype.Timestamp {

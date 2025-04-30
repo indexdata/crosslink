@@ -15,19 +15,19 @@ var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/is
 type MockDirectoryLookupAdapter struct {
 }
 
-func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error) {
+func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string) {
 	if strings.Contains(params.Symbols[0], "error") {
-		return []DirectoryEntry{}, errors.New("there is an error")
+		return []DirectoryEntry{}, errors.New("there is an error"), ""
 	}
 	if strings.Contains(params.Symbols[0], "d-not-found") {
-		return []DirectoryEntry{}, nil
+		return []DirectoryEntry{}, nil, strings.Join(params.Symbols, ",")
 	}
 	if strings.Contains(params.Symbols[0], "ISIL:NOCHANGE") {
 		return []DirectoryEntry{{
 			Symbol: []string{"ISIL:NOCHANGE"},
 			URL:    MOCK_CLIENT_URL,
 			Vendor: "illmock",
-		}}, nil
+		}}, nil, strings.Join(params.Symbols, ",")
 	}
 
 	var dirs []DirectoryEntry
@@ -38,7 +38,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 			Vendor: "illmock",
 		})
 	}
-	return dirs, nil
+	return dirs, nil, strings.Join(params.Symbols, ",")
 }
 
 func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
