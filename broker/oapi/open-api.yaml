@@ -87,6 +87,15 @@ components:
           type: object
           description: Result data of the event
           additionalProperties: true
+        EventsLink:
+          type: string
+          description: Link to Ill Transaction events
+        LocatedSuppliersLink:
+          type: string
+          description: Link to located Suppliers
+        RequesterPeerLink:
+          type: string
+          description: Link to requester Peer
       required:
         - ID
         - Timestamp
@@ -100,6 +109,9 @@ components:
         - LastSupplierStatus
         - PrevSupplierStatus
         - IllTransactionData
+        - EventsLink
+        - LocatedSuppliersLink
+        - RequesterPeerLink
     Peer:
       type: object
       properties:
@@ -121,9 +133,25 @@ components:
           type: string
           enum: [never, transaction]
           description: Policy for refreshing peer information (never, transaction)
+        RefreshTime:
+          type: string
+          format: date-time
+          description: Timestamp of refresh
+        LoansCount:
+          type: integer
+          format: int32
+          description: Count of loans
+        BorrowsCount:
+          type: integer
+          format: int32
+          description: Count of borrows
         Vendor:
           type: string
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
+        CustomData:
+          type: object
+          description: Custom data of peer
+          additionalProperties: true
       required:
         - ID
         - Symbols
@@ -178,12 +206,16 @@ components:
         SupplierRequestID:
           type: string
           description: Supplier request ID
+        SupplierPeerLink:
+          type: string
+          description: Link to supplier Peer
       required:
         - ID
         - IllTransactionID
         - SupplierID
         - SupplierSymbol
         - Ordinal
+        - SupplierPeerLink
 
 paths:
   /events:
@@ -261,9 +293,31 @@ paths:
                   error:
                     type: string
                     description: Error message
+    delete:
+      summary: Delete an ILL transaction by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the ILL transaction to delete
+      responses:
+        '204':
+          description: ILL transaction deleted successfully (No Content)
+        '404':
+          description: ILL transaction not found
+        '500':
+          description: Internal server error
   /ill_transactions:
     get:
       summary: Get all ILL transactions
+      parameters:
+        - in: query
+          name: requester_req_id
+          schema:
+            type: string
+          description: Filter Ill transactions by requester request id
       responses:
         '200':
           description: Successful retrieval of the ILL transaction
@@ -296,6 +350,12 @@ paths:
   /peers:
     get:
       summary: Get all peers
+      parameters:
+        - in: query
+          name: cql
+          schema:
+            type: string
+          description: Filter peers by symbol
       responses:
         '200':
           description: Successful retrieval of peers
@@ -324,16 +384,16 @@ paths:
         '500':
           description: Internal server error
 
-  /peers/{symbol}:
+  /peers/{id}:
     get:
       summary: Get a peer by symbol
       parameters:
         - in: path
-          name: symbol
+          name: id
           schema:
             type: string
           required: true
-          description: Symbol of the peer to retrieve
+          description: ID of the peer to retrieve
       responses:
         '200':
           description: Successful retrieval of the peer
@@ -347,11 +407,11 @@ paths:
       summary: Update a peer
       parameters:
         - in: path
-          name: symbol
+          name: id
           schema:
             type: string
           required: true
-          description: Symbol of the peer to update
+          description: ID of the peer to update
       requestBody:
         content:
           application/json:
@@ -370,11 +430,11 @@ paths:
       summary: Delete a peer
       parameters:
         - in: path
-          name: symbol
+          name: id
           schema:
             type: string
           required: true
-          description: Symbol of the peer to delete
+          description: ID of the peer to delete
       responses:
         '204':
           description: Peer deleted successfully (No Content)

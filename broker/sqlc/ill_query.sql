@@ -41,6 +41,11 @@ FROM ill_transaction
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetIllTransactionByRequesterId :many
+SELECT sqlc.embed(ill_transaction)
+FROM ill_transaction
+WHERE requester_id = $1;
+
 -- name: SaveSymbol :one
 INSERT INTO symbol (symbol_value, peer_id)
 VALUES ($1, $2)
@@ -137,6 +142,11 @@ WHERE ill_transaction_id = $1
   and supplier_status = $2
     FOR UPDATE;
 
+-- name: GetLocatedSupplierByPeerId :many
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+WHERE supplier_id = $1;
+
 -- name: GetLocatedSupplierByIllTransactionAndSupplierForUpdate :one
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
@@ -169,3 +179,8 @@ RETURNING sqlc.embed(located_supplier);
 DELETE
 FROM located_supplier
 WHERE id = $1;
+
+-- name: DeleteLocatedSupplierByIllTransaction :exec
+DELETE
+FROM located_supplier
+WHERE ill_transaction_id = $1;

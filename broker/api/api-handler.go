@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	icql "github.com/indexdata/cql-go/cql"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -19,6 +20,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var EVENTS_PATH = "/events"
+var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
+var PEERS_PATH = "/peers"
+var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 
 type ApiHandler struct {
 	eventRepo events.EventRepo
@@ -58,18 +64,30 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	writeJsonResponse(w, resp)
 }
 
-func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request) {
+func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	resp := []oapi.IllTransaction{}
-	trans, err := a.illRepo.ListIllTransactions(ctx)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	for _, t := range trans {
-		resp = append(resp, toApiIllTransaction(t))
+	if params.RequesterReqId != nil {
+		tran, err := a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{
+			String: *params.RequesterReqId,
+			Valid:  true,
+		})
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		resp = append(resp, toApiIllTransaction(r, tran))
+	} else {
+		trans, err := a.illRepo.ListIllTransactions(ctx)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		for _, t := range trans {
+			resp = append(resp, toApiIllTransaction(r, t))
+		}
 	}
 	writeJsonResponse(w, resp)
 }
@@ -88,10 +106,34 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	writeJsonResponse(w, toApiIllTransaction(trans))
+	writeJsonResponse(w, toApiIllTransaction(r, trans))
 }
 
-func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
+func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: map[string]string{"method": "DeleteIllTransactionsId", "id": id},
+	})
+	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		} else {
+			addInternalError(ctx, w, err)
+			return
+		}
+	}
+	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		return deleteIllTransaction(ctx, repo, a.eventRepo, trans.ID)
+	})
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
@@ -109,7 +151,109 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request) {
 		}
 		resp = append(resp, toApiPeer(p, symbols))
 	}
+	resp, err = filterPeers(params.Cql, resp)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
 	writeJsonResponse(w, resp)
+}
+
+func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
+	var filtered []oapi.Peer
+	if cql != nil && *cql != "" {
+		var p icql.Parser
+		query, err := p.Parse(*cql)
+		if err != nil {
+			return peers, err
+		}
+		for _, entry := range peers {
+			match, err := matchQuery(query, entry.Symbols)
+			if err != nil {
+				return peers, err
+			}
+			if !match {
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+	} else {
+		return peers, nil
+	}
+	return filtered, nil
+}
+
+func matchQuery(query icql.Query, symbols []string) (bool, error) {
+	return matchClause(&query.Clause, symbols)
+}
+func matchClause(clause *icql.Clause, symbols []string) (bool, error) {
+	if symbols == nil {
+		return false, nil
+	}
+	if clause.SearchClause != nil {
+		sc := clause.SearchClause
+		if sc.Index != "symbol" {
+			return false, fmt.Errorf("unsupported index %s", sc.Index)
+		}
+		tSymbols := strings.Split(sc.Term, " ")
+		switch sc.Relation {
+		case icql.ANY:
+			for _, t := range tSymbols {
+				for _, s := range symbols {
+					if s == t {
+						return true, nil
+					}
+				}
+			}
+			return false, nil
+		case icql.ALL:
+			for _, t := range tSymbols {
+				found := false
+				for _, s := range symbols {
+					if s == t {
+						found = true
+					}
+				}
+				if !found {
+					return false, nil
+				}
+			}
+			return true, nil
+		case "=":
+			// all match match in order
+			if len(tSymbols) != len(symbols) {
+				return false, nil
+			}
+			for i, t := range tSymbols {
+				if t != symbols[i] {
+					return false, nil
+				}
+			}
+			return true, nil
+		}
+	}
+	if clause.BoolClause != nil {
+		bc := clause.BoolClause
+		left, err := matchClause(&bc.Left, symbols)
+		if err != nil {
+			return false, err
+		}
+		right, err := matchClause(&bc.Right, symbols)
+		if err != nil {
+			return false, err
+		}
+		switch bc.Operator {
+		case icql.AND:
+			return left && right, nil
+		case icql.OR:
+			return left || right, nil
+		case icql.NOT:
+			return left && !right, nil
+		default:
+			return false, fmt.Errorf("unsupported operator %s", bc.Operator)
+		}
+	}
+	return false, nil
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
@@ -122,15 +266,17 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
+	_, err = a.illRepo.GetPeerById(ctx, newPeer.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		addInternalError(ctx, w, err)
+		return
+	} else if err == nil {
+		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.ID))
+		return
+	}
 	for _, s := range newPeer.Symbols {
 		if s == "" || !strings.Contains(s, ":") {
-			resp := ErrorMessage{
-				Error: "Symbol should be in \"ISIL:SYMBOL\" format but got " + s,
-			}
-			ctx.Logger().Error("error serving api request", "error", err.Error())
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(resp)
+			addBadRequestError(ctx, w, fmt.Errorf("symbol should be in \"ISIL:SYMBOL\" format but got %v", s))
 			return
 		}
 	}
@@ -163,11 +309,48 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols))
 }
 
-func (a *ApiHandler) DeletePeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
-		Other: map[string]string{"method": "DeletePeersSymbol", "symbol": symbol},
+		Other: map[string]string{"method": "DeletePeersSymbol", "id": id},
 	})
-	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	err := a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
+		peer, err := repo.GetPeerById(ctx, id)
+		if err != nil {
+			return err
+		}
+		trans, err := repo.GetIllTransactionByRequesterId(ctx, pgtype.Text{
+			String: peer.ID,
+			Valid:  true,
+		})
+		if err != nil {
+			return err
+		}
+		for _, t := range trans {
+			err = deleteIllTransaction(ctx, repo, a.eventRepo, t.ID)
+			if err != nil {
+				return err
+			}
+		}
+		suppliers, err := a.illRepo.GetLocatedSupplierByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		for _, s := range suppliers {
+			err = deleteIllTransaction(ctx, repo, a.eventRepo, s.IllTransactionID)
+			if err != nil {
+				return err
+			}
+		}
+		err = repo.DeleteSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		err = repo.DeletePeer(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -177,24 +360,14 @@ func (a *ApiHandler) DeletePeersSymbol(w http.ResponseWriter, r *http.Request, s
 			return
 		}
 	}
-	err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	err = a.illRepo.DeletePeer(ctx, peer.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *ApiHandler) GetPeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
-		Other: map[string]string{"method": "GetPeersSymbol", "symbol": symbol},
+		Other: map[string]string{"method": "GetPeersSymbol", "id": id},
 	})
-	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	peer, err := a.illRepo.GetPeerById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -212,11 +385,11 @@ func (a *ApiHandler) GetPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 	writeJsonResponse(w, toApiPeer(peer, symbols))
 }
 
-func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symbol string) {
+func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
-		Other: map[string]string{"method": "PutPeersSymbol", "symbol": symbol},
+		Other: map[string]string{"method": "PutPeersSymbol", "id": id},
 	})
-	peer, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	peer, err := a.illRepo.GetPeerById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -241,11 +414,11 @@ func (a *ApiHandler) PutPeersSymbol(w http.ResponseWriter, r *http.Request, symb
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	var symbols = []ill_db.Symbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		peer, err = a.illRepo.SavePeer(ctx, ill_db.SavePeerParams(peer))
+		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
 			return err
 		}
-		err = a.illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
+		err = repo.DeleteSymbolByPeerId(ctx, peer.ID)
 		if err != nil {
 			return err
 		}
@@ -290,7 +463,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	for _, event := range supList {
-		resp = append(resp, toApiLocatedSupplier(event))
+		resp = append(resp, toApiLocatedSupplier(r, event))
 	}
 	writeJsonResponse(w, resp)
 }
@@ -305,6 +478,18 @@ type ErrorMessage struct {
 	Error string `json:"error"`
 }
 
+func deleteIllTransaction(ctx extctx.ExtendedContext, illRepo ill_db.IllRepo, eventRepo events.EventRepo, transId string) error {
+	inErr := eventRepo.DeleteEventsByIllTransaction(ctx, transId)
+	if inErr != nil {
+		return inErr
+	}
+	inErr = illRepo.DeleteLocatedSupplierByIllTransaction(ctx, transId)
+	if inErr != nil {
+		return inErr
+	}
+	return illRepo.DeleteIllTransaction(ctx, transId)
+}
+
 func addInternalError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
 	resp := ErrorMessage{
 		Error: err.Error(),
@@ -312,6 +497,16 @@ func addInternalError(ctx extctx.ExtendedContext, w http.ResponseWriter, err err
 	ctx.Logger().Error("error serving api request", "error", err.Error())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func addBadRequestError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
+	resp := ErrorMessage{
+		Error: err.Error(),
+	}
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
@@ -341,7 +536,7 @@ func toApiEvent(event events.Event) oapi.Event {
 	return api
 }
 
-func toApiLocatedSupplier(sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
+func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 	return oapi.LocatedSupplier{
 		ID:                sup.ID,
 		IllTransactionID:  sup.IllTransactionID,
@@ -357,6 +552,7 @@ func toApiLocatedSupplier(sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 		PrevReason:        toString(sup.PrevReason),
 		LastReason:        toString(sup.LastReason),
 		SupplierRequestID: toString(sup.SupplierRequestID),
+		SupplierPeerLink:  toLink(r, PEERS_PATH, sup.SupplierID, ""),
 	}
 }
 
@@ -383,73 +579,36 @@ func structToMap(obj interface{}) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func toApiIllTransaction(trans ill_db.IllTransaction) oapi.IllTransaction {
+func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllTransaction {
 	api := oapi.IllTransaction{
 		ID:        trans.ID,
 		Timestamp: trans.Timestamp.Time,
 	}
-	if trans.RequesterSymbol.Valid {
-		api.RequesterSymbol = trans.RequesterSymbol.String
-	}
+	api.RequesterSymbol = getString(trans.RequesterSymbol)
+
+	api.RequesterID = getString(trans.RequesterID)
+	api.LastRequesterAction = getString(trans.LastRequesterAction)
+	api.PrevRequesterAction = getString(trans.PrevRequesterAction)
+	api.SupplierSymbol = getString(trans.SupplierSymbol)
+	api.RequesterRequestID = getString(trans.RequesterRequestID)
+	api.SupplierRequestID = getString(trans.SupplierRequestID)
+	api.LastSupplierStatus = getString(trans.LastSupplierStatus)
+	api.PrevSupplierStatus = getString(trans.PrevSupplierStatus)
+	api.EventsLink = toLink(r, EVENTS_PATH, "", ILL_TRANSACTION_QUERY+trans.ID)
+	api.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", ILL_TRANSACTION_QUERY+trans.ID)
 	if trans.RequesterID.Valid {
-		api.RequesterID = trans.RequesterID.String
+		api.RequesterPeerLink = toLink(r, PEERS_PATH, trans.RequesterID.String, "")
 	}
-	if trans.LastRequesterAction.Valid {
-		api.LastRequesterAction = trans.LastRequesterAction.String
-	}
-	if trans.PrevRequesterAction.Valid {
-		api.PrevRequesterAction = trans.PrevRequesterAction.String
-	}
-	if trans.SupplierSymbol.Valid {
-		api.SupplierSymbol = trans.SupplierSymbol.String
-	}
-	if trans.RequesterRequestID.Valid {
-		api.RequesterRequestID = trans.RequesterRequestID.String
-	}
-	if trans.SupplierRequestID.Valid {
-		api.SupplierRequestID = trans.SupplierRequestID.String
-	}
-	if trans.LastSupplierStatus.Valid {
-		api.LastSupplierStatus = trans.LastSupplierStatus.String
-	}
-	if trans.PrevSupplierStatus.Valid {
-		api.PrevSupplierStatus = trans.PrevSupplierStatus.String
-	}
-	api.IllTransactionData = toApiIllTransactionData(trans.IllTransactionData)
+	api.IllTransactionData = utils.Must(structToMap(trans.IllTransactionData))
 	return api
 }
 
-func toApiIllTransactionData(trans ill_db.IllTransactionData) map[string]interface{} {
-	api := make(map[string]interface{})
-	api["BibliographicInfo"] = trans.BibliographicInfo
-	if trans.PublicationInfo != nil {
-		api["PublicationInfo"] = trans.PublicationInfo
+func getString(value pgtype.Text) string {
+	if value.Valid {
+		return value.String
+	} else {
+		return ""
 	}
-	if trans.ServiceInfo != nil {
-		api["ServiceInfo"] = trans.ServiceInfo
-	}
-	if trans.SupplierInfo != nil {
-		api["SupplierInfo"] = trans.SupplierInfo
-	}
-	if trans.RequestedDeliveryInfo != nil {
-		api["RequestedDeliveryInfo"] = trans.RequestedDeliveryInfo
-	}
-	if trans.RequestingAgencyInfo != nil {
-		api["RequestingAgencyInfo"] = trans.RequestingAgencyInfo
-	}
-	if trans.PatronInfo != nil {
-		api["PatronInfo"] = trans.PatronInfo
-	}
-	if trans.BillingInfo != nil {
-		api["BillingInfo"] = trans.BillingInfo
-	}
-	if trans.DeliveryInfo != nil {
-		api["DeliveryInfo"] = trans.DeliveryInfo
-	}
-	if trans.ReturnInfo != nil {
-		api["ReturnInfo"] = trans.ReturnInfo
-	}
-	return api
 }
 
 func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
@@ -464,6 +623,10 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
 		Vendor:        peer.Vendor,
+		RefreshTime:   &peer.RefreshTime.Time,
+		LoansCount:    &peer.LoansCount,
+		BorrowsCount:  &peer.BorrowsCount,
+		CustomData:    &peer.CustomData,
 	}
 }
 
@@ -507,4 +670,31 @@ func toString(text pgtype.Text) *string {
 	} else {
 		return nil
 	}
+}
+
+func toLink(r *http.Request, path string, id string, query string) string {
+	urlScheme := r.Header.Get("X-Forwarded-Proto")
+	if len(urlScheme) == 0 {
+		urlScheme = r.URL.Scheme
+	}
+	if len(urlScheme) == 0 {
+		urlScheme = "https"
+	}
+	urlHost := r.Header.Get("X-Forwarded-Host")
+	if len(urlHost) == 0 {
+		urlHost = r.URL.Host
+	}
+	if len(urlHost) == 0 {
+		urlHost = r.Host
+	}
+	if strings.Contains(urlHost, "localhost") {
+		urlScheme = "http"
+	}
+	if id != "" {
+		path = path + "/" + id
+	}
+	if query != "" {
+		path = path + "?" + query
+	}
+	return urlScheme + "://" + urlHost + path
 }
