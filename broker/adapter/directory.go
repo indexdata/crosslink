@@ -6,7 +6,7 @@ import (
 )
 
 type DirectoryLookupAdapter interface {
-	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error)
+	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string)
 	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier
 }
 

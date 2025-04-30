@@ -70,8 +70,8 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		symbols = append(symbols, holding.Symbol)
 		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
 	}
-
-	peers := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
+	var directory = map[string]any{}
+	peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
 	for _, peer := range peers {
 		symList, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
@@ -89,6 +89,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 			}
 		}
 	}
+	directory["lookupQuery"] = query
 
 	if len(suppliersToAdd) == 0 {
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(symbols, ","))
@@ -99,7 +100,9 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logProblemAndReturnResult(ctx, "no suppliers after filtering")
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
+	var dirEntries = []any{}
 	for i, sup := range suppliersToAdd {
+		dirEntries = append(dirEntries, map[string]any{"symbol": sup.Symbol, "peerId": sup.PeerId})
 		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), sup.LocalIdentifier, sup.Symbol, sup.PeerId)
 		if loopErr == nil {
 			locatedSuppliers = append(locatedSuppliers, added)
@@ -107,9 +110,10 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 			ctx.Logger().Error("failed to add supplier", "error", loopErr)
 		}
 	}
+	directory["entries"] = dirEntries
 
 	return events.EventStatusSuccess, &events.EventResult{
-		CustomData: map[string]any{"suppliers": locatedSuppliers},
+		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdings, "directory": directory},
 	}
 }
 
