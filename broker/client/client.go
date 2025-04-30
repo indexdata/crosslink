@@ -70,6 +70,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var status iso18626.TypeStatus
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
+	} else if illTrans.RequesterID.Valid && locSupplier.SupplierID == illTrans.RequesterID.String {
+		status = iso18626.TypeStatusExpectToSupply
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s

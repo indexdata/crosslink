@@ -55,6 +55,7 @@ func TestMain(m *testing.M) {
 	}()
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
+	app.LOCAL_SUPPLY = true
 	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -571,6 +572,39 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
 		eventsToCompareString(appCtx, t, illTrans.ID, 21))
+}
+
+func TestRequestLocallyAvailable(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
+	data, _ := os.ReadFile("../testdata/request-locally-available.xml")
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusLoanCompleted) &&
+			illTrans.LastRequesterAction.String == string(iso18626.TypeActionShippedReturn)
+	})
+	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		eventsToCompareString(appCtx, t, illTrans.ID, 14))
 }
 
 func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId string, messageCount int) string {
