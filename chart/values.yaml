@@ -13,18 +13,10 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
-# okapiHooks is a job that runs after the mod-dms deployment
-okapiHooks:
-  enabled: true
-  image:
-    repository: ghcr.io/indexdata/okapi-hooks
-    pullPolicy: Always
-    tag: "main"
-  imagePullSecrets:
-    - name: ghcr-secret
-  env: {}
-  envSecrets: {}
-  envConfigMaps: {}
+okapi-hooks:
+  moduleUrl: http://mod-dms:80
+  moduleDescriptor: |
+    {"name":"mod-dms"}
 
 containerPort: 8086
 # envvars passed to the container
