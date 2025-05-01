@@ -35,16 +35,15 @@ jobs:
           echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
 
-      - name: Set okapi-hooks values
+      - name: Process MD for okapi-hooks
         run: |
-          sed -i "s/moduleVersion: \"@version@\"/moduleVersion: \"$CHART_VERSION\"/" chart/values.yaml
           sed -i "s/@version@/$CHART_VERSION/" ModuleDescriptor-template.json
           sed 's/^/    /' ModuleDescriptor-template.json > indented.json
           sed -i -e '/@descriptor@/{
             r indented.json
             d
           }' chart/values.yaml
-          
+
       - name: helm lint
         run: |
           helm lint ${{ matrix.chart_path }}

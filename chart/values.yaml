@@ -15,7 +15,6 @@ image:
 
 okapi-hooks:
   moduleUrl: http://mod-dms:80
-  moduleVersion: "@version@"
   moduleDescriptor: |
     @descriptor@
 
