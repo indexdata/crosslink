@@ -17,6 +17,6 @@ curl -XDELETE "${OKAPI_URL}/_/discovery/modules/${SVCID}/${INSID}"
 curl -XDELETE "${OKAPI_URL}/_/proxy/modules/${SVCID}"
 
 # Install anew and enable for tenant
-sed "s/@version@/${VER}/g" ../chart/ModuleDescriptor-template.json | curl -XPOST ${OKAPI_URL}/_/proxy/modules -d @-
+sed "s/@version@/${VER}/g" ../ModuleDescriptor-template.json | curl -XPOST ${OKAPI_URL}/_/proxy/modules -d @-
 curl -XPOST ${OKAPI_URL}/_/discovery/modules -d @./discover.json
 curl -XPOST ${OKAPI_URL}/_/proxy/tenants/${TENANT}'/install' -d @./enable.json

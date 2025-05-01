@@ -24,7 +24,7 @@ $(COMMIT_ID):
 $(BINARY):  $(COMMIT_ID) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-$(DESCRIPTOR): chart/ModuleDescriptor-template.json
+$(DESCRIPTOR): ModuleDescriptor-template.json
 	sed "s/@version@/$(VERSION)/g" $< > $@
 
 check:
