@@ -15,7 +15,8 @@ The broker's API uses hyperlinks to connect JSON resources.
 If you're using Chrome or another browser to explore the API,
 consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows to easily navigate hyperlinked JSON.
 
-Note that API is also available with base path `/broker` is env `TENANT_TO_SYMBOL` is defined.
+Note that API is also available with base path `/broker` if env
+`TENANT_TO_SYMBOL` is defined.
 
 # Configuration
 
