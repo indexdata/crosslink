@@ -202,12 +202,99 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	}
 }
 
-func TestBrokerCRUD(t *testing.T) {
-	resp := getResponseBody(t, "/broker/peers")
-	var respPeers []oapi.Peer
-	err := json.Unmarshal(resp, &respPeers)
+func httpGetWithTenant(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {
+	client := http.DefaultClient
+	hreq, err := http.NewRequest("GET", getLocalhostWithPort()+uriPath, nil)
 	assert.NoError(t, err)
-	// assert.Len(t, respPeers, 0)
+	if tenant != "" {
+		hreq.Header.Set("X-Okapi-Tenant", tenant)
+	}
+	hres, err := client.Do(hreq)
+	assert.NoError(t, err)
+	defer hres.Body.Close()
+	assert.Equal(t, expectStatus, hres.StatusCode)
+	body, err := io.ReadAll(hres.Body)
+	assert.NoError(t, err)
+	return body
+}
+
+func TestBrokerCRUD(t *testing.T) {
+	// app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
+	illId := uuid.New().String()
+	reqReqId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID: illId,
+		RequesterSymbol: pgtype.Text{
+			String: "ISIL:DK-DIKU",
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: reqReqId,
+			Valid:  true,
+		},
+		Timestamp: test.GetNow(),
+	})
+	assert.NoError(t, err)
+	body := httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "diku", http.StatusOK)
+	var tran oapi.IllTransaction
+	err = json.Unmarshal(body, &tran)
+	assert.NoError(t, err)
+	assert.Equal(t, illId, tran.ID)
+
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusNotFound)
+
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "", http.StatusNotFound)
+
+	body = httpGetWithTenant(t, "/broker/ill_transactions", "diku", http.StatusOK)
+	var trans []oapi.IllTransaction
+	err = json.Unmarshal(body, &trans)
+	assert.NoError(t, err)
+	assert.Len(t, trans, 1)
+	assert.Equal(t, illId, trans[0].ID)
+
+	body = httpGetWithTenant(t, "/broker/ill_transactions", "ruc", http.StatusOK)
+	err = json.Unmarshal(body, &trans)
+	assert.NoError(t, err)
+	assert.Len(t, trans, 0)
+
+	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
+	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
+
+	body = httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
+	var supps []oapi.LocatedSupplier
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 1)
+	assert.Equal(t, locSup.ID, supps[0].ID)
+
+	body = httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 0)
+
+	body = httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 0)
+
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
+
+	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
+	var events []oapi.Event
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 0)
+
+	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 0)
 }
 
 func TestPeersCRUD(t *testing.T) {

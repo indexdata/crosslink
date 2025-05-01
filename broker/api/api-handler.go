@@ -41,6 +41,18 @@ func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToS
 	}
 }
 
+func (a *ApiHandler) TenantFilter(trans *ill_db.IllTransaction, tenant *string) bool {
+	if a.tenantToSymbol == "" {
+		return true
+	}
+	// this is the /broker mode
+	if tenant == nil {
+		return false
+	}
+	full := strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*tenant))
+	return trans.RequesterSymbol.String == full
+}
+
 func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
 	logParams := map[string]string{"method": "GetEvents"}
 	if params.IllTransactionId != nil {
@@ -66,7 +78,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	} else if a.tenantToSymbol == "" {
 		eventList, err = a.eventRepo.ListEvents(ctx)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
 	}
@@ -74,18 +86,6 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		resp = append(resp, toApiEvent(event))
 	}
 	writeJsonResponse(w, resp)
-}
-
-func (a *ApiHandler) TenantFilter(trans *ill_db.IllTransaction, tenant *string) bool {
-	if a.tenantToSymbol == "" {
-		return true
-	}
-	// this is the /broker mode
-	if tenant == nil {
-		return false
-	}
-	full := strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*tenant))
-	return trans.RequesterSymbol.String == full
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
@@ -499,7 +499,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	} else if a.tenantToSymbol == "" {
 		supList, err = a.illRepo.ListLocatedSuppliers(ctx)
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
 	}
