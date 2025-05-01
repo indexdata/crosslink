@@ -241,9 +241,16 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
 
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
+
 	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusNotFound)
 
 	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "", http.StatusNotFound)
+
+	body = httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	err = json.Unmarshal(body, &tran)
+	assert.NoError(t, err)
+	assert.Equal(t, illId, tran.ID)
 
 	body = httpGetWithTenant(t, "/broker/ill_transactions", "diku", http.StatusOK)
 	var trans []oapi.IllTransaction
@@ -281,6 +288,12 @@ func TestBrokerCRUD(t *testing.T) {
 
 	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var events []oapi.Event
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events, 1)

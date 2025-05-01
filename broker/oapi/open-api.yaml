@@ -26,6 +26,12 @@ components:
       schema:
         type: string
       description: Filter by ILL transaction ID
+    RequesterSymbol:
+      name: requester_symbol
+      in: query
+      schema:
+        type: string
+      description: Filter by requester symbol
   schemas:
     Event:
       type: object
@@ -246,6 +252,7 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/IllTransactionId'
+        - $ref: '#/components/parameters/RequesterSymbol'
       responses:
         '200':
           description: Successful retrieval of events
@@ -280,6 +287,7 @@ paths:
       summary: Get an ILL transaction by ID
       parameters:
         - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterSymbol'
         - in: path
           name: id
           schema:
@@ -335,6 +343,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
+        - $ref: '#/components/parameters/RequesterSymbol'
       responses:
         '200':
           description: Successful retrieval of the ILL transaction
@@ -466,6 +475,7 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/IllTransactionId'
+        - $ref: '#/components/parameters/RequesterSymbol'
       responses:
         '200':
           description: Successful retrieval of located suppliers

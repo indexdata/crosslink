@@ -41,7 +41,10 @@ func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToS
 	}
 }
 
-func (a *ApiHandler) TenantFilter(trans *ill_db.IllTransaction, tenant *string) bool {
+func (a *ApiHandler) TenantFilter(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
+	if tenant == nil && requesterSymbol != nil {
+		return trans.RequesterSymbol.String == *requesterSymbol
+	}
 	if a.tenantToSymbol == "" {
 		return true
 	}
@@ -70,7 +73,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 			String: *params.RequesterReqId,
 			Valid:  true,
 		})
-		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant) {
+		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
 		}
 	} else if a.tenantToSymbol == "" && params.IllTransactionId != nil {
@@ -102,7 +105,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			addInternalError(ctx, w, err)
 			return
 		}
-		if a.TenantFilter(&tran, params.XOkapiTenant) {
+		if a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			resp = append(resp, toApiIllTransaction(r, tran))
 		}
 	} else {
@@ -112,7 +115,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		for _, t := range trans {
-			if a.TenantFilter(&t, params.XOkapiTenant) {
+			if a.TenantFilter(&t, params.XOkapiTenant, params.RequesterSymbol) {
 				resp = append(resp, toApiIllTransaction(r, t))
 			}
 		}
@@ -134,7 +137,7 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	if !a.TenantFilter(&trans, params.XOkapiTenant) {
+	if !a.TenantFilter(&trans, params.XOkapiTenant, params.RequesterSymbol) {
 		addNotFoundError(w)
 		return
 	}
@@ -491,7 +494,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 			String: *params.RequesterReqId,
 			Valid:  true,
 		})
-		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant) {
+		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, tran.ID)
 		}
 	} else if a.tenantToSymbol == "" && params.IllTransactionId != nil {
