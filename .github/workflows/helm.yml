@@ -22,19 +22,45 @@ jobs:
       matrix:
         include:
           - chart_name: mod-dms
-            chart_version: "0.1.0-main.${{ github.run_number }}"
+            chart_base_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: chart
     steps:
       - uses: actions/checkout@v4
+
+      - name: Calculate chart and app version with short SHA
+        run: |
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          CHART_VERSION="${{ matrix.chart_base_version }}+sha.$SHORT_SHA"
+          APP_VERSION="sha-$SHORT_SHA"
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+
+      - name: Set okapi-hooks values
+        run: |
+          sed -i "s/moduleVersion: \"@version@\"/moduleVersion: \"$CHART_VERSION\"/" chart/values.yaml
+          sed -i "s/@version@/$CHART_VERSION/" ModuleDescriptor-template.json
+          sed 's/^/    /' ModuleDescriptor-template.json > indented.json
+          sed -i -e '/@descriptor@/{
+            r indented.json
+            d
+          }' chart/values.yaml
+          
       - name: helm lint
         run: |
           helm lint ${{ matrix.chart_path }}
+
       - name: helm login
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
+
+      - name: helm dependency
+        run: |
+          helm dependency build ${{ matrix.chart_path }}
+
       - name: helm package
         run: |
-          helm package ${{ matrix.chart_path }} --version "${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7)" --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
+          helm package ${{ matrix.chart_path }} --version "$CHART_VERSION" --app-version "$APP_VERSION"
+
       - name: helm push
         run: |
-          helm push "${{ matrix.chart_name }}-${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7).tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
+          helm push "${{ matrix.chart_name }}-$CHART_VERSION.tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
