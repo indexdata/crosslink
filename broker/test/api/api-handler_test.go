@@ -148,6 +148,7 @@ func TestGetIllTransactionsId(t *testing.T) {
 		t.Errorf("did not find the same ILL transaction")
 	}
 	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
 	// Delete peer
 	req, err := http.NewRequest("DELETE", getLocalhostWithPort()+"/ill_transactions/"+illId, nil)
@@ -228,6 +229,7 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
 	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
 	httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusForbidden)
 
