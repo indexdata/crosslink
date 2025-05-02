@@ -22,11 +22,11 @@ jobs:
       matrix:
         include:
           - chart_name: crosslink-broker
-            chart_version: "0.1.0-main.${{ github.run_number }}"
+            chart_base_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: ./broker/chart
             md_path: ./broker/descriptors/ModuleDescriptor-template.json
           - chart_name: crosslink-illmock
-            chart_version: "0.1.0-main.${{ github.run_number }}"
+            chart_base_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: ./illmock/chart
     steps:
       - uses: actions/checkout@v4
@@ -48,18 +48,23 @@ jobs:
             r indented.json
             d
           }' ${{ matrix.chart_path }}/values.yaml
+
       - name: helm lint
         run: |
-          helm lint ${{ matrix.chart_path }}
+            helm lint ${{ matrix.chart_path }}
+
       - name: helm login
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u $ --password-stdin
+
       - name: helm dependency
         run: |
           helm dependency build ${{ matrix.chart_path }}
+
       - name: helm package
         run: |
-          helm package ${{ matrix.chart_path }} --version "${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7)" --app-version "sha-$(echo $GITHUB_SHA | cut -c1-7)"
+          helm package ${{ matrix.chart_path }} --version "$CHART_VERSION" --app-version "$APP_VERSION"
+
       - name: helm push
         run: |
-          helm push "${{ matrix.chart_name }}-${{ matrix.chart_version }}+sha.$(echo $GITHUB_SHA | cut -c1-7).tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
+          helm push "${{ matrix.chart_name }}-$CHART_VERSION.tgz" oci://ghcr.io/${{ github.repository_owner }}/charts
