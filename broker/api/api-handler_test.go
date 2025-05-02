@@ -1,10 +1,11 @@
 package api
 
 import (
-	"github.com/indexdata/cql-go/cql"
-	"github.com/stretchr/testify/assert"
 	"strings"
 	"testing"
+
+	"github.com/indexdata/cql-go/cql"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMatchQueries(t *testing.T) {

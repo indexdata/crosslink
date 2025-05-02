@@ -1,0 +1,99 @@
+{
+  "id": "mod-broker-@version@",
+  "name": "crosslink broker",
+  "provides": [
+    {
+      "id": "crosslink-broker",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/ill_transactions/{id}",
+          "permissionsRequired": [
+            "broker.ill_transactions.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/ill_transactions",
+          "permissionsRequired": [
+            "broker.ill_transactions.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/located_suppliers",
+          "permissionsRequired": [
+            "broker.located_suppliers.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/events",
+          "permissionsRequired": [
+            "broker.events.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/peers/{id}",
+          "permissionsRequired": [
+            "broker.peers.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/peers",
+          "permissionsRequired": [
+            "broker.peers.get"
+          ]
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "permissionSets": [
+    {
+      "description": "Read ILL transaction",
+      "displayName": "Broker - read ILL transaction",
+      "permissionName": "broker.ill_transactions.item.get"
+    },
+    {
+      "description": "Read ILL transactions",
+      "displayName": "Broker - read ILL transactions",
+      "permissionName": "broker.ill_transactions.get"
+    },
+    {
+      "description": "Read located suppliers",
+      "displayName": "Broker - read located suppliers",
+      "permissionName": "broker.located_suppliers.get"
+    },
+    {
+      "description": "Read events",
+      "displayName": "Broker - read events",
+      "permissionName": "broker.events.get"
+    },
+    {
+      "description": "Read peer",
+      "displayName": "Broker - read peer",
+      "permissionName": "broker.peers.item.get"
+    },
+    {
+      "description": "Read peers",
+      "displayName": "Broker - read peers",
+      "permissionName": "broker.peers.get"
+    }
+  ]
+}

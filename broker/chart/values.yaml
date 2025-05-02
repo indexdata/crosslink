@@ -13,6 +13,11 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
 
+okapi-hooks:
+  moduleUrl: http://crosslink-broker:80
+  moduleDescriptor: |
+    @descriptor@
+
 containerPort: 8080
 # envvars passed to the container
 env: {}

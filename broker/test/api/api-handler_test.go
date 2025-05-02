@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/iso18626"
-	"github.com/jackc/pgx/v5/pgtype"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +12,11 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/api"
@@ -34,9 +36,10 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 var mockIllRepoError = new(test.MockIllRepositoryError)
 var mockEventRepoError = new(test.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "")
 
 func TestMain(m *testing.M) {
+	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
@@ -144,20 +147,12 @@ func TestGetIllTransactionsId(t *testing.T) {
 	if resp.ID != illId {
 		t.Errorf("did not find the same ILL transaction")
 	}
+	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
+
 	// Delete peer
-	req, err := http.NewRequest("DELETE", getLocalhostWithPort()+"/ill_transactions/"+illId, nil)
-	if err != nil {
-		t.Errorf("Error creating delete transaction request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	delResp, err := client.Do(req)
-	if err != nil {
-		t.Errorf("Error deleting peer request: %s", err)
-	}
-	if delResp.StatusCode != http.StatusNoContent {
-		t.Errorf("Expected response 204 got %d", delResp.StatusCode)
-	}
+	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/ill_transactions/"+illId, nil, "", http.StatusNotFound)
 }
 
 func TestGetLocatedSuppliers(t *testing.T) {
@@ -199,6 +194,100 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	}
 }
 
+func TestBrokerCRUD(t *testing.T) {
+	// app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
+	illId := uuid.New().String()
+	reqReqId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID: illId,
+		RequesterSymbol: pgtype.Text{
+			String: "ISIL:DK-DIKU",
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: reqReqId,
+			Valid:  true,
+		},
+		Timestamp: test.GetNow(),
+	})
+	assert.NoError(t, err)
+
+	body := httpGet(t, "/broker/ill_transactions/"+illId, "diku", http.StatusOK)
+	var tran oapi.IllTransaction
+	err = json.Unmarshal(body, &tran)
+	assert.NoError(t, err)
+	assert.Equal(t, illId, tran.ID)
+	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
+
+	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusForbidden)
+
+	httpGet(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusForbidden)
+
+	httpGet(t, "/broker/ill_transactions/"+illId, "", http.StatusForbidden)
+
+	body = httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	err = json.Unmarshal(body, &tran)
+	assert.NoError(t, err)
+	assert.Equal(t, illId, tran.ID)
+
+	httpGet(t, "/broker/ill_transactions", "diku", http.StatusForbidden)
+
+	httpGet(t, "/broker/ill_transactions", "ruc", http.StatusForbidden)
+
+	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
+	var trans []oapi.IllTransaction
+	err = json.Unmarshal(body, &trans)
+	assert.NoError(t, err)
+	assert.Len(t, trans, 1)
+	assert.Equal(t, illId, trans[0].ID)
+
+	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
+	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
+
+	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
+	var supps []oapi.LocatedSupplier
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 1)
+	assert.Equal(t, locSup.ID, supps[0].ID)
+
+	body = httpGet(t, "/broker/located_suppliers?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 1)
+	assert.Equal(t, locSup.ID, supps[0].ID)
+
+	httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
+
+	httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
+
+	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
+
+	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
+	var events []oapi.Event
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	body = httpGet(t, "/broker/events?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
+
+	httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
+}
+
 func TestPeersCRUD(t *testing.T) {
 	// Create peer
 	toCreate := oapi.Peer{
@@ -212,23 +301,7 @@ func TestPeersCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error marshaling JSON: %s", err)
 	}
-	req, err := http.NewRequest("POST", getLocalhostWithPort()+"/peers", bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		t.Errorf("Error creating post peer request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Errorf("Error posting peer request: %s", err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Error reading response body: %s", err)
-	}
-	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected response 201 got %d", resp.StatusCode)
-	}
+	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
 	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)
 	if err != nil {
@@ -238,35 +311,16 @@ func TestPeersCRUD(t *testing.T) {
 		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
 	}
 	// Cannot post same again
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Errorf("Error posting peer request: %s", err)
-	}
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("Expected response 400 got %d", resp.StatusCode)
-	}
+	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
+
 	// Update peer
 	toCreate.Name = "Updated"
 	jsonBytes, err = json.Marshal(toCreate)
 	if err != nil {
 		t.Errorf("Error marshaling JSON: %s", err)
 	}
-	req, err = http.NewRequest("PUT", getLocalhostWithPort()+"/peers/"+toCreate.ID, bytes.NewBuffer(jsonBytes))
-	if err != nil {
-		t.Errorf("Error creating put peer request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Errorf("Error putting peer request: %s", err)
-	}
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Error reading response body: %s", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected response 200 got %d", resp.StatusCode)
-	}
+	body = httpRequest(t, "PUT", "/peers/"+toCreate.ID, jsonBytes, "", http.StatusOK)
+
 	err = json.Unmarshal(body, &respPeer)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
@@ -298,18 +352,9 @@ func TestPeersCRUD(t *testing.T) {
 		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeers[0].ID)
 	}
 	// Delete peer
-	req, err = http.NewRequest("DELETE", getLocalhostWithPort()+"/peers/"+toCreate.ID, nil)
-	if err != nil {
-		t.Errorf("Error creating delete peer request: %s", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	if err != nil {
-		t.Errorf("Error deleting peer request: %s", err)
-	}
-	if resp.StatusCode != http.StatusNoContent {
-		t.Errorf("Expected response 204 got %d", resp.StatusCode)
-	}
+	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNotFound)
+
 	// Check no peers left
 	respPeers = getPeers(t)
 	for _, p := range respPeers {
@@ -348,30 +393,7 @@ func TestNotFound(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.method == "GET" {
-				resp, err := http.Get(getLocalhostWithPort() + tt.endpoint)
-				if err != nil {
-					t.Errorf("Error making GET request: %s", err)
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusNotFound {
-					t.Errorf("Expected response 404 got %d", resp.StatusCode)
-				}
-			} else {
-				req, err := http.NewRequest(tt.method, getLocalhostWithPort()+tt.endpoint, nil)
-				if err != nil {
-					t.Errorf("Error creating post peer request: %s", err)
-				}
-				req.Header.Set("Content-Type", "application/json")
-				client := &http.Client{}
-				resp, err := client.Do(req)
-				if err != nil {
-					t.Errorf("Error doing peer request: %s", err)
-				}
-				if resp.StatusCode != http.StatusNotFound {
-					t.Errorf("Expected response 404 got %d", resp.StatusCode)
-				}
-			}
+			httpRequest(t, tt.method, tt.endpoint, nil, "", http.StatusNotFound)
 		})
 	}
 }
@@ -396,7 +418,7 @@ func TestGetIllTransactionsDbError(t *testing.T) {
 func TestGetIllTransactionsIdDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetIllTransactionsId(rr, req, "id")
+	handlerMock.GetIllTransactionsId(rr, req, "id", oapi.GetIllTransactionsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -499,20 +521,30 @@ func getPeerById(t *testing.T, symbol string) oapi.Peer {
 }
 
 func getResponseBody(t *testing.T, endpoint string) []byte {
-	resp, err := http.Get(getLocalhostWithPort() + endpoint)
-	if err != nil {
-		t.Errorf("Error making GET request: %s", err)
-	}
-	defer resp.Body.Close()
+	return httpGet(t, endpoint, "", http.StatusOK)
+}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Error reading response body: %s", err)
+func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, tenant string, expectStatus int) []byte {
+	client := http.DefaultClient
+	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
+	assert.NoError(t, err)
+	if tenant != "" {
+		hreq.Header.Set("X-Okapi-Tenant", tenant)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected response 200 got %d", resp.StatusCode)
+	if method == "POST" || method == "PUT" {
+		hreq.Header.Set("Content-Type", "application/json")
 	}
+	hres, err := client.Do(hreq)
+	assert.NoError(t, err)
+	defer hres.Body.Close()
+	assert.Equal(t, expectStatus, hres.StatusCode)
+	body, err := io.ReadAll(hres.Body)
+	assert.NoError(t, err)
 	return body
+}
+
+func httpGet(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {
+	return httpRequest(t, "GET", uriPath, nil, tenant, expectStatus)
 }
 
 func getLocalhostWithPort() string {

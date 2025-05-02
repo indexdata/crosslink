@@ -15,6 +15,8 @@ The broker's API uses hyperlinks to connect JSON resources.
 If you're using Chrome or another browser to explore the API,
 consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows to easily navigate hyperlinked JSON.
 
+Note that API is also available with base path `/broker` if env
+`TENANT_TO_SYMBOL` is defined.
 
 # Configuration
 
@@ -39,6 +41,9 @@ Configuration is provided via environment variables:
 | DIRECTORY_API_URL     | Comma separated list of URLs when DIRECTORY_ADAPTER is `api`                | `http://localhost:8081/directory/entries` |
 | BROKER_MODE           | Should broker forward supplier/requester symbols: `opaque` or `transparent` | `opaque`                                  |
 | LOCAL_SUPPLY          | Should we check if requester can supply item: `true` or `false`             | `false`                                   |
+| TENANT_TO_SYMBOL      | Limits results to include only transactions with `requesterSymbol`matching  | ``                                        |
+|                       | TENANT_TO_SYMBOL with {tenant} being replaced by X-Okapi-Tenant value       |                                           |
+
 
 # Build
 
