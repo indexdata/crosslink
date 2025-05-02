@@ -30,6 +30,15 @@ jobs:
             chart_path: ./illmock/chart
     steps:
       - uses: actions/checkout@v4
+
+      - name: Calculate chart and app version with short SHA
+        run: |
+          SHORT_SHA=$(echo $GITHUB_SHA | cut -c1-7)
+          CHART_VERSION="${{ matrix.chart_base_version }}+sha.$SHORT_SHA"
+          APP_VERSION="sha-$SHORT_SHA"
+          echo "CHART_VERSION=$CHART_VERSION" >> $GITHUB_ENV
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+
       - name: Process MD for okapi-hooks
         if: ${{ matrix.md_path }}
         run: |
