@@ -225,28 +225,27 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
 
-	httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusForbidden)
 
-	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusNotFound)
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusForbidden)
 
-	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "", http.StatusNotFound)
+	httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "", http.StatusForbidden)
 
 	body = httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
 
-	body = httpGetWithTenant(t, "/broker/ill_transactions", "diku", http.StatusOK)
+	httpGetWithTenant(t, "/broker/ill_transactions", "diku", http.StatusForbidden)
+
+	httpGetWithTenant(t, "/broker/ill_transactions", "ruc", http.StatusForbidden)
+
+	body = httpGetWithTenant(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var trans []oapi.IllTransaction
 	err = json.Unmarshal(body, &trans)
 	assert.NoError(t, err)
 	assert.Len(t, trans, 1)
 	assert.Equal(t, illId, trans[0].ID)
-
-	body = httpGetWithTenant(t, "/broker/ill_transactions", "ruc", http.StatusOK)
-	err = json.Unmarshal(body, &trans)
-	assert.NoError(t, err)
-	assert.Len(t, trans, 0)
 
 	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
 	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
@@ -258,15 +257,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, supps, 1)
 	assert.Equal(t, locSup.ID, supps[0].ID)
 
-	body = httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
-	err = json.Unmarshal(body, &supps)
-	assert.NoError(t, err)
-	assert.Len(t, supps, 0)
+	httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
 
-	body = httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
-	err = json.Unmarshal(body, &supps)
-	assert.NoError(t, err)
-	assert.Len(t, supps, 0)
+	httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
 
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
@@ -283,15 +276,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events, 1)
 	assert.Equal(t, eventId, events[0].ID)
 
-	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
-	err = json.Unmarshal(body, &events)
-	assert.NoError(t, err)
-	assert.Len(t, events, 0)
+	httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
 
-	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
-	err = json.Unmarshal(body, &events)
-	assert.NoError(t, err)
-	assert.Len(t, events, 0)
+	httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
 }
 
 func TestPeersCRUD(t *testing.T) {

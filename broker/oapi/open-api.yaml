@@ -272,6 +272,16 @@ paths:
                   error:
                     type: string
                     description: Error message
+        '403': # Example error response
+          description: Forbidden. Invalid tenant.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
         '500': # Example error response
           description: Internal Server Error
           content:
@@ -303,6 +313,16 @@ paths:
                 $ref: '#/components/schemas/IllTransaction'
         '400': # Example error response
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '403': # Example error response
+          description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
@@ -355,6 +375,16 @@ paths:
                   $ref: '#/components/schemas/IllTransaction'
         '400': # Example error response
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '403': # Example error response
+          description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
@@ -487,6 +517,16 @@ paths:
                   $ref: '#/components/schemas/LocatedSupplier'
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+        '403': # Example error response
+          description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
