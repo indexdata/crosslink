@@ -68,7 +68,7 @@
     {
       "description": "Read ILL transaction",
       "displayName": "ILL Broker - view all",
-      "permissionName": "broker.ill_transactions.item.get",
+      "permissionName": "broker.all.read",
       "visible": true,
       "subPermissions": [
         "broker.ill_transactions.item.get",
