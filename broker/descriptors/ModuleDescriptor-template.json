@@ -67,6 +67,20 @@
   "permissionSets": [
     {
       "description": "Read ILL transaction",
+      "displayName": "ILL Broker - view all",
+      "permissionName": "broker.ill_transactions.item.get",
+      "visible": true,
+      "subPermissions": [
+        "broker.ill_transactions.item.get",
+        "broker.ill_transactions.get",
+        "broker.located_suppliers.get",
+        "broker.events.get",
+        "broker.peers.item.get",
+        "broker.peers.get"
+      ]
+    },
+    {
+      "description": "Read ILL transaction",
       "displayName": "Broker - read ILL transaction",
       "permissionName": "broker.ill_transactions.item.get"
     },

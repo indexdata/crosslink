@@ -18,6 +18,7 @@ on:
       - '**/chart/**' #trigger also when chart templates chnage to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
+      - '**/ModuleDescriptor-template.json' #trigger when module descriptor changes
   pull_request:
     branches: [ "main" ]
     paths:
@@ -31,6 +32,7 @@ on:
       - '**/chart/**' #trigger also when chart templates change to force republish
       - '.github/**' #trigger when pipeline changes
       - '**/go.mod' #trigger when dependencies change
+      - '**/ModuleDescriptor-template.json' #trigger when module descriptor changes
   release:
     types: [published]
 
