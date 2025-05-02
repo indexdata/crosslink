@@ -202,22 +202,6 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	}
 }
 
-func httpGetWithTenant(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {
-	client := http.DefaultClient
-	hreq, err := http.NewRequest("GET", getLocalhostWithPort()+uriPath, nil)
-	assert.NoError(t, err)
-	if tenant != "" {
-		hreq.Header.Set("X-Okapi-Tenant", tenant)
-	}
-	hres, err := client.Do(hreq)
-	assert.NoError(t, err)
-	defer hres.Body.Close()
-	assert.Equal(t, expectStatus, hres.StatusCode)
-	body, err := io.ReadAll(hres.Body)
-	assert.NoError(t, err)
-	return body
-}
-
 func TestBrokerCRUD(t *testing.T) {
 	// app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	illId := uuid.New().String()
@@ -610,19 +594,22 @@ func getPeerById(t *testing.T, symbol string) oapi.Peer {
 }
 
 func getResponseBody(t *testing.T, endpoint string) []byte {
-	resp, err := http.Get(getLocalhostWithPort() + endpoint)
-	if err != nil {
-		t.Errorf("Error making GET request: %s", err)
-	}
-	defer resp.Body.Close()
+	return httpGetWithTenant(t, endpoint, "", http.StatusOK)
+}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Errorf("Error reading response body: %s", err)
+func httpGetWithTenant(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {
+	client := http.DefaultClient
+	hreq, err := http.NewRequest("GET", getLocalhostWithPort()+uriPath, nil)
+	assert.NoError(t, err)
+	if tenant != "" {
+		hreq.Header.Set("X-Okapi-Tenant", tenant)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected response 200 got %d", resp.StatusCode)
-	}
+	hres, err := client.Do(hreq)
+	assert.NoError(t, err)
+	defer hres.Body.Close()
+	assert.Equal(t, expectStatus, hres.StatusCode)
+	body, err := io.ReadAll(hres.Body)
+	assert.NoError(t, err)
 	return body
 }
 

@@ -310,7 +310,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, s := range newPeer.Symbols {
-		if s == "" || !strings.Contains(s, ":") {
+		if !strings.Contains(s, ":") {
 			addBadRequestError(ctx, w, fmt.Errorf("symbol should be in \"ISIL:SYMBOL\" format but got %v", s))
 			return
 		}
