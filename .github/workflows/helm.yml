@@ -28,6 +28,7 @@ jobs:
           - chart_name: crosslink-illmock
             chart_base_version: "0.1.0-main.${{ github.run_number }}"
             chart_path: ./illmock/chart
+            md_path: ./illmock/descriptors/ModuleDescriptor-template.json
     steps:
       - uses: actions/checkout@v4
 

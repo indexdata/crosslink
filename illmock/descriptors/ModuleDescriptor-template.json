@@ -1,0 +1,30 @@
+{
+  "id": "mod-illmock-@version@",
+  "name": "CrossLink ILL Mock",
+  "provides": [
+    {
+      "id": "crosslink-illmock",
+      "version": "1.0",
+      "handlers": [
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/directory/entries",
+          "permissionsRequired": [
+            "illmock.directory.entries.get"
+          ]
+        }
+      ]
+    }
+  ],
+  "requires": [],
+  "permissionSets": [
+    {
+      "description": "Read ILL directory entries",
+      "displayName": "ILL Mock - view all directory entries",
+      "permissionName": "illmock.directory.entries.get",
+      "visible": true
+    }
+  ]
+}
