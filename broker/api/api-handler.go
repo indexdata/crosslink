@@ -64,7 +64,6 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	resp := []oapi.Event{}
 	var eventList []events.Event
 	var err error
 	if params.RequesterReqId != nil {
@@ -85,6 +84,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		addInternalError(ctx, w, err)
 		return
 	}
+	resp := []oapi.Event{}
 	for _, event := range eventList {
 		resp = append(resp, toApiEvent(event))
 	}
@@ -485,7 +485,6 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	resp := []oapi.LocatedSupplier{}
 	var supList []ill_db.LocatedSupplier
 	var err error
 	if params.RequesterReqId != nil {
@@ -506,8 +505,9 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		addInternalError(ctx, w, err)
 		return
 	}
-	for _, event := range supList {
-		resp = append(resp, toApiLocatedSupplier(r, event))
+	resp := []oapi.LocatedSupplier{}
+	for _, supplier := range supList {
+		resp = append(resp, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
 }
