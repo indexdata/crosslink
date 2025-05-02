@@ -147,6 +147,8 @@ func TestGetIllTransactionsId(t *testing.T) {
 	if resp.ID != illId {
 		t.Errorf("did not find the same ILL transaction")
 	}
+	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
+
 	// Delete peer
 	req, err := http.NewRequest("DELETE", getLocalhostWithPort()+"/ill_transactions/"+illId, nil)
 	if err != nil {
@@ -219,11 +221,13 @@ func TestBrokerCRUD(t *testing.T) {
 		Timestamp: test.GetNow(),
 	})
 	assert.NoError(t, err)
+
 	body := httpGetWithTenant(t, "/broker/ill_transactions/"+illId, "diku", http.StatusOK)
 	var tran oapi.IllTransaction
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
+	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
 
 	httpGetWithTenant(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusForbidden)
 
@@ -257,6 +261,12 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, supps, 1)
 	assert.Equal(t, locSup.ID, supps[0].ID)
 
+	body = httpGetWithTenant(t, "/broker/located_suppliers?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps, 1)
+	assert.Equal(t, locSup.ID, supps[0].ID)
+
 	httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
 
 	httpGetWithTenant(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
@@ -271,6 +281,12 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, eventId, events[0].ID)
 
 	body = httpGetWithTenant(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events, 1)
+	assert.Equal(t, eventId, events[0].ID)
+
+	body = httpGetWithTenant(t, "/broker/events?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events, 1)

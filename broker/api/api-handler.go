@@ -75,12 +75,14 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
 		}
-	} else if a.tenantToSymbol == "" {
-		if params.IllTransactionId != nil {
-			eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, *params.IllTransactionId)
-		} else {
-			eventList, err = a.eventRepo.ListEvents(ctx)
+	} else if params.IllTransactionId != nil {
+		var tran ill_db.IllTransaction
+		tran, err = a.illRepo.GetIllTransactionById(ctx, *params.IllTransactionId)
+		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+			eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
 		}
+	} else if a.tenantToSymbol == "" {
+		eventList, err = a.eventRepo.ListEvents(ctx)
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
@@ -504,12 +506,14 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, tran.ID)
 		}
-	} else if a.tenantToSymbol == "" {
-		if params.IllTransactionId != nil {
+	} else if params.IllTransactionId != nil {
+		var tran ill_db.IllTransaction
+		tran, err = a.illRepo.GetIllTransactionById(ctx, *params.IllTransactionId)
+		if err == nil && a.TenantFilter(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 			supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, *params.IllTransactionId)
-		} else {
-			supList, err = a.illRepo.ListLocatedSuppliers(ctx)
 		}
+	} else if a.tenantToSymbol == "" {
+		supList, err = a.illRepo.ListLocatedSuppliers(ctx)
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
@@ -757,6 +761,9 @@ func toLink(r *http.Request, path string, id string, query string) string {
 	}
 	if strings.Contains(urlHost, "localhost") {
 		urlScheme = "http"
+	}
+	if strings.Contains(r.RequestURI, "/broker/") {
+		path = "/broker" + path
 	}
 	if id != "" {
 		path = path + "/" + id
