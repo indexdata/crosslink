@@ -393,30 +393,7 @@ func TestNotFound(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.method == "GET" {
-				resp, err := http.Get(getLocalhostWithPort() + tt.endpoint)
-				if err != nil {
-					t.Errorf("Error making GET request: %s", err)
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusNotFound {
-					t.Errorf("Expected response 404 got %d", resp.StatusCode)
-				}
-			} else {
-				req, err := http.NewRequest(tt.method, getLocalhostWithPort()+tt.endpoint, nil)
-				if err != nil {
-					t.Errorf("Error creating post peer request: %s", err)
-				}
-				req.Header.Set("Content-Type", "application/json")
-				client := &http.Client{}
-				resp, err := client.Do(req)
-				if err != nil {
-					t.Errorf("Error doing peer request: %s", err)
-				}
-				if resp.StatusCode != http.StatusNotFound {
-					t.Errorf("Expected response 404 got %d", resp.StatusCode)
-				}
-			}
+			httpRequest(t, tt.method, tt.endpoint, nil, "", http.StatusNotFound)
 		})
 	}
 }
