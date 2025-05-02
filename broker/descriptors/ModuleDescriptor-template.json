@@ -46,6 +46,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/peers/{id}",
+          "permissionsRequired": [
+            "broker.peers.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/peers",
           "permissionsRequired": [
             "broker.peers.get"
@@ -75,6 +84,11 @@
       "description": "Read events",
       "displayName": "Broker - read events",
       "permissionName": "broker.events.get"
+    },
+    {
+      "description": "Read peer",
+      "displayName": "Broker - read peer",
+      "permissionName": "broker.peers.item.get"
     },
     {
       "description": "Read peers",
