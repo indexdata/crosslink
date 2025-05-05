@@ -97,6 +97,15 @@ func TestGetEvents(t *testing.T) {
 	if resp[0].ID != eventId {
 		t.Errorf("did not find created event")
 	}
+
+	body = getResponseBody(t, "/events?ill_transaction_id=not-exists")
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("failed to unmarshal json: %s", err)
+	}
+	if len(resp) > 0 {
+		t.Errorf("should not find events")
+	}
 }
 
 func TestGetIllTransactions(t *testing.T) {
@@ -133,6 +142,15 @@ func TestGetIllTransactions(t *testing.T) {
 	}
 	if reqReqId != resp[0].RequesterRequestID {
 		t.Errorf("expected to find with same requester request id, got: %v, expected %v", resp[0].RequesterRequestID, reqReqId)
+	}
+
+	body = getResponseBody(t, "/ill_transactions?requester_req_id=not-exists")
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		t.Errorf("failed to unmarshal json: %s", err)
+	}
+	if len(resp) > 0 {
+		t.Errorf("should not find transactions")
 	}
 }
 
