@@ -82,15 +82,15 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		Other: logParams,
 	})
 	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
+	if err != nil { //DB error
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeEmpty(w)
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
 	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		addForbiddenError(ctx, w)
-		return
-	}
-	if err != nil && errors.Is(err, pgx.ErrNoRows) {
 		writeEmpty(w)
 		return
 	}
@@ -116,22 +116,19 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
+	if err != nil { //DB error
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeEmpty(w)
+			return
+		}
 		addInternalError(ctx, w, err)
-		return
-	}
-	//TODO filter the list down instead
-	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		addForbiddenError(ctx, w)
-		return
-	}
-	if err != nil && errors.Is(err, pgx.ErrNoRows) {
-		writeEmpty(w)
 		return
 	}
 	resp := []oapi.IllTransaction{}
 	if tran.ID != "" {
-		resp = append(resp, toApiIllTransaction(r, tran))
+		if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+			resp = append(resp, toApiIllTransaction(r, tran))
+		}
 	} else {
 		trans, err := a.illRepo.ListIllTransactions(ctx)
 		if err != nil { //DB error
@@ -152,12 +149,16 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
 	})
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
 	if !a.isOwner(&trans, params.XOkapiTenant, params.RequesterSymbol) {
-		addForbiddenError(ctx, w)
+		addNotFoundError(w)
 		return
 	}
 	if trans.ID == "" {
@@ -509,15 +510,15 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		Other: logParams,
 	})
 	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil { //DB error
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeEmpty(w)
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
 	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		addForbiddenError(ctx, w)
-		return
-	}
-	if err != nil && errors.Is(err, pgx.ErrNoRows) {
 		writeEmpty(w)
 		return
 	}
@@ -573,16 +574,6 @@ func addInternalError(ctx extctx.ExtendedContext, w http.ResponseWriter, err err
 	ctx.Logger().Error("error serving api request", "error", err.Error())
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func addForbiddenError(ctx extctx.ExtendedContext, w http.ResponseWriter) {
-	resp := ErrorMessage{
-		Error: "forbidden",
-	}
-	ctx.Logger().Error("error serving api request", "error", "forbidden")
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
 	_ = json.NewEncoder(w).Encode(resp)
 }
 

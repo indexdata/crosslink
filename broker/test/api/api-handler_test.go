@@ -238,20 +238,19 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
-	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusForbidden)
-
-	httpGet(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusForbidden)
-
-	httpGet(t, "/broker/ill_transactions/"+illId, "", http.StatusForbidden)
+	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
+	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
+	httpGet(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusNotFound)
+	httpGet(t, "/broker/ill_transactions/"+illId, "", http.StatusNotFound)
 
 	body = httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.ID)
 
-	httpGet(t, "/broker/ill_transactions", "diku", http.StatusForbidden)
+	assert.Equal(t, 1, len(httpGetTrans(t, "/broker/ill_transactions", "diku", http.StatusOK)))
 
-	httpGet(t, "/broker/ill_transactions", "ruc", http.StatusForbidden)
+	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
 
 	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var trans []oapi.IllTransaction
@@ -276,9 +275,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, supps, 1)
 	assert.Equal(t, locSup.ID, supps[0].ID)
 
-	httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
+	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
 
-	httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
+	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
 
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
@@ -301,9 +300,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events, 1)
 	assert.Equal(t, eventId, events[0].ID)
 
-	httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusForbidden)
+	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
 
-	httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusForbidden)
+	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
 }
 
 func TestPeersCRUD(t *testing.T) {
@@ -559,6 +558,16 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, t
 	body, err := io.ReadAll(hres.Body)
 	assert.NoError(t, err)
 	return body
+}
+
+func httpGetTrans(t *testing.T, uriPath string, tenant string, expectStatus int) []oapi.IllTransaction {
+	body := httpRequest(t, "GET", uriPath, nil, tenant, expectStatus)
+	var res []oapi.IllTransaction
+	err := json.Unmarshal(body, &res)
+	if err != nil {
+		t.Errorf("Failed to unmarshal json: %s", err)
+	}
+	return res
 }
 
 func httpGet(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {

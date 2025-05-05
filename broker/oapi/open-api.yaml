@@ -262,7 +262,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Event'
-        '400': # Example error response
+        '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
@@ -272,17 +272,7 @@ paths:
                   error:
                     type: string
                     description: Error message
-        '403': # Example error response
-          description: Forbidden. Invalid tenant.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
-        '500': # Example error response
+        '500':
           description: Internal Server Error
           content:
             application/json:
@@ -311,7 +301,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IllTransaction'
-        '400': # Example error response
+        '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
@@ -321,8 +311,8 @@ paths:
                   error:
                     type: string
                     description: Error message
-        '403': # Example error response
-          description: Forbidden. Invalid tenant.
+        '404':
+          description: Not Found. ILL transaction not found.
           content:
             application/json:
               schema:
@@ -331,7 +321,7 @@ paths:
                   error:
                     type: string
                     description: Error message
-        '500': # Example error response
+        '500':
           description: Internal Server Error
           content:
             application/json:
@@ -373,7 +363,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/IllTransaction'
-        '400': # Example error response
+        '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
@@ -383,7 +373,7 @@ paths:
                   error:
                     type: string
                     description: Error message
-        '403': # Example error response
+        '403':
           description: Forbidden. Invalid tenant.
           content:
             application/json:
@@ -393,7 +383,7 @@ paths:
                   error:
                     type: string
                     description: Error message
-        '500': # Example error response
+        '500':
           description: Internal Server Error
           content:
             application/json:
@@ -517,16 +507,6 @@ paths:
                   $ref: '#/components/schemas/LocatedSupplier'
         '400':
           description: Bad Request. Invalid query parameters.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
-        '403': # Example error response
-          description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
