@@ -126,12 +126,8 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	}
 	resp := []oapi.IllTransaction{}
 	if tran.ID != "" {
-		if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-			writeEmpty(w)
-			return
-		}
-                if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		    resp = append(resp, toApiIllTransaction(r, tran))
+		if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+			resp = append(resp, toApiIllTransaction(r, tran))
 		}
 	} else {
 		trans, err := a.illRepo.ListIllTransactions(ctx)
