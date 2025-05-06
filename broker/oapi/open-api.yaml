@@ -36,7 +36,6 @@ components:
       name: offset
       in: query
       description: Offset for pagination (first item is 0)
-      default: 0
       schema:
         type: integer
         format: int32
@@ -44,7 +43,6 @@ components:
       name: limit
       in: query
       description: Limit for pagination
-      default: 100
       schema:
         type: integer
         format: int32

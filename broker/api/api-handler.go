@@ -129,6 +129,37 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 				resp = append(resp, toApiIllTransaction(r, tran))
 			}
 		}
+	} else if a.isTenantMode() {
+		var tenantSymbol string
+		if params.XOkapiTenant != nil {
+			tenantSymbol = strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*params.XOkapiTenant))
+		} else if params.RequesterSymbol != nil {
+			tenantSymbol = *params.RequesterSymbol
+		}
+		if tenantSymbol != "" {
+			dbparms := ill_db.GetIllTransactionsByRequesterSymbolParams{
+				Limit:  100,
+				Offset: 0,
+				RequesterSymbol: pgtype.Text{
+					String: tenantSymbol,
+					Valid:  true,
+				},
+			}
+			if params.Limit != nil {
+				dbparms.Limit = *params.Limit
+			}
+			if params.Offset != nil {
+				dbparms.Offset = *params.Offset
+			}
+			trans, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
+			if err != nil { //DB error
+				addInternalError(ctx, w, err)
+				return
+			}
+			for _, t := range trans {
+				resp = append(resp, toApiIllTransaction(r, t))
+			}
+		}
 	} else {
 		dbparms := ill_db.ListIllTransactionsParams{
 			Limit:  100,
@@ -146,9 +177,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		for _, t := range trans {
-			if a.isOwner(&t, params.XOkapiTenant, params.RequesterSymbol) {
-				resp = append(resp, toApiIllTransaction(r, t))
-			}
+			resp = append(resp, toApiIllTransaction(r, t))
 		}
 	}
 	writeJsonResponse(w, resp)

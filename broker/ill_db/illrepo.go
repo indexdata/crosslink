@@ -21,6 +21,7 @@ type IllRepo interface {
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error)
+	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
@@ -88,6 +89,17 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 
 func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error) {
 	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+	var transactions []IllTransaction
+	if err == nil {
+		for _, r := range rows {
+			transactions = append(transactions, r.IllTransaction)
+		}
+	}
+	return transactions, err
+}
+
+func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, error) {
+	rows, err := r.queries.GetIllTransactionsByRequesterSymbol(ctx, r.GetConnOrTx(), params)
 	var transactions []IllTransaction
 	if err == nil {
 		for _, r := range rows {

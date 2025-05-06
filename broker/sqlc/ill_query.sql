@@ -88,6 +88,13 @@ FROM ill_transaction
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
 
+-- name: GetIllTransactionsByRequesterSymbol :many
+SELECT sqlc.embed(ill_transaction)
+FROM ill_transaction
+WHERE requester_symbol = $3
+ORDER BY timestamp
+LIMIT $1 OFFSET $2;
+
 -- name: SaveIllTransaction :one
 INSERT INTO ill_transaction (id, timestamp, requester_symbol, requester_id, last_requester_action,
                              prev_requester_action, supplier_symbol, requester_request_id,
