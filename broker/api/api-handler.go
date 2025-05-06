@@ -26,6 +26,7 @@ var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
+var LIMIT_DEFAULT int32 = 10
 
 type ApiHandler struct {
 	eventRepo      events.EventRepo
@@ -135,7 +136,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		if tenantSymbol != "" {
 			dbparms := ill_db.GetIllTransactionsByRequesterSymbolParams{
-				Limit:  100,
+				Limit:  LIMIT_DEFAULT,
 				Offset: 0,
 				RequesterSymbol: pgtype.Text{
 					String: tenantSymbol,
@@ -159,7 +160,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 	} else {
 		dbparms := ill_db.ListIllTransactionsParams{
-			Limit:  100,
+			Limit:  LIMIT_DEFAULT,
 			Offset: 0,
 		}
 		if params.Limit != nil {
@@ -233,7 +234,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		Other: map[string]string{"method": "GetPeers"},
 	})
 	dbparams := ill_db.ListPeersParams{
-		Limit:  100,
+		Limit:  LIMIT_DEFAULT,
 		Offset: 0,
 	}
 	if params.Limit != nil {
