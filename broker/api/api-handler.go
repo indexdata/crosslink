@@ -91,11 +91,8 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 			addInternalError(ctx, w, err)
 			return
 		}
+	} else if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
 		tran.ID = ""
-	} else {
-		if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-			tran.ID = ""
-		}
 	}
 	var eventList []events.Event
 	if tran.ID != "" {
@@ -558,40 +555,32 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
-			return
-		}
-		addInternalError(ctx, w, err)
+	if params.RequesterReqId == nil && params.IllTransactionId == nil {
+		addBadRequestError(ctx, w, fmt.Errorf("either requesterReqId or illTransactionId should be provided"))
 		return
 	}
-	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		writeEmpty(w)
-		return
+	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
+	if err != nil { //DB error
+		if !errors.Is(err, pgx.ErrNoRows) {
+			addInternalError(ctx, w, err)
+			return
+		}
+	} else if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+		tran.ID = ""
 	}
 	var supList []ill_db.LocatedSupplier
 	if tran.ID != "" {
 		supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, tran.ID)
-	} else {
-		supList, err = a.illRepo.ListLocatedSuppliers(ctx)
-	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
-		addInternalError(ctx, w, err)
-		return
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	resp := []oapi.LocatedSupplier{}
 	for _, supplier := range supList {
 		resp = append(resp, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
-}
-
-func writeEmpty(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("[]"))
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {

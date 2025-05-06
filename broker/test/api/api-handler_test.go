@@ -168,21 +168,10 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	illId := test.GetIllTransId(t, illRepo)
 	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
 	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
-	body := getResponseBody(t, "/located_suppliers")
+	httpGet(t, "/located_suppliers", "", http.StatusBadRequest)
 	var resp []oapi.LocatedSupplier
+	body := getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
-	if len(resp) == 0 {
-		t.Errorf("Did not find located suppliers")
-	}
-	if resp[0].ID != locSup.ID {
-		t.Errorf("Did not find created located supplier")
-	}
-
-	body = getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
-	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
@@ -266,9 +255,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, supps, 1)
 	assert.Equal(t, locSup.ID, supps[0].ID)
 
-	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
+	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
 
-	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
+	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
 
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
@@ -502,7 +491,8 @@ func TestPutPeersSymbolDbError(t *testing.T) {
 func TestGetLocatedSuppliersDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetLocatedSuppliers(rr, req, oapi.GetLocatedSuppliersParams{})
+	reqReqId := uuid.New().String()
+	handlerMock.GetLocatedSuppliers(rr, req, oapi.GetLocatedSuppliersParams{RequesterReqId: &reqReqId})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
