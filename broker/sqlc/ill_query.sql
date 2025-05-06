@@ -14,7 +14,8 @@ LIMIT 1;
 -- name: ListPeers :many
 SELECT sqlc.embed(peer)
 FROM peer
-ORDER BY name;
+ORDER BY name
+LIMIT $1 OFFSET $2;
 
 -- name: SavePeer :one
 INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data)
@@ -84,7 +85,8 @@ LIMIT 1;
 -- name: ListIllTransactions :many
 SELECT sqlc.embed(ill_transaction)
 FROM ill_transaction
-ORDER BY timestamp;
+ORDER BY timestamp
+LIMIT $1 OFFSET $2;
 
 -- name: SaveIllTransaction :one
 INSERT INTO ill_transaction (id, timestamp, requester_symbol, requester_id, last_requester_action,

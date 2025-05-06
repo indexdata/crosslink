@@ -20,12 +20,12 @@ type IllRepo interface {
 	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
+	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext) ([]Peer, error)
+	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -86,8 +86,8 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error) {
-	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error) {
+	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
 	var transactions []IllTransaction
 	if err == nil {
 		for _, r := range rows {
@@ -111,8 +111,8 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext) ([]Peer, error) {
-	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, error) {
+	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx(), params)
 	var peers []Peer
 	if err == nil {
 		for _, r := range rows {

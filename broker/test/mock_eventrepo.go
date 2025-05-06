@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"

@@ -81,28 +81,29 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
-			return
-		}
-		addInternalError(ctx, w, err)
+	if params.RequesterReqId == nil && params.IllTransactionId == nil {
+		addBadRequestError(ctx, w, fmt.Errorf("either requesterReqId or illTransactionId should be provided"))
 		return
 	}
-	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		writeEmpty(w)
-		return
+	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
+	if err != nil { //DB error
+		if !errors.Is(err, pgx.ErrNoRows) {
+			addInternalError(ctx, w, err)
+			return
+		}
+		tran.ID = ""
+	} else {
+		if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+			tran.ID = ""
+		}
 	}
 	var eventList []events.Event
 	if tran.ID != "" {
 		eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
-	} else {
-		eventList, err = a.eventRepo.ListEvents(ctx)
-	}
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		addInternalError(ctx, w, err)
-		return
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	resp := []oapi.Event{}
 	for _, event := range eventList {
@@ -115,22 +116,31 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
-			return
-		}
-		addInternalError(ctx, w, err)
-		return
-	}
 	resp := []oapi.IllTransaction{}
-	if tran.ID != "" {
-		if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-			resp = append(resp, toApiIllTransaction(r, tran))
+	if params.RequesterReqId != nil {
+		tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
+		if err != nil { //DB error
+			if !errors.Is(err, pgx.ErrNoRows) {
+				addInternalError(ctx, w, err)
+				return
+			}
+		} else {
+			if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
+				resp = append(resp, toApiIllTransaction(r, tran))
+			}
 		}
 	} else {
-		trans, err := a.illRepo.ListIllTransactions(ctx)
+		dbparms := ill_db.ListIllTransactionsParams{
+			Limit:  100,
+			Offset: 0,
+		}
+		if params.Limit != nil {
+			dbparms.Limit = *params.Limit
+		}
+		if params.Offset != nil {
+			dbparms.Offset = *params.Offset
+		}
+		trans, err := a.illRepo.ListIllTransactions(ctx, dbparms)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
@@ -196,12 +206,22 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
-	resp := []oapi.Peer{}
-	peers, err := a.illRepo.ListPeers(ctx)
+	dbparams := ill_db.ListPeersParams{
+		Limit:  100,
+		Offset: 0,
+	}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	peers, err := a.illRepo.ListPeers(ctx, dbparams)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
+	resp := []oapi.Peer{}
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {

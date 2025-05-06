@@ -73,21 +73,12 @@ func TestMain(m *testing.M) {
 func TestGetEvents(t *testing.T) {
 	illId := test.GetIllTransId(t, illRepo)
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
-	body := getResponseBody(t, "/events")
+
+	httpGet(t, "/events", "", http.StatusBadRequest)
+
+	body := getResponseBody(t, "/events?ill_transaction_id="+illId)
 	var resp []oapi.Event
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
-	if len(resp) == 0 {
-		t.Errorf("Did not find events")
-	}
-	if resp[0].ID != eventId {
-		t.Errorf("Did not find created event")
-	}
-
-	body = getResponseBody(t, "/events?ill_transaction_id="+illId)
-	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
@@ -300,9 +291,9 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events, 1)
 	assert.Equal(t, eventId, events[0].ID)
 
-	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
+	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
 
-	assert.Equal(t, []byte("[]"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
+	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
 }
 
 func TestPeersCRUD(t *testing.T) {
@@ -417,7 +408,8 @@ func TestNotFound(t *testing.T) {
 func TestGetEventsDbError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
-	handlerMock.GetEvents(rr, req, oapi.GetEventsParams{})
+	reqId := uuid.New().String()
+	handlerMock.GetEvents(rr, req, oapi.GetEventsParams{RequesterReqId: &reqId})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)

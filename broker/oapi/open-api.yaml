@@ -29,9 +29,25 @@ components:
     RequesterSymbol:
       name: requester_symbol
       in: query
+      description: Filter by requester symbol
       schema:
         type: string
-      description: Filter by requester symbol
+    Offset:
+      name: offset
+      in: query
+      description: Offset for pagination (first item is 0)
+      default: 0
+      schema:
+        type: integer
+        format: int32
+    Limit:
+      name: limit
+      in: query
+      description: Limit for pagination
+      default: 100
+      schema:
+        type: integer
+        format: int32
   schemas:
     Event:
       type: object
@@ -354,6 +370,8 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of the ILL transaction
@@ -402,6 +420,8 @@ paths:
           schema:
             type: string
           description: Filter peers by symbol
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of peers
