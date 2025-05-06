@@ -62,16 +62,13 @@ func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, reque
 
 func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext,
 	requesterReqId *oapi.RequesterRequestId, illTransactionId *oapi.IllTransactionId) (ill_db.IllTransaction, error) {
-	var tran ill_db.IllTransaction
 	if requesterReqId != nil {
 		return a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{
 			String: *requesterReqId,
 			Valid:  true,
 		})
-	} else if illTransactionId != nil {
-		return a.illRepo.GetIllTransactionById(ctx, *illTransactionId)
 	}
-	return tran, nil
+	return a.illRepo.GetIllTransactionById(ctx, *illTransactionId)
 }
 
 func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
