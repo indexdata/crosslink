@@ -116,12 +116,12 @@ func TestGetIllTransactions(t *testing.T) {
 		t.Errorf("failed to save transaction in DB: %s", err)
 	}
 	body := getResponseBody(t, "/ill_transactions")
-	var resp []oapi.IllTransaction
+	var resp api.IllTransactionsResponse
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) == 0 {
+	if len(resp.Items) == 0 {
 		t.Errorf("did not find ILL transaction")
 	}
 
@@ -131,8 +131,8 @@ func TestGetIllTransactions(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if reqReqId != resp[0].RequesterRequestID {
-		t.Errorf("expected to find with same requester request id, got: %v, expected %v", resp[0].RequesterRequestID, reqReqId)
+	if reqReqId != resp.Items[0].RequesterRequestID {
+		t.Errorf("expected to find with same requester request id, got: %v, expected %v", resp.Items[0].RequesterRequestID, reqReqId)
 	}
 
 	body = getResponseBody(t, "/ill_transactions?requester_req_id=not-exists")
@@ -140,7 +140,7 @@ func TestGetIllTransactions(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) > 0 {
+	if len(resp.Items) > 0 {
 		t.Errorf("should not find transactions")
 	}
 }
@@ -233,11 +233,11 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
 
 	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
-	var trans []oapi.IllTransaction
-	err = json.Unmarshal(body, &trans)
+	var resp api.IllTransactionsResponse
+	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Len(t, trans, 1)
-	assert.Equal(t, illId, trans[0].ID)
+	assert.Len(t, resp.Items, 1)
+	assert.Equal(t, illId, resp.Items[0].ID)
 
 	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
 	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
@@ -544,12 +544,12 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, t
 
 func httpGetTrans(t *testing.T, uriPath string, tenant string, expectStatus int) []oapi.IllTransaction {
 	body := httpRequest(t, "GET", uriPath, nil, tenant, expectStatus)
-	var res []oapi.IllTransaction
+	var res api.IllTransactionsResponse
 	err := json.Unmarshal(body, &res)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
 	}
-	return res
+	return res.Items
 }
 
 func httpGet(t *testing.T, uriPath string, tenant string, expectStatus int) []byte {

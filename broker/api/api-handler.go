@@ -34,6 +34,12 @@ type ApiHandler struct {
 	tenantToSymbol string // non-empty if in /broker mode
 }
 
+// would have hoped that this would be in the oapi package already
+type IllTransactionsResponse struct {
+	ResultInfo oapi.ResultInfo       `json:"resultInfo"`
+	Items      []oapi.IllTransaction `json:"items"`
+}
+
 func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol string) ApiHandler {
 	return ApiHandler{
 		eventRepo:      eventRepo,
@@ -111,7 +117,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
-	resp := []oapi.IllTransaction{}
+	var resp IllTransactionsResponse
 	if params.RequesterReqId != nil {
 		tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
 		if err != nil { //DB error
@@ -121,7 +127,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			}
 		} else {
 			if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-				resp = append(resp, toApiIllTransaction(r, tran))
+				resp.Items = append(resp.Items, toApiIllTransaction(r, tran))
 			}
 		}
 	} else if a.isTenantMode() {
@@ -152,7 +158,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 				return
 			}
 			for _, t := range trans {
-				resp = append(resp, toApiIllTransaction(r, t))
+				resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 			}
 		}
 	} else {
@@ -172,7 +178,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		for _, t := range trans {
-			resp = append(resp, toApiIllTransaction(r, t))
+			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	}
 	writeJsonResponse(w, resp)
