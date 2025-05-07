@@ -64,8 +64,8 @@ func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, reque
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext, w http.ResponseWriter,
-	okapiTenant *string, requesterSymbol *string,
-	requesterReqId *oapi.RequesterRequestId, illTransactionId *oapi.IllTransactionId) (*ill_db.IllTransaction, error) {
+	okapiTenant *string, requesterSymbol *string, requesterReqId *oapi.RequesterRequestId,
+	illTransactionId *oapi.IllTransactionId) (*ill_db.IllTransaction, error) {
 	var tran ill_db.IllTransaction
 	var err error
 	if requesterReqId != nil {
@@ -144,29 +144,31 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		} else if params.RequesterSymbol != nil {
 			tenantSymbol = *params.RequesterSymbol
 		}
-		if tenantSymbol != "" {
-			dbparms := ill_db.GetIllTransactionsByRequesterSymbolParams{
-				Limit:  LIMIT_DEFAULT,
-				Offset: 0,
-				RequesterSymbol: pgtype.Text{
-					String: tenantSymbol,
-					Valid:  true,
-				},
-			}
-			if params.Limit != nil {
-				dbparms.Limit = *params.Limit
-			}
-			if params.Offset != nil {
-				dbparms.Offset = *params.Offset
-			}
-			trans, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
-			if err != nil { //DB error
-				addInternalError(ctx, w, err)
-				return
-			}
-			for _, t := range trans {
-				resp.Items = append(resp.Items, toApiIllTransaction(r, t))
-			}
+		if tenantSymbol == "" {
+			writeJsonResponse(w, resp)
+			return
+		}
+		dbparms := ill_db.GetIllTransactionsByRequesterSymbolParams{
+			Limit:  LIMIT_DEFAULT,
+			Offset: 0,
+			RequesterSymbol: pgtype.Text{
+				String: tenantSymbol,
+				Valid:  true,
+			},
+		}
+		if params.Limit != nil {
+			dbparms.Limit = *params.Limit
+		}
+		if params.Offset != nil {
+			dbparms.Offset = *params.Offset
+		}
+		trans, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
+		if err != nil { //DB error
+			addInternalError(ctx, w, err)
+			return
+		}
+		for _, t := range trans {
+			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	} else {
 		dbparms := ill_db.ListIllTransactionsParams{
@@ -195,24 +197,16 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
 	})
-	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
+	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+		nil, &id)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
-			return
-		}
-		addInternalError(ctx, w, err)
 		return
 	}
-	if !a.isOwner(&trans, params.XOkapiTenant, params.RequesterSymbol) {
+	if tran == nil {
 		addNotFoundError(w)
 		return
 	}
-	if trans.ID == "" {
-		addNotFoundError(w)
-		return
-	}
-	writeJsonResponse(w, toApiIllTransaction(r, trans))
+	writeJsonResponse(w, toApiIllTransaction(r, *tran))
 }
 
 func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
