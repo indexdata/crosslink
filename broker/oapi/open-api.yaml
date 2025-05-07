@@ -51,6 +51,7 @@ components:
       type: object
       required:
         - items
+        - resultInfo
       properties:
         resultInfo:
           $ref: '#/components/schemas/ResultInfo'
@@ -63,6 +64,7 @@ components:
       type: object
       required:
         - items
+        - resultInfo
       properties:
         resultInfo:
           $ref: '#/components/schemas/ResultInfo'
@@ -75,6 +77,7 @@ components:
       type: object
       required:
         - items
+        - resultInfo
       properties:
         resultInfo:
           $ref: '#/components/schemas/ResultInfo'
@@ -87,6 +90,7 @@ components:
       type: object
       required:
         - items
+        - resultInfo
       properties:
         resultInfo:
           $ref: '#/components/schemas/ResultInfo'
@@ -100,6 +104,7 @@ components:
       properties:
         count:
           type: integer
+          format: int64
           description: Total number of items in the result
         nextLink:
           type: string

@@ -83,7 +83,7 @@ WHERE requester_request_id = $1
 LIMIT 1;
 
 -- name: ListIllTransactions :many
-SELECT sqlc.embed(ill_transaction)
+SELECT sqlc.embed(ill_transaction), COUNT(*) OVER () as full_count
 FROM ill_transaction
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;

@@ -103,46 +103,40 @@ func TestGetIllTransactions(t *testing.T) {
 	id := test.GetIllTransId(t, illRepo)
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	trans, err := illRepo.GetIllTransactionById(ctx, id)
-	if err != nil {
-		t.Errorf("failed to read transaction from DB: %s", err)
-	}
-	reqReqId := "reqReqId1"
+	assert.NoError(t, err)
+	reqReqId := uuid.NewString()
 	trans.RequesterRequestID = pgtype.Text{
 		String: reqReqId,
 		Valid:  true,
 	}
 	trans, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(trans))
-	if err != nil {
-		t.Errorf("failed to save transaction in DB: %s", err)
-	}
+	assert.NoError(t, err)
 	body := getResponseBody(t, "/ill_transactions")
 	var resp oapi.IllTransactions
 	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if len(resp.Items) == 0 {
-		t.Errorf("did not find ILL transaction")
-	}
-
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(resp.Items), 1)
+	assert.NotNil(t, resp.ResultInfo.Count)
+	assert.Equal(t, *resp.ResultInfo.Count, int64(len(resp.Items)))
 	// Query
-	body = getResponseBody(t, "/ill_transactions?requester_req_id="+reqReqId)
+	body = getResponseBody(t, "/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId))
 	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if reqReqId != resp.Items[0].RequesterRequestID {
-		t.Errorf("expected to find with same requester request id, got: %v, expected %v", resp.Items[0].RequesterRequestID, reqReqId)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, reqReqId, resp.Items[0].RequesterRequestID)
 
 	body = getResponseBody(t, "/ill_transactions?requester_req_id=not-exists")
 	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 0)
+
+	for range 2 * api.LIMIT_DEFAULT {
+		test.GetIllTransId(t, illRepo)
 	}
-	if len(resp.Items) > 0 {
-		t.Errorf("should not find transactions")
-	}
+	body = getResponseBody(t, "/ill_transactions")
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, len(resp.Items), int(api.LIMIT_DEFAULT))
+	assert.GreaterOrEqual(t, *resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
 }
 
 func TestGetIllTransactionsId(t *testing.T) {
@@ -548,8 +542,8 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, t
 	hres, err := client.Do(hreq)
 	assert.NoError(t, err)
 	defer hres.Body.Close()
-	assert.Equal(t, expectStatus, hres.StatusCode)
 	body, err := io.ReadAll(hres.Body)
+	assert.Equal(t, expectStatus, hres.StatusCode, string(body))
 	assert.NoError(t, err)
 	return body
 }

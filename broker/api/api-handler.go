@@ -181,11 +181,12 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		if params.Offset != nil {
 			dbparms.Offset = *params.Offset
 		}
-		trans, err := a.illRepo.ListIllTransactions(ctx, dbparms)
+		trans, full_count, err := a.illRepo.ListIllTransactions(ctx, dbparms)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
+		resp.ResultInfo.Count = &full_count
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}

@@ -20,7 +20,7 @@ type IllRepo interface {
 	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error)
+	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error)
 	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
@@ -87,15 +87,17 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, error) {
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error) {
 	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
 	var transactions []IllTransaction
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			transactions = append(transactions, r.IllTransaction)
 		}
 	}
-	return transactions, err
+	return transactions, fullCount, err
 }
 
 func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, error) {
