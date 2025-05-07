@@ -612,7 +612,12 @@ func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId st
 	var err error
 
 	test.WaitForPredicateToBeTrue(func() bool {
-		eventList, err = eventRepo.GetIllTransactionEvents(appCtx, illId)
+		params := events.GetIllTransactionEventsParams{
+			IllTransactionID: illId,
+			Limit:            100,
+			Offset:           0,
+		}
+		eventList, _, err = eventRepo.GetIllTransactionEvents(appCtx, params)
 		if err != nil {
 			t.Errorf("failed to find events for ill transaction id %v", illId)
 		}

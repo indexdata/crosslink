@@ -79,12 +79,10 @@ func TestGetEvents(t *testing.T) {
 	body := getResponseBody(t, "/events?ill_transaction_id="+illId)
 	var resp oapi.Events
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if len(resp.Items) == 0 {
-		t.Errorf("did not find events")
-	}
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(resp.Items), 1)
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
+	assert.Equal(t, eventId, resp.Items[0].ID)
 	if resp.Items[0].ID != eventId {
 		t.Errorf("did not find created event")
 	}

@@ -18,7 +18,6 @@ RETURNING sqlc.embed(event_config);
 DELETE FROM event_config
 WHERE event_name = $1;
 
-
 -- name: GetEvent :one
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
@@ -28,9 +27,11 @@ SELECT sqlc.embed(event) FROM event
 ORDER BY timestamp;
 
 -- name: GetIllTransactionEvents :many
-SELECT sqlc.embed(event) FROM event
+SELECT sqlc.embed(event), COUNT(*) OVER () as full_count
+FROM event
 WHERE ill_transaction_id = $1
-ORDER BY timestamp;
+ORDER BY timestamp
+LIMIT $2 OFFSET $3;
 
 -- name: SaveEvent :one
 INSERT INTO event (
