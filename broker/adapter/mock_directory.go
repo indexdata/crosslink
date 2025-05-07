@@ -43,6 +43,11 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 
 func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
 	slices.SortFunc(entries, func(a, b Supplier) int {
+		if a.Selected && !b.Selected {
+			return -1
+		} else if !a.Selected && b.Selected {
+			return 1
+		}
 		return cmp.Compare(a.Ratio, b.Ratio)
 	})
 	return entries

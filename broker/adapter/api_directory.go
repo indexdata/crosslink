@@ -151,6 +151,11 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 }
 
 func CompareSuppliers(a, b Supplier) int {
+	if a.Selected && !b.Selected {
+		return -1
+	} else if !a.Selected && b.Selected {
+		return 1
+	}
 	sort := cmp.Compare(a.Cost, b.Cost)
 	if sort != 0 {
 		return sort

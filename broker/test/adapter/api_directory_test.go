@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -345,4 +346,16 @@ func TestCompareSuppliers(t *testing.T) {
 	assert.True(t, adapter.CompareSuppliers(
 		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 2},
 		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}) < 0)
+
+	assert.True(t, adapter.CompareSuppliers(
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}) > 0)
+
+	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}}
+	slices.SortFunc(suppliers, adapter.CompareSuppliers)
+	assert.True(t, suppliers[0].Selected) // Selected sorted as first
 }
