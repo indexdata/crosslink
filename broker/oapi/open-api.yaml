@@ -47,6 +47,30 @@ components:
         type: integer
         format: int32
   schemas:
+    IllTransactions:
+      type: object
+      required:
+        - items
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of ILL transactions
+          items:
+            $ref: '#/components/schemas/IllTransaction'
+    Events:
+      type: object
+      required:
+        - items
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of events
+          items:
+            $ref: '#/components/schemas/Event'
     ResultInfo:
       type: object
       properties:
@@ -285,9 +309,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Event'
+                $ref: '#/components/schemas/Events'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
@@ -388,15 +410,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  resultInfo:
-                    $ref: '#/components/schemas/ResultInfo'
-                  items:
-                    type: array
-                    description: List of ILL transactions
-                    items:
-                      $ref: '#/components/schemas/IllTransaction'
+                $ref: '#/components/schemas/IllTransactions'
         '400':
           description: Bad Request. Invalid query parameters.
           content:

@@ -77,15 +77,15 @@ func TestGetEvents(t *testing.T) {
 	httpGet(t, "/events", "", http.StatusBadRequest)
 
 	body := getResponseBody(t, "/events?ill_transaction_id="+illId)
-	var resp []oapi.Event
+	var resp oapi.Events
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) == 0 {
+	if len(resp.Items) == 0 {
 		t.Errorf("did not find events")
 	}
-	if resp[0].ID != eventId {
+	if resp.Items[0].ID != eventId {
 		t.Errorf("did not find created event")
 	}
 
@@ -94,7 +94,7 @@ func TestGetEvents(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) > 0 {
+	if len(resp.Items) > 0 {
 		t.Errorf("should not find events")
 	}
 }
@@ -116,7 +116,7 @@ func TestGetIllTransactions(t *testing.T) {
 		t.Errorf("failed to save transaction in DB: %s", err)
 	}
 	body := getResponseBody(t, "/ill_transactions")
-	var resp api.IllTransactionsResponse
+	var resp oapi.IllTransactions
 	err = json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
@@ -233,7 +233,7 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
 
 	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
-	var resp api.IllTransactionsResponse
+	var resp oapi.IllTransactions
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 1)
@@ -262,27 +262,33 @@ func TestBrokerCRUD(t *testing.T) {
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
-	var events []oapi.Event
+	var events oapi.Events
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
-	assert.Len(t, events, 1)
-	assert.Equal(t, eventId, events[0].ID)
+	assert.Len(t, events.Items, 1)
+	assert.Equal(t, eventId, events.Items[0].ID)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
-	assert.Len(t, events, 1)
-	assert.Equal(t, eventId, events[0].ID)
+	assert.Len(t, events.Items, 1)
+	assert.Equal(t, eventId, events.Items[0].ID)
 
 	body = httpGet(t, "/broker/events?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
-	assert.Len(t, events, 1)
-	assert.Equal(t, eventId, events[0].ID)
+	assert.Len(t, events.Items, 1)
+	assert.Equal(t, eventId, events.Items[0].ID)
 
-	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
+	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events.Items, 0)
 
-	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
+	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &events)
+	assert.NoError(t, err)
+	assert.Len(t, events.Items, 0)
 }
 
 func TestPeersCRUD(t *testing.T) {
@@ -544,7 +550,7 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, t
 
 func httpGetTrans(t *testing.T, uriPath string, tenant string, expectStatus int) []oapi.IllTransaction {
 	body := httpRequest(t, "GET", uriPath, nil, tenant, expectStatus)
-	var res api.IllTransactionsResponse
+	var res oapi.IllTransactions
 	err := json.Unmarshal(body, &res)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)

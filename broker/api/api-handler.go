@@ -34,12 +34,6 @@ type ApiHandler struct {
 	tenantToSymbol string // non-empty if in /broker mode
 }
 
-// would have hoped that this would be in the oapi package already
-type IllTransactionsResponse struct {
-	ResultInfo oapi.ResultInfo       `json:"resultInfo"`
-	Items      []oapi.IllTransaction `json:"items"`
-}
-
 func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol string) ApiHandler {
 	return ApiHandler{
 		eventRepo:      eventRepo,
@@ -52,6 +46,10 @@ func (a *ApiHandler) isTenantMode() bool {
 	return a.tenantToSymbol != ""
 }
 
+func (a *ApiHandler) getSymbolFromTenant(tenant string) string {
+	return strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))
+}
+
 func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
@@ -62,8 +60,7 @@ func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, reque
 	if tenant == nil {
 		return false
 	}
-	tenantSymbol := strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*tenant))
-	return trans.RequesterSymbol.String == tenantSymbol
+	return trans.RequesterSymbol.String == a.getSymbolFromTenant(*tenant)
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext,
@@ -106,9 +103,9 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 			return
 		}
 	}
-	resp := []oapi.Event{}
+	var resp oapi.Events
 	for _, event := range eventList {
-		resp = append(resp, toApiEvent(event))
+		resp.Items = append(resp.Items, toApiEvent(event))
 	}
 	writeJsonResponse(w, resp)
 }
@@ -117,7 +114,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
-	var resp IllTransactionsResponse
+	var resp oapi.IllTransactions
 	if params.RequesterReqId != nil {
 		tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
 		if err != nil { //DB error
@@ -133,7 +130,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	} else if a.isTenantMode() {
 		var tenantSymbol string
 		if params.XOkapiTenant != nil {
-			tenantSymbol = strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*params.XOkapiTenant))
+			tenantSymbol = a.getSymbolFromTenant(*params.XOkapiTenant)
 		} else if params.RequesterSymbol != nil {
 			tenantSymbol = *params.RequesterSymbol
 		}
