@@ -128,14 +128,40 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
 
-	for range 2 * api.LIMIT_DEFAULT {
-		test.GetIllTransId(t, illRepo)
+	for i := range 2 * api.LIMIT_DEFAULT {
+		requester := "ISIL:DK-BIB1"
+		if i > api.LIMIT_DEFAULT+3 {
+			requester = "ISIL:DK-BIB2"
+		}
+		illId := uuid.NewString()
+		reqReqId := uuid.NewString()
+		_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+			ID: illId,
+			RequesterSymbol: pgtype.Text{
+				String: requester,
+				Valid:  true,
+			},
+			RequesterRequestID: pgtype.Text{
+				String: reqReqId,
+				Valid:  true,
+			},
+			Timestamp: test.GetNow(),
+		})
+		assert.NoError(t, err)
 	}
 	body = getResponseBody(t, "/ill_transactions")
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, len(resp.Items), int(api.LIMIT_DEFAULT))
+	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
+
+	body = getResponseBody(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(3+api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(2*api.LIMIT_DEFAULT))
 }
 
 func TestGetIllTransactionsId(t *testing.T) {

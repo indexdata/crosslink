@@ -109,10 +109,10 @@ func (r *MockIllRepositorySuccess) ListIllTransactions(ctx extctx.ExtendedContex
 	}}, 0, nil
 }
 
-func (r *MockIllRepositorySuccess) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, error) {
+func (r *MockIllRepositorySuccess) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, int64, error) {
 	return []ill_db.IllTransaction{{
 		ID: "id",
-	}}, nil
+	}}, 0, nil
 }
 
 func (r *MockIllRepositorySuccess) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, error) {
@@ -234,8 +234,8 @@ func (r *MockIllRepositoryError) ListIllTransactions(ctx extctx.ExtendedContext,
 	return []ill_db.IllTransaction{}, 0, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, error) {
-	return []ill_db.IllTransaction{}, errors.New("DB error")
+func (r *MockIllRepositoryError) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, int64, error) {
+	return []ill_db.IllTransaction{}, 0, errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, error) {

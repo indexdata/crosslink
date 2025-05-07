@@ -89,7 +89,7 @@ ORDER BY timestamp
 LIMIT $1 OFFSET $2;
 
 -- name: GetIllTransactionsByRequesterSymbol :many
-SELECT sqlc.embed(ill_transaction)
+SELECT sqlc.embed(ill_transaction), COUNT(*) OVER () as full_count
 FROM ill_transaction
 WHERE requester_symbol = $3
 ORDER BY timestamp

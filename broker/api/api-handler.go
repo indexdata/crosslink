@@ -138,6 +138,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
 	} else if a.isTenantMode() {
+		fmt.Println("GetIllTransactions: Tenant mode")
 		var tenantSymbol string
 		if params.XOkapiTenant != nil {
 			tenantSymbol = a.getSymbolFromTenant(*params.XOkapiTenant)
@@ -162,11 +163,12 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		if params.Offset != nil {
 			dbparms.Offset = *params.Offset
 		}
-		trans, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
+		trans, fullCount, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
+		resp.ResultInfo.Count = fullCount
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
@@ -181,12 +183,12 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		if params.Offset != nil {
 			dbparms.Offset = *params.Offset
 		}
-		trans, full_count, err := a.illRepo.ListIllTransactions(ctx, dbparms)
+		trans, fullCount, err := a.illRepo.ListIllTransactions(ctx, dbparms)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
-		resp.ResultInfo.Count = full_count
+		resp.ResultInfo.Count = fullCount
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
