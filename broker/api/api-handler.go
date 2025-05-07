@@ -263,12 +263,13 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	if params.Offset != nil {
 		dbparams.Offset = *params.Offset
 	}
-	peers, err := a.illRepo.ListPeers(ctx, dbparams)
+	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
 	var resp oapi.Peers
+	resp.ResultInfo.Count = count
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {

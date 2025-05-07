@@ -26,7 +26,7 @@ type IllRepo interface {
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, error)
+	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -127,15 +127,17 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, error) {
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error) {
 	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx(), params)
 	var peers []Peer
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			peers = append(peers, r.Peer)
 		}
 	}
-	return peers, err
+	return peers, fullCount, err
 }
 
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error) {

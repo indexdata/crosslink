@@ -115,10 +115,10 @@ func (r *MockIllRepositorySuccess) GetIllTransactionsByRequesterSymbol(ctx extct
 	}}, 0, nil
 }
 
-func (r *MockIllRepositorySuccess) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, error) {
+func (r *MockIllRepositorySuccess) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, int64, error) {
 	return []ill_db.Peer{{
 		ID: uuid.New().String(),
-	}}, nil
+	}}, 0, nil
 }
 func (r *MockIllRepositorySuccess) DeletePeer(ctx extctx.ExtendedContext, id string) error {
 	return nil
@@ -238,9 +238,10 @@ func (r *MockIllRepositoryError) GetIllTransactionsByRequesterSymbol(ctx extctx.
 	return []ill_db.IllTransaction{}, 0, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, error) {
-	return []ill_db.Peer{{}}, errors.New("DB error")
+func (r *MockIllRepositoryError) ListPeers(ctx extctx.ExtendedContext, params ill_db.ListPeersParams) ([]ill_db.Peer, int64, error) {
+	return []ill_db.Peer{{}}, 0, errors.New("DB error")
 }
+
 func (r *MockIllRepositoryError) DeletePeer(ctx extctx.ExtendedContext, id string) error {
 	return errors.New("DB error")
 }

@@ -12,7 +12,7 @@ WHERE symbol_value = $1
 LIMIT 1;
 
 -- name: ListPeers :many
-SELECT sqlc.embed(peer)
+SELECT sqlc.embed(peer), COUNT(*) OVER () as full_count
 FROM peer
 ORDER BY name
 LIMIT $1 OFFSET $2;
