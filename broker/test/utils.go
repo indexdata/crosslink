@@ -17,6 +17,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var eventRecordFormat = "%v, %v = %v"
+
 func GetNow() pgtype.Timestamp {
 	return pgtype.Timestamp{
 		Time:  time.Now(),
@@ -169,4 +171,38 @@ func CreatePgText(value string) pgtype.Text {
 		Valid:  true,
 	}
 	return textValue
+}
+
+func EventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
+	var eventList []events.Event
+	var err error
+
+	WaitForPredicateToBeTrue(func() bool {
+		eventList, err = eventRepo.GetIllTransactionEvents(appCtx, illId)
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction id %v", illId)
+		}
+		if len(eventList) != messageCount {
+			return false
+		}
+		for _, e := range eventList {
+			if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
+				return false
+			}
+		}
+		return true
+	})
+
+	value := ""
+	for _, e := range eventList {
+		value = value + fmt.Sprintf(eventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		if e.EventStatus == events.EventStatusProblem {
+			value += ", problem=" + e.ResultData.Problem.Kind
+		}
+		if e.EventStatus == events.EventStatusError {
+			value += ", error=" + e.ResultData.EventError.Message
+		}
+		value += "\n"
+	}
+	return value
 }

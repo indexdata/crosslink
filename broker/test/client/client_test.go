@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/adapter"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
@@ -55,7 +57,17 @@ func TestMain(m *testing.M) {
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	app.BROKER_MODE = string(client.BrokerModeTransparent)
+	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
+	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
+	test.Expect(os.Setenv("PEER_URL", LocalAddress), "failed to set peer URL")
+
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
+
+	go func() {
+		var mockApp mockapp.MockApp
+		test.Expect(mockApp.Run(), "failed to start illmock client")
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -508,6 +520,39 @@ func TestSendHttpPost(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRequestLocallyAvailable(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
+	data, _ := os.ReadFile("../testdata/request-locally-available.xml")
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	httpClient := &http.Client{}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, test.CreatePgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusLoanCompleted) &&
+			illTrans.LastRequesterAction.String == string(iso18626.TypeActionShippedReturn)
+	})
+	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		test.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 3))
 }
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {

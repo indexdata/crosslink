@@ -42,7 +42,6 @@ Configuration is provided via environment variables:
 | DIRECTORY_ADAPTER     | Directory lookup method:`mock` or `api`                                     | `mock`                                    |
 | DIRECTORY_API_URL     | Comma separated list of URLs when DIRECTORY_ADAPTER is `api`                | `http://localhost:8081/directory/entries` |
 | BROKER_MODE           | Should broker forward supplier/requester symbols: `opaque` or `transparent` | `opaque`                                  |
-| LOCAL_SUPPLY          | Should we check if requester can supply item: `true` or `false`             | `false`                                   |
 | TENANT_TO_SYMBOL      | Limits results to include only transactions with `requesterSymbol`matching  | ``                                        |
 |                       | TENANT_TO_SYMBOL with {tenant} being replaced by X-Okapi-Tenant value       |                                           |
 
