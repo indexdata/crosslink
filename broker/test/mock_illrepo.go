@@ -136,18 +136,22 @@ func (r *MockIllRepositorySuccess) GetCachedPeersBySymbols(ctx extctx.ExtendedCo
 	return []ill_db.Peer{{ID: uuid.NewString()}}, ""
 }
 
-func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]ill_db.LocatedSupplier, error) {
-	return []ill_db.LocatedSupplier{{ID: uuid.NewString(), IllTransactionID: illTransactionID}}, nil
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransitionParams) ([]ill_db.LocatedSupplier, int64, error) {
+	return []ill_db.LocatedSupplier{{ID: uuid.NewString(), IllTransactionID: params.IllTransactionID}}, 0, nil
 }
+
 func (r *MockIllRepositorySuccess) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{{ID: uuid.NewString()}}, nil
 }
+
 func (r *MockIllRepositorySuccess) SaveSymbol(ctx extctx.ExtendedContext, params ill_db.SaveSymbolParams) (ill_db.Symbol, error) {
 	return ill_db.Symbol(params), nil
 }
+
 func (r *MockIllRepositorySuccess) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
 	return nil
 }
+
 func (r *MockIllRepositorySuccess) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
 	return []ill_db.Symbol{{
 		SymbolValue: "ISIL:SUP1",
@@ -258,8 +262,8 @@ func (r *MockIllRepositoryError) GetCachedPeersBySymbols(ctx extctx.ExtendedCont
 	return []ill_db.Peer{}, ""
 }
 
-func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]ill_db.LocatedSupplier, error) {
-	return []ill_db.LocatedSupplier{}, errors.New("DB error")
+func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params ill_db.GetLocatedSupplierByIllTransitionParams) ([]ill_db.LocatedSupplier, int64, error) {
+	return []ill_db.LocatedSupplier{}, 0, errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]ill_db.LocatedSupplier, error) {

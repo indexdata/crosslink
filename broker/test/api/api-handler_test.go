@@ -167,12 +167,8 @@ func TestGetIllTransactionsId(t *testing.T) {
 	body := getResponseBody(t, "/ill_transactions/"+illId)
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if resp.ID != illId {
-		t.Errorf("did not find the same ILL transaction")
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, illId, resp.ID)
 	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
@@ -189,24 +185,15 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	var resp oapi.LocatedSuppliers
 	body := getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if len(resp.Items) == 0 {
-		t.Errorf("did not find located suppliers")
-	}
-	if resp.Items[0].ID != locSup.ID {
-		t.Errorf("did not find created located supplier ")
-	}
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(resp.Items), 1)
+	assert.Equal(t, resp.Items[0].ID, locSup.ID)
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
 
 	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if len(resp.Items) > 0 {
-		t.Errorf("should not find located suppliers")
-	}
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 0)
 }
 
 func TestBrokerCRUD(t *testing.T) {
@@ -330,53 +317,33 @@ func TestPeersCRUD(t *testing.T) {
 	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
 	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
-	if toCreate.ID != respPeer.ID {
-		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, toCreate.ID, respPeer.ID)
 	// Cannot post same again
 	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
 
 	// Update peer
 	toCreate.Name = "Updated"
 	jsonBytes, err = json.Marshal(toCreate)
-	if err != nil {
-		t.Errorf("Error marshaling JSON: %s", err)
-	}
+	assert.NoError(t, err)
 	body = httpRequest(t, "PUT", "/peers/"+toCreate.ID, jsonBytes, "", http.StatusOK)
 
 	err = json.Unmarshal(body, &respPeer)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
-	if toCreate.ID != respPeer.ID {
-		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
-	}
-
-	if respPeer.Name != "Updated" {
-		t.Errorf("expected same peer name 'Updated' got %s", respPeer.Name)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, toCreate.ID, respPeer.ID)
+	assert.Equal(t, "Updated", respPeer.Name)
 	// Get peer
 	respPeer = getPeerById(t, toCreate.ID)
-	if toCreate.ID != respPeer.ID {
-		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeer.ID)
-	}
+	assert.Equal(t, toCreate.ID, respPeer.ID)
 	// Get peers
 	respPeers := getPeers(t)
-	if len(respPeers.Items) < 1 {
-		t.Errorf("Did not find peers")
-	}
+	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	// Query peers
 	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
 	err = json.Unmarshal(body, &respPeers)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
-	if toCreate.ID != respPeers.Items[0].ID {
-		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeers.Items[0].ID)
-	}
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
+	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
 	// Delete peer
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNotFound)
@@ -384,9 +351,7 @@ func TestPeersCRUD(t *testing.T) {
 	// Check no peers left
 	respPeers = getPeers(t)
 	for _, p := range respPeers.Items {
-		if p.ID == toCreate.ID {
-			t.Errorf("Expected this peer %s to be deleted", toCreate.ID)
-		}
+		assert.NotEqual(t, toCreate.ID, p.ID)
 	}
 }
 
@@ -532,9 +497,7 @@ func getPeers(t *testing.T) oapi.Peers {
 	body := getResponseBody(t, "/peers")
 	var respPeers oapi.Peers
 	err := json.Unmarshal(body, &respPeers)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
+	assert.NoError(t, err)
 	return respPeers
 }
 
@@ -542,9 +505,7 @@ func getPeerById(t *testing.T, symbol string) oapi.Peer {
 	body := getResponseBody(t, "/peers/"+symbol)
 	var resp oapi.Peer
 	err := json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
+	assert.NoError(t, err)
 	return resp
 }
 
@@ -575,9 +536,7 @@ func httpGetTrans(t *testing.T, uriPath string, tenant string, expectStatus int)
 	body := httpRequest(t, "GET", uriPath, nil, tenant, expectStatus)
 	var res oapi.IllTransactions
 	err := json.Unmarshal(body, &res)
-	if err != nil {
-		t.Errorf("Failed to unmarshal json: %s", err)
-	}
+	assert.NoError(t, err)
 	return res.Items
 }
 

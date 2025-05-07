@@ -111,20 +111,20 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		writeJsonResponse(w, resp)
 		return
 	}
-	dbparms := events.GetIllTransactionEventsParams{
+	dbparams := events.GetIllTransactionEventsParams{
 		IllTransactionID: tran.ID,
 		Limit:            LIMIT_DEFAULT,
 		Offset:           0,
 	}
 	if params.Limit != nil {
-		dbparms.Limit = *params.Limit
+		dbparams.Limit = *params.Limit
 	}
 	if params.Offset != nil {
-		dbparms.Offset = *params.Offset
+		dbparams.Offset = *params.Offset
 	}
 	var fullCount int64
 	var eventList []events.Event
-	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, dbparms)
+	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, dbparams)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
@@ -162,7 +162,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			writeJsonResponse(w, resp)
 			return
 		}
-		dbparms := ill_db.GetIllTransactionsByRequesterSymbolParams{
+		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
 			Limit:  LIMIT_DEFAULT,
 			Offset: 0,
 			RequesterSymbol: pgtype.Text{
@@ -171,12 +171,12 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			},
 		}
 		if params.Limit != nil {
-			dbparms.Limit = *params.Limit
+			dbparams.Limit = *params.Limit
 		}
 		if params.Offset != nil {
-			dbparms.Offset = *params.Offset
+			dbparams.Offset = *params.Offset
 		}
-		trans, fullCount, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparms)
+		trans, fullCount, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
@@ -186,17 +186,17 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	} else {
-		dbparms := ill_db.ListIllTransactionsParams{
+		dbparams := ill_db.ListIllTransactionsParams{
 			Limit:  LIMIT_DEFAULT,
 			Offset: 0,
 		}
 		if params.Limit != nil {
-			dbparms.Limit = *params.Limit
+			dbparams.Limit = *params.Limit
 		}
 		if params.Offset != nil {
-			dbparms.Offset = *params.Offset
+			dbparams.Offset = *params.Offset
 		}
-		trans, fullCount, err := a.illRepo.ListIllTransactions(ctx, dbparms)
+		trans, fullCount, err := a.illRepo.ListIllTransactions(ctx, dbparams)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
@@ -588,11 +588,24 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var supList []ill_db.LocatedSupplier
-	supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, tran.ID)
+	dbparams := ill_db.GetLocatedSupplierByIllTransitionParams{
+		IllTransactionID: tran.ID,
+		Limit:            LIMIT_DEFAULT,
+		Offset:           0,
+	}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	var count int64
+	supList, count, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, dbparams)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return
 	}
+	resp.ResultInfo.Count = count
 	for _, supplier := range supList {
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}

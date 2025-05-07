@@ -30,7 +30,7 @@ type IllRepo interface {
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
-	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error)
+	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionParams) ([]LocatedSupplier, int64, error)
 	ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
@@ -181,15 +181,17 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx e
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error) {
-	rows, err := r.queries.GetLocatedSupplierByIllTransition(ctx, r.GetConnOrTx(), illTransactionID)
+func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionParams) ([]LocatedSupplier, int64, error) {
+	rows, err := r.queries.GetLocatedSupplierByIllTransition(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			suppliers = append(suppliers, r.LocatedSupplier)
 		}
 	}
-	return suppliers, err
+	return suppliers, fullCount, err
 }
 func (r *PgIllRepo) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error) {
 	rows, err := r.queries.ListLocatedSuppliers(ctx, r.GetConnOrTx())
