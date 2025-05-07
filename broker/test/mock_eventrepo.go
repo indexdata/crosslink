@@ -66,11 +66,6 @@ func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx extctx.Extended
 		ID: uuid.New().String(),
 	}}, 0, nil
 }
-func (r *MockEventRepositorySuccess) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
-	return []events.Event{{
-		ID: uuid.New().String(),
-	}}, nil
-}
 
 func (r *MockEventRepositorySuccess) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
 	return nil
@@ -103,9 +98,7 @@ func (r *MockEventRepositoryError) Notify(ctx extctx.ExtendedContext, eventId st
 func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx extctx.ExtendedContext, params events.GetIllTransactionEventsParams) ([]events.Event, int64, error) {
 	return []events.Event{}, 0, errors.New("DB error")
 }
-func (r *MockEventRepositoryError) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
-	return []events.Event{}, errors.New("DB error")
-}
+
 func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
 	return errors.New("DB error")
 }

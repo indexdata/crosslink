@@ -22,10 +22,6 @@ WHERE event_name = $1;
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
 
--- name: ListEvents :many
-SELECT sqlc.embed(event) FROM event
-ORDER BY timestamp;
-
 -- name: GetIllTransactionEvents :many
 SELECT sqlc.embed(event), COUNT(*) OVER () as full_count
 FROM event
