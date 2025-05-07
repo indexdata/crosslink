@@ -169,16 +169,16 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
 	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
 	httpGet(t, "/located_suppliers", "", http.StatusBadRequest)
-	var resp []oapi.LocatedSupplier
+	var resp oapi.LocatedSuppliers
 	body := getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
 	err := json.Unmarshal(body, &resp)
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) == 0 {
+	if len(resp.Items) == 0 {
 		t.Errorf("did not find located suppliers")
 	}
-	if resp[0].ID != locSup.ID {
+	if resp.Items[0].ID != locSup.ID {
 		t.Errorf("did not find created located supplier ")
 	}
 
@@ -187,7 +187,7 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to unmarshal json: %s", err)
 	}
-	if len(resp) > 0 {
+	if len(resp.Items) > 0 {
 		t.Errorf("should not find located suppliers")
 	}
 }
@@ -243,21 +243,27 @@ func TestBrokerCRUD(t *testing.T) {
 	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
 
 	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
-	var supps []oapi.LocatedSupplier
+	var supps oapi.LocatedSuppliers
 	err = json.Unmarshal(body, &supps)
 	assert.NoError(t, err)
-	assert.Len(t, supps, 1)
-	assert.Equal(t, locSup.ID, supps[0].ID)
+	assert.Len(t, supps.Items, 1)
+	assert.Equal(t, locSup.ID, supps.Items[0].ID)
 
 	body = httpGet(t, "/broker/located_suppliers?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &supps)
 	assert.NoError(t, err)
-	assert.Len(t, supps, 1)
-	assert.Equal(t, locSup.ID, supps[0].ID)
+	assert.Len(t, supps.Items, 1)
+	assert.Equal(t, locSup.ID, supps.Items[0].ID)
 
-	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK))
+	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps.Items, 0)
 
-	assert.Equal(t, []byte("[]\n"), httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK))
+	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(uuid.NewString()), "diku", http.StatusOK)
+	err = json.Unmarshal(body, &supps)
+	assert.NoError(t, err)
+	assert.Len(t, supps.Items, 0)
 
 	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
@@ -342,7 +348,7 @@ func TestPeersCRUD(t *testing.T) {
 	}
 	// Get peers
 	respPeers := getPeers(t)
-	if len(respPeers) < 1 {
+	if len(respPeers.Items) < 1 {
 		t.Errorf("Did not find peers")
 	}
 	// Query peers
@@ -351,8 +357,8 @@ func TestPeersCRUD(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)
 	}
-	if toCreate.ID != respPeers[0].ID {
-		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeers[0].ID)
+	if toCreate.ID != respPeers.Items[0].ID {
+		t.Errorf("expected same peer %s got %s", toCreate.ID, respPeers.Items[0].ID)
 	}
 	// Delete peer
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)
@@ -360,7 +366,7 @@ func TestPeersCRUD(t *testing.T) {
 
 	// Check no peers left
 	respPeers = getPeers(t)
-	for _, p := range respPeers {
+	for _, p := range respPeers.Items {
 		if p.ID == toCreate.ID {
 			t.Errorf("Expected this peer %s to be deleted", toCreate.ID)
 		}
@@ -505,9 +511,9 @@ func TestGetLocatedSuppliersDbError(t *testing.T) {
 	}
 }
 
-func getPeers(t *testing.T) []oapi.Peer {
+func getPeers(t *testing.T) oapi.Peers {
 	body := getResponseBody(t, "/peers")
-	var respPeers []oapi.Peer
+	var respPeers oapi.Peers
 	err := json.Unmarshal(body, &respPeers)
 	if err != nil {
 		t.Errorf("Failed to unmarshal json: %s", err)

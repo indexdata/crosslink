@@ -248,16 +248,16 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp := []oapi.Peer{}
+	var resp oapi.Peers
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
 			addInternalError(ctx, w, e)
 			return
 		}
-		resp = append(resp, toApiPeer(p, symbols))
+		resp.Items = append(resp.Items, toApiPeer(p, symbols))
 	}
-	resp, err = filterPeers(params.Cql, resp)
+	resp.Items, err = filterPeers(params.Cql, resp.Items)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -577,9 +577,9 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	resp := []oapi.LocatedSupplier{}
+	var resp oapi.LocatedSuppliers
 	for _, supplier := range supList {
-		resp = append(resp, toApiLocatedSupplier(r, supplier))
+		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
 }

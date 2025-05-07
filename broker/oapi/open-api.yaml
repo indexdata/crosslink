@@ -71,6 +71,30 @@ components:
           description: List of events
           items:
             $ref: '#/components/schemas/Event'
+    Peers:
+      type: object
+      required:
+        - items
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of peers
+          items:
+            $ref: '#/components/schemas/Peer'
+    LocatedSuppliers:
+      type: object
+      required:
+        - items
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of peers
+          items:
+            $ref: '#/components/schemas/LocatedSupplier'
     ResultInfo:
       type: object
       properties:
@@ -458,9 +482,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Peer'
+                $ref: '#/components/schemas/Peers'
     post:
       summary: Create a new peer
       requestBody:
@@ -552,9 +574,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LocatedSupplier'
+                $ref: '#/components/schemas/LocatedSuppliers'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
