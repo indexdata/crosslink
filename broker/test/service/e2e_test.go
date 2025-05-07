@@ -604,7 +604,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		eventsToCompareString(appCtx, t, illTrans.ID, 14))
+		eventsToCompareString(appCtx, t, illTrans.ID, 3))
 }
 
 func eventsToCompareString(appCtx extctx.ExtendedContext, t *testing.T, illId string, messageCount int) string {

@@ -73,42 +73,34 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	for _, holding := range holdings {
 		symbols = append(symbols, holding.Symbol)
 		symLocalIdMapping[holding.Symbol] = holding.LocalIdentifier
-		if s.localSupply && illTrans.RequesterSymbol.Valid && holding.Symbol == illTrans.RequesterSymbol.String {
-			locallyAvailable = true
-		}
 	}
-	if locallyAvailable {
-		if localId, ok := symLocalIdMapping[illTrans.RequesterSymbol.String]; ok {
-			suppliersToAdd = append(suppliersToAdd, adapter.Supplier{
-				PeerId:          requester.ID,
-				CustomData:      requester.CustomData,
-				LocalIdentifier: localId,
-				Ratio:           1,
-				Symbol:          illTrans.RequesterSymbol.String,
-				Selected:        true,
-			})
+
+	peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
+	for _, peer := range peers {
+		symList, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
+		if err != nil {
+			return logErrorAndReturnResult(ctx, "failed to read symbols", err)
 		}
-	} else {
-		peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, symbols, s.dirAdapter)
-		for _, peer := range peers {
-			symList, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
-			if err != nil {
-				return logErrorAndReturnResult(ctx, "failed to read symbols", err)
-			}
-			for _, sym := range symList {
-				if localId, ok := symLocalIdMapping[sym.SymbolValue]; ok {
-					suppliersToAdd = append(suppliersToAdd, adapter.Supplier{
-						PeerId:          peer.ID,
-						CustomData:      peer.CustomData,
-						LocalIdentifier: localId,
-						Ratio:           getPeerRatio(peer),
-						Symbol:          sym.SymbolValue,
-					})
+		for _, sym := range symList {
+			if localId, ok := symLocalIdMapping[sym.SymbolValue]; ok {
+				selected := false
+				if !locallyAvailable && s.localSupply &&
+					illTrans.RequesterSymbol.Valid && sym.SymbolValue == illTrans.RequesterSymbol.String {
+					locallyAvailable = true
+					selected = true
 				}
+				suppliersToAdd = append(suppliersToAdd, adapter.Supplier{
+					PeerId:          peer.ID,
+					CustomData:      peer.CustomData,
+					LocalIdentifier: localId,
+					Ratio:           getPeerRatio(peer),
+					Symbol:          sym.SymbolValue,
+					Selected:        selected,
+				})
 			}
 		}
-		directory["lookupQuery"] = query
 	}
+	directory["lookupQuery"] = query
 
 	if len(suppliersToAdd) == 0 {
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(symbols, ","))
