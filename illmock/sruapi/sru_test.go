@@ -356,25 +356,24 @@ func TestSruService(t *testing.T) {
 		err := xml.Unmarshal([]byte(sruResp.Records.Record[0].RecordData.XMLContent), &marc)
 		assert.Nil(t, err)
 
-		matches := 0
+		matched := 0
 		for _, f := range marc.RecordType.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				if matches == 0 {
+				if matched == 0 {
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "b", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
 					assert.Equal(t, "a", string(f.Subfield[1].Text))
-					matches++
-				} else if matches == 1 {
+				} else if matched == 1 {
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "d", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
 					assert.Equal(t, "c", string(f.Subfield[1].Text))
-					matches++
 				}
+				matched++
 			}
 		}
-		assert.Equal(t, 2, matches)
+		assert.Equal(t, 2, matched)
 	})
 
 	t.Run("sr2.0 magic: record-error", func(t *testing.T) {
