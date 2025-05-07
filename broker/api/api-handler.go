@@ -186,7 +186,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			addInternalError(ctx, w, err)
 			return
 		}
-		resp.ResultInfo.Count = &full_count
+		resp.ResultInfo.Count = full_count
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}

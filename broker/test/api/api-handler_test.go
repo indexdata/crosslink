@@ -116,8 +116,7 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
-	assert.NotNil(t, resp.ResultInfo.Count)
-	assert.Equal(t, *resp.ResultInfo.Count, int64(len(resp.Items)))
+	assert.Equal(t, resp.ResultInfo.Count, int64(len(resp.Items)))
 	// Query
 	body = getResponseBody(t, "/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId))
 	err = json.Unmarshal(body, &resp)
@@ -136,7 +135,7 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, len(resp.Items), int(api.LIMIT_DEFAULT))
-	assert.GreaterOrEqual(t, *resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
 }
 
 func TestGetIllTransactionsId(t *testing.T) {

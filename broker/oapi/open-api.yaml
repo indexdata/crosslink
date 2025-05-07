@@ -101,6 +101,8 @@ components:
             $ref: '#/components/schemas/LocatedSupplier'
     ResultInfo:
       type: object
+      required:
+        - count
       properties:
         count:
           type: integer
