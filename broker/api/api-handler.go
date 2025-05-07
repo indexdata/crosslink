@@ -257,11 +257,17 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		Limit:  LIMIT_DEFAULT,
 		Offset: 0,
 	}
-	if params.Limit != nil {
-		dbparams.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		dbparams.Offset = *params.Offset
+	if params.Cql != nil && *params.Cql != "" {
+		// paging does not work with CQL as the filter is applied after the paging
+		// the count is also number of peers before filtering
+		dbparams.Limit = 10_000
+	} else {
+		if params.Limit != nil {
+			dbparams.Limit = *params.Limit
+		}
+		if params.Offset != nil {
+			dbparams.Offset = *params.Offset
+		}
 	}
 	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
 	if err != nil {
