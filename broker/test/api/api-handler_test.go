@@ -37,7 +37,7 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 var mockIllRepoError = new(test.MockIllRepositoryError)
 var mockEventRepoError = new(test.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "")
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "", api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
