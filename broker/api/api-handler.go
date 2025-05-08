@@ -31,16 +31,18 @@ var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
 
 type ApiHandler struct {
+	limitDefault   int32
 	eventRepo      events.EventRepo
 	illRepo        ill_db.IllRepo
 	tenantToSymbol string // non-empty if in /broker mode
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol string) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol string, limitDefault int32) ApiHandler {
 	return ApiHandler{
 		eventRepo:      eventRepo,
 		illRepo:        illRepo,
 		tenantToSymbol: tenentToSymbol,
+		limitDefault:   limitDefault,
 	}
 }
 
@@ -115,7 +117,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	}
 	dbparams := events.GetIllTransactionEventsParams{
 		IllTransactionID: tran.ID,
-		Limit:            LIMIT_DEFAULT,
+		Limit:            a.limitDefault,
 		Offset:           0,
 	}
 	if params.Limit != nil {
@@ -144,7 +146,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	})
 	var resp oapi.IllTransactions
 
-	var limit int32 = LIMIT_DEFAULT
+	var limit int32 = a.limitDefault
 	if params.Limit != nil {
 		limit = *params.Limit
 	}
@@ -274,7 +276,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		Other: map[string]string{"method": "GetPeers"},
 	})
 	dbparams := ill_db.ListPeersParams{
-		Limit:  LIMIT_DEFAULT,
+		Limit:  a.limitDefault,
 		Offset: 0,
 	}
 	if params.Cql != nil && *params.Cql != "" {
@@ -615,7 +617,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	var supList []ill_db.LocatedSupplier
 	dbparams := ill_db.GetLocatedSupplierByIllTransactionParams{
 		IllTransactionID: tran.ID,
-		Limit:            LIMIT_DEFAULT,
+		Limit:            a.limitDefault,
 		Offset:           0,
 	}
 	if params.Limit != nil {
