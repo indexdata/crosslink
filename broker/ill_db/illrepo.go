@@ -88,11 +88,7 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 }
 
 func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error) {
-	var rows []ListIllTransactionsRow
-	var err error
-	if params.Limit > 0 {
-		rows, err = r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
-	}
+	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
 	var transactions []IllTransaction
 	var fullCount int64
 	if err == nil {
