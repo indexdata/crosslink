@@ -12,9 +12,10 @@ WHERE symbol_value = $1
 LIMIT 1;
 
 -- name: ListPeers :many
-SELECT sqlc.embed(peer)
+SELECT sqlc.embed(peer), COUNT(*) OVER () as full_count
 FROM peer
-ORDER BY name;
+ORDER BY name
+LIMIT $1 OFFSET $2;
 
 -- name: SavePeer :one
 INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data)
@@ -82,9 +83,17 @@ WHERE requester_request_id = $1
 LIMIT 1;
 
 -- name: ListIllTransactions :many
-SELECT sqlc.embed(ill_transaction)
+SELECT sqlc.embed(ill_transaction), COUNT(*) OVER () as full_count
 FROM ill_transaction
-ORDER BY timestamp;
+ORDER BY timestamp
+LIMIT $1 OFFSET $2;
+
+-- name: GetIllTransactionsByRequesterSymbol :many
+SELECT sqlc.embed(ill_transaction), COUNT(*) OVER () as full_count
+FROM ill_transaction
+WHERE requester_symbol = $1
+ORDER BY timestamp
+LIMIT $2 OFFSET $3;
 
 -- name: SaveIllTransaction :one
 INSERT INTO ill_transaction (id, timestamp, requester_symbol, requester_id, last_requester_action,
@@ -118,16 +127,12 @@ FROM located_supplier
 WHERE id = $1
 LIMIT 1;
 
--- name: GetLocatedSupplierByIllTransition :many
-SELECT sqlc.embed(located_supplier)
+-- name: GetLocatedSupplierByIllTransaction :many
+SELECT sqlc.embed(located_supplier), COUNT(*) OVER () as full_count
 FROM located_supplier
 WHERE ill_transaction_id = $1
-ORDER BY ordinal;
-
--- name: ListLocatedSuppliers :many
-SELECT sqlc.embed(located_supplier)
-FROM located_supplier
-ORDER BY ill_transaction_id, ordinal;
+ORDER BY ordinal
+LIMIT $2 OFFSET $3;
 
 -- name: GetLocatedSupplierByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)

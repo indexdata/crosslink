@@ -20,17 +20,17 @@ type IllRepo interface {
 	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error)
+	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error)
+	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext) ([]Peer, error)
+	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
-	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error)
-	ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error)
+	GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionParams) ([]LocatedSupplier, int64, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -86,15 +86,40 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext) ([]IllTransaction, error) {
-	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
 	var transactions []IllTransaction
+	var fullCount int64
+	if err == nil {
+		if len(rows) > 0 {
+			fullCount = rows[0].FullCount
+			for _, r := range rows {
+				fullCount = r.FullCount
+				transactions = append(transactions, r.IllTransaction)
+			}
+		} else {
+			params.Limit = 1
+			params.Offset = 0
+			rows, err = r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+			if err == nil && len(rows) > 0 {
+				fullCount = rows[0].FullCount
+			}
+		}
+	}
+	return transactions, fullCount, err
+}
+
+func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.GetIllTransactionsByRequesterSymbol(ctx, r.GetConnOrTx(), params)
+	var transactions []IllTransaction
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			transactions = append(transactions, r.IllTransaction)
 		}
 	}
-	return transactions, err
+	return transactions, fullCount, err
 }
 
 func (r *PgIllRepo) DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error {
@@ -111,15 +136,17 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext) ([]Peer, error) {
-	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx())
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error) {
+	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx(), params)
 	var peers []Peer
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			peers = append(peers, r.Peer)
 		}
 	}
-	return peers, err
+	return peers, fullCount, err
 }
 
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error) {
@@ -163,25 +190,17 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx e
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, illTransactionID string) ([]LocatedSupplier, error) {
-	rows, err := r.queries.GetLocatedSupplierByIllTransition(ctx, r.GetConnOrTx(), illTransactionID)
+func (r *PgIllRepo) GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionParams) ([]LocatedSupplier, int64, error) {
+	rows, err := r.queries.GetLocatedSupplierByIllTransaction(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
+	var fullCount int64
 	if err == nil {
 		for _, r := range rows {
+			fullCount = r.FullCount
 			suppliers = append(suppliers, r.LocatedSupplier)
 		}
 	}
-	return suppliers, err
-}
-func (r *PgIllRepo) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error) {
-	rows, err := r.queries.ListLocatedSuppliers(ctx, r.GetConnOrTx())
-	var suppliers []LocatedSupplier
-	if err == nil {
-		for _, r := range rows {
-			suppliers = append(suppliers, r.LocatedSupplier)
-		}
-	}
-	return suppliers, err
+	return suppliers, fullCount, err
 }
 
 func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {

@@ -2,6 +2,7 @@ package test
 
 import (
 	"errors"
+
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -60,15 +61,10 @@ func (r *MockEventRepositorySuccess) Notify(ctx extctx.ExtendedContext, eventId 
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]events.Event, error) {
+func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx extctx.ExtendedContext, params events.GetIllTransactionEventsParams) ([]events.Event, int64, error) {
 	return []events.Event{{
 		ID: uuid.New().String(),
-	}}, nil
-}
-func (r *MockEventRepositorySuccess) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
-	return []events.Event{{
-		ID: uuid.New().String(),
-	}}, nil
+	}}, 0, nil
 }
 
 func (r *MockEventRepositorySuccess) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
@@ -99,12 +95,10 @@ func (r *MockEventRepositoryError) Notify(ctx extctx.ExtendedContext, eventId st
 	return errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId string) ([]events.Event, error) {
-	return []events.Event{}, errors.New("DB error")
+func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx extctx.ExtendedContext, params events.GetIllTransactionEventsParams) ([]events.Event, int64, error) {
+	return []events.Event{}, 0, errors.New("DB error")
 }
-func (r *MockEventRepositoryError) ListEvents(ctx extctx.ExtendedContext) ([]events.Event, error) {
-	return []events.Event{}, errors.New("DB error")
-}
+
 func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
 	return errors.New("DB error")
 }

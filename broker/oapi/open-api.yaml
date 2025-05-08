@@ -29,10 +29,97 @@ components:
     RequesterSymbol:
       name: requester_symbol
       in: query
+      description: Filter by requester symbol
       schema:
         type: string
-      description: Filter by requester symbol
+    Offset:
+      name: offset
+      in: query
+      description: Offset for pagination (first item is 0)
+      schema:
+        type: integer
+        format: int32
+    Limit:
+      name: limit
+      in: query
+      description: Limit for pagination
+      schema:
+        type: integer
+        format: int32
   schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+    IllTransactions:
+      type: object
+      required:
+        - items
+        - resultInfo
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of ILL transactions
+          items:
+            $ref: '#/components/schemas/IllTransaction'
+    Events:
+      type: object
+      required:
+        - items
+        - resultInfo
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of events
+          items:
+            $ref: '#/components/schemas/Event'
+    Peers:
+      type: object
+      required:
+        - items
+        - resultInfo
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of peers
+          items:
+            $ref: '#/components/schemas/Peer'
+    LocatedSuppliers:
+      type: object
+      required:
+        - items
+        - resultInfo
+      properties:
+        resultInfo:
+          $ref: '#/components/schemas/ResultInfo'
+        items:
+          type: array
+          description: List of peers
+          items:
+            $ref: '#/components/schemas/LocatedSupplier'
+    ResultInfo:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
     Event:
       type: object
       properties:
@@ -253,35 +340,27 @@ paths:
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/IllTransactionId'
         - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of events
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Event'
+                $ref: '#/components/schemas/Events'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
   /ill_transactions/{id}:
     get:
       summary: Get an ILL transaction by ID
@@ -306,31 +385,19 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not Found. ILL transaction not found.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete an ILL transaction by ID
       parameters:
@@ -345,8 +412,16 @@ paths:
           description: ILL transaction deleted successfully (No Content)
         '404':
           description: ILL transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /ill_transactions:
     get:
       summary: Get all ILL transactions
@@ -354,45 +429,33 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Successful retrieval of the ILL transaction
+          description: Successful retrieval of the ILL transactions
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/IllTransaction'
+                $ref: '#/components/schemas/IllTransactions'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
   /peers:
     get:
       summary: Get all peers
@@ -402,15 +465,27 @@ paths:
           schema:
             type: string
           description: Filter peers by symbol
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of peers
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Peer'
+                $ref: '#/components/schemas/Peers'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       summary: Create a new peer
       requestBody:
@@ -427,9 +502,16 @@ paths:
                 $ref: '#/components/schemas/Peer'
         '400':
           description: Bad request (e.g., invalid data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
-
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /peers/{id}:
     get:
       summary: Get a peer by symbol
@@ -449,6 +531,10 @@ paths:
                 $ref: '#/components/schemas/Peer'
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       summary: Update a peer
       parameters:
@@ -468,10 +554,22 @@ paths:
           description: Peer updated successfully
         '400':
           description: Bad request (e.g., invalid data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a peer
       parameters:
@@ -486,8 +584,16 @@ paths:
           description: Peer deleted successfully (No Content)
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /located_suppliers:
     get:
       summary: Retrieve located suppliers
@@ -496,32 +602,24 @@ paths:
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/IllTransactionId'
         - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of located suppliers
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/LocatedSupplier'
+                $ref: '#/components/schemas/LocatedSuppliers'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'

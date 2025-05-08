@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +28,7 @@ var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
+var LIMIT_DEFAULT int32 = 10
 
 type ApiHandler struct {
 	eventRepo      events.EventRepo
@@ -45,6 +48,10 @@ func (a *ApiHandler) isTenantMode() bool {
 	return a.tenantToSymbol != ""
 }
 
+func (a *ApiHandler) getSymbolFromTenant(tenant string) string {
+	return strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))
+}
+
 func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
@@ -55,22 +62,37 @@ func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, reque
 	if tenant == nil {
 		return false
 	}
-	tenantSymbol := strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(*tenant))
-	return trans.RequesterSymbol.String == tenantSymbol
+	return trans.RequesterSymbol.String == a.getSymbolFromTenant(*tenant)
 }
 
-func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext,
-	requesterReqId *oapi.RequesterRequestId, illTransactionId *oapi.IllTransactionId) (ill_db.IllTransaction, error) {
+func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext, w http.ResponseWriter,
+	okapiTenant *string, requesterSymbol *string, requesterReqId *oapi.RequesterRequestId,
+	illTransactionId *oapi.IllTransactionId) (*ill_db.IllTransaction, error) {
 	var tran ill_db.IllTransaction
+	var err error
 	if requesterReqId != nil {
-		return a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{
+		tran, err = a.illRepo.GetIllTransactionByRequesterRequestId(ctx, pgtype.Text{
 			String: *requesterReqId,
 			Valid:  true,
 		})
 	} else if illTransactionId != nil {
-		return a.illRepo.GetIllTransactionById(ctx, *illTransactionId)
+		tran, err = a.illRepo.GetIllTransactionById(ctx, *illTransactionId)
+	} else {
+		err = fmt.Errorf("either requesterReqId or illTransactionId should be provided")
+		addBadRequestError(ctx, w, err)
+		return nil, err
 	}
-	return tran, nil
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		addInternalError(ctx, w, err)
+		return nil, err
+	}
+	if !a.isOwner(&tran, okapiTenant, requesterSymbol) {
+		return nil, nil
+	}
+	return &tran, nil
 }
 
 func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
@@ -81,32 +103,37 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
-			return
-		}
-		addInternalError(ctx, w, err)
+	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+		params.RequesterReqId, params.IllTransactionId)
+	if err != nil {
 		return
 	}
-	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		writeEmpty(w)
+	var resp oapi.Events
+	if tran == nil {
+		writeJsonResponse(w, resp)
 		return
 	}
+	dbparams := events.GetIllTransactionEventsParams{
+		IllTransactionID: tran.ID,
+		Limit:            LIMIT_DEFAULT,
+		Offset:           0,
+	}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	var fullCount int64
 	var eventList []events.Event
-	if tran.ID != "" {
-		eventList, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
-	} else {
-		eventList, err = a.eventRepo.ListEvents(ctx)
-	}
+	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, dbparams)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp := []oapi.Event{}
+	resp.ResultInfo.Count = fullCount
 	for _, event := range eventList {
-		resp = append(resp, toApiEvent(event))
+		resp.Items = append(resp.Items, toApiEvent(event))
 	}
 	writeJsonResponse(w, resp)
 }
@@ -115,31 +142,89 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, nil)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
+	var resp oapi.IllTransactions
+
+	var limit int32 = LIMIT_DEFAULT
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var offset int32 = 0
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+	var fullCount int64
+	if params.RequesterReqId != nil {
+		tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+			params.RequesterReqId, nil)
+		if err != nil {
 			return
 		}
-		addInternalError(ctx, w, err)
-		return
-	}
-	resp := []oapi.IllTransaction{}
-	if tran.ID != "" {
-		if a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-			resp = append(resp, toApiIllTransaction(r, tran))
+		if tran != nil {
+			fullCount = 1
+			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else {
-		trans, err := a.illRepo.ListIllTransactions(ctx)
+	} else if a.isTenantMode() {
+		var tenantSymbol string
+		if params.XOkapiTenant != nil {
+			tenantSymbol = a.getSymbolFromTenant(*params.XOkapiTenant)
+		} else if params.RequesterSymbol != nil {
+			tenantSymbol = *params.RequesterSymbol
+		}
+		if tenantSymbol == "" {
+			writeJsonResponse(w, resp)
+			return
+		}
+		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
+			Limit:  limit,
+			Offset: offset,
+			RequesterSymbol: pgtype.Text{
+				String: tenantSymbol,
+				Valid:  true,
+			},
+		}
+		var trans []ill_db.IllTransaction
+		var err error
+		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
 		for _, t := range trans {
-			if a.isOwner(&t, params.XOkapiTenant, params.RequesterSymbol) {
-				resp = append(resp, toApiIllTransaction(r, t))
-			}
+			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
+	} else {
+		dbparams := ill_db.ListIllTransactionsParams{
+			Limit:  limit,
+			Offset: offset,
+		}
+		var trans []ill_db.IllTransaction
+		var err error
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams)
+		if err != nil { //DB error
+			addInternalError(ctx, w, err)
+			return
+		}
+		for _, t := range trans {
+			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
+		}
+	}
+	resp.ResultInfo.Count = fullCount
+	if offset > 0 {
+		pOffset := offset - limit
+		if pOffset < 0 {
+			pOffset = 0
+		}
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
+		link := toLinkUrlValues(r, urlValues)
+		resp.ResultInfo.PrevLink = &link
+	}
+	if fullCount > int64(limit+offset) {
+		noffset := offset + limit
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
+		link := toLinkUrlValues(r, urlValues)
+		resp.ResultInfo.NextLink = &link
 	}
 	writeJsonResponse(w, resp)
 }
@@ -148,24 +233,16 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
 	})
-	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
+	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+		nil, &id)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
-			return
-		}
-		addInternalError(ctx, w, err)
 		return
 	}
-	if !a.isOwner(&trans, params.XOkapiTenant, params.RequesterSymbol) {
+	if tran == nil {
 		addNotFoundError(w)
 		return
 	}
-	if trans.ID == "" {
-		addNotFoundError(w)
-		return
-	}
-	writeJsonResponse(w, toApiIllTransaction(r, trans))
+	writeJsonResponse(w, toApiIllTransaction(r, *tran))
 }
 
 func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
@@ -196,48 +273,64 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
-	resp := []oapi.Peer{}
-	peers, err := a.illRepo.ListPeers(ctx)
+	dbparams := ill_db.ListPeersParams{
+		Limit:  LIMIT_DEFAULT,
+		Offset: 0,
+	}
+	if params.Cql != nil && *params.Cql != "" {
+		// paging does not work with CQL as the filter is applied after the paging
+		// the count is also number of peers before filtering
+		dbparams.Limit = 10_000
+	} else {
+		if params.Limit != nil {
+			dbparams.Limit = *params.Limit
+		}
+		if params.Offset != nil {
+			dbparams.Offset = *params.Offset
+		}
+	}
+	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
+	var resp oapi.Peers
+	resp.ResultInfo.Count = count
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
 			addInternalError(ctx, w, e)
 			return
 		}
-		resp = append(resp, toApiPeer(p, symbols))
+		resp.Items = append(resp.Items, toApiPeer(p, symbols))
 	}
-	resp, err = filterPeers(params.Cql, resp)
+	resp.Items, err = filterPeers(params.Cql, resp.Items)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	writeJsonResponse(w, resp)
 }
 
 func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
+	if cql == nil || *cql == "" {
+		return peers, nil
+	}
 	var filtered []oapi.Peer
-	if cql != nil && *cql != "" {
-		var p icql.Parser
-		query, err := p.Parse(*cql)
+	var p icql.Parser
+	query, err := p.Parse(*cql)
+	if err != nil {
+		return peers, err
+	}
+	for _, entry := range peers {
+		match, err := matchQuery(query, entry.Symbols)
 		if err != nil {
 			return peers, err
 		}
-		for _, entry := range peers {
-			match, err := matchQuery(query, entry.Symbols)
-			if err != nil {
-				return peers, err
-			}
-			if !match {
-				continue
-			}
-			filtered = append(filtered, entry)
+		if !match {
+			continue
 		}
-	} else {
-		return peers, nil
+		filtered = append(filtered, entry)
 	}
 	return filtered, nil
 }
@@ -509,40 +602,39 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, params.RequesterReqId, params.IllTransactionId)
-	if err != nil { //DB error
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeEmpty(w)
-			return
-		}
-		addInternalError(ctx, w, err)
+	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+		params.RequesterReqId, params.IllTransactionId)
+	if err != nil {
 		return
 	}
-	if !a.isOwner(&tran, params.XOkapiTenant, params.RequesterSymbol) {
-		writeEmpty(w)
+	var resp oapi.LocatedSuppliers
+	if tran == nil {
+		writeJsonResponse(w, resp)
 		return
 	}
 	var supList []ill_db.LocatedSupplier
-	if tran.ID != "" {
-		supList, err = a.illRepo.GetLocatedSupplierByIllTransition(ctx, tran.ID)
-	} else {
-		supList, err = a.illRepo.ListLocatedSuppliers(ctx)
+	dbparams := ill_db.GetLocatedSupplierByIllTransactionParams{
+		IllTransactionID: tran.ID,
+		Limit:            LIMIT_DEFAULT,
+		Offset:           0,
 	}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
+	}
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	var count int64
+	supList, count, err = a.illRepo.GetLocatedSupplierByIllTransaction(ctx, dbparams)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp := []oapi.LocatedSupplier{}
+	resp.ResultInfo.Count = count
 	for _, supplier := range supList {
-		resp = append(resp, toApiLocatedSupplier(r, supplier))
+		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
-}
-
-func writeEmpty(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("[]"))
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {
@@ -749,7 +841,24 @@ func toString(text pgtype.Text) *string {
 	}
 }
 
+func toLinkUrlValues(r *http.Request, urlValues url.Values) string {
+	return toLinkPath(r, r.URL.Path, urlValues.Encode())
+}
+
 func toLink(r *http.Request, path string, id string, query string) string {
+	if strings.Contains(r.RequestURI, "/broker/") {
+		path = "/broker" + path
+	}
+	if id != "" {
+		path = path + "/" + id
+	}
+	return toLinkPath(r, path, query)
+}
+
+func toLinkPath(r *http.Request, path string, query string) string {
+	if query != "" {
+		path = path + "?" + query
+	}
 	urlScheme := r.Header.Get("X-Forwarded-Proto")
 	if len(urlScheme) == 0 {
 		urlScheme = r.URL.Scheme
@@ -766,15 +875,6 @@ func toLink(r *http.Request, path string, id string, query string) string {
 	}
 	if strings.Contains(urlHost, "localhost") {
 		urlScheme = "http"
-	}
-	if strings.Contains(r.RequestURI, "/broker/") {
-		path = "/broker" + path
-	}
-	if id != "" {
-		path = path + "/" + id
-	}
-	if query != "" {
-		path = path + "?" + query
 	}
 	return urlScheme + "://" + urlHost + path
 }
