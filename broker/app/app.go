@@ -36,6 +36,7 @@ var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
@@ -128,10 +129,10 @@ func StartServer(context Context) error {
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, "")
+	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, "", API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, mux)
 	if TENANT_TO_SYMBOL != "" {
-		apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, TENANT_TO_SYMBOL)
+		apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, mux, "/broker")
 	}
 
