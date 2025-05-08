@@ -30,7 +30,7 @@ type IllRepo interface {
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
-	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionParams) ([]LocatedSupplier, int64, error)
+	GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionParams) ([]LocatedSupplier, int64, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -190,8 +190,8 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx e
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionParams) ([]LocatedSupplier, int64, error) {
-	rows, err := r.queries.GetLocatedSupplierByIllTransition(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionParams) ([]LocatedSupplier, int64, error) {
+	rows, err := r.queries.GetLocatedSupplierByIllTransaction(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
 	var fullCount int64
 	if err == nil {

@@ -127,7 +127,7 @@ FROM located_supplier
 WHERE id = $1
 LIMIT 1;
 
--- name: GetLocatedSupplierByIllTransition :many
+-- name: GetLocatedSupplierByIllTransaction :many
 SELECT sqlc.embed(located_supplier), COUNT(*) OVER () as full_count
 FROM located_supplier
 WHERE ill_transaction_id = $1
