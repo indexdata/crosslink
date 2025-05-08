@@ -134,11 +134,6 @@ WHERE ill_transaction_id = $1
 ORDER BY ordinal
 LIMIT $2 OFFSET $3;
 
--- name: ListLocatedSuppliers :many
-SELECT sqlc.embed(located_supplier)
-FROM located_supplier
-ORDER BY ill_transaction_id, ordinal;
-
 -- name: GetLocatedSupplierByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier

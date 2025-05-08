@@ -31,7 +31,6 @@ type IllRepo interface {
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransitionParams) ([]LocatedSupplier, int64, error)
-	ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -202,16 +201,6 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransition(ctx extctx.ExtendedContext
 		}
 	}
 	return suppliers, fullCount, err
-}
-func (r *PgIllRepo) ListLocatedSuppliers(ctx extctx.ExtendedContext) ([]LocatedSupplier, error) {
-	rows, err := r.queries.ListLocatedSuppliers(ctx, r.GetConnOrTx())
-	var suppliers []LocatedSupplier
-	if err == nil {
-		for _, r := range rows {
-			suppliers = append(suppliers, r.LocatedSupplier)
-		}
-	}
-	return suppliers, err
 }
 
 func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {
