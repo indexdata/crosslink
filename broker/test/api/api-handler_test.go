@@ -151,8 +151,9 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
-	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
+	count := resp.ResultInfo.Count
+	assert.GreaterOrEqual(t, count, int64(1+2*api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, count, int64(3*api.LIMIT_DEFAULT))
 	assert.Nil(t, resp.ResultInfo.PrevLink)
 	assert.NotNil(t, resp.ResultInfo.NextLink)
 	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.ResultInfo.NextLink)
@@ -160,7 +161,12 @@ func TestGetIllTransactions(t *testing.T) {
 	body = getResponseBody(t, "/ill_transactions?offset=1000")
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(0), resp.ResultInfo.Count) // TODO: should really not be zero
+	assert.Equal(t, count, resp.ResultInfo.Count)
+
+	body = getResponseBody(t, "/ill_transactions?limit=0")
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, count, resp.ResultInfo.Count)
 
 	body = getResponseBody(t, "/ill_transactions?offset=3&limit="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
 	err = json.Unmarshal(body, &resp)
