@@ -600,8 +600,6 @@ paths:
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/IllTransactionId'
         - $ref: '#/components/parameters/RequesterSymbol'
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Successful retrieval of located suppliers

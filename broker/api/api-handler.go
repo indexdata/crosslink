@@ -602,19 +602,8 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var supList []ill_db.LocatedSupplier
-	dbparams := ill_db.GetLocatedSupplierByIllTransactionParams{
-		IllTransactionID: tran.ID,
-		Limit:            LIMIT_DEFAULT,
-		Offset:           0,
-	}
-	if params.Limit != nil {
-		dbparams.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		dbparams.Offset = *params.Offset
-	}
 	var count int64
-	supList, count, err = a.illRepo.GetLocatedSupplierByIllTransaction(ctx, dbparams)
+	supList, count, err = a.illRepo.GetLocatedSupplierByIllTransaction(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return
