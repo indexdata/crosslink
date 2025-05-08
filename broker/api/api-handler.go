@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -215,14 +216,14 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := toLink(r, r.URL.Path, "", urlValues.Encode())
+		link := toLinkUrlValues(r, urlValues)
 		resp.ResultInfo.PrevLink = &link
 	}
 	if fullCount > int64(limit+offset) {
 		noffset := offset + limit
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := toLink(r, r.URL.Path, "", urlValues.Encode())
+		link := toLinkUrlValues(r, urlValues)
 		resp.ResultInfo.NextLink = &link
 	}
 	writeJsonResponse(w, resp)
@@ -841,7 +842,24 @@ func toString(text pgtype.Text) *string {
 	}
 }
 
+func toLinkUrlValues(r *http.Request, urlValues url.Values) string {
+	return toLinkPath(r, r.URL.Path, urlValues.Encode())
+}
+
 func toLink(r *http.Request, path string, id string, query string) string {
+	if strings.Contains(r.RequestURI, "/broker/") {
+		path = "/broker" + path
+	}
+	if id != "" {
+		path = path + "/" + id
+	}
+	return toLinkPath(r, path, query)
+}
+
+func toLinkPath(r *http.Request, path string, query string) string {
+	if query != "" {
+		path = path + "?" + query
+	}
 	urlScheme := r.Header.Get("X-Forwarded-Proto")
 	if len(urlScheme) == 0 {
 		urlScheme = r.URL.Scheme
@@ -858,15 +876,6 @@ func toLink(r *http.Request, path string, id string, query string) string {
 	}
 	if strings.Contains(urlHost, "localhost") {
 		urlScheme = "http"
-	}
-	if strings.Contains(r.RequestURI, "/broker/") && !strings.Contains(path, "/broker") {
-		path = "/broker" + path
-	}
-	if id != "" {
-		path = path + "/" + id
-	}
-	if query != "" {
-		path = path + "?" + query
 	}
 	return urlScheme + "://" + urlHost + path
 }
