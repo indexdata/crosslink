@@ -47,6 +47,12 @@ components:
         type: integer
         format: int32
   schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
     IllTransactions:
       type: object
       required:
@@ -348,21 +354,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
   /ill_transactions/{id}:
     get:
       summary: Get an ILL transaction by ID
@@ -387,31 +385,19 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not Found. ILL transaction not found.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete an ILL transaction by ID
       parameters:
@@ -426,8 +412,16 @@ paths:
           description: ILL transaction deleted successfully (No Content)
         '404':
           description: ILL transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /ill_transactions:
     get:
       summary: Get all ILL transactions
@@ -449,31 +443,19 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '403':
           description: Forbidden. Invalid tenant.
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
   /peers:
     get:
       summary: Get all peers
@@ -492,6 +474,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Peers'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     post:
       summary: Create a new peer
       requestBody:
@@ -508,9 +502,16 @@ paths:
                 $ref: '#/components/schemas/Peer'
         '400':
           description: Bad request (e.g., invalid data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
-
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /peers/{id}:
     get:
       summary: Get a peer by symbol
@@ -530,6 +531,10 @@ paths:
                 $ref: '#/components/schemas/Peer'
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       summary: Update a peer
       parameters:
@@ -549,10 +554,22 @@ paths:
           description: Peer updated successfully
         '400':
           description: Bad request (e.g., invalid data)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a peer
       parameters:
@@ -567,8 +584,16 @@ paths:
           description: Peer deleted successfully (No Content)
         '404':
           description: Peer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /located_suppliers:
     get:
       summary: Retrieve located suppliers
@@ -591,18 +616,10 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
+                $ref: '#/components/schemas/Error'

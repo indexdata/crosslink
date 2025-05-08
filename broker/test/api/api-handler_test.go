@@ -82,20 +82,19 @@ func TestGetEvents(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1))
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
 	assert.Equal(t, eventId, resp.Items[0].ID)
-	if resp.Items[0].ID != eventId {
-		t.Errorf("did not find created event")
-	}
 
 	body = getResponseBody(t, "/events?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)
-	if err != nil {
-		t.Errorf("failed to unmarshal json: %s", err)
-	}
-	if len(resp.Items) > 0 {
-		t.Errorf("should not find events")
-	}
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 0)
+
+	body = getResponseBody(t, "/events?ill_transaction_id="+url.QueryEscape(illId)+"&limit=1&offset=10")
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 0)
 }
 
 func TestGetIllTransactions(t *testing.T) {
@@ -154,12 +153,26 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
 	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
-
 	assert.Nil(t, resp.ResultInfo.PrevLink)
 	assert.NotNil(t, resp.ResultInfo.NextLink)
 	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.ResultInfo.NextLink)
 
+	body = getResponseBody(t, "/ill_transactions?offset=1000")
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), resp.ResultInfo.Count) // TODO: should really not be zero
+
+	body = getResponseBody(t, "/ill_transactions?offset=3&limit="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
+	prevLink := *resp.ResultInfo.PrevLink
+	assert.Contains(t, prevLink, "offset=0")
+
 	body = getResponseBody(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	resp.ResultInfo.NextLink = nil
+	resp.ResultInfo.PrevLink = nil
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
@@ -180,7 +193,7 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.ResultInfo.PrevLink)
-	prevLink := *resp.ResultInfo.PrevLink
+	prevLink = *resp.ResultInfo.PrevLink
 	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, prevLink, "offset=0")
 }
@@ -258,6 +271,8 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, 1, len(httpGetTrans(t, "/broker/ill_transactions", "diku", http.StatusOK)))
 
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
+
+	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "", http.StatusOK)))
 
 	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var resp oapi.IllTransactions
@@ -361,12 +376,23 @@ func TestPeersCRUD(t *testing.T) {
 	// Get peers
 	respPeers := getPeers(t)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
+
+	body = getResponseBody(t, "/peers?offset=0&limit=1")
+	err = json.Unmarshal(body, &respPeers)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, respPeers.ResultInfo.Count, int64(1))
+
+	httpGet(t, "/peers?cql="+url.QueryEscape("badfield any ISIL:PEER"), "", http.StatusBadRequest)
+
+	httpGet(t, "/peers?cql="+url.QueryEscape("("), "", http.StatusBadRequest)
+
 	// Query peers
 	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
+
 	// Delete peer
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNotFound)

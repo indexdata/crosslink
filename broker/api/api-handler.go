@@ -306,32 +306,31 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	}
 	resp.Items, err = filterPeers(params.Cql, resp.Items)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	writeJsonResponse(w, resp)
 }
 
 func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
+	if cql == nil || *cql == "" {
+		return peers, nil
+	}
 	var filtered []oapi.Peer
-	if cql != nil && *cql != "" {
-		var p icql.Parser
-		query, err := p.Parse(*cql)
+	var p icql.Parser
+	query, err := p.Parse(*cql)
+	if err != nil {
+		return peers, err
+	}
+	for _, entry := range peers {
+		match, err := matchQuery(query, entry.Symbols)
 		if err != nil {
 			return peers, err
 		}
-		for _, entry := range peers {
-			match, err := matchQuery(query, entry.Symbols)
-			if err != nil {
-				return peers, err
-			}
-			if !match {
-				continue
-			}
-			filtered = append(filtered, entry)
+		if !match {
+			continue
 		}
-	} else {
-		return peers, nil
+		filtered = append(filtered, entry)
 	}
 	return filtered, nil
 }
