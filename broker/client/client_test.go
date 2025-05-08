@@ -1,15 +1,17 @@
 package client
 
 import (
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestCreateMessageHeaderTransparent(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeTransparent)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeTransparent, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
@@ -23,7 +25,7 @@ func TestCreateMessageHeaderTransparent(t *testing.T) {
 }
 
 func TestCreateMessageHeaderOpaque(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeOpaque)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeOpaque, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 

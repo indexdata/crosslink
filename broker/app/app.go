@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -53,6 +54,7 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 })
 var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
 var TENANT_TO_SYMBOL = os.Getenv("TENANT_TO_SYMBOL")
+var CLIENT_DELAY = utils.GetEnv("CLIENT_DELAY", "0ms")
 
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
@@ -79,7 +81,11 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, getBrokerMode(BROKER_MODE))
+	delay, err := time.ParseDuration(CLIENT_DELAY)
+	if err != nil {
+		return Context{}, err
+	}
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, getBrokerMode(BROKER_MODE), delay)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{

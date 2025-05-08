@@ -61,3 +61,13 @@ func TestBadDirectoryAdapter(t *testing.T) {
 	assert.ErrorContains(t, err, "bad value for DIRECTORY_ADAPTER")
 	DIRECTORY_ADAPTER = "mock"
 }
+
+func TestBadClientDelay(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	CLIENT_DELAY = "bad"
+	_, err := Init(ctx)
+	assert.ErrorContains(t, err, "invalid duration \"bad\"")
+	CLIENT_DELAY = "0ms"
+}

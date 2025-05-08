@@ -43,6 +43,7 @@ Configuration is provided via environment variables:
 | `DIRECTORY_API_URL`    | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`              | `http://localhost:8081/directory/entries` |
 | `BROKER_MODE`          | Should broker forward supplier/requester symbols: `opaque` or `transparent` | `opaque`                                  |
 | `API_PAGE_SIZE`        | Default value for `limit` query parameter                                   | `10`                                      |
+| `CLIENT_DELAY`         | Delay ISO18626 messages being sent by this duration                         | `0ms`                                     |
 | `TENANT_TO_SYMBOL`     | Limits results to include only transactions with `requesterSymbol` matching | (empty string)                            |
 |                        | `TENANT_TO_SYMBOL` with {tenant} being replaced by `X-Okapi-Tenant` value   |                                           |
 
