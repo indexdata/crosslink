@@ -32,15 +32,17 @@ type Iso18626Client struct {
 	client     *http.Client
 	maxMsgSize int
 	brokerMode BrokerMode
+	sendDelay  time.Duration
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, brokerMode BrokerMode) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, brokerMode BrokerMode, delay time.Duration) Iso18626Client {
 	return Iso18626Client{
 		eventBus:   eventBus,
 		illRepo:    illRepo,
 		client:     http.DefaultClient,
 		maxMsgSize: maxMsgSize,
 		brokerMode: brokerMode,
+		sendDelay:  delay,
 	}
 }
 
@@ -359,6 +361,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	if len(tenant) > 0 {
 		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
+	time.Sleep(c.sendDelay)
 	iso18626Shim := shim.GetShim(peer.Vendor)
 	var resmsg iso18626.ISO18626Message
 	err := httpClient.RequestResponse(c.client, http.MethodPost,
