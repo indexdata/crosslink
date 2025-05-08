@@ -90,11 +90,6 @@ func TestGetEvents(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
-
-	body = getResponseBody(t, "/events?ill_transaction_id="+url.QueryEscape(illId)+"&limit=1&offset=10")
-	err = json.Unmarshal(body, &resp)
-	assert.NoError(t, err)
-	assert.Len(t, resp.Items, 0)
 }
 
 func TestGetIllTransactions(t *testing.T) {

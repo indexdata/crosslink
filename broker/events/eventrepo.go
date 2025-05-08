@@ -14,7 +14,7 @@ type EventRepo interface {
 	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error
 	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
 	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
-	GetIllTransactionEvents(ctx extctx.ExtendedContext, params GetIllTransactionEventsParams) ([]Event, int64, error)
+	GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
 }
 
@@ -60,8 +60,8 @@ func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal 
 	return err
 }
 
-func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, illTransactionId GetIllTransactionEventsParams) ([]Event, int64, error) {
-	rows, err := r.queries.GetIllTransactionEvents(ctx, r.GetConnOrTx(), illTransactionId)
+func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error) {
+	rows, err := r.queries.GetIllTransactionEvents(ctx, r.GetConnOrTx(), id)
 	var events []Event
 	var fullCount int64
 	if err == nil {

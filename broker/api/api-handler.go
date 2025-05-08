@@ -113,20 +113,9 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		writeJsonResponse(w, resp)
 		return
 	}
-	dbparams := events.GetIllTransactionEventsParams{
-		IllTransactionID: tran.ID,
-		Limit:            LIMIT_DEFAULT,
-		Offset:           0,
-	}
-	if params.Limit != nil {
-		dbparams.Limit = *params.Limit
-	}
-	if params.Offset != nil {
-		dbparams.Offset = *params.Offset
-	}
 	var fullCount int64
 	var eventList []events.Event
-	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, dbparams)
+	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
