@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,12 +155,34 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
 	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
 
+	assert.Nil(t, resp.ResultInfo.PrevLink)
+	assert.NotNil(t, resp.ResultInfo.NextLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.ResultInfo.NextLink)
+
 	body = getResponseBody(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(3+api.LIMIT_DEFAULT))
 	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(2*api.LIMIT_DEFAULT))
+
+	assert.Nil(t, resp.ResultInfo.PrevLink)
+	assert.NotNil(t, resp.ResultInfo.NextLink)
+	nextLink := *resp.ResultInfo.NextLink
+	assert.True(t, strings.HasPrefix(nextLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.Contains(t, nextLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	// we have estblished that the next link is correct, now we will check if it works
+	hres, err := http.Get(nextLink) // nolint:gosec
+	assert.NoError(t, err)
+	defer hres.Body.Close()
+	body, err = io.ReadAll(hres.Body)
+	assert.NoError(t, err)
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp.ResultInfo.PrevLink)
+	prevLink := *resp.ResultInfo.PrevLink
+	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.Contains(t, prevLink, "offset=0")
 }
 
 func TestGetIllTransactionsId(t *testing.T) {

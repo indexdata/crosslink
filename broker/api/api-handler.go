@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -141,6 +142,16 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	var resp oapi.IllTransactions
+
+	var limit int32 = LIMIT_DEFAULT
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var offset int32 = 0
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+	var fullCount int64
 	if params.RequesterReqId != nil {
 		tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
 			params.RequesterReqId, nil)
@@ -148,10 +159,10 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		if tran != nil {
+			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
 	} else if a.isTenantMode() {
-		fmt.Println("GetIllTransactions: Tenant mode")
 		var tenantSymbol string
 		if params.XOkapiTenant != nil {
 			tenantSymbol = a.getSymbolFromTenant(*params.XOkapiTenant)
@@ -163,48 +174,56 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
-			Limit:  LIMIT_DEFAULT,
-			Offset: 0,
+			Limit:  limit,
+			Offset: offset,
 			RequesterSymbol: pgtype.Text{
 				String: tenantSymbol,
 				Valid:  true,
 			},
 		}
-		if params.Limit != nil {
-			dbparams.Limit = *params.Limit
-		}
-		if params.Offset != nil {
-			dbparams.Offset = *params.Offset
-		}
-		trans, fullCount, err := a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
+		var trans []ill_db.IllTransaction
+		var err error
+		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
-		resp.ResultInfo.Count = fullCount
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	} else {
 		dbparams := ill_db.ListIllTransactionsParams{
-			Limit:  LIMIT_DEFAULT,
-			Offset: 0,
+			Limit:  limit,
+			Offset: offset,
 		}
-		if params.Limit != nil {
-			dbparams.Limit = *params.Limit
-		}
-		if params.Offset != nil {
-			dbparams.Offset = *params.Offset
-		}
-		trans, fullCount, err := a.illRepo.ListIllTransactions(ctx, dbparams)
+		var trans []ill_db.IllTransaction
+		var err error
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
 		}
-		resp.ResultInfo.Count = fullCount
 		for _, t := range trans {
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
+	}
+	resp.ResultInfo.Count = fullCount
+	if offset > 0 {
+		pOffset := offset - limit
+		if pOffset < 0 {
+			pOffset = 0
+		}
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
+		link := toLink(r, r.URL.Path, "", urlValues.Encode())
+		resp.ResultInfo.PrevLink = &link
+	}
+	if fullCount > int64(limit+offset) {
+		noffset := offset + limit
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
+		link := toLink(r, r.URL.Path, "", urlValues.Encode())
+		resp.ResultInfo.NextLink = &link
 	}
 	writeJsonResponse(w, resp)
 }
@@ -840,7 +859,7 @@ func toLink(r *http.Request, path string, id string, query string) string {
 	if strings.Contains(urlHost, "localhost") {
 		urlScheme = "http"
 	}
-	if strings.Contains(r.RequestURI, "/broker/") {
+	if strings.Contains(r.RequestURI, "/broker/") && !strings.Contains(path, "/broker") {
 		path = "/broker" + path
 	}
 	if id != "" {
