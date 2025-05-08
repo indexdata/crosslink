@@ -90,11 +90,6 @@ func TestGetEvents(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
-
-	body = getResponseBody(t, "/events?ill_transaction_id="+url.QueryEscape(illId)+"&limit=1&offset=10")
-	err = json.Unmarshal(body, &resp)
-	assert.NoError(t, err)
-	assert.Len(t, resp.Items, 0)
 }
 
 func TestGetIllTransactions(t *testing.T) {
@@ -229,13 +224,6 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
-	assert.Equal(t, resp.Items[0].ID, locSup.ID)
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
-
-	body = getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId+"&limit=1&offset=0")
-	err = json.Unmarshal(body, &resp)
-	assert.NoError(t, err)
-	assert.Len(t, resp.Items, 1)
 	assert.Equal(t, resp.Items[0].ID, locSup.ID)
 	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
 

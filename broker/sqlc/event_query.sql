@@ -26,8 +26,7 @@ WHERE id = $1 LIMIT 1;
 SELECT sqlc.embed(event), COUNT(*) OVER () as full_count
 FROM event
 WHERE ill_transaction_id = $1
-ORDER BY timestamp
-LIMIT $2 OFFSET $3;
+ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (

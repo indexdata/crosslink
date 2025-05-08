@@ -131,8 +131,7 @@ LIMIT 1;
 SELECT sqlc.embed(located_supplier), COUNT(*) OVER () as full_count
 FROM located_supplier
 WHERE ill_transaction_id = $1
-ORDER BY ordinal
-LIMIT $2 OFFSET $3;
+ORDER BY ordinal;
 
 -- name: GetLocatedSupplierByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)
