@@ -2,6 +2,7 @@ package ill_db
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -27,6 +28,7 @@ type IllRepo interface {
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
 	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
+	GetPeersWithSymbols(ctx extctx.ExtendedContext, params GetPeersWithSymbolsParams) ([]PeerWithSymbols, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -42,6 +44,11 @@ type IllRepo interface {
 	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
 	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
 	GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
+}
+
+type PeerWithSymbols struct {
+	Peer
+	Symbols []string
 }
 
 type PgIllRepo struct {
@@ -145,6 +152,37 @@ func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams
 			fullCount = r.FullCount
 			peers = append(peers, r.Peer)
 		}
+	}
+	return peers, fullCount, err
+}
+
+func (r *PgIllRepo) GetPeersWithSymbols(ctx extctx.ExtendedContext, params GetPeersWithSymbolsParams) ([]PeerWithSymbols, int64, error) {
+	rows, err := r.queries.GetPeersWithSymbols(ctx, r.GetConnOrTx(), params)
+	var peers []PeerWithSymbols
+	if err != nil {
+		return peers, 0, err
+	}
+	var fullCount int64
+	for _, r := range rows {
+		fullCount = r.FullCount
+		ctx.Logger().Info(fmt.Sprintf("Type of r.ArrayAgg: %T", r.ArrayAgg))
+		array, ok := r.ArrayAgg.([]interface{})
+		if !ok {
+			return peers, fullCount, errors.New("arrayAgg is not of type []interface{}")
+		}
+		ctx.Logger().Info(fmt.Sprintf("Type of r.ArrayAgg[0]: %T", array[0]))
+		var symbols []string
+		for _, v := range array {
+			s, ok := v.(string)
+			if !ok {
+				return peers, fullCount, errors.New("arrayAgg element is not of type string")
+			}
+			symbols = append(symbols, s)
+		}
+		peers = append(peers, PeerWithSymbols{
+			Peer:    r.Peer,
+			Symbols: symbols,
+		})
 	}
 	return peers, fullCount, err
 }

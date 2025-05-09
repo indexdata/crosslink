@@ -17,6 +17,13 @@ FROM peer
 ORDER BY name
 LIMIT $1 OFFSET $2;
 
+-- name: GetPeersWithSymbols :many
+SELECT sqlc.embed(peer), array_agg(symbol.symbol_value), COUNT(*) OVER () as full_count
+FROM peer
+         LEFT JOIN symbol ON peer_id = id
+GROUP BY peer.id
+LIMIT $1 OFFSET $2;
+
 -- name: SavePeer :one
 INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

@@ -264,11 +264,11 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
-	dbparams := ill_db.ListPeersParams{
+	dbparams := ill_db.GetPeersWithSymbolsParams{
 		Limit:  a.limitDefault,
 		Offset: 0,
 	}
-	if params.Cql != nil && *params.Cql != "" {
+	if params.Cql != nil {
 		// paging does not work with CQL as the filter is applied after the paging
 		// the count is also number of peers before filtering
 		dbparams.Limit = 10_000
@@ -280,55 +280,47 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			dbparams.Offset = *params.Offset
 		}
 	}
-	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
+	var resp oapi.Peers
+	peers, count, err := a.illRepo.GetPeersWithSymbols(ctx, dbparams)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
-	var resp oapi.Peers
 	resp.ResultInfo.Count = count
 	for _, p := range peers {
-		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
-		if e != nil {
-			addInternalError(ctx, w, e)
-			return
-		}
-		resp.Items = append(resp.Items, toApiPeer(p, symbols))
-	}
-	resp.Items, err = filterPeers(params.Cql, resp.Items)
-	if err != nil {
-		addBadRequestError(ctx, w, err)
-		return
-	}
-	writeJsonResponse(w, resp)
-}
-
-func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
-	if cql == nil || *cql == "" {
-		return peers, nil
-	}
-	var filtered []oapi.Peer
-	var p icql.Parser
-	query, err := p.Parse(*cql)
-	if err != nil {
-		return peers, err
-	}
-	for _, entry := range peers {
-		match, err := matchQuery(query, entry.Symbols)
+		match, err := matchCql(params.Cql, p.Symbols)
 		if err != nil {
-			return peers, err
+			addBadRequestError(ctx, w, err)
+			return
 		}
 		if !match {
 			continue
 		}
-		filtered = append(filtered, entry)
+		resp.Items = append(resp.Items, toApiPeerStrings(p.Peer, p.Symbols))
 	}
-	return filtered, nil
+	writeJsonResponse(w, resp)
+}
+
+func matchCql(cql *string, symbols []string) (bool, error) {
+	if cql == nil {
+		return true, nil
+	}
+	var parser icql.Parser
+	query, err := parser.Parse(*cql)
+	if err != nil {
+		return false, err
+	}
+	match, err := matchQuery(query, symbols)
+	if err != nil {
+		return false, err
+	}
+	return match, nil
 }
 
 func matchQuery(query icql.Query, symbols []string) (bool, error) {
 	return matchClause(&query.Clause, symbols)
 }
+
 func matchClause(clause *icql.Clause, symbols []string) (bool, error) {
 	if symbols == nil {
 		return false, nil
@@ -765,9 +757,13 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 	for i, s := range symbols {
 		list[i] = s.SymbolValue
 	}
+	return toApiPeerStrings(peer, list)
+}
+
+func toApiPeerStrings(peer ill_db.Peer, symbols []string) oapi.Peer {
 	return oapi.Peer{
 		ID:            peer.ID,
-		Symbols:       list,
+		Symbols:       symbols,
 		Name:          peer.Name,
 		Url:           peer.Url,
 		RefreshPolicy: toApiPeerRefreshPolicy(peer.RefreshPolicy),
