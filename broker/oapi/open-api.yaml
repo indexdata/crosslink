@@ -57,10 +57,10 @@ components:
       type: object
       required:
         - items
-        - resultInfo
+        - about
       properties:
-        resultInfo:
-          $ref: '#/components/schemas/ResultInfo'
+        about:
+          $ref: '#/components/schemas/About'
         items:
           type: array
           description: List of ILL transactions
@@ -70,10 +70,10 @@ components:
       type: object
       required:
         - items
-        - resultInfo
+        - about
       properties:
-        resultInfo:
-          $ref: '#/components/schemas/ResultInfo'
+        about:
+          $ref: '#/components/schemas/About'
         items:
           type: array
           description: List of events
@@ -83,10 +83,10 @@ components:
       type: object
       required:
         - items
-        - resultInfo
+        - about
       properties:
-        resultInfo:
-          $ref: '#/components/schemas/ResultInfo'
+        about:
+          $ref: '#/components/schemas/About'
         items:
           type: array
           description: List of peers
@@ -96,16 +96,16 @@ components:
       type: object
       required:
         - items
-        - resultInfo
+        - about
       properties:
-        resultInfo:
-          $ref: '#/components/schemas/ResultInfo'
+        about:
+          $ref: '#/components/schemas/About'
         items:
           type: array
           description: List of peers
           items:
             $ref: '#/components/schemas/LocatedSupplier'
-    ResultInfo:
+    About:
       type: object
       required:
         - count
