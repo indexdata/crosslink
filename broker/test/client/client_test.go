@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/adapter"
-	mockapp "github.com/indexdata/crosslink/illmock/app"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
 	"os"
@@ -15,6 +12,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/adapter"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -551,6 +552,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
 		test.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 3))
 }

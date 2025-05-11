@@ -348,14 +348,14 @@ func TestCompareSuppliers(t *testing.T) {
 		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}) < 0)
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}) > 0)
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}) > 0)
 
-	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}}
+	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}}
 	slices.SortFunc(suppliers, adapter.CompareSuppliers)
-	assert.True(t, suppliers[0].Selected) // Selected sorted as first
+	assert.True(t, suppliers[0].Local) // Local sorted as first
 }

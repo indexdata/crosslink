@@ -3,11 +3,12 @@ package adapter
 import (
 	"cmp"
 	"errors"
+	"slices"
+	"strings"
+
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
-	"slices"
-	"strings"
 )
 
 var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/iso18626")
@@ -43,9 +44,9 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 
 func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier {
 	slices.SortFunc(entries, func(a, b Supplier) int {
-		if a.Selected && !b.Selected {
+		if a.Local && !b.Local {
 			return -1
-		} else if !a.Selected && b.Selected {
+		} else if !a.Local && b.Local {
 			return 1
 		}
 		return cmp.Compare(a.Ratio, b.Ratio)
