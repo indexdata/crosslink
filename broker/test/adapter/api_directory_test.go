@@ -11,7 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/test"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -150,6 +150,8 @@ func TestLookup(t *testing.T) {
 	assert.Len(t, entries, 4)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
+	assert.Equal(t, entries[3].Name, "University of Melbourne")
+	assert.Len(t, entries[3].Symbol, 3)
 
 	ad = createDirectoryAdapter(server.URL, server.URL)
 	p = adapter.DirectoryLookupParams{

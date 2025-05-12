@@ -25,7 +25,9 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
-	"github.com/indexdata/crosslink/broker/test"
+	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	mocks "github.com/indexdata/crosslink/broker/test/mocks"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -35,8 +37,8 @@ import (
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
-var mockIllRepoError = new(test.MockIllRepositoryError)
-var mockEventRepoError = new(test.MockEventRepositoryError)
+var mockIllRepoError = new(mocks.MockIllRepositoryError)
+var mockEventRepoError = new(mocks.MockEventRepositoryError)
 var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "", api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
@@ -61,7 +63,7 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = test.StartApp(ctx)
+	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
@@ -72,8 +74,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestGetEvents(t *testing.T) {
-	illId := test.GetIllTransId(t, illRepo)
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
+	illId := apptest.GetIllTransId(t, illRepo)
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
 	httpGet(t, "/events", "", http.StatusBadRequest)
 
@@ -93,7 +95,7 @@ func TestGetEvents(t *testing.T) {
 }
 
 func TestGetIllTransactions(t *testing.T) {
-	id := test.GetIllTransId(t, illRepo)
+	id := apptest.GetIllTransId(t, illRepo)
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	trans, err := illRepo.GetIllTransactionById(ctx, id)
 	assert.NoError(t, err)
@@ -200,7 +202,7 @@ func TestGetIllTransactions(t *testing.T) {
 }
 
 func TestGetIllTransactionsId(t *testing.T) {
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 	body := getResponseBody(t, "/ill_transactions/"+illId)
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
@@ -215,9 +217,9 @@ func TestGetIllTransactionsId(t *testing.T) {
 }
 
 func TestGetLocatedSuppliers(t *testing.T) {
-	illId := test.GetIllTransId(t, illRepo)
-	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
-	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
+	illId := apptest.GetIllTransId(t, illRepo)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
 	httpGet(t, "/located_suppliers", "", http.StatusBadRequest)
 	var resp oapi.LocatedSuppliers
 	body := getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
@@ -282,8 +284,8 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, resp.Items, 1)
 	assert.Equal(t, illId, resp.Items[0].ID)
 
-	peer := test.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
-	locSup := test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
 
 	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var supps oapi.LocatedSuppliers
@@ -308,7 +310,7 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, supps.Items, 0)
 
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameMessageRequester)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var events oapi.Events
