@@ -341,6 +341,14 @@ func TestBrokerCRUD(t *testing.T) {
 }
 
 func TestPeersCRUD(t *testing.T) {
+	headers := map[string]string{
+		"X-Okapi-Tenant": "diku",
+		"X-Okapi-Url":    "http://localhost:1234",
+	}
+	custom := map[string]interface{}{
+		"k1": "v1",
+		"k2": "v2",
+	}
 	// Create peer
 	toCreate := oapi.Peer{
 		ID:            uuid.New().String(),
@@ -348,16 +356,29 @@ func TestPeersCRUD(t *testing.T) {
 		Url:           "https://url.com",
 		Symbols:       []string{"ISIL:PEER"},
 		RefreshPolicy: oapi.Transaction,
+		CustomData:    &custom,
+		HttpHeaders:   &headers,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
-	if err != nil {
-		t.Errorf("Error marshaling JSON: %s", err)
-	}
+	assert.NoError(t, err)
 	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
 	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)
 	assert.NoError(t, err)
 	assert.Equal(t, toCreate.ID, respPeer.ID)
+	assert.Equal(t, "diku", (*toCreate.HttpHeaders)["X-Okapi-Tenant"])
+
+	var respPeers oapi.Peers
+	// Query the just POSTed peer
+	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
+	err = json.Unmarshal(body, &respPeers)
+	assert.NoError(t, err)
+	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
+	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
+	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
+	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
+	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
+
 	// Cannot post same again
 	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
 
@@ -375,7 +396,7 @@ func TestPeersCRUD(t *testing.T) {
 	respPeer = getPeerById(t, toCreate.ID)
 	assert.Equal(t, toCreate.ID, respPeer.ID)
 	// Get peers
-	respPeers := getPeers(t)
+	respPeers = getPeers(t)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 
 	body = getResponseBody(t, "/peers?offset=0&limit=1")
@@ -393,6 +414,10 @@ func TestPeersCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
+	assert.NotNil(t, respPeers.Items[0].CustomData)
+	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
+	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
+	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 
 	// Delete peer
 	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)

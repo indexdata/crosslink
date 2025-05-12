@@ -8,7 +8,8 @@ CREATE TABLE peer
     loans_count    INTEGER   NOT NULL DEFAULT 0,
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
     vendor         VARCHAR   NOT NULL,
-    custom_data    jsonb
+    custom_data    jsonb,
+    http_headers   jsonb
 );
 
 CREATE TABLE symbol

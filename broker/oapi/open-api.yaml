@@ -266,6 +266,11 @@ components:
           type: object
           description: Custom data of peer
           additionalProperties: true
+        HttpHeaders:
+          type: object
+          description: HTTP headers to be sent with requests to the peer
+          additionalProperties:
+            type: string
       required:
         - ID
         - Symbols
