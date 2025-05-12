@@ -10,7 +10,6 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -54,14 +53,15 @@ func TestSendHttpPost(t *testing.T) {
 		assert.Equal(t, "myother", r.Header.Get("X-Other"))
 		w.WriteHeader(http.StatusOK)
 		msg := &iso18626.ISO18626Message{}
-		buf := utils.Must(xml.Marshal(msg))
-		_, err := w.Write(buf)
-		assert.Nil(t, err)
+		buf, err := xml.Marshal(msg)
+		assert.NoError(t, err)
+		_, err = w.Write(buf)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1000, BrokerModeOpaque, 0*time.Second)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 0, BrokerModeOpaque, 0*time.Second)
 
 	msg := &iso18626.ISO18626Message{}
 	peer := ill_db.Peer{
@@ -69,5 +69,5 @@ func TestSendHttpPost(t *testing.T) {
 		HttpHeaders: headers,
 	}
 	_, err := client.SendHttpPost(&peer, msg)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
