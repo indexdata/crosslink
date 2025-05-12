@@ -409,17 +409,15 @@ func TestSendHttpPost(t *testing.T) {
 		name           string
 		url            string
 		msg            *iso18626.ISO18626Message
-		tenant         string
 		mockResponse   *http.Response
 		mockError      error
 		expectedResult *iso18626.ISO18626Message
 		expectedError  string
 	}{
 		{
-			name:   "successful post request",
-			url:    "https://test.com",
-			msg:    &iso18626.ISO18626Message{},
-			tenant: "testTenant",
+			name: "successful post request",
+			url:  "https://test.com",
+			msg:  &iso18626.ISO18626Message{},
 			mockResponse: &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"application/xml"}},
@@ -437,7 +435,6 @@ func TestSendHttpPost(t *testing.T) {
 			msg:  &iso18626.ISO18626Message{
 				// Fill in the fields with test data
 			},
-			tenant: "testTenant",
 			mockResponse: &http.Response{
 				StatusCode: http.StatusInternalServerError,
 				Body:       io.NopCloser(bytes.NewBufferString("Internal Server Error")),
@@ -452,7 +449,6 @@ func TestSendHttpPost(t *testing.T) {
 			msg:  &iso18626.ISO18626Message{
 				// Fill in the fields with test data
 			},
-			tenant:         "testTenant",
 			mockResponse:   nil,
 			mockError:      fmt.Errorf("mock request error"),
 			expectedResult: nil,
@@ -462,7 +458,6 @@ func TestSendHttpPost(t *testing.T) {
 			name:           "Marshal error",
 			url:            "https://test.com/",
 			msg:            nil,
-			tenant:         "testTenant",
 			mockResponse:   nil,
 			mockError:      nil,
 			expectedResult: nil,
@@ -478,7 +473,6 @@ func TestSendHttpPost(t *testing.T) {
 					},
 				},
 			},
-			tenant:         "testTenant",
 			mockResponse:   nil,
 			mockError:      nil,
 			expectedResult: nil,
@@ -502,7 +496,7 @@ func TestSendHttpPost(t *testing.T) {
 			peer := ill_db.Peer{
 				Url: tt.url,
 			}
-			result, err := isoClient.SendHttpPost(&peer, tt.msg, tt.tenant)
+			result, err := isoClient.SendHttpPost(&peer, tt.msg)
 
 			if tt.expectedError == "" && err != nil {
 				t.Fatalf("expected no error, got %v", err)
