@@ -50,6 +50,9 @@ WHERE requester_id = $1;
 -- name: SaveSymbol :one
 INSERT INTO symbol (symbol_value, peer_id)
 VALUES ($1, $2)
+ON CONFLICT (symbol_value) DO UPDATE
+    SET symbol_value = EXCLUDED.symbol_value,
+        peer_id      = EXCLUDED.peer_id
 RETURNING sqlc.embed(symbol);
 
 -- name: GetSymbolsByPeerId :many
