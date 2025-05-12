@@ -776,6 +776,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 		LoansCount:    &peer.LoansCount,
 		BorrowsCount:  &peer.BorrowsCount,
 		CustomData:    &peer.CustomData,
+		HttpHeaders:   &peer.HttpHeaders,
 	}
 }
 
@@ -798,6 +799,8 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 			Time:  time.Now(),
 			Valid: true,
 		},
+		CustomData:  *peer.CustomData,
+		HttpHeaders: *peer.HttpHeaders,
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()

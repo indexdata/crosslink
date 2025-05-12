@@ -18,8 +18,8 @@ ORDER BY name
 LIMIT $1 OFFSET $2;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data, http_headers)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
         url            = EXCLUDED.url,
@@ -28,7 +28,8 @@ ON CONFLICT (id) DO UPDATE
         loans_count    = EXCLUDED.loans_count,
         borrows_count  = EXCLUDED.borrows_count,
         vendor         = EXCLUDED.vendor,
-        custom_data    = EXCLUDED.custom_data
+        custom_data    = EXCLUDED.custom_data,
+        http_headers   = EXCLUDED.http_headers
 RETURNING sqlc.embed(peer);
 
 -- name: DeletePeer :exec

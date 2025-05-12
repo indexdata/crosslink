@@ -22,6 +22,9 @@ sql:
           - column: "peer.custom_data"
             go_type:
               type: "map[string]any"
+          - column: "peer.http_headers"
+            go_type:
+              type: "map[string]any"
   - engine: "postgresql"
     queries: "event_query.sql"
     schema: "event_schema.sql"
