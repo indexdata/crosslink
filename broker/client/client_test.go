@@ -49,9 +49,9 @@ func TestSendHttpPost(t *testing.T) {
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
-		assert.Equal(t, "mytenant", r.Header.Get("X-Okapi-Tenant"))
-		assert.Equal(t, "myother", r.Header.Get("X-Other"))
-		w.WriteHeader(http.StatusOK)
+		for k, v := range headers {
+			assert.Equal(t, v, r.Header.Get(k))
+		}
 		msg := &iso18626.ISO18626Message{}
 		buf, err := xml.Marshal(msg)
 		assert.NoError(t, err)
