@@ -24,7 +24,7 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 }
 
 func TestMain(m *testing.M) {
-	ctx, pgc, connStr, err := dbutil.StartPGContainer()
+	ctx, pgc, connStr, err := test.StartPGContainer()
 	test.Expect(err, "failed to start db container")
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	err = json.Unmarshal(respBody, &dirEntries)
 	test.Expect(err, "failed to parse directory entries")
 	ret := m.Run()
-	test.Expect(dbutil.TerminatePGContainer(ctx, pgc), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgc), "failed to stop db container")
 	os.Exit(ret)
 }
 
