@@ -133,7 +133,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to get requester", "error", err)
 		return events.EventStatusError, &resData
 	}
-	response, err := c.SendHttpPost(&requester, message, "")
+	response, err := c.SendHttpPost(&requester, message)
 	if response != nil {
 		resData.IncomingMessage = response
 	}
@@ -232,7 +232,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		action = string(found)
 	}
 	resData.OutgoingMessage = message
-	response, err := c.SendHttpPost(peer, message, "")
+	response, err := c.SendHttpPost(peer, message)
 	if response != nil {
 		resData.IncomingMessage = response
 	}
@@ -356,11 +356,8 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 	return defaultStatus
 }
 
-func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message, tenant string) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient().WithMaxSize(int64(c.maxMsgSize))
-	if len(tenant) > 0 {
-		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
-	}
 	for k, v := range peer.HttpHeaders {
 		httpClient.WithHeaders(k, v)
 	}
