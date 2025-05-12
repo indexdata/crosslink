@@ -174,7 +174,7 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 |                              | Requester: delay before sending ShippedReturn.                       |                                              |
 | `HTTP_HEADERS`               | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
 | `MOCK_DIRECTORY_ENTRIES`     | JSON format list of directory entries                                | [directories.json](dirmock/directories.json) |
-| `MOCK_DIRECTORY_ENTRIES_PATH`| Path (filename) with JSON entries                                    |                                              |
+| `MOCK_DIRECTORY_ENTRIES_PATH`| Path (filename) with JSON entries, can be gzipped (.gz/.gzip/.zip)   |                                              |
 
 # Deploying on Kubernetes
 

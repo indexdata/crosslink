@@ -82,8 +82,8 @@ func TestGetEvents(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1))
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
+	assert.GreaterOrEqual(t, resp.About.Count, int64(1))
+	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
 	assert.Equal(t, eventId, resp.Items[0].ID)
 
 	body = getResponseBody(t, "/events?ill_transaction_id=not-exists")
@@ -109,7 +109,7 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
-	assert.Equal(t, resp.ResultInfo.Count, int64(len(resp.Items)))
+	assert.Equal(t, resp.About.Count, int64(len(resp.Items)))
 	// Query
 	body = getResponseBody(t, "/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId))
 	err = json.Unmarshal(body, &resp)
@@ -146,43 +146,43 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
-	count := resp.ResultInfo.Count
+	count := resp.About.Count
 	assert.GreaterOrEqual(t, count, int64(1+2*api.LIMIT_DEFAULT))
 	assert.LessOrEqual(t, count, int64(3*api.LIMIT_DEFAULT))
-	assert.Nil(t, resp.ResultInfo.PrevLink)
-	assert.NotNil(t, resp.ResultInfo.NextLink)
-	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.ResultInfo.NextLink)
+	assert.Nil(t, resp.About.PrevLink)
+	assert.NotNil(t, resp.About.NextLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.About.NextLink)
 
 	body = getResponseBody(t, "/ill_transactions?offset=1000")
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, count, resp.ResultInfo.Count)
+	assert.Equal(t, count, resp.About.Count)
 
 	body = getResponseBody(t, "/ill_transactions?limit=0")
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, count, resp.ResultInfo.Count)
+	assert.Equal(t, count, resp.About.Count)
 
 	body = getResponseBody(t, "/ill_transactions?offset=3&limit="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(1+2*api.LIMIT_DEFAULT))
-	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(3*api.LIMIT_DEFAULT))
-	prevLink := *resp.ResultInfo.PrevLink
+	assert.GreaterOrEqual(t, resp.About.Count, int64(1+2*api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, resp.About.Count, int64(3*api.LIMIT_DEFAULT))
+	prevLink := *resp.About.PrevLink
 	assert.Contains(t, prevLink, "offset=0")
 
 	body = getResponseBody(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
-	resp.ResultInfo.NextLink = nil
-	resp.ResultInfo.PrevLink = nil
+	resp.About.NextLink = nil
+	resp.About.PrevLink = nil
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, int(api.LIMIT_DEFAULT), len(resp.Items))
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(3+api.LIMIT_DEFAULT))
-	assert.LessOrEqual(t, resp.ResultInfo.Count, int64(2*api.LIMIT_DEFAULT))
+	assert.GreaterOrEqual(t, resp.About.Count, int64(3+api.LIMIT_DEFAULT))
+	assert.LessOrEqual(t, resp.About.Count, int64(2*api.LIMIT_DEFAULT))
 
-	assert.Nil(t, resp.ResultInfo.PrevLink)
-	assert.NotNil(t, resp.ResultInfo.NextLink)
-	nextLink := *resp.ResultInfo.NextLink
+	assert.Nil(t, resp.About.PrevLink)
+	assert.NotNil(t, resp.About.NextLink)
+	nextLink := *resp.About.NextLink
 	assert.True(t, strings.HasPrefix(nextLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, nextLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	// we have estblished that the next link is correct, now we will check if it works
@@ -193,8 +193,8 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.NoError(t, err)
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.NotNil(t, resp.ResultInfo.PrevLink)
-	prevLink = *resp.ResultInfo.PrevLink
+	assert.NotNil(t, resp.About.PrevLink)
+	prevLink = *resp.About.PrevLink
 	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, prevLink, "offset=0")
 }
@@ -225,7 +225,7 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
 	assert.Equal(t, resp.Items[0].ID, locSup.ID)
-	assert.GreaterOrEqual(t, resp.ResultInfo.Count, int64(len(resp.Items)))
+	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
 
 	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)
@@ -381,7 +381,7 @@ func TestPeersCRUD(t *testing.T) {
 	body = getResponseBody(t, "/peers?offset=0&limit=1")
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
-	assert.GreaterOrEqual(t, respPeers.ResultInfo.Count, int64(1))
+	assert.GreaterOrEqual(t, respPeers.About.Count, int64(1))
 
 	httpGet(t, "/peers?cql="+url.QueryEscape("badfield any ISIL:PEER"), "", http.StatusBadRequest)
 

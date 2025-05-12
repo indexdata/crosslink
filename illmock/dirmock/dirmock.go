@@ -1,10 +1,12 @@
 package dirmock
 
 import (
+	"compress/gzip"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -31,7 +33,26 @@ func NewEnv() (*DirectoryMock, error) {
 	if path == "" {
 		return NewJson(defaultDirectories)
 	}
-	bytes, err := os.ReadFile(path)
+	var err error
+	var bytes []byte
+	if strings.HasSuffix(path, ".gz") || strings.HasSuffix(path, ".gzip") || strings.HasSuffix(path, ".zip") {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		gr, err := gzip.NewReader(file)
+		if err != nil {
+			return nil, err
+		}
+		defer gr.Close()
+		bytes, err = io.ReadAll(gr)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		bytes, err = os.ReadFile(path)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -122,7 +122,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp.ResultInfo.Count = fullCount
+	resp.About.Count = fullCount
 	for _, event := range eventList {
 		resp.Items = append(resp.Items, toApiEvent(event))
 	}
@@ -199,7 +199,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	}
-	resp.ResultInfo.Count = fullCount
+	resp.About.Count = fullCount
 	if offset > 0 {
 		pOffset := offset - limit
 		if pOffset < 0 {
@@ -208,14 +208,14 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
 		link := toLinkUrlValues(r, urlValues)
-		resp.ResultInfo.PrevLink = &link
+		resp.About.PrevLink = &link
 	}
 	if fullCount > int64(limit+offset) {
 		noffset := offset + limit
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
 		link := toLinkUrlValues(r, urlValues)
-		resp.ResultInfo.NextLink = &link
+		resp.About.NextLink = &link
 	}
 	writeJsonResponse(w, resp)
 }
@@ -280,13 +280,13 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			dbparams.Offset = *params.Offset
 		}
 	}
-	var resp oapi.Peers
 	peers, count, err := a.illRepo.GetPeersWithSymbols(ctx, dbparams)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp.ResultInfo.Count = count
+	var resp oapi.Peers
+	resp.About.Count = count
 	for _, p := range peers {
 		match, err := matchCql(params.Cql, p.Symbols)
 		if err != nil {
@@ -602,7 +602,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		addInternalError(ctx, w, err)
 		return
 	}
-	resp.ResultInfo.Count = count
+	resp.About.Count = count
 	for _, supplier := range supList {
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
