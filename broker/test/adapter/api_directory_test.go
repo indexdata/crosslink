@@ -147,7 +147,7 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err, _ := ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 3)
+	assert.Len(t, entries, 4)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
 
@@ -157,7 +157,7 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err, _ = ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 6)
+	assert.Len(t, entries, 8)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
 }
@@ -168,8 +168,8 @@ func TestFilterAndSort(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -245,8 +245,8 @@ func TestFilterAndSortByType(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -273,8 +273,8 @@ func TestFilterAndSortByLevel(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Rush",
@@ -300,8 +300,8 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
 	entries = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)

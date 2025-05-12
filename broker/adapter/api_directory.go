@@ -49,6 +49,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	if err != nil {
 		return []DirectoryEntry{}, err, query
 	}
+	childSyms := make(map[string][]string, len(responseList.Items))
 	for _, d := range responseList.Items {
 		var symbols []string
 		if listMap, ok := d["symbols"].([]any); ok && len(listMap) > 0 {
@@ -60,6 +61,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 						symbols = append(symbols, auth+":"+sym)
 					}
 				}
+			}
+			if parent, ok := d["parent"].(string); ok {
+				childSyms[parent] = append(childSyms[parent], symbols...)
+				// skip child entries
+				continue
 			}
 		}
 		apiUrl := ""
@@ -83,6 +89,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				CustomData: d,
 			}
 			directoryList = append(directoryList, entry)
+		}
+	}
+	for _, de := range directoryList {
+		if childSyms, ok := childSyms[de.CustomData["id"].(string)]; ok {
+			de.Symbol = append(de.Symbol, childSyms...)
 		}
 	}
 	return directoryList, nil, query
