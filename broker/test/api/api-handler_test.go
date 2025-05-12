@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -374,7 +373,6 @@ func TestPeersCRUD(t *testing.T) {
 	var respPeers oapi.Peers
 	// Query the just POSTed peer
 	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
-	fmt.Print(string(body))
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
 	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
@@ -414,7 +412,6 @@ func TestPeersCRUD(t *testing.T) {
 
 	// Query peers
 	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
-	fmt.Print(string(body))
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
