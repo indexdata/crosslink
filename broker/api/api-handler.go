@@ -423,10 +423,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	dbPeer, err := toDbPeer(newPeer)
-	if err != nil {
-		addBadRequestError(ctx, w, err)
-	}
+	dbPeer := toDbPeer(newPeer)
 	var peer ill_db.Peer
 	var symbols = []ill_db.Symbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
@@ -769,10 +766,6 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 	for i, s := range symbols {
 		list[i] = s.SymbolValue
 	}
-	headers := make(map[string]any)
-	for k, v := range peer.HttpHeaders {
-		headers[k] = v
-	}
 	return oapi.Peer{
 		ID:            peer.ID,
 		Symbols:       list,
@@ -784,7 +777,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 		LoansCount:    &peer.LoansCount,
 		BorrowsCount:  &peer.BorrowsCount,
 		CustomData:    &peer.CustomData,
-		HttpHeaders:   &headers,
+		HttpHeaders:   &peer.HttpHeaders,
 	}
 }
 
@@ -796,15 +789,7 @@ func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) oapi.PeerRefreshPolicy 
 	}
 }
 
-func toDbPeer(peer oapi.Peer) (ill_db.Peer, error) {
-	headers := make(map[string]string)
-	for k, v := range *peer.HttpHeaders {
-		s, ok := v.(string)
-		if !ok {
-			return ill_db.Peer{}, fmt.Errorf("header %s is not a string", k)
-		}
-		headers[k] = s
-	}
+func toDbPeer(peer oapi.Peer) ill_db.Peer {
 	db := ill_db.Peer{
 		ID:            peer.ID,
 		Name:          peer.Name,
@@ -816,12 +801,12 @@ func toDbPeer(peer oapi.Peer) (ill_db.Peer, error) {
 			Valid: true,
 		},
 		CustomData:  *peer.CustomData,
-		HttpHeaders: headers,
+		HttpHeaders: *peer.HttpHeaders,
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()
 	}
-	return db, nil
+	return db
 }
 
 func toDbRefreshPolicy(policy oapi.PeerRefreshPolicy) ill_db.RefreshPolicy {

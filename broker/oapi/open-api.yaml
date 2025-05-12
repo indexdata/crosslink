@@ -269,7 +269,8 @@ components:
         HttpHeaders:
           type: object
           description: HTTP headers to be sent with requests to the peer
-          additionalProperties: true
+          additionalProperties:
+            type: string
       required:
         - ID
         - Symbols

@@ -340,25 +340,8 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events.Items, 0)
 }
 
-func TestPeersBadHeaders(t *testing.T) {
-	headers := map[string]interface{}{
-		"X-Okapi-Tenant": true,
-	}
-	toCreate := oapi.Peer{
-		ID:            uuid.New().String(),
-		Name:          "Peer1",
-		Url:           "https://url.com",
-		Symbols:       []string{"ISIL:PEER"},
-		RefreshPolicy: oapi.Transaction,
-		HttpHeaders:   &headers,
-	}
-	jsonBytes, err := json.Marshal(toCreate)
-	assert.NoError(t, err)
-	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
-}
-
 func TestPeersCRUD(t *testing.T) {
-	headers := map[string]interface{}{
+	headers := map[string]string{
 		"X-Okapi-Tenant": "diku",
 		"X-Okapi-Url":    "http://localhost:1234",
 	}
