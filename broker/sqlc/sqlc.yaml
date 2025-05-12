@@ -24,7 +24,7 @@ sql:
               type: "map[string]any"
           - column: "peer.http_headers"
             go_type:
-              type: "map[string]any"
+              type: "map[string]string"
   - engine: "postgresql"
     queries: "event_query.sql"
     schema: "event_schema.sql"

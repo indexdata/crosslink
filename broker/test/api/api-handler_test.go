@@ -340,6 +340,23 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events.Items, 0)
 }
 
+func TestPeersBadHeaders(t *testing.T) {
+	headers := map[string]interface{}{
+		"X-Okapi-Tenant": true,
+	}
+	toCreate := oapi.Peer{
+		ID:            uuid.New().String(),
+		Name:          "Peer1",
+		Url:           "https://url.com",
+		Symbols:       []string{"ISIL:PEER"},
+		RefreshPolicy: oapi.Transaction,
+		HttpHeaders:   &headers,
+	}
+	jsonBytes, err := json.Marshal(toCreate)
+	assert.NoError(t, err)
+	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
+}
+
 func TestPeersCRUD(t *testing.T) {
 	headers := map[string]interface{}{
 		"X-Okapi-Tenant": "diku",
@@ -360,9 +377,7 @@ func TestPeersCRUD(t *testing.T) {
 		HttpHeaders:   &headers,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
-	if err != nil {
-		t.Errorf("Error marshaling JSON: %s", err)
-	}
+	assert.NoError(t, err)
 	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
 	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)

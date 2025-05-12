@@ -362,10 +362,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		httpClient.WithHeaders("X-Okapi-Tenant", tenant)
 	}
 	for k, v := range peer.HttpHeaders {
-		s, ok := v.(string)
-		if ok {
-			httpClient.WithHeaders(k, s)
-		}
+		httpClient.WithHeaders(k, v)
 	}
 	time.Sleep(c.sendDelay)
 	iso18626Shim := shim.GetShim(peer.Vendor)
