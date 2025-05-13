@@ -1,4 +1,4 @@
-package test
+package mocks
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -31,7 +32,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        GetNow(),
+			Timestamp:        test.GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusNew,
@@ -40,7 +41,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        GetNow(),
+			Timestamp:        test.GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusProcessing,
@@ -49,7 +50,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        GetNow(),
+			Timestamp:        test.GetNow(),
 			EventType:        events.EventTypeNotice,
 			EventName:        events.EventNameRequesterMsgReceived,
 			EventStatus:      events.EventStatusSuccess,

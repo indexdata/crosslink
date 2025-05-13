@@ -19,7 +19,7 @@
             <requestingAgencyRequestId>5636c993-c41c-48f4-a285-170545f6f343</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>return-ISIL:REQ::123;return-ISIL:SUP1::321</supplierUniqueRecordId>
+            <supplierUniqueRecordId>return-ISIL:SUP1::321;return-ISIL:REQ::123</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>

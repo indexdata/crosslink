@@ -11,7 +11,8 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
-	"github.com/indexdata/crosslink/broker/test"
+	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -57,7 +58,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to create symbol " + err.Error())
 	}
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -134,7 +135,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 	if err != nil {
 		t.Error("Failed to create symbol " + err.Error())
 	}
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -186,7 +187,7 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	sup1 := getOrCreatePeer(t, illRepo, "ISIL:SUP1", 3, 4)
 	sup2 := getOrCreatePeer(t, illRepo, "ISIL:SUP2", 2, 4)
 
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -246,7 +247,7 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 		}
 	})
 
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -291,7 +292,7 @@ func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 		}
 	})
 
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusProcessing, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusProcessing, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
@@ -363,7 +364,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 				}
 			})
 
-			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+			eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
 				t.Error("Failed to notify with error " + err.Error())
@@ -417,7 +418,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-			illTrId := test.GetIllTransId(t, illRepo)
+			illTrId := apptest.GetIllTransId(t, illRepo)
 			var completedTask []events.Event
 			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
@@ -431,7 +432,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 				}
 			})
 
-			eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
+			eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
 			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 			if err != nil {
 				t.Error("failed to notify with error " + err.Error())
@@ -472,7 +473,7 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 		}
 	})
 
-	eventId := test.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())

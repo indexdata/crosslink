@@ -30,7 +30,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	for _, s := range symbols {
 		cql += " " + s
 	}
-	var directoryList []DirectoryEntry
+	var dirEntries []DirectoryEntry
 	query := "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
 	fullUrl := durl + query
 	response, err := a.client.Get(fullUrl)
@@ -49,6 +49,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	if err != nil {
 		return []DirectoryEntry{}, err, query
 	}
+	childSymbolsById := make(map[string][]string, len(responseList.Items))
 	for _, d := range responseList.Items {
 		var symbols []string
 		if listMap, ok := d["symbols"].([]any); ok && len(listMap) > 0 {
@@ -60,6 +61,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 						symbols = append(symbols, auth+":"+sym)
 					}
 				}
+			}
+			if parent, ok := d["parent"].(string); ok {
+				childSymbolsById[parent] = append(childSymbolsById[parent], symbols...)
+				// skip child entries
+				continue
 			}
 		}
 		apiUrl := ""
@@ -82,10 +88,16 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				URL:        apiUrl,
 				CustomData: d,
 			}
-			directoryList = append(directoryList, entry)
+			dirEntries = append(dirEntries, entry)
 		}
 	}
-	return directoryList, nil, query
+	for i := range dirEntries {
+		de := &dirEntries[i]
+		if childSyms, ok := childSymbolsById[de.CustomData["id"].(string)]; ok {
+			de.Symbol = append(de.Symbol, childSyms...)
+		}
+	}
+	return dirEntries, nil, query
 }
 
 func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string) {
@@ -151,9 +163,9 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 }
 
 func CompareSuppliers(a, b Supplier) int {
-	if a.Selected && !b.Selected {
+	if a.Local && !b.Local {
 		return -1
-	} else if !a.Selected && b.Selected {
+	} else if !a.Local && b.Local {
 		return 1
 	}
 	sort := cmp.Compare(a.Cost, b.Cost)

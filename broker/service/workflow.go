@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	"github.com/indexdata/crosslink/broker/client"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -36,11 +38,7 @@ func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event even
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
-			if available, ok := event.ResultData.CustomData["locallyAvailable"].(bool); ok && available {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
-			} else {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
-			}
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		} else {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 		}
@@ -51,12 +49,20 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
 			if w.brokerMode == client.BrokerModeTransparent {
-				_, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 				if err != nil {
-					ctx.Logger().Error("failed to create event to message requester", "error", err)
+					return id, err
 				}
 			}
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
+				if !local {
+					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+				} else {
+					return "", nil
+				}
+			} else {
+				return "", fmt.Errorf("failed to detect local supplier from event result data")
+			}
 		} else {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 		}

@@ -85,6 +85,14 @@
       "type": "institution"
     },
     {
+      "description": "nalb_a",
+      "id": "69b6f9c5-5c42-54b8-bb2f-75667457b55a",
+      "name": "Albury City Libraries / Albury City Libraries",
+      "parent": "30191a94-9588-5b53-808a-58d843706d1b",
+      "symbols": [],
+      "type": "branch"
+    },
+    {
       "description": "nu",
       "email": "library.resourcesharing@sydney.edu.au",
       "endpoints": [
@@ -187,6 +195,14 @@
       "type": "institution"
     },
     {
+      "description": "nu_a",
+      "id": "8733dd66-6554-5759-a127-2fe61fefdaf5",
+      "name": "University of Sydney / The University of Sydney Library",
+      "parent": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+      "symbols": [],
+      "type": "branch"
+    },
+    {
       "description": "vvwa",
       "email": "library@worksafe.vic.gov.au",
       "endpoints": [
@@ -275,9 +291,577 @@
         }
       ],
       "type": "institution"
+    },
+    {
+      "description": "vvwa_a",
+      "id": "253271d4-e754-5049-8db8-d03962820f07",
+      "name": "WorkSafe Victoria / WorkSafe Victoria",
+      "parent": "dba2b3ea-6eee-530b-95e2-9ce75b4a222b",
+      "symbols": [],
+      "type": "branch"
+    },
+    {
+      "description": "vu",
+      "email": "ill-library@unimelb.edu.au",
+      "endpoints": [
+        {
+          "address": "http://crosslink-illmock/iso18626",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "4593017e-26b4-5c16-8b75-b8c9c4ac8414",
+          "name": "VU ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://vu-okapi.au.reshare.indexdata.com/_/invoke/tenant/vu/rs/externalApi/statistics",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "0a3c5ac4-f8b5-5622-918e-f0259efd86bd",
+          "name": "VU Statistics Service",
+          "type": "http"
+        }
+      ],
+      "id": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+      "name": "University of Melbourne",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+          "name": "Victoria Higher Education",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "94964646-3266-588d-90a9-408e40055216",
+          "name": "National Academic and Research",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+          "name": "National",
+          "priority": 3
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+          "name": "NSW & ACT Higher Education",
+          "priority": 4
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 5
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
+          "name": "South Australia Higher Education",
+          "priority": 6
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+          "name": "Western Australia Higher Education",
+          "priority": 7
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 8
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 9
+        }
+      ],
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "02bfa790-2aae-500a-b125-998d87c65e8c",
+          "symbol": "AU-VU"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "406f6876-3aef-596f-a4fa-fa5c35e22a17",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 34.4,
+          "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 62.8,
+          "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 44.5,
+          "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 85,
+          "id": "940d6a2e-7e5d-5841-83ae-0152312cdfe7",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 67,
+          "id": "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Copy",
+          "type": "Copy"
+        }
+      ],
+      "type": "institution"
+    },
+    {
+      "description": "vu_a",
+      "id": "25f48f87-fead-5d27-93a2-9c01b1252069",
+      "name": "University of Melbourne / Baillieu Library",
+      "parent": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+      "symbols": [],
+      "type": "branch"
+    },
+    {
+      "description": "vu_b",
+      "endpoints": [
+        {
+          "address": "http://crosslink-illmock/iso18626",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "4593017e-26b4-5c16-8b75-b8c9c4ac8414",
+          "name": "VU ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://vu-okapi.au.reshare.indexdata.com/_/invoke/tenant/vu/rs/externalApi/statistics",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "0a3c5ac4-f8b5-5622-918e-f0259efd86bd",
+          "name": "VU Statistics Service",
+          "type": "http"
+        }
+      ],
+      "id": "905c043f-1c42-51e9-bdee-9f8bdc52819f",
+      "name": "University of Melbourne / The University of Melbourne: Museums and Collections",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+          "name": "Victoria Higher Education",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "94964646-3266-588d-90a9-408e40055216",
+          "name": "National Academic and Research",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+          "name": "National",
+          "priority": 3
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+          "name": "NSW & ACT Higher Education",
+          "priority": 4
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 5
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
+          "name": "South Australia Higher Education",
+          "priority": 6
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+          "name": "Western Australia Higher Education",
+          "priority": 7
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 8
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 9
+        }
+      ],
+      "parent": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "381bb2f6-3be9-52e2-9449-ce580e9ebe00",
+          "symbol": "AU-VUMC"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "406f6876-3aef-596f-a4fa-fa5c35e22a17",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 34.4,
+          "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 62.8,
+          "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 44.5,
+          "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 85,
+          "id": "940d6a2e-7e5d-5841-83ae-0152312cdfe7",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 67,
+          "id": "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Copy",
+          "type": "Copy"
+        }
+      ],
+      "type": "branch"
+    },
+    {
+      "description": "vu_c",
+      "endpoints": [
+        {
+          "address": "http://crosslink-illmock/iso18626",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "4593017e-26b4-5c16-8b75-b8c9c4ac8414",
+          "name": "VU ISO18626 Service",
+          "type": "ISO18626"
+        },
+        {
+          "address": "https://vu-okapi.au.reshare.indexdata.com/_/invoke/tenant/vu/rs/externalApi/statistics",
+          "entry": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+          "id": "0a3c5ac4-f8b5-5622-918e-f0259efd86bd",
+          "name": "VU Statistics Service",
+          "type": "http"
+        }
+      ],
+      "id": "524a883e-70cd-5647-a4ae-9f70629d34eb",
+      "name": "University of Melbourne / St mary's College & Newman College Academic Centre Library",
+      "networks": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "879f4ac5-9a2d-5e2d-94a6-0b72c9e18fff",
+          "name": "Victoria Higher Education",
+          "priority": 1
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "94964646-3266-588d-90a9-408e40055216",
+          "name": "National Academic and Research",
+          "priority": 2
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d4284915-859b-59b2-b6f2-2990340278c2",
+          "name": "National",
+          "priority": 3
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "d55f3cff-bf71-500e-85f9-b4a74199c1b1",
+          "name": "NSW & ACT Higher Education",
+          "priority": 4
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "84fcd0ff-da15-5285-a45a-5abcc6e1b023",
+          "name": "Victoria",
+          "priority": 5
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5f63ba91-c7a4-5068-ada7-97e34a40f26a",
+          "name": "South Australia Higher Education",
+          "priority": 6
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "1c0346cd-f7e2-565a-9068-55fa6ab29ca6",
+          "name": "Western Australia Higher Education",
+          "priority": 7
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 8
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "id": "5dcb365d-ee82-58b6-8b80-591bf891900c",
+          "name": "Queensland Higher Education",
+          "priority": 9
+        }
+      ],
+      "parent": "e470e850-ccab-5588-bded-c7ca9e2ba956",
+      "symbols": [
+        {
+          "authority": "ISIL",
+          "id": "028affbf-e4cb-5c59-b833-d8d9a5986bb9",
+          "symbol": "AU-VU:M"
+        }
+      ],
+      "tiers": [
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "23e7ec42-affc-57db-b383-770f5668ffe5",
+          "level": "Standard",
+          "name": "Reciprocal Peer to Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "e6aa9fc2-652d-56e9-a457-a8478b2b9412",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "2ac07f70-009e-5525-9d77-598810d7ba54",
+          "level": "Rush",
+          "name": "Reciprocal Peer to Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "406f6876-3aef-596f-a4fa-fa5c35e22a17",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 0,
+          "id": "870badb7-fd8a-5a20-85ac-7e3cef2e6c4f",
+          "level": "Express",
+          "name": "Reciprocal Peer to Peer - Express Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 34.4,
+          "id": "09c24f58-3827-5bed-8c5e-9c964dc4078a",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 22.4,
+          "id": "62ff7682-9a06-51cf-8a6e-a4ef0cb20f9d",
+          "level": "Standard",
+          "name": "Premium Pay for Peer - Core Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 62.8,
+          "id": "53c416eb-0c78-5e30-8268-b3e9233e160a",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 44.5,
+          "id": "a9505ca0-31b1-5bba-8772-c3f3ef536b48",
+          "level": "Rush",
+          "name": "Premium Pay for Peer - Rush Copy",
+          "type": "Copy"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 85,
+          "id": "940d6a2e-7e5d-5841-83ae-0152312cdfe7",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Loan",
+          "type": "Loan"
+        },
+        {
+          "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+          "cost": 67,
+          "id": "010889d1-1caa-5b52-8fa1-3bcf9c3fa2a2",
+          "level": "Express",
+          "name": "Premium Pay for Peer - Express Copy",
+          "type": "Copy"
+        }
+      ],
+      "type": "branch"
     }
   ],
   "resultInfo": {
-    "totalRecords": 3
+    "totalRecords": 10
   }
 }

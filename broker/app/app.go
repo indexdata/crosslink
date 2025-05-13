@@ -15,10 +15,10 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/client"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/indexdata/crosslink/broker/service"
 
-	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -36,7 +36,7 @@ var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "crosslink")
 var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
-var ConnectionString = fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
@@ -147,38 +147,16 @@ func StartServer(context Context) error {
 }
 
 func RunMigrateScripts() {
-	m, err := migrate.New(MigrationsFolder, ConnectionString)
+	verFrom, verTo, dirty, err := dbutil.RunMigrateScripts(MigrationsFolder, ConnectionString)
 	if err != nil {
-		appCtx.Logger().Error("failed to initiate migration", "error", err)
+		appCtx.Logger().Error("DB migration failed", "error", err, "versionFrom", verFrom, "versionTo", verTo, "dirty", dirty)
 		return
 	}
-
-	// Check migration version before running
-	version, dirty, err := m.Version()
-	if err != nil && err != migrate.ErrNilVersion {
-		appCtx.Logger().Error("failed to get migration version", "error", err)
-		return
-	}
-	appCtx.Logger().Info("current migration version", "version", version, "dirty", dirty)
-
-	// Migrate up
-	err = m.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		appCtx.Logger().Error("failed to run migration", "error", err)
-		return
-	}
-
-	// Check migration version after running
-	version, dirty, err = m.Version()
-	if err != nil && err != migrate.ErrNilVersion {
-		appCtx.Logger().Error("failed to get migration version after running", "error", err)
-		return
-	}
-	appCtx.Logger().Info("migration version after running", "version", version, "dirty", dirty)
+	appCtx.Logger().Info("DB migration success", "versionFrom", verFrom, "versionTo", verTo, "dirty", dirty)
 }
 
 func InitDbPool() *pgxpool.Pool {
-	dbPool, err := pgxpool.New(context.Background(), ConnectionString)
+	dbPool, err := dbutil.InitDbPool(ConnectionString)
 	if err != nil {
 		appCtx.Logger().Error("Unable to create pool to database", "error", err)
 		os.Exit(1)

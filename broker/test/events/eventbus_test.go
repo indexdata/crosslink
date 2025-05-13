@@ -20,7 +20,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/indexdata/crosslink/broker/test"
+	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 )
 
 var eventBus events.EventBus
@@ -48,7 +49,7 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = test.StartApp(ctx)
+	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
@@ -63,7 +64,7 @@ func TestCreateTask(t *testing.T) {
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 
 	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
 	if err != nil {
@@ -83,12 +84,12 @@ func TestCreateTask(t *testing.T) {
 func TestTransactionRollback(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	eventId := uuid.New().String()
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 	err := eventRepo.WithTxFunc(appCtx, func(eventRepo events.EventRepo) error {
 		_, err := eventRepo.SaveEvent(appCtx, events.SaveEventParams{
 			ID:               eventId,
 			IllTransactionID: illId,
-			Timestamp:        test.GetNow(),
+			Timestamp:        apptest.GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameMessageRequester,
 			EventStatus:      events.EventStatusNew,
@@ -100,7 +101,7 @@ func TestTransactionRollback(t *testing.T) {
 		_, err = eventRepo.SaveEvent(appCtx, events.SaveEventParams{
 			ID:               uuid.New().String(),
 			IllTransactionID: uuid.New().String(),
-			Timestamp:        test.GetNow(),
+			Timestamp:        apptest.GetNow(),
 			EventType:        events.EventTypeTask,
 			EventName:        events.EventNameMessageRequester,
 			EventStatus:      events.EventStatusNew,
@@ -123,7 +124,7 @@ func TestCreateNotice(t *testing.T) {
 		eventReceived = append(eventReceived, event)
 	})
 
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 
 	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
@@ -159,7 +160,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 
 	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
 	if err != nil {
@@ -213,7 +214,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 }
 
 func TestBeginTaskNegative(t *testing.T) {
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
 	err := eventBus.BeginTask(eventId)
@@ -221,14 +222,14 @@ func TestBeginTaskNegative(t *testing.T) {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
-	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
+	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.BeginTask(eventId)
 	if err == nil || err.Error() != "event is not a TASK" {
 		t.Errorf("Should fail with: event is not a TASK")
 	}
 
-	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
+	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.BeginTask(eventId)
 	if err == nil || err.Error() != "event is not in state NEW" {
@@ -237,7 +238,7 @@ func TestBeginTaskNegative(t *testing.T) {
 }
 
 func TestCompleteTaskNegative(t *testing.T) {
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
 	result := events.EventResult{}
@@ -246,14 +247,14 @@ func TestCompleteTaskNegative(t *testing.T) {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
-	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
+	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "event is not a TASK" {
 		t.Errorf("Should fail with: event is not a TASK")
 	}
 
-	eventId = test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
+	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
 	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "event is not in state PROCESSING" {
@@ -296,7 +297,7 @@ func TestReconnectListener(t *testing.T) {
 		eventReceived = append(eventReceived, event)
 	})
 
-	illId := test.GetIllTransId(t, illRepo)
+	illId := apptest.GetIllTransId(t, illRepo)
 
 	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	if err != nil {
