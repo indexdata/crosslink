@@ -329,12 +329,17 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 		if !symCheck(symbols, dir.Symbol) {
 			continue
 		}
-		var peer Peer
-		var loopErr error
-		for _, sym := range dir.Symbol {
-			peer, loopErr = r.GetPeerBySymbol(ctx, sym)
+		if len(dir.Symbol) == 0 {
+			continue
 		}
-		if loopErr == nil {
+		peer, err := r.GetPeerBySymbol(ctx, dir.Symbol[0]) //parent peer
+		if err != nil {
+			if !errors.Is(err, pgx.ErrNoRows) {
+				ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)
+				continue
+			}
+		}
+		if err == nil {
 			// cached peer found
 			peer.Url = dir.URL
 			peer.CustomData = dir.CustomData
@@ -346,10 +351,6 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			} else {
 				peers = append(peers, peer)
 			}
-			continue
-		}
-		if !errors.Is(loopErr, pgx.ErrNoRows) {
-			ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)
 			continue
 		}
 		err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {

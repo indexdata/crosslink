@@ -51,6 +51,9 @@ WHERE requester_id = $1;
 -- name: SaveSymbol :one
 INSERT INTO symbol (symbol_value, peer_id)
 VALUES ($1, $2)
+ON CONFLICT (symbol_value) DO UPDATE
+    SET symbol_value = EXCLUDED.symbol_value,
+        peer_id      = EXCLUDED.peer_id
 RETURNING sqlc.embed(symbol);
 
 -- name: GetSymbolsByPeerId :many
@@ -162,8 +165,8 @@ WHERE ill_transaction_id = $1
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
                               prev_action, prev_status,
-                              last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                              last_action, last_status, local_id, prev_reason, last_reason, supplier_request_id, local_supplier)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (id) DO UPDATE
     SET ill_transaction_id  = EXCLUDED.ill_transaction_id,
         supplier_id         = EXCLUDED.supplier_id,
@@ -177,7 +180,8 @@ ON CONFLICT (id) DO UPDATE
         local_id            = EXCLUDED.local_id,
         prev_reason         = EXCLUDED.prev_reason,
         last_reason         = EXCLUDED.last_reason,
-        supplier_request_id = EXCLUDED.supplier_request_id
+        supplier_request_id = EXCLUDED.supplier_request_id,
+        local_supplier      = EXCLUDED.local_supplier
 RETURNING sqlc.embed(located_supplier);
 
 -- name: DeleteLocatedSupplier :exec

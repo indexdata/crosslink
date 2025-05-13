@@ -11,7 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/test"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -147,9 +147,11 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err, _ := ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 3)
+	assert.Len(t, entries, 4)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
+	assert.Equal(t, entries[3].Name, "University of Melbourne")
+	assert.Len(t, entries[3].Symbol, 3)
 
 	ad = createDirectoryAdapter(server.URL, server.URL)
 	p = adapter.DirectoryLookupParams{
@@ -157,7 +159,7 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err, _ = ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 6)
+	assert.Len(t, entries, 8)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbol, 1)
 }
@@ -168,8 +170,8 @@ func TestFilterAndSort(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -245,8 +247,8 @@ func TestFilterAndSortByType(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Core",
@@ -273,8 +275,8 @@ func TestFilterAndSortByLevel(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
 			Text: "Rush",
@@ -300,8 +302,8 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]},
-		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[2]}}
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
 	entries = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)
@@ -348,14 +350,14 @@ func TestCompareSuppliers(t *testing.T) {
 		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}) < 0)
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}) > 0)
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false},
+		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}) > 0)
 
-	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Selected: true}}
+	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}}
 	slices.SortFunc(suppliers, adapter.CompareSuppliers)
-	assert.True(t, suppliers[0].Selected) // Selected sorted as first
+	assert.True(t, suppliers[0].Local) // Local sorted as first
 }

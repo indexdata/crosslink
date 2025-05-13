@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/app"
-	"github.com/indexdata/crosslink/broker/test"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/go-utils/utils"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"net"
-	"os"
-	"testing"
-	"time"
 )
 
 func TestMain(m *testing.M) {

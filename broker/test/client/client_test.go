@@ -25,7 +25,8 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/test"
+	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
@@ -72,7 +73,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo = test.StartApp(ctx)
+	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
@@ -89,11 +90,11 @@ func TestMessageRequester(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ1", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -124,11 +125,11 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ1_1", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP1_1", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "")
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", LocalAddress)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "")
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -160,11 +161,11 @@ func TestMessageSupplier(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ2", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP2", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", LocalAddress)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -195,11 +196,11 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ3", "invalid")
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ3", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP3", "invalid")
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP3", string(iso18626.TypeStatusLoaned))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP3", "invalid")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP3", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -228,11 +229,11 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ4", "invalid")
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ4", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP4", "invalid")
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP4", string(iso18626.TypeStatusLoaned))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP4", "invalid")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP4", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -261,9 +262,9 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ7", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ7", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -293,7 +294,7 @@ func TestMessageRequesterFailToBegin(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -319,7 +320,7 @@ func TestMessageRequesterCompleteWithError(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -344,11 +345,11 @@ func TestMessageRequesterInvalidStatus(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ5", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ5", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP5", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP5", "invalid")
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP5", LocalAddress)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP5", "invalid")
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -373,11 +374,11 @@ func TestMessageSupplierInvalidAction(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := test.CreatePeer(t, illRepo, "ISIL:REQ6", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, "invalid")
-	resp := test.CreatePeer(t, illRepo, "ISIL:RESP6", LocalAddress)
-	test.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned))
-	eventId := test.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", LocalAddress)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
@@ -534,7 +535,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	}
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
-		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, test.CreatePgText(reqId))
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
@@ -546,8 +547,14 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
 			"TASK, message-requester = SUCCESS\n",
-		test.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 3))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 3, func(e events.Event) string {
+			if e.EventName == "select-supplier" {
+				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
+			}
+			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		}))
 }
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {

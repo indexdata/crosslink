@@ -26,17 +26,19 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/test"
+	apptest "github.com/indexdata/crosslink/broker/test/apputils"
+	mocks "github.com/indexdata/crosslink/broker/test/mocks"
+	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var mockIllRepoSuccess = new(test.MockIllRepositorySuccess)
-var mockEventRepoSuccess = new(test.MockEventRepositorySuccess)
+var mockIllRepoSuccess = new(mocks.MockIllRepositorySuccess)
+var mockEventRepoSuccess = new(mocks.MockEventRepositorySuccess)
 var eventBussSuccess = events.NewPostgresEventBus(mockEventRepoSuccess, "mock")
-var mockIllRepoError = new(test.MockIllRepositoryError)
-var mockEventRepoError = new(test.MockEventRepositoryError)
+var mockIllRepoError = new(mocks.MockIllRepositoryError)
+var mockEventRepoError = new(mocks.MockEventRepositoryError)
 var eventBussError = events.NewPostgresEventBus(mockEventRepoError, "mock")
 var dirAdapter = new(adapter.MockDirectoryLookupAdapter)
 var illRepo ill_db.IllRepo
@@ -71,7 +73,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, illRepo, _ = test.StartApp(ctx)
+	_, illRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()
@@ -319,13 +321,13 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
-		RequesterRequestID: test.CreatePgText("reqid"),
+		RequesterRequestID: apptest.CreatePgText("reqid"),
 	})
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)
 	}
-	peer := test.CreatePeer(t, illRepo, "isil:reqTest", adapter.MOCK_CLIENT_URL)
-	test.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "isil:reqTest", "selected")
+	peer := apptest.CreatePeer(t, illRepo, "isil:reqTest", adapter.MOCK_CLIENT_URL)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "isil:reqTest", "selected")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -452,7 +454,7 @@ func TestIso18626PostHandlerInvalidReason(t *testing.T) {
 }
 
 type MockRepositoryOnlyPeersOK struct {
-	test.MockIllRepositoryError
+	mocks.MockIllRepositoryError
 }
 
 func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string) {
@@ -463,7 +465,7 @@ func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedC
 }
 
 type MockRepositoryReqNotFound struct {
-	test.MockIllRepositoryError
+	mocks.MockIllRepositoryError
 }
 
 func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
@@ -475,7 +477,7 @@ func (r *MockRepositoryReqNotFound) WithTxFunc(ctx extctx.ExtendedContext, fn fu
 }
 
 type MockRepositoryReqExists struct {
-	test.MockIllRepositorySuccess
+	mocks.MockIllRepositorySuccess
 }
 
 func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
