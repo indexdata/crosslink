@@ -547,9 +547,14 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 3))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 3, func(e events.Event) string {
+			if e.EventName == "select-supplier" {
+				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
+			}
+			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		}))
 }
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {

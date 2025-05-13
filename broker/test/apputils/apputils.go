@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var eventRecordFormat = "%v, %v = %v"
+const EventRecordFormat = "%v, %v = %v"
 
 func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
 	context, err := app.Init(ctx)
@@ -116,6 +116,12 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 }
 
 func EventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
+	return EventsToCompareStringFunc(appCtx, eventRepo, t, illId, messageCount, func(e events.Event) string {
+		return fmt.Sprintf(EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+	})
+}
+
+func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, eventFmt func(events.Event) string) string {
 	var eventList []events.Event
 	var err error
 
@@ -137,7 +143,7 @@ func EventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.Event
 
 	value := ""
 	for _, e := range eventList {
-		value = value + fmt.Sprintf(eventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		value = value + eventFmt(e)
 		if e.EventStatus == events.EventStatusProblem {
 			value += ", problem=" + e.ResultData.Problem.Kind
 		}
