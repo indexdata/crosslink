@@ -415,10 +415,11 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	dbPeer := toDbPeer(newPeer)
 	var peer ill_db.Peer
 	var symbols = []ill_db.Symbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(toDbPeer(newPeer)))
+		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(dbPeer))
 		if err != nil {
 			return err
 		}
@@ -772,6 +773,7 @@ func toApiPeerStrings(peer ill_db.Peer, symbols []string) oapi.Peer {
 		LoansCount:    &peer.LoansCount,
 		BorrowsCount:  &peer.BorrowsCount,
 		CustomData:    &peer.CustomData,
+		HttpHeaders:   &peer.HttpHeaders,
 	}
 }
 
@@ -794,6 +796,8 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 			Time:  time.Now(),
 			Valid: true,
 		},
+		CustomData:  *peer.CustomData,
+		HttpHeaders: *peer.HttpHeaders,
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()

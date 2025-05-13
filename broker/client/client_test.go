@@ -1,11 +1,15 @@
 package client
 
 import (
+	"encoding/xml"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -36,4 +40,34 @@ func TestCreateMessageHeaderOpaque(t *testing.T) {
 	supHeader := client.createMessageHeader(illTrans, &sup, false)
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
+}
+
+func TestSendHttpPost(t *testing.T) {
+	headers := map[string]string{
+		"X-Okapi-Tenant": "mytenant",
+		"X-Other":        "myother",
+	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		for k, v := range headers {
+			assert.Equal(t, v, r.Header.Get(k))
+		}
+		msg := &iso18626.ISO18626Message{}
+		buf, err := xml.Marshal(msg)
+		assert.NoError(t, err)
+		_, err = w.Write(buf)
+		assert.NoError(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 0, BrokerModeOpaque, 0*time.Second)
+
+	msg := &iso18626.ISO18626Message{}
+	peer := ill_db.Peer{
+		Url:         server.URL,
+		HttpHeaders: headers,
+	}
+	_, err := client.SendHttpPost(&peer, msg)
+	assert.NoError(t, err)
 }
