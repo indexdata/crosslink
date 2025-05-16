@@ -47,6 +47,35 @@ components:
         type: integer
         format: int32
   schemas:
+    Index:
+      type: object
+      properties:
+        revision:
+          type: string
+          description: VCS revision
+        links:
+          type: object
+          properties:
+            illTransactionsLink:
+              type: string
+              description: Link to ILL transactions
+            peersLink:
+              type: string
+              description: Link to peers
+            eventsLink:
+              type: string
+              description: Link to events
+            locatedSuppliersLink:
+              type: string
+              description: Link to located suppliers
+          required:
+            - eventsLink
+            - illTransactionsLink
+            - peersLink
+            - locatedSuppliersLink
+      required:
+        - revision
+        - links
     Error:
       type: object
       properties:
@@ -337,6 +366,22 @@ components:
         - SupplierPeerLink
 
 paths:
+  /:
+    get:
+      summary: Retrieve index information
+      responses:
+        '200':
+          description: Successful retrieval of index information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Index'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /events:
     get:
       summary: Retrieve events

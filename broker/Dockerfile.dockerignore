@@ -9,7 +9,7 @@ broker/*
 !broker/**/*.go
 
 # include commit id
-!broker/cmd/broker/commit.txt
+!broker/vcs/commit.txt
 
 # Exclude tests
 broker/test

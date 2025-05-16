@@ -20,10 +20,12 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var ILL_TRANSACTIONS_PATH = "/ill_transactions"
 var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
@@ -95,6 +97,16 @@ func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext, w http.Res
 		return nil, nil
 	}
 	return &tran, nil
+}
+
+func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
+	var index oapi.Index
+	index.Revision = vcs.GetCommit()
+	index.Links.IllTransactionsLink = toLink(r, ILL_TRANSACTIONS_PATH, "", "")
+	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
+	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")
+	index.Links.PeersLink = toLink(r, PEERS_PATH, "", "")
+	writeJsonResponse(w, index)
 }
 
 func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
