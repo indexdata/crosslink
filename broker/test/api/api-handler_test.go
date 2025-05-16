@@ -15,6 +15,7 @@ import (
 	"time"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -71,6 +72,19 @@ func TestMain(m *testing.M) {
 
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
+}
+
+func TestGetIndex(t *testing.T) {
+	httpGet(t, "/", "", http.StatusOK)
+	body := getResponseBody(t, "/")
+	var resp oapi.Index
+	err := json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, vcs.GetCommit(), resp.Revision)
+	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
+	assert.Equal(t, getLocalhostWithPort()+api.EVENTS_PATH, resp.Links.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)
+	assert.Equal(t, getLocalhostWithPort()+api.LOCATED_SUPPLIERS_PATH, resp.Links.LocatedSuppliersLink)
 }
 
 func TestGetEvents(t *testing.T) {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"log/slog"
 	"math"
@@ -125,12 +126,13 @@ func Run(ctx context.Context) error {
 func StartServer(context Context) error {
 	mux := http.NewServeMux()
 
-	serviceHandler := http.HandlerFunc(HandleRequest)
-	mux.Handle("/", serviceHandler)
-	mux.HandleFunc("/healthz", HandleHealthz)
-
-	mux.HandleFunc("/iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
-	mux.HandleFunc("/v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /healthz", HandleHealthz)
+	//all methods must be mapped explicitly to avoid conflicts with the index handler
+	mux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
+	mux.HandleFunc("POST /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
+	mux.HandleFunc("PUT /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
+	mux.HandleFunc("DELETE /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
+	mux.HandleFunc("GET /v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
@@ -203,10 +205,6 @@ func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
 	illRepo := new(ill_db.PgIllRepo)
 	illRepo.Pool = dbPool
 	return illRepo
-}
-
-func HandleRequest(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("Hello from " + r.URL.Path))
 }
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {

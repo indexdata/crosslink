@@ -12,7 +12,7 @@ GOTOOLS=tools.go
 BINARY=broker
 MAIN_PACKAGE=cmd/broker
 MODULE=broker
-COMMIT_ID=cmd/broker/commit.txt
+COMMIT_ID=vcs/commit.txt
 COVERAGE=coverage.out
 
 
