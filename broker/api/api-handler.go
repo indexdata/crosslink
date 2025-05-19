@@ -123,6 +123,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 		return
 	}
 	var resp oapi.Events
+	resp.Items = make([]oapi.Event, 0)
 	if tran == nil {
 		writeJsonResponse(w, resp)
 		return
@@ -146,6 +147,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	var resp oapi.IllTransactions
+	resp.Items = make([]oapi.IllTransaction, 0)
 
 	var limit int32 = a.limitDefault
 	if params.Limit != nil {
@@ -298,6 +300,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		return
 	}
 	var resp oapi.Peers
+	resp.Items = make([]oapi.Peer, 0)
 	resp.About.Count = count
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
@@ -612,6 +615,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var resp oapi.LocatedSuppliers
+	resp.Items = make([]oapi.LocatedSupplier, 0)
 	if tran == nil {
 		writeJsonResponse(w, resp)
 		return
