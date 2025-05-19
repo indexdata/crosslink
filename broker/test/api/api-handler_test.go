@@ -107,6 +107,7 @@ func TestGetEvents(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
+	assert.Equal(t, []oapi.Event{}, resp.Items)
 }
 
 func TestGetIllTransactions(t *testing.T) {
@@ -137,6 +138,7 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
+	assert.Equal(t, []oapi.IllTransaction{}, resp.Items)
 
 	for i := range 2 * api.LIMIT_DEFAULT {
 		requester := "ISIL:DK-BIB1"
@@ -248,6 +250,7 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 0)
+	assert.Equal(t, []oapi.LocatedSupplier{}, resp.Items)
 }
 
 func TestBrokerCRUD(t *testing.T) {
@@ -420,6 +423,11 @@ func TestPeersCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, respPeers.About.Count, int64(1))
+
+	body = getResponseBody(t, "/peers?limit=0")
+	err = json.Unmarshal(body, &respPeers)
+	assert.NoError(t, err)
+	assert.Equal(t, []oapi.Peer{}, respPeers.Items)
 
 	httpGet(t, "/peers?cql="+url.QueryEscape("badfield any ISIL:PEER"), "", http.StatusBadRequest)
 
