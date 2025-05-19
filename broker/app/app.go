@@ -19,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/broker/vcs"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -143,9 +144,13 @@ func StartServer(context Context) error {
 		apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, mux, "/broker")
 	}
+	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server", vcs.GetSignature())
+		mux.ServeHTTP(w, r)
+	})
 
 	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
-	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), mux)
+	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), signatureHandler)
 }
 
 func RunMigrateScripts() {

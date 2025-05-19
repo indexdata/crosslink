@@ -81,6 +81,7 @@ func TestGetIndex(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, vcs.GetCommit(), resp.Revision)
+	assert.Equal(t, vcs.GetSignature(), resp.Signature)
 	assert.Equal(t, getLocalhostWithPort()+api.ILL_TRANSACTIONS_PATH, resp.Links.IllTransactionsLink)
 	assert.Equal(t, getLocalhostWithPort()+api.EVENTS_PATH, resp.Links.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+api.PEERS_PATH, resp.Links.PeersLink)

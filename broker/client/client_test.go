@@ -9,6 +9,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,7 @@ func TestSendHttpPost(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "mytenant",
 		"X-Other":        "myother",
+		"User-Agent":     vcs.GetSignature(),
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
