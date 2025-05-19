@@ -1,11 +1,12 @@
 # Introduction
 
-Crosslink broker manages inter-library loan (ILL) transactions, specifically:
+CrossLink broker manages inter-library loan (ILL) transactions, specifically:
 
 * accepts and handles ISO18626 requests
 * locates suppliers via _Search/Retrieval via URL_ (SRU) protocol
+* resolves suppliers address via the Directory API
 * negotiates loans with suppliers via ISO18626
-* forwards settled loan notification to requesters
+* forwards the settled loan notification to requesters
 
 # API
 
@@ -19,6 +20,16 @@ Note that selected read-only API endpoints are accessible with the base path `/b
 if env `TENANT_TO_SYMBOL` is defined.
 This is allows the broker to be used as a FOLIO/Okapi module,
 see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for details.
+
+# Mode of operation
+
+CrossLink broker can operate in two modes:
+
+1. `opaque` -- in this mode the broker behaves like a regular ISO18626 peer and does not reveal any information about the actual supplier. Broker's own symbol (e.g., `ISIL:BROKER`) is used to address and sign messages in both directions.
+
+2. `transparent` -- in this mode the broker reveals the actual supplier behind the request. It does so by using the actual supplier's symbol in the proxied supplying messages. When selecting a supplier, the broker will send an `ExpectToSupply` message to the requester to inform it about a new or changed supplier.
+
+Additionally, in this mode the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
 
 # Configuration
 
