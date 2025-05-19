@@ -53,6 +53,9 @@ components:
         revision:
           type: string
           description: VCS revision
+        signature:
+          type: string
+          description: Application signature
         links:
           type: object
           properties:
@@ -75,6 +78,7 @@ components:
             - locatedSuppliersLink
       required:
         - revision
+        - signature
         - links
     Error:
       type: object

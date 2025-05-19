@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/vcs"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -349,6 +350,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 			if err != nil {
 				t.Errorf("failed to send request to broker :%s", err)
 			}
+			assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
 			if res.StatusCode != tt.status {
 				t.Errorf("handler returned wrong status code: got %v want %v",
 					res.StatusCode, tt.status)

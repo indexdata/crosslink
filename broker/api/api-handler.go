@@ -102,6 +102,7 @@ func (a *ApiHandler) getIllTranFromParams(ctx extctx.ExtendedContext, w http.Res
 func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var index oapi.Index
 	index.Revision = vcs.GetCommit()
+	index.Signature = vcs.GetSignature()
 	index.Links.IllTransactionsLink = toLink(r, ILL_TRANSACTIONS_PATH, "", "")
 	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
 	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")

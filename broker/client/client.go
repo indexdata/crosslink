@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/shim"
+	"github.com/indexdata/crosslink/broker/vcs"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -357,7 +358,9 @@ func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso186
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
-	httpClient := httpclient.NewClient().WithMaxSize(int64(c.maxMsgSize))
+	httpClient := httpclient.NewClient().
+		WithMaxSize(int64(c.maxMsgSize)).
+		WithHeaders("User-Agent", vcs.GetSignature())
 	for k, v := range peer.HttpHeaders {
 		httpClient.WithHeaders(k, v)
 	}

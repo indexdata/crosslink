@@ -18,3 +18,7 @@ func GetCommit() string {
 	}
 	return CommitId
 }
+
+func GetSignature() string {
+	return "CrossLink-Broker/" + GetCommit()
+}
