@@ -13,3 +13,4 @@ dependencies:
   - name: okapi-hooks
     repository: oci://ghcr.io/indexdata/charts
     version: ">0.1.0-0"
+    condition: okapi-hooks.enabled
