@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -234,6 +235,28 @@ func TestIso18626PostSupplyingMessage(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgOk := "<messageStatus>OK</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgOk)
+}
+
+func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(new(MockRepositoryOtherSupplier), eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgError := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgError)
+	errorValue := "<errorValue>supplyingAgencyId: not a selected supplier for this request</errorValue>"
+	assert.Contains(t, rr.Body.String(), errorValue)
+}
+
+func TestIso18626PostSupplyingMessageErrorFindingSupplier(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(new(MockRepositorySupplierError), eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func TestIso18626PostSupplyingMessageDBFailure(t *testing.T) {
@@ -488,4 +511,22 @@ func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext,
 
 func (r *MockRepositoryReqExists) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
 	return &pgconn.PgError{Code: "23505"}
+}
+
+type MockRepositoryOtherSupplier struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *MockRepositoryOtherSupplier) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		SupplierSymbol: "ISIL:OTHER",
+	}, nil
+}
+
+type MockRepositorySupplierError struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *MockRepositorySupplierError) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }

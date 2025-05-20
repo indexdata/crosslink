@@ -125,7 +125,9 @@ func (r *MockIllRepositorySuccess) DeletePeer(ctx extctx.ExtendedContext, id str
 }
 
 func (r *MockIllRepositorySuccess) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
-	return ill_db.LocatedSupplier{}, nil
+	return ill_db.LocatedSupplier{
+		SupplierSymbol: "ISIL:SUP",
+	}, nil
 }
 
 func (r *MockIllRepositorySuccess) GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
