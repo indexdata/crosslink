@@ -31,6 +31,8 @@ const (
 	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
 	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
 	RetryNotPossible       ErrorValue = "requestType: Retry not possible"
+	SupplierNotFound       ErrorValue = "supplyingAgencyId: located supplier cannot be found"
+	IncorrectSupplier      ErrorValue = "supplyingAgencyId: not a selected supplier for this request"
 	UnsupportedRequestType ErrorValue = "requestType: unsupported value"
 	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
@@ -430,7 +432,22 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-
+	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound)
+			return
+		}
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return
+	}
+	if supplier.SupplierSymbol != symbol {
+		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier)
+		return
+	}
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -438,8 +455,7 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 			OutgoingMessage: resmsg,
 		},
 	}
-	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
-		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+
 	supReqId := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId
 	status, reason := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
 	if status == "" {
