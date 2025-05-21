@@ -121,17 +121,12 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 
 func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event events.Event) bool {
 	if w.brokerMode == client.BrokerModeTransparent {
-		illTrans, err := w.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
-		if err != nil {
-			ctx.Logger().Error("failed to process supplier message received event", "error", err)
-			return false
-		}
 		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
 		if err != nil {
 			ctx.Logger().Error("failed to process supplier message received event", "error", err)
 			return false
 		}
-		return !illTrans.RequesterID.Valid || illTrans.RequesterID.String != sup.SupplierID
+		return !sup.LocalSupplier
 	}
 	return true
 }
