@@ -84,15 +84,17 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
 	default:
-		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
-		}, "")
+		if w.shouldForwardMessage(ctx, event) {
+			extctx.Must(ctx, func() (string, error) {
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+					events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
+			}, "")
+		}
 	}
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	if event.EventStatus == events.EventStatusSuccess {
+	if event.EventStatus == events.EventStatusSuccess && w.shouldForwardMessage(ctx, event) {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
@@ -115,4 +117,16 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
 	}
+}
+
+func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event events.Event) bool {
+	if w.brokerMode == client.BrokerModeTransparent {
+		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
+		if err != nil {
+			ctx.Logger().Error("failed to process supplier message received event", "error", err)
+			return false
+		}
+		return !sup.LocalSupplier
+	}
+	return true
 }

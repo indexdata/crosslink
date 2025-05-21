@@ -542,14 +542,21 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusLoanCompleted) &&
 			illTrans.LastRequesterAction.String == string(iso18626.TypeActionShippedReturn)
 	})
+	// These notices should not trigger message sending because locally supplied
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	assert.Nil(t, err)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	assert.Nil(t, err)
 	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
-			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 3, func(e events.Event) string {
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}
