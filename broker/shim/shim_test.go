@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
@@ -146,4 +147,44 @@ func TestIso18626DefaultShim(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to apply incoming")
 	}
+}
+
+func TestIso18626AlmaShimRequest(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		Request: &iso18626.Request{
+			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+				{
+					Address: &iso18626.Address{
+						PhysicalAddress: &iso18626.PhysicalAddress{
+							Line1:    "124 Main St",
+							Line2:    "",
+							Locality: "Chicago",
+							Region: &iso18626.TypeSchemeValuePair{
+								Text: "IL",
+							},
+							PostalCode: "60606",
+							Country: &iso18626.TypeSchemeValuePair{
+								Text: "US",
+							},
+						},
+					},
+				},
+			},
+			ServiceInfo: &iso18626.ServiceInfo{
+				Note: "original note",
+			},
+		},
+	}
+	shim := GetShim(VendorAlma)
+	bytes, err := shim.ApplyToOutgoing(&msg)
+	if err != nil {
+		t.Errorf("failed to apply outgoing")
+	}
+	var resmsg iso18626.ISO18626Message
+	err = shim.ApplyToIncoming(bytes, &resmsg)
+	if err != nil {
+		t.Errorf("failed to apply incoming")
+	}
+	assert.Equal(t, "original note\n\n"+ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+ADDRESS_END+"\n",
+		resmsg.Request.ServiceInfo.Note)
 }
