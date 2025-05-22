@@ -1,11 +1,11 @@
-# CrossLink ILL services
+# CrossLink Inter-Library Loan Platform
 
-CrossLink project provides software services for implementation of Inter-Library Loan (ILL) systems.
+CrossLink project provides software services for implementation of Inter-Library Loan (ILL) solutions.
 
 See individual components docs for details:
 
 * [broker](broker/README.md): ISO18626 transaction broker
-* [illmock](illmock/README.md): ISO18626 + SRU mocking service
+* [illmock](illmock/README.md): ISO18626 and SRU mocking service
 
 ## Setting up local development environment
 
