@@ -201,7 +201,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
-		appCtx.Logger().Error("Unable to listen to database notify", "error", err)
+		appCtx.Logger().Error("starting event bus failed", "error", err)
 		os.Exit(1)
 	}
 }
