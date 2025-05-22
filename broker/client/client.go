@@ -134,7 +134,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to get requester", "error", err)
 		return events.EventStatusError, &resData
 	}
-	if getForward(event) {
+	if !isDoNotSend(event) {
 		response, err := c.SendHttpPost(&requester, message)
 		if response != nil {
 			resData.IncomingMessage = response
@@ -151,7 +151,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		if resData.CustomData == nil {
 			resData.CustomData = map[string]any{}
 		}
-		resData.CustomData["forward"] = false
+		resData.CustomData["doNotSend"] = true
 	}
 	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
 	if err != nil {
@@ -240,7 +240,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		action = string(found)
 	}
 	resData.OutgoingMessage = message
-	if getForward(event) {
+	if !isDoNotSend(event) {
 		response, err := c.SendHttpPost(peer, message)
 		if response != nil {
 			resData.IncomingMessage = response
@@ -263,7 +263,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		if resData.CustomData == nil {
 			resData.CustomData = map[string]any{}
 		}
-		resData.CustomData["forward"] = false
+		resData.CustomData["doNotSend"] = true
 	}
 	// check for status == EvenStatusError and NOT save??
 	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
@@ -278,13 +278,13 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	return status, &resData
 }
 
-func getForward(event events.Event) bool {
+func isDoNotSend(event events.Event) bool {
 	if event.EventData.CustomData != nil {
-		if forward, ok := event.EventData.CustomData["forward"].(bool); ok && !forward {
-			return false
+		if forward, ok := event.EventData.CustomData["doNotSend"].(bool); ok && forward {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
