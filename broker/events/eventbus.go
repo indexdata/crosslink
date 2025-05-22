@@ -118,7 +118,7 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		return
 	}
 	p.ctx.Logger().Debug("event_bus: received event", "channel", EVENT_BUS_CHANNEL,
-		"transaction", event.IllTransactionID,
+		"signal", data.Signal,
 		"eventName", event.EventName,
 		"eventType", event.EventType,
 		"eventStatus", event.EventStatus)
@@ -128,20 +128,21 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	})
 	switch data.Signal {
 	case SignalTaskCreated, SignalNoticeCreated:
-		triggerHandlers(eventCtx, event, p.EventCreatedHandlers)
+		triggerHandlers(eventCtx, event, p.EventCreatedHandlers, data.Signal)
 	case SignalTaskBegin:
-		triggerHandlers(eventCtx, event, p.TaskStartedHandlers)
+		triggerHandlers(eventCtx, event, p.TaskStartedHandlers, data.Signal)
 	case SignalTaskComplete:
-		triggerHandlers(eventCtx, event, p.TaskCompletedHandlers)
+		triggerHandlers(eventCtx, event, p.TaskCompletedHandlers, data.Signal)
 	default:
 		p.ctx.Logger().Error("event_bus: unsupported signal", "signal", data.Signal, "eventName", event.EventName)
 	}
 }
 
-func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx extctx.ExtendedContext, event Event)) {
+func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx extctx.ExtendedContext, event Event), signal Signal) {
 	var wg sync.WaitGroup
 	handlers, ok := handlersMap[event.EventName]
 	if ok {
+		ctx.Logger().Debug("event_bus: found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
 		for _, handler := range handlers {
 			wg.Add(1)
 			go func(h func(extctx.ExtendedContext, Event), e Event) {
@@ -150,10 +151,10 @@ func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[Ev
 			}(handler, event)
 		}
 	} else {
-		ctx.Logger().Warn("event_bus: no handlers found for event", "eventName", event.EventName)
+		ctx.Logger().Debug("event_bus: no handlers found for event", "eventName", event.EventName, "signal", signal)
 	}
 	wg.Wait() // Wait for all goroutines to finish
-	ctx.Logger().Debug("event_bus: all handlers finished", "eventName", event.EventName)
+	ctx.Logger().Debug("event_bus: all handlers finished", "eventName", event.EventName, "signal", signal)
 }
 
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
