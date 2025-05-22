@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+
 	extctx "github.com/indexdata/crosslink/broker/common"
 
 	"github.com/jackc/pgx/v5"
@@ -44,14 +45,13 @@ func (r *PgBaseRepo[T]) WithTxFunc(ctx extctx.ExtendedContext, repo PgDerivedRep
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			ctx.Logger().Error("db tx rollback")
+			ctx.Logger().Error("DB TX rollback", "error", r)
 			_ = tx.Rollback(ctx)
 			panic(r)
 		} else if err != nil {
-			ctx.Logger().Error("db tx error and rollback", "error", err)
+			ctx.Logger().Error("DB TX error and rollback", "error", err)
 			_ = tx.Rollback(ctx)
 		} else {
-			ctx.Logger().Info("db tx commit")
 			err = tx.Commit(ctx)
 		}
 	}()

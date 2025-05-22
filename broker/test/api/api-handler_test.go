@@ -360,6 +360,34 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events.Items, 0)
 }
 
+func TestPeersLinks(t *testing.T) {
+	for i := 0; i < 2*int(api.LIMIT_DEFAULT); i++ {
+		peer := "ISIL:DK-PEER" + strconv.Itoa(i)
+		toCreate := oapi.Peer{
+			ID:            uuid.New().String(),
+			Name:          peer,
+			Url:           "https://url.com",
+			Symbols:       []string{peer},
+			RefreshPolicy: oapi.Transaction,
+		}
+		apptest.CreatePeer(t, illRepo, toCreate.Symbols[0], "")
+	}
+	resp := getPeers(t)
+	assert.Len(t, resp.Items, int(api.LIMIT_DEFAULT))
+	assert.GreaterOrEqual(t, int(resp.About.Count), int(2*api.LIMIT_DEFAULT))
+	assert.NotNil(t, resp.About.NextLink)
+	assert.True(t, strings.HasPrefix(*resp.About.NextLink, getLocalhostWithPort()+"/peers?"))
+	assert.Contains(t, *resp.About.NextLink, "offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
+	assert.Nil(t, resp.About.PrevLink)
+
+	body := getResponseBody(t, "/peers?offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)-1))
+	err := json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.NotNil(t, resp.About.PrevLink)
+	assert.Contains(t, *resp.About.PrevLink, "offset=0")
+	assert.NotNil(t, resp.About.NextLink)
+}
+
 func TestPeersCRUD(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "diku",

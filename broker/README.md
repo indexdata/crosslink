@@ -44,19 +44,20 @@ Configuration is provided via environment variables:
 | `DB_HOST`              | Database host                                                               | `localhost`                               |
 | `DB_DATABASE`          | Database name                                                               | `crosslink`                               |
 | `DB_PORT`              | Database port                                                               | `25432`                                   |
+| `LOG_LEVEL`            | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                 | `INFO`                                    |
 | `ENABLE_JSON_LOG`      | Should JSON log format be enabled                                           | `false`                                   |
-| `MOCK_CLIENT_URL`      | Mock client URL used for directory entries                                  | `http://localhost:19083/iso18626`         |
+| `BROKER_MODE`          | Should broker reveal supplier/requester symbols: `opaque` or `transparent`  | `opaque`                                  |
+| `CLIENT_DELAY`         | Delay duration for outgoing ISO18626 messages                               | `0ms`                                     |
+| `MAX_MESSAGE_SIZE`     | Max accepted ISO18626 message size                                          | `100KB`                                   |
 | `HOLDINGS_ADAPTER`     | Holdings lookup method: `mock` or `sru`                                     | `mock`                                    |
-| `SRU_URL`              | Comma separated list of URLs when HOLDINGS_ADAPTER is `sru`                 | `http://localhost:8081/sru`               |
-| `PEER_REFRESH_INTERVAL`| Peer refresh interval                                                       | `5m`                                      |
-| `MAX_MESSAGE_SIZE`     | Max ISO18626 message size                                                   | `100KB`                                   |
-| `DIRECTORY_ADAPTER`    | Directory lookup method:`mock` or `api`                                     | `mock`                                    |
+| `SRU_URL`              | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`               | `http://localhost:8081/sru`               |
+| `DIRECTORY_ADAPTER`    | Directory lookup method: `mock` or `api`                                    | `mock`                                    |
 | `DIRECTORY_API_URL`    | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`              | `http://localhost:8081/directory/entries` |
-| `BROKER_MODE`          | Should broker forward supplier/requester symbols: `opaque` or `transparent` | `opaque`                                  |
-| `API_PAGE_SIZE`        | Default value for `limit` query parameter                                   | `10`                                      |
-| `CLIENT_DELAY`         | Delay ISO18626 messages being sent by this duration                         | `0ms`                                     |
-| `TENANT_TO_SYMBOL`     | Limits results to include only transactions with `requesterSymbol` matching | (empty string)                            |
-|                        | `TENANT_TO_SYMBOL` with {tenant} being replaced by `X-Okapi-Tenant` value   |                                           |
+| `PEER_REFRESH_INTERVAL`| Peer refresh interval (via Directory lookup)                                | `5m`                                      |
+| `MOCK_CLIENT_URL`      | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                   | `http://localhost:19083/iso18626`         |
+| `API_PAGE_SIZE`        | Default value for the `limit` query parameter when paging the API           | `10`                                      |
+| `TENANT_TO_SYMBOL`     | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,| (empty value)                             |
+|                        | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value       |                                           |
 
 # Build
 

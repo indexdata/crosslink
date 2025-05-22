@@ -203,7 +203,7 @@ func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err err
 }
 
 func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (events.EventStatus, *events.EventResult) {
-	ctx.Logger().Info(message)
+	ctx.Logger().Debug("supplier_locator: " + message)
 	return events.EventStatusProblem, &events.EventResult{
 		Problem: &events.Problem{
 			Kind:    "no-suppliers",

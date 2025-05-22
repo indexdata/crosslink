@@ -42,6 +42,7 @@ var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD,
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
+var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
@@ -68,16 +69,35 @@ type Context struct {
 }
 
 func configLog() slog.Handler {
+	var level slog.Level
+	switch strings.ToUpper(LOG_LEVEL) {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "INFO":
+		level = slog.LevelInfo
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo
+	}
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
-		jsonHandler := slog.NewJSONHandler(os.Stdout, nil)
+		jsonHandler := slog.NewJSONHandler(os.Stdout, opts)
 		extctx.DefaultLogHandler = jsonHandler
 		return jsonHandler
 	} else {
-		return extctx.DefaultLogHandler
+		textHandler := slog.NewTextHandler(os.Stdout, opts)
+		extctx.DefaultLogHandler = textHandler
+		return textHandler
 	}
 }
 
 func Init(ctx context.Context) (Context, error) {
+	appCtx.Logger().Info("starting " + vcs.GetSignature())
 	RunMigrateScripts()
 	pool := InitDbPool()
 	eventRepo := CreateEventRepo(pool)
@@ -149,7 +169,7 @@ func StartServer(context Context) error {
 		mux.ServeHTTP(w, r)
 	})
 
-	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
+	appCtx.Logger().Info("HTTP server started on port " + strconv.Itoa(HTTP_PORT))
 	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), signatureHandler)
 }
 
@@ -201,7 +221,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 func StartEventBus(ctx context.Context, eventBus events.EventBus) {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
-		appCtx.Logger().Error("Unable to listen to database notify", "error", err)
+		appCtx.Logger().Error("starting event bus failed", "error", err)
 		os.Exit(1)
 	}
 }
