@@ -84,20 +84,18 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
 	default:
-		if w.shouldForwardMessage(ctx, event) {
-			extctx.Must(ctx, func() (string, error) {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-					events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
-			}, "")
-		}
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"forward": w.shouldForwardMessage(ctx, event)}}, &event.ID)
+		}, "")
 	}
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
-	if event.EventStatus == events.EventStatusSuccess && w.shouldForwardMessage(ctx, event) {
+	if event.EventStatus == events.EventStatusSuccess {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}}, &event.ID)
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"forward": w.shouldForwardMessage(ctx, event)}}, &event.ID)
 		}, "")
 	}
 }

@@ -134,17 +134,24 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		ctx.Logger().Error("failed to get requester", "error", err)
 		return events.EventStatusError, &resData
 	}
-	response, err := c.SendHttpPost(&requester, message)
-	if response != nil {
-		resData.IncomingMessage = response
-	}
-	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to send ISO18626 message",
-			Cause:   err.Error(),
+	if getForward(event) {
+		response, err := c.SendHttpPost(&requester, message)
+		if response != nil {
+			resData.IncomingMessage = response
 		}
-		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-		return events.EventStatusError, &resData
+		if err != nil {
+			resData.EventError = &events.EventError{
+				Message: "failed to send ISO18626 message",
+				Cause:   err.Error(),
+			}
+			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+			return events.EventStatusError, &resData
+		}
+	} else {
+		if resData.CustomData == nil {
+			resData.CustomData = map[string]any{}
+		}
+		resData.CustomData["forward"] = false
 	}
 	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
 	if err != nil {
@@ -233,23 +240,30 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		action = string(found)
 	}
 	resData.OutgoingMessage = message
-	response, err := c.SendHttpPost(peer, message)
-	if response != nil {
-		resData.IncomingMessage = response
-	}
-	if err != nil {
-		var httpErr *httpclient.HttpError
-		if errors.As(err, &httpErr) {
-			resData.HttpFailure = httpErr
+	if getForward(event) {
+		response, err := c.SendHttpPost(peer, message)
+		if response != nil {
+			resData.IncomingMessage = response
 		}
-		resData.EventError = &events.EventError{
-			Message: "failed to send ISO18626 message",
-			Cause:   err.Error(),
+		if err != nil {
+			var httpErr *httpclient.HttpError
+			if errors.As(err, &httpErr) {
+				resData.HttpFailure = httpErr
+			}
+			resData.EventError = &events.EventError{
+				Message: "failed to send ISO18626 message",
+				Cause:   err.Error(),
+			}
+			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
+			status = events.EventStatusError
+		} else {
+			status = c.checkConfirmationError(isRequest, response, status)
 		}
-		ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-		status = events.EventStatusError
 	} else {
-		status = c.checkConfirmationError(isRequest, response, status)
+		if resData.CustomData == nil {
+			resData.CustomData = map[string]any{}
+		}
+		resData.CustomData["forward"] = false
 	}
 	// check for status == EvenStatusError and NOT save??
 	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
@@ -262,6 +276,15 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		status = events.EventStatusError
 	}
 	return status, &resData
+}
+
+func getForward(event events.Event) bool {
+	if event.EventData.CustomData != nil {
+		if forward, ok := event.EventData.CustomData["forward"].(bool); ok && !forward {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
