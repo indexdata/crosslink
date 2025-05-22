@@ -316,6 +316,25 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		addBadRequestError(ctx, w, err)
 		return
 	}
+
+	if dbparams.Offset > 0 {
+		pOffset := dbparams.Offset - dbparams.Limit
+		if pOffset < 0 {
+			pOffset = 0
+		}
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
+		link := toLinkUrlValues(r, urlValues)
+		resp.About.PrevLink = &link
+	}
+	if count > int64(dbparams.Limit+dbparams.Offset) {
+		noffset := dbparams.Offset + dbparams.Limit
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
+		link := toLinkUrlValues(r, urlValues)
+		resp.About.NextLink = &link
+	}
+
 	writeJsonResponse(w, resp)
 }
 
