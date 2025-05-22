@@ -97,6 +97,7 @@ func configLog() slog.Handler {
 }
 
 func Init(ctx context.Context) (Context, error) {
+	appCtx.Logger().Info("starting " + vcs.GetSignature())
 	RunMigrateScripts()
 	pool := InitDbPool()
 	eventRepo := CreateEventRepo(pool)
@@ -168,7 +169,7 @@ func StartServer(context Context) error {
 		mux.ServeHTTP(w, r)
 	})
 
-	appCtx.Logger().Info("Server started on http://localhost:" + strconv.Itoa(HTTP_PORT))
+	appCtx.Logger().Info("HTTP server started on port " + strconv.Itoa(HTTP_PORT))
 	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), signatureHandler)
 }
 

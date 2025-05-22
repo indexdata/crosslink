@@ -39,21 +39,19 @@ func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) *PgBa
 }
 
 func (r *PgBaseRepo[T]) WithTxFunc(ctx extctx.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) error {
-	ctx.Logger().Debug("DB TX begin")
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			ctx.Logger().Error("DB TX rollback")
+			ctx.Logger().Error("DB TX rollback", "error", r)
 			_ = tx.Rollback(ctx)
 			panic(r)
 		} else if err != nil {
 			ctx.Logger().Error("DB TX error and rollback", "error", err)
 			_ = tx.Rollback(ctx)
 		} else {
-			ctx.Logger().Debug("DB TX commit")
 			err = tx.Commit(ctx)
 		}
 	}()

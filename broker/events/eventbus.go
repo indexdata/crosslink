@@ -174,6 +174,7 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
+		p.ctx.Logger().Debug("event_bus: created TASK", "eventName", eventName, "eventId", event.ID)
 		return err
 	})
 }
@@ -181,7 +182,7 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error) {
 	id := uuid.New().String()
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
+		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
 			IllTransactionID: illTransactionID,
 			Timestamp:        getPgNow(),
@@ -194,6 +195,7 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName Event
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated)
+		p.ctx.Logger().Debug("event_bus: created NOTICE", "eventName", eventName, "eventId", event.ID)
 		return err
 	})
 }
@@ -288,7 +290,7 @@ func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, 
 
 	err = p.CompleteTask(event.ID, result, status)
 	if err != nil {
-		ctx.Logger().Error("failed to complete processing TASK event", "error", err, "eventName", event.EventName)
+		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", event.EventName)
 	}
 }
 
