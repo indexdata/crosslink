@@ -340,6 +340,13 @@ func populateAddressFields(message *iso18626.ISO18626Message, name string, addre
 		if message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress == nil {
 			message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
 		}
+		if len(message.Request.RequestingAgencyInfo.Address) == 0 || message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress == nil {
+			if len(message.Request.RequestingAgencyInfo.Address) == 0 {
+				message.Request.RequestingAgencyInfo.Address = []iso18626.Address{{PhysicalAddress: &address}}
+			} else {
+				message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress = &address
+			}
+		}
 	}
 }
 

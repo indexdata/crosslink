@@ -109,11 +109,13 @@ func TestPopulateAddressFields(t *testing.T) {
 
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line2, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line2)
+	assert.Equal(t, address.Line2, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line2)
 
 	// Don't override
 	populateAddressFields(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line2, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line2)
+	assert.Equal(t, address.Line2, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line2)
 }
 
 func TestPopulateSupplierAddress(t *testing.T) {
