@@ -342,10 +342,13 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
 	illId := uuid.NewString()
+	requester := apptest.CreatePeer(t, illRepo, "isil:requester1", adapter.MOCK_CLIENT_URL)
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
 		RequesterRequestID: apptest.CreatePgText("reqid"),
+		RequesterSymbol:    apptest.CreatePgText("isil:requester1"),
+		RequesterID:        apptest.CreatePgText(requester.ID),
 	})
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)

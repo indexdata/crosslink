@@ -251,14 +251,14 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
 		name, address := getPeerNameAndAddress(requester, illTrans.RequesterSymbol.String)
-		if message.Request.RequestingAgencyInfo == nil && message.Request.RequestingAgencyInfo.Name == "" {
+		if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
 			if message.Request.RequestingAgencyInfo == nil {
 				message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
 			}
 			message.Request.RequestingAgencyInfo.Name = name
 		}
 		if len(message.Request.RequestedDeliveryInfo) == 0 {
-			message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{}
+			message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{}}
 		}
 		if message.Request.RequestedDeliveryInfo[0].Address == nil {
 			message.Request.RequestedDeliveryInfo[0].Address = &iso18626.Address{}
