@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -69,7 +70,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	resData := events.EventResult{}
 
-	locSupplier, _, _ := c.getSupplier(ctx, illTrans)
+	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
@@ -122,6 +123,26 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.validateReason(reason, illTrans.LastRequesterAction.String, illTrans.LastSupplierStatus.String)
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
+
+	if status == iso18626.TypeStatusLoaned {
+		name, address := getPeerNameAndAddress(*supplier, "")
+		if message.SupplyingAgencyMessage.ReturnInfo == nil {
+			message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
+		}
+		if message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId == nil {
+			symbol := strings.Split(locSupplier.SupplierSymbol, ":")
+			message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId = &iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: symbol[0]},
+				AgencyIdValue: symbol[1],
+			}
+		}
+		if message.SupplyingAgencyMessage.ReturnInfo.Name == "" {
+			message.SupplyingAgencyMessage.ReturnInfo.Name = name
+		}
+		if message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress == nil {
+			message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress = &address
+		}
+	}
 
 	resData.OutgoingMessage = message
 
@@ -183,13 +204,26 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	resData := events.EventResult{}
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
+		resData.EventError = &events.EventError{
+			Message: "failed to read ILL transaction",
+			Cause:   err.Error(),
+		}
 		ctx.Logger().Error("failed to read ILL transaction", "error", err)
-		return events.EventStatusError, nil
+		return events.EventStatusError, &resData
+	}
+	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
+	if err != nil {
+		resData.EventError = &events.EventError{
+			Message: "failed to get requester",
+			Cause:   err.Error(),
+		}
+		ctx.Logger().Error("failed to get requester", "error", err)
+		return events.EventStatusError, &resData
 	}
 
-	resData := events.EventResult{}
 	selected, peer, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
 		resData.EventError = &events.EventError{
@@ -216,6 +250,29 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
+		name, address := getPeerNameAndAddress(requester, illTrans.RequesterSymbol.String)
+		if message.Request.RequestingAgencyInfo == nil && message.Request.RequestingAgencyInfo.Name == "" {
+			if message.Request.RequestingAgencyInfo == nil {
+				message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
+			}
+			message.Request.RequestingAgencyInfo.Name = name
+		}
+		if len(message.Request.RequestedDeliveryInfo) == 0 {
+			message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{}
+		}
+		if message.Request.RequestedDeliveryInfo[0].Address == nil {
+			message.Request.RequestedDeliveryInfo[0].Address = &iso18626.Address{}
+		}
+		if message.Request.PatronInfo != nil && message.Request.PatronInfo.SendToPatron != nil &&
+			*message.Request.PatronInfo.SendToPatron == iso18626.TypeYesNoY {
+			if len(message.Request.PatronInfo.Address) > 0 && message.Request.RequestedDeliveryInfo[0].Address == nil {
+				message.Request.RequestedDeliveryInfo[0].Address = &message.Request.PatronInfo.Address[0]
+			}
+		} else {
+			if message.Request.RequestedDeliveryInfo[0].Address == nil {
+				message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
+			}
+		}
 		action = ill_db.RequestAction
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
@@ -401,4 +458,52 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		return nil, err
 	}
 	return &resmsg, nil
+}
+
+func getPeerNameAndAddress(peer ill_db.Peer, symbol string) (string, iso18626.PhysicalAddress) {
+	name := ""
+	address := iso18626.PhysicalAddress{}
+	if nameValue, ok := peer.CustomData["name"].(string); ok {
+		if symbol == "" {
+			name = nameValue
+		} else {
+			name = fmt.Sprintf("%v (%v)", nameValue, symbol)
+		}
+		address.Line1 = name
+	}
+	if listMap, ok := peer.CustomData["addresses"].([]any); ok && len(listMap) > 0 {
+		for _, s := range listMap {
+			if addressMap, castOk := s.(map[string]any); castOk {
+				typeS, typeOk := addressMap["type"].(string)
+				comp, compOk := addressMap["addressComponents"].([]any)
+				if typeOk && compOk && typeS == "Shipping" {
+					for _, c := range comp {
+						if compMap, cCastOk := c.(map[string]any); cCastOk {
+							part, partOk := compMap["value"].(string)
+							pType, pTypeOk := compMap["type"].(string)
+							if partOk && pTypeOk {
+								switch pType {
+								case "Thoroughfare":
+									address.Line2 = part
+								case "Locality":
+									address.Locality = part
+								case "AdministrativeArea":
+									address.Region = &iso18626.TypeSchemeValuePair{
+										Text: part,
+									}
+								case "PostalCode":
+									address.PostalCode = part
+								case "CountryCode":
+									address.Country = &iso18626.TypeSchemeValuePair{
+										Text: part,
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return name, address
 }
