@@ -469,7 +469,7 @@ func getPeerNameAndAddress(peer ill_db.Peer, symbol string) (string, iso18626.Ph
 		} else {
 			name = fmt.Sprintf("%v (%v)", nameValue, symbol)
 		}
-		address.Line1 = name
+		address.Line1 = nameValue
 	}
 	if listMap, ok := peer.CustomData["addresses"].([]any); ok && len(listMap) > 0 {
 		for _, s := range listMap {
