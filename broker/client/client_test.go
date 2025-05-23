@@ -81,12 +81,12 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 	err := json.Unmarshal([]byte(jsonString), &data)
 	assert.Nil(t, err)
 	peer := ill_db.Peer{
+		Name:       "ACTLegislativeAssemblyLibrary",
 		CustomData: data,
 	}
 	name, address := getPeerNameAndAddress(peer, "")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary", name)
-	assert.Equal(t, "ACTLegislativeAssemblyLibrary", address.Line1)
-	assert.Equal(t, "196LondonCircuit", address.Line2)
+	assert.Equal(t, "196LondonCircuit", address.Line1)
 	assert.Equal(t, "Canberra", address.Locality)
 	assert.Equal(t, "2601", address.PostalCode)
 	assert.Equal(t, "ACT", address.Region.Text)
@@ -94,7 +94,7 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 
 	name, address = getPeerNameAndAddress(peer, "ISIL:ACT")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary (ISIL:ACT)", name)
-	assert.Equal(t, "ACTLegislativeAssemblyLibrary", address.Line1)
+	assert.Equal(t, "196LondonCircuit", address.Line1)
 }
 
 func TestPopulateAddressFields(t *testing.T) {
@@ -103,7 +103,7 @@ func TestPopulateAddressFields(t *testing.T) {
 	}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
-		Line2: "Home 1",
+		Line1: "Home 1",
 	}
 	populateAddressFields(&message, name, address)
 
@@ -114,8 +114,8 @@ func TestPopulateAddressFields(t *testing.T) {
 	// Don't override
 	populateAddressFields(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
-	assert.Equal(t, address.Line2, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line2)
-	assert.Equal(t, address.Line2, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line2)
+	assert.Equal(t, address.Line1, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line1)
+	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 }
 
 func TestPopulateSupplierAddress(t *testing.T) {
@@ -124,7 +124,7 @@ func TestPopulateSupplierAddress(t *testing.T) {
 	}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
-		Line2: "Home 1",
+		Line1: "Home 1",
 	}
 	locSup := ill_db.LocatedSupplier{
 		SupplierSymbol: "ISIL:SUP1",
@@ -133,7 +133,7 @@ func TestPopulateSupplierAddress(t *testing.T) {
 	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
 	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
-	assert.Equal(t, address.Line2, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line2)
+	assert.Equal(t, address.Line1, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line1)
 
 	// Don't override
 	populateSupplierAddress(&message, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP2"}, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
