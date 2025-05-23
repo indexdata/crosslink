@@ -826,6 +826,14 @@ func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) oapi.PeerRefreshPolicy 
 }
 
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
+	customData := make(map[string]interface{})
+	if peer.CustomData != nil {
+		customData = *peer.CustomData
+	}
+	httpHeaders := make(map[string]string)
+	if peer.HttpHeaders != nil {
+		httpHeaders = *peer.HttpHeaders
+	}
 	db := ill_db.Peer{
 		ID:            peer.ID,
 		Name:          peer.Name,
@@ -836,8 +844,8 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 			Time:  time.Now(),
 			Valid: true,
 		},
-		CustomData:  *peer.CustomData,
-		HttpHeaders: *peer.HttpHeaders,
+		CustomData:  customData,
+		HttpHeaders: httpHeaders,
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()
