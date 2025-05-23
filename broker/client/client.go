@@ -126,22 +126,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	if status == iso18626.TypeStatusLoaned {
 		name, address := getPeerNameAndAddress(*supplier, "")
-		if message.SupplyingAgencyMessage.ReturnInfo == nil {
-			message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
-		}
-		if message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId == nil {
-			symbol := strings.Split(locSupplier.SupplierSymbol, ":")
-			message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId = &iso18626.TypeAgencyId{
-				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: symbol[0]},
-				AgencyIdValue: symbol[1],
-			}
-		}
-		if message.SupplyingAgencyMessage.ReturnInfo.Name == "" {
-			message.SupplyingAgencyMessage.ReturnInfo.Name = name
-		}
-		if message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress == nil {
-			message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress = &address
-		}
+		populateSupplierAddress(message, locSupplier, name, address)
 	}
 
 	resData.OutgoingMessage = message
@@ -184,6 +169,25 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		return events.EventStatusError, &resData
 	}
 	return events.EventStatusSuccess, &resData
+}
+
+func populateSupplierAddress(message *iso18626.ISO18626Message, locSupplier *ill_db.LocatedSupplier, name string, address iso18626.PhysicalAddress) {
+	if message.SupplyingAgencyMessage.ReturnInfo == nil {
+		message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
+	}
+	if message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId == nil {
+		symbol := strings.Split(locSupplier.SupplierSymbol, ":")
+		message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId = &iso18626.TypeAgencyId{
+			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: symbol[0]},
+			AgencyIdValue: symbol[1],
+		}
+	}
+	if message.SupplyingAgencyMessage.ReturnInfo.Name == "" {
+		message.SupplyingAgencyMessage.ReturnInfo.Name = name
+	}
+	if message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress == nil {
+		message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress = &address
+	}
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
@@ -251,28 +255,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
 		name, address := getPeerNameAndAddress(requester, illTrans.RequesterSymbol.String)
-		if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
-			if message.Request.RequestingAgencyInfo == nil {
-				message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
-			}
-			message.Request.RequestingAgencyInfo.Name = name
-		}
-		if len(message.Request.RequestedDeliveryInfo) == 0 {
-			message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{}}
-		}
-		if message.Request.RequestedDeliveryInfo[0].Address == nil {
-			message.Request.RequestedDeliveryInfo[0].Address = &iso18626.Address{}
-		}
-		if message.Request.PatronInfo != nil && message.Request.PatronInfo.SendToPatron != nil &&
-			*message.Request.PatronInfo.SendToPatron == iso18626.TypeYesNoY {
-			if len(message.Request.PatronInfo.Address) > 0 && message.Request.RequestedDeliveryInfo[0].Address == nil {
-				message.Request.RequestedDeliveryInfo[0].Address = &message.Request.PatronInfo.Address[0]
-			}
-		} else {
-			if message.Request.RequestedDeliveryInfo[0].Address == nil {
-				message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
-			}
-		}
+		populateAddressFields(message, name, address)
 		action = ill_db.RequestAction
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
@@ -333,6 +316,31 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		status = events.EventStatusError
 	}
 	return status, &resData
+}
+
+func populateAddressFields(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
+	if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
+		if message.Request.RequestingAgencyInfo == nil {
+			message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
+		}
+		message.Request.RequestingAgencyInfo.Name = name
+	}
+	if len(message.Request.RequestedDeliveryInfo) == 0 {
+		message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{}}
+	}
+	if message.Request.RequestedDeliveryInfo[0].Address == nil {
+		message.Request.RequestedDeliveryInfo[0].Address = &iso18626.Address{}
+	}
+	if message.Request.PatronInfo != nil && message.Request.PatronInfo.SendToPatron != nil &&
+		*message.Request.PatronInfo.SendToPatron == iso18626.TypeYesNoY {
+		if len(message.Request.PatronInfo.Address) > 0 && message.Request.RequestedDeliveryInfo[0].Address == nil {
+			message.Request.RequestedDeliveryInfo[0].Address = &message.Request.PatronInfo.Address[0]
+		}
+	} else {
+		if message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress == nil {
+			message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
+		}
+	}
 }
 
 func isDoNotSend(event events.Event) bool {

@@ -96,3 +96,47 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary (ISIL:ACT)", name)
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary", address.Line1)
 }
+
+func TestPopulateAddressFields(t *testing.T) {
+	message := iso18626.ISO18626Message{
+		Request: &iso18626.Request{},
+	}
+	name := "Requester 1"
+	address := iso18626.PhysicalAddress{
+		Line2: "Home 1",
+	}
+	populateAddressFields(&message, name, address)
+
+	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
+	assert.Equal(t, address.Line2, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line2)
+
+	// Don't override
+	populateAddressFields(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
+	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
+	assert.Equal(t, address.Line2, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line2)
+}
+
+func TestPopulateSupplierAddress(t *testing.T) {
+	message := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
+	}
+	name := "Requester 1"
+	address := iso18626.PhysicalAddress{
+		Line2: "Home 1",
+	}
+	locSup := ill_db.LocatedSupplier{
+		SupplierSymbol: "ISIL:SUP1",
+	}
+	populateSupplierAddress(&message, &locSup, name, address)
+	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
+	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
+	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
+	assert.Equal(t, address.Line2, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line2)
+
+	// Don't override
+	populateSupplierAddress(&message, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP2"}, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
+	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
+	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
+	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
+	assert.Equal(t, address.Line2, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line2)
+}
