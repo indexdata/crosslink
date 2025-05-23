@@ -43,6 +43,22 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 			},
 			MessageInfo: iso18626.MessageInfo{
 				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+				Note:             "original note",
+			},
+			ReturnInfo: &iso18626.ReturnInfo{
+				Name: "University of Chicago (ISIL:US-IL-UC)",
+				PhysicalAddress: &iso18626.PhysicalAddress{
+					Line1:    "124 Main St",
+					Line2:    "",
+					Locality: "Chicago",
+					Region: &iso18626.TypeSchemeValuePair{
+						Text: "IL",
+					},
+					PostalCode: "60606",
+					Country: &iso18626.TypeSchemeValuePair{
+						Text: "US",
+					},
+				},
 			},
 		},
 	}
@@ -74,6 +90,10 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 		t.Errorf("expected to have message reason %s but got %s", iso18626.TypeReasonForMessageRenewResponse,
 			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	}
+	assert.Equal(t, "original note\n"+
+		SUPPLIER_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n"+SUPPLIER_END+"\n\n"+
+		RETURN_ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+RETURN_ADDRESS_END+"\n",
+		resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimIncoming(t *testing.T) {
@@ -152,6 +172,9 @@ func TestIso18626DefaultShim(t *testing.T) {
 func TestIso18626AlmaShimRequest(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		Request: &iso18626.Request{
+			RequestingAgencyInfo: &iso18626.RequestingAgencyInfo{
+				Name: "University of Chicago (ISIL:US-IL-UC)",
+			},
 			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
 				{
 					Address: &iso18626.Address{
@@ -185,6 +208,8 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to apply incoming")
 	}
-	assert.Equal(t, "original note\n\n"+ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+ADDRESS_END+"\n",
+	assert.Equal(t, "original note\n"+
+		REQUESTER_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n"+REQUESTER_END+"\n\n"+
+		DELIVERY_ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
 }
