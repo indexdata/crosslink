@@ -82,7 +82,46 @@
           "type": "Copy"
         }
       ],
-      "type": "institution"
+      "type": "institution",
+      "addresses": [
+        {
+          "id": "e60a281d-cd29-5be0-a303-f9255677f234",
+          "entry": "30191a94-9588-5b53-808a-58d843706d1b",
+          "type": "Shipping",
+          "addressComponents": [
+            {
+              "id": "35a7fb50-e595-58d8-a513-b8fb74605550",
+              "address": "e60a281d-cd29-5be0-a303-f9255677f234",
+              "type": "Thoroughfare",
+              "value": "Albury City Libraries, Inter-library loans, 540 Kiewa Street"
+            },
+            {
+              "id": "854a1861-585b-5eb8-9ae1-0748f8ff7d26",
+              "address": "e60a281d-cd29-5be0-a303-f9255677f234",
+              "type": "Locality",
+              "value": "Albury"
+            },
+            {
+              "id": "7eb3324d-2dfe-5b69-b80e-4c29becc0110",
+              "address": "e60a281d-cd29-5be0-a303-f9255677f234",
+              "type": "AdministrativeArea",
+              "value": "NSW"
+            },
+            {
+              "id": "467f5009-cb1a-51b8-90a8-ed2287c78f91",
+              "address": "e60a281d-cd29-5be0-a303-f9255677f234",
+              "type": "PostalCode",
+              "value": "2640"
+            },
+            {
+              "id": "be250e00-071f-5ab5-b47c-5f626ffe9140",
+              "address": "e60a281d-cd29-5be0-a303-f9255677f234",
+              "type": "CountryCode",
+              "value": "AUS"
+            }
+          ]
+        }
+      ]
     },
     {
       "description": "nalb_a",
@@ -192,7 +231,46 @@
           "type": "Copy"
         }
       ],
-      "type": "institution"
+      "type": "institution",
+      "addresses": [
+        {
+          "id": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+          "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
+          "type": "Shipping",
+          "addressComponents": [
+            {
+              "id": "cd0eb8b7-d909-59d4-a950-fd6c0afcf554",
+              "address": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+              "type": "Thoroughfare",
+              "value": "University of Sydney, Fisher Library - F03, Resource Sharing"
+            },
+            {
+              "id": "6f7e49be-b7ec-54cc-b282-e75902d2b15b",
+              "address": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+              "type": "Locality",
+              "value": "University of Sydney"
+            },
+            {
+              "id": "a2277cf6-5a7f-5713-902c-107a213e4c94",
+              "address": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+              "type": "AdministrativeArea",
+              "value": "NSW"
+            },
+            {
+              "id": "70bdae83-0e5f-5a4f-ad01-0882bc9ac0f3",
+              "address": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+              "type": "PostalCode",
+              "value": "2006"
+            },
+            {
+              "id": "2c436353-aa21-515b-bf33-316861004053",
+              "address": "e9ec363d-aa99-5a6a-9121-bd84215c242b",
+              "type": "CountryCode",
+              "value": "AUS"
+            }
+          ]
+        }
+      ]
     },
     {
       "description": "nu_a",
