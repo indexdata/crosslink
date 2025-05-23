@@ -125,7 +125,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
 	if status == iso18626.TypeStatusLoaned {
-		name, address := getPeerNameAndAddress(*supplier, "")
+		name, address := getPeerNameAndAddress(*supplier, locSupplier.SupplierSymbol)
 		populateSupplierAddress(message, locSupplier, name, address)
 	}
 
@@ -476,16 +476,11 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 }
 
 func getPeerNameAndAddress(peer ill_db.Peer, symbol string) (string, iso18626.PhysicalAddress) {
-	name := ""
-	address := iso18626.PhysicalAddress{}
-	if nameValue, ok := peer.CustomData["name"].(string); ok {
-		if symbol == "" {
-			name = nameValue
-		} else {
-			name = fmt.Sprintf("%v (%v)", nameValue, symbol)
-		}
-		address.Line1 = nameValue
+	name := peer.Name
+	if symbol != "" {
+		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
 	}
+	address := iso18626.PhysicalAddress{}
 	if listMap, ok := peer.CustomData["addresses"].([]any); ok && len(listMap) > 0 {
 		for _, s := range listMap {
 			if addressMap, castOk := s.(map[string]any); castOk {
@@ -499,7 +494,7 @@ func getPeerNameAndAddress(peer ill_db.Peer, symbol string) (string, iso18626.Ph
 							if partOk && pTypeOk {
 								switch pType {
 								case "Thoroughfare":
-									address.Line2 = part
+									address.Line1 = part
 								case "Locality":
 									address.Locality = part
 								case "AdministrativeArea":
