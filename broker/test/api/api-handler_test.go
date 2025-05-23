@@ -388,6 +388,27 @@ func TestPeersLinks(t *testing.T) {
 	assert.NotNil(t, resp.About.NextLink)
 }
 
+func TestPeersNoHeaders(t *testing.T) {
+	// Create peer
+	toCreate := oapi.Peer{
+		// No ID
+		Name:          "Peer",
+		Url:           "https://url.com",
+		Symbols:       []string{"ISIL:PEER"},
+		RefreshPolicy: oapi.Transaction,
+	}
+	jsonBytes, err := json.Marshal(toCreate)
+	assert.NoError(t, err)
+	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
+	var respPeer oapi.Peer
+	err = json.Unmarshal(body, &respPeer)
+	assert.NoError(t, err)
+
+	// Delete peer
+	httpRequest(t, "DELETE", "/peers/"+respPeer.ID, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/peers/"+respPeer.ID, nil, "", http.StatusNotFound)
+}
+
 func TestPeersCRUD(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "diku",
