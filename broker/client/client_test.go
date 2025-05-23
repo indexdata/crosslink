@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/common"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,29 +19,29 @@ import (
 )
 
 func TestCreateMessageHeaderTransparent(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeTransparent, 0*time.Second)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
-	reqHeader := client.createMessageHeader(illTrans, &sup, true)
+	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTransparent))
 	assert.Equal(t, "REQ", reqHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
 
-	supHeader := client.createMessageHeader(illTrans, &sup, false)
+	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTransparent))
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestCreateMessageHeaderOpaque(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, BrokerModeOpaque, 0*time.Second)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
-	reqHeader := client.createMessageHeader(illTrans, &sup, true)
+	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeOpaque))
 	assert.Equal(t, "BROKER", reqHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
 
-	supHeader := client.createMessageHeader(illTrans, &sup, false)
+	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeOpaque))
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
@@ -65,7 +66,7 @@ func TestSendHttpPost(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 0, BrokerModeOpaque, 0*time.Second)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 0, 0*time.Second)
 
 	msg := &iso18626.ISO18626Message{}
 	peer := ill_db.Peer{

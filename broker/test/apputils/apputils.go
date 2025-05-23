@@ -82,6 +82,7 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 			Time:  time.Now(),
 			Valid: true,
 		},
+		BrokerMode: app.BROKER_MODE,
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)

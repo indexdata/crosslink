@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	app.BROKER_MODE = string(client.BrokerModeTransparent)
+	app.BROKER_MODE = string(extctx.BrokerModeTransparent)
 	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")

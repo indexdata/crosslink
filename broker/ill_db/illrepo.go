@@ -25,6 +25,7 @@ type IllRepo interface {
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
+	GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
 	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
@@ -128,6 +129,11 @@ func (r *PgIllRepo) DeleteIllTransaction(ctx extctx.ExtendedContext, id string) 
 
 func (r *PgIllRepo) GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error) {
 	row, err := r.queries.GetPeerById(ctx, r.GetConnOrTx(), id)
+	return row.Peer, err
+}
+
+func (r *PgIllRepo) GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error) {
+	row, err := r.queries.GetRequesterByIllTransactionId(ctx, r.GetConnOrTx(), illTransactionId)
 	return row.Peer, err
 }
 
@@ -360,8 +366,9 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 				Name:          dir.Name,
 				RefreshPolicy: RefreshPolicyTransaction,
 				RefreshTime:   GetPgNow(),
-				Vendor:        dir.Vendor,
+				Vendor:        string(dir.Vendor),
 				CustomData:    dir.CustomData,
+				BrokerMode:    string(dir.BrokerMode),
 			})
 			if err != nil {
 				return err

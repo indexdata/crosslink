@@ -4,6 +4,13 @@ FROM peer
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetRequesterByIllTransactionId :one
+SELECT sqlc.embed(peer)
+FROM peer
+JOIN ill_transaction on peer.id = ill_transaction.requester_id
+WHERE ill_transaction.id = $1
+LIMIT 1;
+
 -- name: GetPeerBySymbol :one
 SELECT sqlc.embed(peer)
 FROM peer
@@ -18,8 +25,8 @@ ORDER BY name
 LIMIT $1 OFFSET $2;
 
 -- name: SavePeer :one
-INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, custom_data, http_headers)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO peer (id, name, refresh_policy, refresh_time, url, loans_count, borrows_count, vendor, broker_mode, custom_data, http_headers)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO UPDATE
     SET name           = EXCLUDED.name,
         url            = EXCLUDED.url,
@@ -29,7 +36,8 @@ ON CONFLICT (id) DO UPDATE
         borrows_count  = EXCLUDED.borrows_count,
         vendor         = EXCLUDED.vendor,
         custom_data    = EXCLUDED.custom_data,
-        http_headers   = EXCLUDED.http_headers
+        http_headers   = EXCLUDED.http_headers,
+        broker_mode    = EXCLUDED.broker_mode
 RETURNING sqlc.embed(peer);
 
 -- name: DeletePeer :exec

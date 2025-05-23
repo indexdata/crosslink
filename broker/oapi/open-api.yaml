@@ -295,6 +295,9 @@ components:
         Vendor:
           type: string
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
+        BrokerMode:
+          type: string
+          description: Broker mode, e.g "opaque" or "transparent"
         CustomData:
           type: object
           description: Custom data of peer
@@ -311,6 +314,7 @@ components:
         - Url
         - RefreshPolicy
         - Vendor
+        - BrokerMode
 
     LocatedSupplier:
       type: object
