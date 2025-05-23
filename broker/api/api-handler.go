@@ -584,11 +584,17 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	if update.Name != "" {
-		peer.Name = update.Name
+	peer.Name = update.Name
+	peer.Url = update.Url
+	if update.HttpHeaders != nil {
+		peer.HttpHeaders = *update.HttpHeaders
+	} else {
+		peer.HttpHeaders = make(map[string]string)
 	}
-	if update.Url != "" {
-		peer.Url = update.Url
+	if update.CustomData != nil {
+		peer.CustomData = *update.CustomData
+	} else {
+		peer.CustomData = make(map[string]interface{})
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	var symbols = []ill_db.Symbol{}
