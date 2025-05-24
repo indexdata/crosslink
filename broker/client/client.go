@@ -125,8 +125,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
 	if status == iso18626.TypeStatusLoaned {
-		name, address := getPeerNameAndAddress(supplier, locSupplier.SupplierSymbol)
-		populateReturnAddress(message, locSupplier, name, address)
+		name, agencyId, address := getPeerNameAgencyIdAddress(supplier, locSupplier.SupplierSymbol)
+		populateReturnAddress(message, name, agencyId, address)
 	}
 
 	resData.OutgoingMessage = message
@@ -171,16 +171,12 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	return events.EventStatusSuccess, &resData
 }
 
-func populateReturnAddress(message *iso18626.ISO18626Message, locSupplier *ill_db.LocatedSupplier, name string, address iso18626.PhysicalAddress) {
+func populateReturnAddress(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
 	if message.SupplyingAgencyMessage.ReturnInfo == nil {
 		message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
 	}
 	if message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId == nil {
-		symbol := strings.Split(locSupplier.SupplierSymbol, ":")
-		message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId = &iso18626.TypeAgencyId{
-			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: symbol[0]},
-			AgencyIdValue: symbol[1],
-		}
+		message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId = &agencyId
 	}
 	if message.SupplyingAgencyMessage.ReturnInfo.Name == "" {
 		message.SupplyingAgencyMessage.ReturnInfo.Name = name
@@ -254,9 +250,11 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		requesterName, deliveryAddress := getPeerNameAndAddress(&requester, illTrans.RequesterSymbol.String)
+		requesterName, _, deliveryAddress := getPeerNameAgencyIdAddress(&requester, illTrans.RequesterSymbol.String)
 		populateRequesterInfo(message, requesterName, deliveryAddress)
 		populateDeliveryAddress(message, requesterName, deliveryAddress)
+		supplierName, suppAgencyId, supplierAddress := getPeerNameAgencyIdAddress(supplier, selected.SupplierSymbol)
+		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 		action = ill_db.RequestAction
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
@@ -351,6 +349,26 @@ func populateDeliveryAddress(message *iso18626.ISO18626Message, name string, add
 		if message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress == nil {
 			message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
 		}
+	}
+}
+
+func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
+	if len(message.Request.SupplierInfo) == 0 {
+		var sb strings.Builder
+		sb.WriteString(shim.RETURN_ADDRESS_BEGIN)
+		sb.WriteString("\n")
+		if name != "" {
+			sb.WriteString(name)
+			sb.WriteString("\n")
+		}
+		shim.MarshalAddress(&sb, &address)
+		sb.WriteString(shim.RETURN_ADDRESS_END)
+		sb.WriteString("\n")
+		suppInfo := iso18626.SupplierInfo{
+			SupplierDescription: sb.String(),
+			SupplierCode:        &agencyId,
+		}
+		message.Request.SupplierInfo = []iso18626.SupplierInfo{suppInfo}
 	}
 }
 
@@ -479,10 +497,16 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	return &resmsg, nil
 }
 
-func getPeerNameAndAddress(peer *ill_db.Peer, symbol string) (string, iso18626.PhysicalAddress) {
+func getPeerNameAgencyIdAddress(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyId, iso18626.PhysicalAddress) {
 	name := peer.Name
+	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
+		parts := strings.Split(symbol, ":")
+		if len(parts) == 2 {
+			agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: parts[0]}
+			agencyId.AgencyIdValue = parts[1]
+		}
 	}
 	address := iso18626.PhysicalAddress{}
 	if listMap, ok := peer.CustomData["addresses"].([]any); ok && len(listMap) > 0 {
@@ -519,5 +543,5 @@ func getPeerNameAndAddress(peer *ill_db.Peer, symbol string) (string, iso18626.P
 			}
 		}
 	}
-	return name, address
+	return name, agencyId, address
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -84,16 +85,20 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 		Name:       "ACTLegislativeAssemblyLibrary",
 		CustomData: data,
 	}
-	name, address := getPeerNameAndAddress(&peer, "")
+	name, agencyId, address := getPeerNameAgencyIdAddress(&peer, "")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary", name)
+	assert.Equal(t, "", agencyId.AgencyIdValue)
+	assert.Equal(t, "", agencyId.AgencyIdType.Text)
 	assert.Equal(t, "196LondonCircuit", address.Line1)
 	assert.Equal(t, "Canberra", address.Locality)
 	assert.Equal(t, "2601", address.PostalCode)
 	assert.Equal(t, "ACT", address.Region.Text)
 	assert.Equal(t, "AUS", address.Country.Text)
 
-	name, address = getPeerNameAndAddress(&peer, "ISIL:ACT")
+	name, agencyId, address = getPeerNameAgencyIdAddress(&peer, "ISIL:ACT")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary (ISIL:ACT)", name)
+	assert.Equal(t, "ACT", agencyId.AgencyIdValue)
+	assert.Equal(t, "ISIL", agencyId.AgencyIdType.Text)
 	assert.Equal(t, "196LondonCircuit", address.Line1)
 }
 
@@ -141,19 +146,74 @@ func TestPopulateSupplierAddress(t *testing.T) {
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
-	locSup := ill_db.LocatedSupplier{
-		SupplierSymbol: "ISIL:SUP1",
+	agencyId := iso18626.TypeAgencyId{
+		AgencyIdValue: "SUP1",
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: "ISIL",
+		},
 	}
-	populateReturnAddress(&message, &locSup, name, address)
+	populateReturnAddress(&message, name, agencyId, address)
 	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
 	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
 	assert.Equal(t, address.Line1, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line1)
 
-	// Don't override
-	populateReturnAddress(&message, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP2"}, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
+	name = "Requester 2"
+	address = iso18626.PhysicalAddress{
+		Line1: "Home 2",
+	}
+	agencyId = iso18626.TypeAgencyId{
+		AgencyIdValue: "SUP2",
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: "ISIL",
+		},
+	}
+	// Don't override if already set
+	populateReturnAddress(&message, name, agencyId, address)
 	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
-	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
-	assert.Equal(t, address.Line2, message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line2)
+	assert.Equal(t, "Requester 1", message.SupplyingAgencyMessage.ReturnInfo.Name)
+	assert.Equal(t, "Home 1", message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress.Line1)
+}
+
+func TestPopulateSupplierInfo(t *testing.T) {
+	message := iso18626.ISO18626Message{
+		Request: &iso18626.Request{},
+	}
+	name := "Supplier 1"
+	address := iso18626.PhysicalAddress{
+		Line1: "Home 1",
+	}
+	agencyId := iso18626.TypeAgencyId{
+		AgencyIdValue: "SUP1",
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: "ISIL",
+		},
+	}
+	desc := shim.RETURN_ADDRESS_BEGIN + "\n" + name + "\n" + address.Line1 + "\n" + shim.RETURN_ADDRESS_END + "\n"
+	populateSupplierInfo(&message, name, agencyId, address)
+	assert.Equal(t, 1, len(message.Request.SupplierInfo))
+	assert.Equal(t, "SUP1", message.Request.SupplierInfo[0].SupplierCode.AgencyIdValue)
+	assert.Equal(t, "ISIL", message.Request.SupplierInfo[0].SupplierCode.AgencyIdType.Text)
+	assert.Equal(t, desc, message.Request.SupplierInfo[0].SupplierDescription)
+	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, name)
+	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, address.Line1)
+
+	name2 := "Supplier 2"
+	address2 := iso18626.PhysicalAddress{
+		Line1: "Home 2",
+	}
+	agencyId2 := iso18626.TypeAgencyId{
+		AgencyIdValue: "SUP2",
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: "ISIL",
+		},
+	}
+	// Don't override if already set
+	populateSupplierInfo(&message, name2, agencyId2, address2)
+	assert.Equal(t, 1, len(message.Request.SupplierInfo))
+	assert.Equal(t, "SUP1", message.Request.SupplierInfo[0].SupplierCode.AgencyIdValue)
+	assert.Equal(t, "ISIL", message.Request.SupplierInfo[0].SupplierCode.AgencyIdType.Text)
+	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, name)
+	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, address.Line1)
 }
