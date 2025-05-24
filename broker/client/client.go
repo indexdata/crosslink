@@ -125,8 +125,8 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
 	if status == iso18626.TypeStatusLoaned {
-		name, address := getPeerNameAndAddress(*supplier, locSupplier.SupplierSymbol)
-		populateSupplierAddress(message, locSupplier, name, address)
+		name, address := getPeerNameAndAddress(supplier, locSupplier.SupplierSymbol)
+		populateReturnAddress(message, locSupplier, name, address)
 	}
 
 	resData.OutgoingMessage = message
@@ -171,7 +171,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	return events.EventStatusSuccess, &resData
 }
 
-func populateSupplierAddress(message *iso18626.ISO18626Message, locSupplier *ill_db.LocatedSupplier, name string, address iso18626.PhysicalAddress) {
+func populateReturnAddress(message *iso18626.ISO18626Message, locSupplier *ill_db.LocatedSupplier, name string, address iso18626.PhysicalAddress) {
 	if message.SupplyingAgencyMessage.ReturnInfo == nil {
 		message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
 	}
@@ -228,7 +228,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		return events.EventStatusError, &resData
 	}
 
-	selected, peer, err := c.getSupplier(ctx, illTrans)
+	selected, supplier, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
 		resData.EventError = &events.EventError{
 			Message: "failed to get supplier",
@@ -254,8 +254,9 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		name, address := getPeerNameAndAddress(requester, illTrans.RequesterSymbol.String)
-		populateAddressFields(message, name, address)
+		requesterName, deliveryAddress := getPeerNameAndAddress(&requester, illTrans.RequesterSymbol.String)
+		populateRequesterInfo(message, requesterName, deliveryAddress)
+		populateDeliveryAddress(message, requesterName, deliveryAddress)
 		action = ill_db.RequestAction
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
@@ -281,7 +282,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(event) {
-		response, err := c.SendHttpPost(peer, message)
+		response, err := c.SendHttpPost(supplier, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -318,7 +319,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	return status, &resData
 }
 
-func populateAddressFields(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
+func populateRequesterInfo(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
 	if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
 		if message.Request.RequestingAgencyInfo == nil {
 			message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
@@ -332,6 +333,9 @@ func populateAddressFields(message *iso18626.ISO18626Message, name string, addre
 			}
 		}
 	}
+}
+
+func populateDeliveryAddress(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
 	if len(message.Request.RequestedDeliveryInfo) == 0 {
 		message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{}}
 	}
@@ -475,7 +479,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	return &resmsg, nil
 }
 
-func getPeerNameAndAddress(peer ill_db.Peer, symbol string) (string, iso18626.PhysicalAddress) {
+func getPeerNameAndAddress(peer *ill_db.Peer, symbol string) (string, iso18626.PhysicalAddress) {
 	name := peer.Name
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
