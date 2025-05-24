@@ -57,6 +57,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 	if message != nil && message.Request != nil {
 		request := message.Request
 		i.appendDeliveryAddressToNote(request)
+		i.appendReturnAddressToReqNote(request)
 	}
 	return xml.Marshal(message)
 }
@@ -138,6 +139,18 @@ func (i *Iso18626AlmaShim) appendDeliveryAddressToNote(request *iso18626.Request
 					break
 				}
 			}
+		}
+	}
+}
+
+func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Request) {
+	if request.ServiceInfo != nil && strings.Contains(request.ServiceInfo.Note, RETURN_ADDRESS_BEGIN) {
+		return
+	}
+	for _, suppInfo := range request.SupplierInfo {
+		if strings.HasPrefix(suppInfo.SupplierDescription, RETURN_ADDRESS_BEGIN) {
+			request.ServiceInfo.Note = request.ServiceInfo.Note + "\n" + suppInfo.SupplierDescription
+			return
 		}
 	}
 }

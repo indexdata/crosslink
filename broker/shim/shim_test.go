@@ -195,6 +195,11 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 			ServiceInfo: &iso18626.ServiceInfo{
 				Note: "original note",
 			},
+			SupplierInfo: []iso18626.SupplierInfo{
+				{
+					SupplierDescription: RETURN_ADDRESS_BEGIN + "\nsome address\n" + RETURN_ADDRESS_END + "\n",
+				},
+			},
 		},
 	}
 	shim := GetShim(VendorAlma)
@@ -208,6 +213,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		t.Errorf("failed to apply incoming")
 	}
 	assert.Equal(t, "original note\n"+
-		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n",
+		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n"+"\n"+
+		RETURN_ADDRESS_BEGIN+"\nsome address\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
 }
