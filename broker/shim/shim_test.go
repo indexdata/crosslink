@@ -91,8 +91,7 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	}
 	assert.Equal(t, "original note\n"+
-		SUPPLIER_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n"+SUPPLIER_END+"\n\n"+
-		RETURN_ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+RETURN_ADDRESS_END+"\n",
+		RETURN_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
@@ -209,7 +208,6 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		t.Errorf("failed to apply incoming")
 	}
 	assert.Equal(t, "original note\n"+
-		REQUESTER_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n"+REQUESTER_END+"\n\n"+
-		DELIVERY_ADDRESS_BEGIN+"\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n",
+		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
 }
