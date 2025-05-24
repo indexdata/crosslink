@@ -74,15 +74,7 @@ func (i *Iso18626AlmaShim) appendReturnAddressToNote(suppMsg *iso18626.Supplying
 			sb.WriteString(suppMsg.MessageInfo.Note)
 			sb.WriteString("\n")
 		}
-		sb.WriteString(RETURN_ADDRESS_BEGIN)
-		sb.WriteString("\n")
-		if len(suppMsg.ReturnInfo.Name) > 0 {
-			sb.WriteString(suppMsg.ReturnInfo.Name)
-			sb.WriteString("\n")
-		}
-		MarshalAddress(&sb, addr)
-		sb.WriteString(RETURN_ADDRESS_END)
-		sb.WriteString("\n")
+		MarshalReturnLabel(&sb, suppMsg.ReturnInfo.Name, addr)
 		// put in the note
 		suppMsg.MessageInfo.Note = sb.String()
 	}
@@ -120,21 +112,14 @@ func (i *Iso18626AlmaShim) appendDeliveryAddressToNote(request *iso18626.Request
 							sb.WriteString(request.ServiceInfo.Note)
 							sb.WriteString("\n")
 						}
-					}
-					sb.WriteString(DELIVERY_ADDRESS_BEGIN)
-					sb.WriteString("\n")
-					requester := request.RequestingAgencyInfo
-					if requester != nil && requester.Name != "" {
-						sb.WriteString(requester.Name)
-						sb.WriteString("\n")
-					}
-					MarshalAddress(&sb, addr)
-					sb.WriteString(DELIVERY_ADDRESS_END)
-					sb.WriteString("\n")
-					if request.ServiceInfo == nil {
+					} else {
 						request.ServiceInfo = new(iso18626.ServiceInfo)
 					}
-					// put in the note
+					requesterName := ""
+					if request.RequestingAgencyInfo != nil {
+						requesterName = request.RequestingAgencyInfo.Name
+					}
+					MarshalShipLabel(&sb, requesterName, addr)
 					request.ServiceInfo.Note = sb.String()
 					break
 				}
@@ -153,6 +138,30 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 			return
 		}
 	}
+}
+
+func MarshalShipLabel(sb *strings.Builder, name string, address *iso18626.PhysicalAddress) {
+	sb.WriteString(DELIVERY_ADDRESS_BEGIN)
+	sb.WriteString("\n")
+	if name != "" {
+		sb.WriteString(name)
+		sb.WriteString("\n")
+	}
+	MarshalAddress(sb, address)
+	sb.WriteString(DELIVERY_ADDRESS_END)
+	sb.WriteString("\n")
+}
+
+func MarshalReturnLabel(sb *strings.Builder, name string, address *iso18626.PhysicalAddress) {
+	sb.WriteString(RETURN_ADDRESS_BEGIN)
+	sb.WriteString("\n")
+	if name != "" {
+		sb.WriteString(name)
+		sb.WriteString("\n")
+	}
+	MarshalAddress(sb, address)
+	sb.WriteString(RETURN_ADDRESS_END)
+	sb.WriteString("\n")
 }
 
 func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
