@@ -3,7 +3,6 @@ package client
 import (
 	"errors"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/adapter"
 	"net/http"
 	"strings"
 	"time"
@@ -122,12 +121,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	}
 
-	brokerMode := string(adapter.DEFAULT_BROKER_MODE)
-	if supplier != nil {
-		brokerMode = supplier.BrokerMode
-	}
-
-	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false, brokerMode)
+	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false, requester.BrokerMode)
 	reason := message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage
 	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.validateReason(reason, illTrans.LastRequesterAction.String, illTrans.LastSupplierStatus.String)
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
