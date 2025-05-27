@@ -25,11 +25,21 @@ see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for det
 
 CrossLink broker can operate in two modes:
 
-1. `opaque` -- in this mode the broker behaves like a regular ISO18626 peer and does not reveal any information about the actual supplier. Broker's own symbol (e.g., `ISIL:BROKER`) is used to address and sign messages in both directions.
+1. `opaque` -- in this mode the broker behaves like a regular ISO18626 peer and does not reveal any information about the located supplier. Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the header of outgoing messages.
 
-2. `transparent` -- in this mode the broker reveals the actual supplier behind the request. It does so by using the actual supplier's symbol in the proxied supplying messages. When selecting a supplier, the broker will send an `ExpectToSupply` message to the requester to inform it about a new or changed supplier.
+2. `transparent` -- in this mode the broker reveals the supplier located for a request. It does so by using the supplier's symbol in the proxied supplying message header. Additionally, when selecting a supplier, the broker will send an `ExpectToSupply` message to the requester to inform it about a new or changed supplier.
+  When in this mode, the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
 
-Additionally, in this mode the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
+The broker mode can be configured for each peer individually by setting the `BrokerMode` field on the `peer` entity (via the `/peers/:id` endpoint). Unless explicitly set, the broker will configure the `BrokerMode` based on the peer `Vendor` field as follows:
+
+* vendor `Alma` -> mode `opaque`
+* vendor `ReShare` -> mode `transparent`
+* vendor `Unknown` -> fallback mode set via the `BROKER_MODE` env var, `opaque` by default
+
+Note, that for both modes the broker will attach Directory information about the supplier and the requester by
+
+* appending `requestingAgencyInfo` and `supplierInfo` fields to the outgoing lending `request` message
+* appending `returnInfo` field to the outgoing `Loaned` supplying agency message
 
 # Configuration
 
@@ -46,7 +56,8 @@ Configuration is provided via environment variables:
 | `DB_PORT`              | Database port                                                               | `25432`                                   |
 | `LOG_LEVEL`            | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                 | `INFO`                                    |
 | `ENABLE_JSON_LOG`      | Should JSON log format be enabled                                           | `false`                                   |
-| `BROKER_MODE`          | Should broker reveal supplier/requester symbols: `opaque` or `transparent`  | `opaque`                                  |
+| `BROKER_MODE`          | Default broker mode if not configured for a peer: `opaque` or `transparent` | `opaque`                                  |
+| `BROKER_SYMBOL`        | Symbol for the broker when in the `opaque` mode                             | `ISIL:BROKER`                             |
 | `CLIENT_DELAY`         | Delay duration for outgoing ISO18626 messages                               | `0ms`                                     |
 | `MAX_MESSAGE_SIZE`     | Max accepted ISO18626 message size                                          | `100KB`                                   |
 | `HOLDINGS_ADAPTER`     | Holdings lookup method: `mock` or `sru`                                     | `mock`                                    |
