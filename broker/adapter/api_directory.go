@@ -64,8 +64,6 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 			}
 			if parent, ok := d["parent"].(string); ok {
 				childSymbolsById[parent] = append(childSymbolsById[parent], symbols...)
-				// skip child entries
-				continue
 			}
 		}
 		apiUrl := ""
@@ -96,7 +94,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	for i := range dirEntries {
 		de := &dirEntries[i]
 		if childSyms, ok := childSymbolsById[de.CustomData["id"].(string)]; ok {
-			de.Symbol = append(de.Symbol, childSyms...)
+			de.Symbol = append(de.SecondarySymbols, childSyms...)
 		}
 	}
 	return dirEntries, nil, query
