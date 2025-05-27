@@ -573,9 +573,19 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusLoanCompleted) &&
-			illTrans.LastRequesterAction.String == string(iso18626.TypeActionShippedReturn)
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
 	})
+	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	selSup, err := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
+	assert.Nil(t, err)
+	selSup.LastStatus = pgtype.Text{
+		String: string(iso18626.TypeStatusLoanCompleted),
+		Valid:  true,
+	}
+	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
+	assert.Nil(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess)
 	assert.Nil(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
@@ -590,8 +600,6 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		},
 	}, events.EventStatusSuccess)
 	assert.Nil(t, err)
-	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
-	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
@@ -601,7 +609,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS doNotSend=true\n"+
 			"TASK, message-requester = SUCCESS doNotSend=true\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, func(e events.Event) string {
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}
@@ -610,6 +618,9 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			}
 			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 		}))
+	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
+	assert.Nil(t, err)
+	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 }
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {
