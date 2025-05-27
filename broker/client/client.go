@@ -19,7 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var BrokerSymbol = "ISIL:BROKER"
+// TODO this must be removed and saved from the initial request
+var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 type Iso18626Client struct {
 	eventBus   events.EventBus
