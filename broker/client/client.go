@@ -397,16 +397,16 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool, brokerMode string) iso18626.Header {
-	requesterSymbol := strings.Split(BrokerSymbol, ":")
+	requesterSymbol := strings.SplitN(BrokerSymbol, ":", 2)
 	if !isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent) {
-		requesterSymbol = strings.Split(transaction.RequesterSymbol.String, ":")
+		requesterSymbol = strings.SplitN(transaction.RequesterSymbol.String, ":", 2)
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
-	supplierSymbol := strings.Split(BrokerSymbol, ":")
+	supplierSymbol := strings.SplitN(BrokerSymbol, ":", 2)
 	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent)) {
-		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
+		supplierSymbol = strings.SplitN(sup.SupplierSymbol, ":", 2)
 	}
 	return iso18626.Header{
 		RequestingAgencyId: iso18626.TypeAgencyId{
@@ -489,7 +489,7 @@ func getPeerNameAgencyIdAddress(peer *ill_db.Peer, symbol string) (string, iso18
 	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
-		parts := strings.Split(symbol, ":")
+		parts := strings.SplitN(symbol, ":", 2)
 		if len(parts) == 2 {
 			agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: parts[0]}
 			agencyId.AgencyIdValue = parts[1]
