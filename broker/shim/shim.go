@@ -58,6 +58,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 		request := message.Request
 		i.appendDeliveryAddressToNote(request)
 		i.appendReturnAddressToReqNote(request)
+		i.fixBibItemIdCode(request)
 	}
 	return xml.Marshal(message)
 }
@@ -137,6 +138,13 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 			request.ServiceInfo.Note = request.ServiceInfo.Note + "\n" + suppInfo.SupplierDescription
 			return
 		}
+	}
+}
+
+func (i *Iso18626AlmaShim) fixBibItemIdCode(request *iso18626.Request) {
+	for i := range request.BibliographicInfo.BibliographicItemId {
+		request.BibliographicInfo.BibliographicItemId[i].BibliographicItemIdentifierCode.Text =
+			strings.ToUpper(request.BibliographicInfo.BibliographicItemId[i].BibliographicItemIdentifierCode.Text)
 	}
 }
 

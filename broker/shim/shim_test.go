@@ -202,6 +202,13 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 			},
 		},
 	}
+	isbn := iso18626.BibliographicItemId{
+		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+			Text: "isbn",
+		},
+		BibliographicItemIdentifier: "978-3-16-148410-0",
+	}
+	msg.Request.BibliographicInfo.BibliographicItemId = append(msg.Request.BibliographicInfo.BibliographicItemId, isbn)
 	shim := GetShim(VendorAlma)
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
@@ -216,4 +223,6 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n"+"\n"+
 		RETURN_ADDRESS_BEGIN+"\nsome address\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
+	assert.Equal(t, "ISBN", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text)
+	assert.Equal(t, "978-3-16-148410-0", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)
 }
