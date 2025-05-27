@@ -3,6 +3,7 @@ package apputils
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -136,10 +137,12 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 			t.Errorf("failed to find events for ill transaction id %v", illId)
 		}
 		if len(eventList) != messageCount {
+			appCtx.Logger().Info("Check events count " + strconv.Itoa(len(eventList)))
 			return false
 		}
 		for _, e := range eventList {
 			if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
+				appCtx.Logger().Info("Check events processing state")
 				return false
 			}
 		}

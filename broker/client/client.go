@@ -80,7 +80,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	var status iso18626.TypeStatus
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
-	} else if illTrans.RequesterID.Valid && locSupplier.SupplierID == illTrans.RequesterID.String {
+	} else if illTrans.RequesterID.Valid && locSupplier.SupplierID == illTrans.RequesterID.String && !locSupplier.LastStatus.Valid {
 		status = iso18626.TypeStatusExpectToSupply
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
@@ -159,6 +159,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			resData.CustomData = map[string]any{}
 		}
 		resData.CustomData["doNotSend"] = true
+		resData.OutgoingMessage = nil
 	}
 	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
 	if err != nil {
@@ -304,6 +305,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			resData.CustomData = map[string]any{}
 		}
 		resData.CustomData["doNotSend"] = true
+		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??
 	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
