@@ -76,6 +76,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
 	for _, peer := range peers {
+		//iterate over both primary and secondary symbols
 		peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
 			return logErrorAndReturnResult(ctx, "failed to read symbols", err)
