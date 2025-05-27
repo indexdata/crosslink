@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"net/http"
 	"strings"
 	"time"
@@ -21,29 +22,20 @@ import (
 
 var BrokerSymbol = "ISIL:BROKER"
 
-type BrokerMode string
-
-const (
-	BrokerModeOpaque      BrokerMode = "opaque"
-	BrokerModeTransparent BrokerMode = "transparent"
-)
-
 type Iso18626Client struct {
 	eventBus   events.EventBus
 	illRepo    ill_db.IllRepo
 	client     *http.Client
 	maxMsgSize int
-	brokerMode BrokerMode
 	sendDelay  time.Duration
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, brokerMode BrokerMode, delay time.Duration) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, delay time.Duration) Iso18626Client {
 	return Iso18626Client{
 		eventBus:   eventBus,
 		illRepo:    illRepo,
 		client:     http.DefaultClient,
 		maxMsgSize: maxMsgSize,
-		brokerMode: brokerMode,
 		sendDelay:  delay,
 	}
 }
@@ -63,12 +55,26 @@ func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event event
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	resData := events.EventResult{}
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
+		resData.EventError = &events.EventError{
+			Message: "failed to read ILL transaction",
+			Cause:   err.Error(),
+		}
 		ctx.Logger().Error("failed to read ILL transaction", "error", err)
 		return events.EventStatusError, nil
 	}
-	resData := events.EventResult{}
+
+	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
+	if err != nil {
+		resData.EventError = &events.EventError{
+			Message: "failed to get requester",
+			Cause:   err.Error(),
+		}
+		ctx.Logger().Error("failed to get requester", "error", err)
+		return events.EventStatusError, &resData
+	}
 
 	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
@@ -80,10 +86,10 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
 		} else if !locSupplier.LastStatus.Valid {
-			if c.brokerMode == BrokerModeTransparent {
+			if requester.BrokerMode == string(extctx.BrokerModeTransparent) {
 				status = iso18626.TypeStatusExpectToSupply
 			} else {
-				resData.Note = "no need to message requester in broker mode " + string(c.brokerMode)
+				resData.Note = "no need to message requester in broker mode " + requester.BrokerMode
 				return events.EventStatusSuccess, &resData
 			}
 		} else {
@@ -95,7 +101,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			return events.EventStatusError, &resData
 		}
 		//in opaque mode we proxy ExpectToSupply and WillSupply once
-		if c.brokerMode == BrokerModeOpaque {
+		if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
 			lastSentStatus := illTrans.LastSupplierStatus.String
 			if len(lastSentStatus) > 0 {
 				if status == iso18626.TypeStatusExpectToSupply && lastSentStatus != string(iso18626.TypeStatusRequestReceived) {
@@ -118,7 +124,12 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	}
 
-	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false)
+	brokerMode := string(adapter.DEFAULT_BROKER_MODE)
+	if supplier != nil {
+		brokerMode = supplier.BrokerMode
+	}
+
+	message.SupplyingAgencyMessage.Header = c.createMessageHeader(illTrans, locSupplier, false, brokerMode)
 	reason := message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage
 	message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = c.validateReason(reason, illTrans.LastRequesterAction.String, illTrans.LastSupplierStatus.String)
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
@@ -130,16 +141,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 
 	resData.OutgoingMessage = message
-
-	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
-	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to get requester",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to get requester", "error", err)
-		return events.EventStatusError, &resData
-	}
 	if !isDoNotSend(event) {
 		response, err := c.SendHttpPost(&requester, message)
 		if response != nil {
@@ -239,7 +240,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	var action string
 	if isRequest {
 		message.Request = &iso18626.Request{
-			Header:                c.createMessageHeader(illTrans, selected, true),
+			Header:                c.createMessageHeader(illTrans, selected, true, supplier.BrokerMode),
 			BibliographicInfo:     illTrans.IllTransactionData.BibliographicInfo,
 			PublicationInfo:       illTrans.IllTransactionData.PublicationInfo,
 			ServiceInfo:           illTrans.IllTransactionData.ServiceInfo,
@@ -272,7 +273,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			note = event.EventData.IncomingMessage.RequestingAgencyMessage.Note
 		}
 		message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-			Header: c.createMessageHeader(illTrans, selected, true),
+			Header: c.createMessageHeader(illTrans, selected, true, supplier.BrokerMode),
 			Action: found,
 			Note:   note,
 		}
@@ -401,16 +402,16 @@ func (c *Iso18626Client) getSupplier(ctx extctx.ExtendedContext, transaction ill
 	return &selectedSupplier, &peer, err
 }
 
-func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool) iso18626.Header {
+func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool, brokerMode string) iso18626.Header {
 	requesterSymbol := strings.Split(BrokerSymbol, ":")
-	if !isRequestingMessage || c.brokerMode == BrokerModeTransparent {
+	if !isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent) {
 		requesterSymbol = strings.Split(transaction.RequesterSymbol.String, ":")
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.Split(BrokerSymbol, ":")
-	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || c.brokerMode == BrokerModeTransparent) {
+	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent)) {
 		supplierSymbol = strings.Split(sup.SupplierSymbol, ":")
 	}
 	return iso18626.Header{

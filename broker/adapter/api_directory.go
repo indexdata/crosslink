@@ -81,10 +81,12 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 			}
 		}
 		if apiUrl != "" && len(symbols) > 0 {
+			vendor := getVendorFromUrl(apiUrl)
 			entry := DirectoryEntry{
 				Name:       d["name"].(string),
 				Symbol:     symbols,
-				Vendor:     "api",
+				Vendor:     vendor,
+				BrokerMode: getBrokerMode(vendor),
 				URL:        apiUrl,
 				CustomData: d,
 			}
@@ -219,6 +221,27 @@ func getPeerTiers(peerData map[string]any) []Tier {
 		}
 	}
 	return tiers
+}
+
+func getVendorFromUrl(url string) extctx.Vendor {
+	if strings.Contains(url, "alma.exlibrisgroup.com") {
+		return extctx.VendorAlma
+	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
+		return extctx.VendorReShare
+	} else {
+		return extctx.VendorUnknown
+	}
+}
+
+func getBrokerMode(vendor extctx.Vendor) extctx.BrokerMode {
+	switch vendor {
+	case extctx.VendorAlma:
+		return extctx.BrokerModeOpaque
+	case extctx.VendorReShare:
+		return extctx.BrokerModeTransparent
+	default:
+		return DEFAULT_BROKER_MODE
+	}
 }
 
 type EntriesResponse struct {

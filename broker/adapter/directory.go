@@ -5,6 +5,8 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 )
 
+var DEFAULT_BROKER_MODE extctx.BrokerMode
+
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string)
 	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier
@@ -18,7 +20,8 @@ type DirectoryEntry struct {
 	Symbol     []string
 	Name       string
 	URL        string
-	Vendor     string
+	Vendor     extctx.Vendor
+	BrokerMode extctx.BrokerMode
 	CustomData map[string]any
 }
 

@@ -820,6 +820,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 		BorrowsCount:  &peer.BorrowsCount,
 		CustomData:    &peer.CustomData,
 		HttpHeaders:   &peer.HttpHeaders,
+		BrokerMode:    peer.BrokerMode,
 	}
 }
 
@@ -845,6 +846,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		Name:          peer.Name,
 		Url:           peer.Url,
 		Vendor:        peer.Vendor,
+		BrokerMode:    peer.BrokerMode,
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
 		RefreshTime: pgtype.Timestamp{
 			Time:  time.Now(),

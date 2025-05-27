@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	app.BROKER_MODE = string(client.BrokerModeTransparent)
+	app.BROKER_MODE = string(extctx.BrokerModeTransparent)
 	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
@@ -117,6 +117,40 @@ func TestMessageRequester(t *testing.T) {
 	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		completedTask = append(completedTask, event)
+	})
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+
+	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", LocalAddress, string(extctx.BrokerModeOpaque))
+	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", LocalAddress, string(extctx.BrokerModeOpaque))
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
+	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("Failed to notify with error " + err.Error())
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("Expected to have request event received and successfully processed")
+	}
+	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+	if event.ResultData.IncomingMessage == nil {
+		t.Error("Should have response in result data")
+	}
+	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "BROKER", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
 func TestMessageRequesterNoLastStatus(t *testing.T) {
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {

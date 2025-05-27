@@ -39,6 +39,12 @@ func (r *MockIllRepositorySuccess) GetPeerById(ctx extctx.ExtendedContext, id st
 	}, nil
 }
 
+func (r *MockIllRepositorySuccess) GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (ill_db.Peer, error) {
+	return ill_db.Peer{
+		ID: uuid.NewString(),
+	}, nil
+}
+
 func (r *MockIllRepositorySuccess) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (ill_db.Peer, error) {
 	return ill_db.Peer{
 		ID: uuid.New().String(),
@@ -189,6 +195,10 @@ func (r *MockIllRepositoryError) SavePeer(ctx extctx.ExtendedContext, params ill
 }
 
 func (r *MockIllRepositoryError) GetPeerById(ctx extctx.ExtendedContext, id string) (ill_db.Peer, error) {
+	return ill_db.Peer{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (ill_db.Peer, error) {
 	return ill_db.Peer{}, errors.New("DB error")
 }
 

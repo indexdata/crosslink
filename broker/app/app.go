@@ -107,7 +107,7 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, getBrokerMode(BROKER_MODE), delay)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
@@ -117,6 +117,7 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
+	adapter.DEFAULT_BROKER_MODE = getBrokerMode(BROKER_MODE)
 	dirAdapter, err := adapter.CreateDirectoryLookupAdapter(map[string]string{
 		adapter.DirectoryAdapter: DIRECTORY_ADAPTER,
 		adapter.DirectoryApiUrl:  DIRECTORY_API_URL,
@@ -124,8 +125,8 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, getBrokerMode(BROKER_MODE) == client.BrokerModeTransparent)
-	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{}, getBrokerMode(BROKER_MODE))
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, getBrokerMode(BROKER_MODE) == extctx.BrokerModeTransparent)
+	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
 	return Context{
@@ -236,10 +237,10 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func getBrokerMode(mode string) client.BrokerMode {
-	if strings.EqualFold(mode, string(client.BrokerModeTransparent)) {
-		return client.BrokerModeTransparent
+func getBrokerMode(mode string) extctx.BrokerMode {
+	if strings.EqualFold(mode, string(extctx.BrokerModeTransparent)) {
+		return extctx.BrokerModeTransparent
 	} else {
-		return client.BrokerModeOpaque
+		return extctx.BrokerModeOpaque
 	}
 }
