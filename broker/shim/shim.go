@@ -58,7 +58,8 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 		request := message.Request
 		i.appendDeliveryAddressToNote(request)
 		i.appendReturnAddressToReqNote(request)
-		i.fixBibItemIdCode(request)
+		i.fixBibItemIds(request)
+		i.fixBibRecIds(request)
 	}
 	return xml.Marshal(message)
 }
@@ -141,11 +142,36 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 	}
 }
 
-func (i *Iso18626AlmaShim) fixBibItemIdCode(request *iso18626.Request) {
-	for i := range request.BibliographicInfo.BibliographicItemId {
-		request.BibliographicInfo.BibliographicItemId[i].BibliographicItemIdentifierCode.Text =
-			strings.ToUpper(request.BibliographicInfo.BibliographicItemId[i].BibliographicItemIdentifierCode.Text)
+func (i *Iso18626AlmaShim) fixBibItemIds(request *iso18626.Request) {
+	var bibItemIds []iso18626.BibliographicItemId
+	for _, bibItemId := range request.BibliographicInfo.BibliographicItemId {
+		val, err := iso18626.BibliographicItemIdCodeFromString(strings.ToUpper(bibItemId.BibliographicItemIdentifierCode.Text))
+		if err == nil {
+			bibItemIds = append(bibItemIds, iso18626.BibliographicItemId{
+				BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+					Text: string(val),
+				},
+				BibliographicItemIdentifier: bibItemId.BibliographicItemIdentifier,
+			})
+		}
 	}
+	request.BibliographicInfo.BibliographicItemId = bibItemIds
+}
+
+func (i *Iso18626AlmaShim) fixBibRecIds(request *iso18626.Request) {
+	var bibRecIds []iso18626.BibliographicRecordId
+	for _, bibRecId := range request.BibliographicInfo.BibliographicRecordId {
+		val, err := iso18626.BibliographicRecordIdCodeFromString(strings.ToUpper(bibRecId.BibliographicRecordIdentifierCode.Text))
+		if err == nil {
+			bibRecIds = append(bibRecIds, iso18626.BibliographicRecordId{
+				BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+					Text: string(val),
+				},
+				BibliographicRecordIdentifier: bibRecId.BibliographicRecordIdentifier,
+			})
+		}
+	}
+	request.BibliographicInfo.BibliographicRecordId = bibRecIds
 }
 
 func MarshalShipLabel(sb *strings.Builder, name string, address *iso18626.PhysicalAddress) {

@@ -208,7 +208,26 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		},
 		BibliographicItemIdentifier: "978-3-16-148410-0",
 	}
-	msg.Request.BibliographicInfo.BibliographicItemId = append(msg.Request.BibliographicInfo.BibliographicItemId, isbn)
+	badItemId := iso18626.BibliographicItemId{
+		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+			Text: "badcode",
+		},
+		BibliographicItemIdentifier: "val",
+	}
+	msg.Request.BibliographicInfo.BibliographicItemId = append(msg.Request.BibliographicInfo.BibliographicItemId, isbn, badItemId)
+	lccn := iso18626.BibliographicRecordId{
+		BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+			Text: "lccn",
+		},
+		BibliographicRecordIdentifier: "2023000023",
+	}
+	badRecId := iso18626.BibliographicRecordId{
+		BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+			Text: "lccnNumber",
+		},
+		BibliographicRecordIdentifier: "val",
+	}
+	msg.Request.BibliographicInfo.BibliographicRecordId = append(msg.Request.BibliographicInfo.BibliographicRecordId, lccn, badRecId)
 	shim := GetShim(VendorAlma)
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
@@ -223,6 +242,10 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n"+"\n"+
 		RETURN_ADDRESS_BEGIN+"\nsome address\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
+	assert.Equal(t, 1, len(resmsg.Request.BibliographicInfo.BibliographicItemId))
 	assert.Equal(t, "ISBN", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text)
 	assert.Equal(t, "978-3-16-148410-0", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)
+	assert.Equal(t, 1, len(resmsg.Request.BibliographicInfo.BibliographicRecordId))
+	assert.Equal(t, "LCCN", resmsg.Request.BibliographicInfo.BibliographicRecordId[0].BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "2023000023", resmsg.Request.BibliographicInfo.BibliographicRecordId[0].BibliographicRecordIdentifier)
 }
