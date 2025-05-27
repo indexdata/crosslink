@@ -21,6 +21,9 @@ import (
 
 // TODO this must be removed and saved from the initial request
 var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
+var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
+var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
+var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
 
 type Iso18626Client struct {
 	eventBus   events.EventBus
@@ -128,7 +131,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.StatusInfo.Status = status
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
-	if status == iso18626.TypeStatusLoaned {
+	if status == iso18626.TypeStatusLoaned && appendReturnInfo {
 		name, agencyId, address := getPeerNameAgencyIdAddress(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
@@ -246,10 +249,14 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
 		requesterName, _, deliveryAddress := getPeerNameAgencyIdAddress(&requester, illTrans.RequesterSymbol.String)
-		populateRequesterInfo(message, requesterName, deliveryAddress)
+		if appendRequestingAgencyInfo {
+			populateRequesterInfo(message, requesterName, deliveryAddress)
+		}
 		populateDeliveryAddress(message, requesterName, deliveryAddress)
-		supplierName, suppAgencyId, supplierAddress := getPeerNameAgencyIdAddress(supplier, selected.SupplierSymbol)
-		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
+		if appendSupplierInfo {
+			supplierName, suppAgencyId, supplierAddress := getPeerNameAgencyIdAddress(supplier, selected.SupplierSymbol)
+			populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
+		}
 		action = ill_db.RequestAction
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
