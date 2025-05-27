@@ -338,7 +338,16 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 		if len(dir.Symbol) == 0 {
 			continue
 		}
-		peer, err := r.GetPeerBySymbol(ctx, dir.Symbol[0]) //parent peer
+		var peer Peer
+		for _, sym := range dir.Symbol {
+			peer, err = r.GetPeerBySymbol(ctx, sym) //parent peer
+			if err != nil {
+				break
+			}
+			if errors.Is(err, pgx.ErrNoRows) {
+				continue
+			}
+		}
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				ctx.Logger().Error("failed to read peer", "symbol", dir.Symbol, "error", err)

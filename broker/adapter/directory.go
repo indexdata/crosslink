@@ -17,12 +17,13 @@ type DirectoryLookupParams struct {
 }
 
 type DirectoryEntry struct {
-	Symbol     []string
-	Name       string
-	URL        string
-	Vendor     extctx.Vendor
-	BrokerMode extctx.BrokerMode
-	CustomData map[string]any
+	Symbol           []string
+	SecondarySymbols []string // for child entries
+	Name             string
+	URL              string
+	Vendor           extctx.Vendor
+	BrokerMode       extctx.BrokerMode
+	CustomData       map[string]any
 }
 
 type Supplier struct {
