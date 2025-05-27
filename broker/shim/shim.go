@@ -56,6 +56,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 	}
 	if message != nil && message.Request != nil {
 		request := message.Request
+		i.fixServiceLevel(request)
 		i.appendDeliveryAddressToNote(request)
 		i.appendReturnAddressToReqNote(request)
 		i.fixBibItemIds(request)
@@ -140,6 +141,17 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 			return
 		}
 	}
+}
+
+func (i *Iso18626AlmaShim) fixServiceLevel(request *iso18626.Request) {
+	if request.ServiceInfo == nil || request.ServiceInfo.ServiceLevel == nil {
+		return
+	}
+	serviceLevel, ok := iso18626.ServiceLevelFromStringCI(request.ServiceInfo.ServiceLevel.Text)
+	if !ok {
+		serviceLevel = iso18626.ServiceLevelStandard
+	}
+	request.ServiceInfo.ServiceLevel.Text = string(serviceLevel)
 }
 
 func (i *Iso18626AlmaShim) fixBibItemIds(request *iso18626.Request) {

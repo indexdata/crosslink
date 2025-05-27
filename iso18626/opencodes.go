@@ -90,3 +90,14 @@ func BibliographicRecordIdCodeFromString(s string) (BibliographicRecordIdCode, e
 		return "", fmt.Errorf("invalid BibliographicRecordIdCode: %s", s)
 	}
 }
+
+type ServiceLevel string
+
+const (
+	ServiceLevelExpress       ServiceLevel = "Express"
+	ServiceLevelNormal        ServiceLevel = "Normal"
+	ServiceLevelRush          ServiceLevel = "Rush"
+	ServiceLevelSecondaryMail ServiceLevel = "SecondaryMail"
+	ServiceLevelStandard      ServiceLevel = "Standard"
+	ServiceLevelUrgent        ServiceLevel = "Urgent"
+)
