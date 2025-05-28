@@ -26,6 +26,10 @@ RUN adduser \
   --uid 65532 \
   mod-dms-user
 
+RUN mkdir /tmp \
+  && chmod 1777 /tmp \
+  && chown root:root /tmp
+
 # create small runtime image
 FROM scratch
 
