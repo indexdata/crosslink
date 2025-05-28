@@ -205,6 +205,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 			},
 		},
 	}
+	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
 	isbn := iso18626.BibliographicItemId{
 		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
 			Text: "isbn",
@@ -249,7 +250,10 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	assert.Equal(t, 1, len(resmsg.Request.BibliographicInfo.BibliographicItemId))
 	assert.Equal(t, "ISBN", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text)
 	assert.Equal(t, "978-3-16-148410-0", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)
-	assert.Equal(t, 1, len(resmsg.Request.BibliographicInfo.BibliographicRecordId))
+	assert.Equal(t, 2, len(resmsg.Request.BibliographicInfo.BibliographicRecordId))
 	assert.Equal(t, "LCCN", resmsg.Request.BibliographicInfo.BibliographicRecordId[0].BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "2023000023", resmsg.Request.BibliographicInfo.BibliographicRecordId[0].BibliographicRecordIdentifier)
+	//we pass supplierUniqeRecordId as the OCLC number
+	assert.Equal(t, "OCLC", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "12345678", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
 }

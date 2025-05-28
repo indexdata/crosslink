@@ -199,6 +199,14 @@ func (i *Iso18626AlmaShim) fixBibRecIds(request *iso18626.Request) {
 			})
 		}
 	}
+	if len(request.BibliographicInfo.SupplierUniqueRecordId) > 0 {
+		bibRecIds = append(bibRecIds, iso18626.BibliographicRecordId{
+			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+				Text: string(iso18626.BibliographicRecordIdCodeOCLC),
+			},
+			BibliographicRecordIdentifier: request.BibliographicInfo.SupplierUniqueRecordId,
+		})
+	}
 	request.BibliographicInfo.BibliographicRecordId = bibRecIds
 }
 
