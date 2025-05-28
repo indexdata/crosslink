@@ -26,7 +26,7 @@ RUN adduser \
   --uid 65532 \
   mod-dms-user
 
-RUN mkdir /tmp \
+RUN mkdir -p /tmp \
   && chmod 1777 /tmp \
   && chown root:root /tmp
 
