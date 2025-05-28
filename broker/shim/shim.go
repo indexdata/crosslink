@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"regexp"
 	"strings"
 
 	"github.com/indexdata/crosslink/iso18626"
@@ -12,6 +13,8 @@ const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
 const RETURN_ADDRESS_END = "#RT_END#"
+
+var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 
 type Iso18626Shim interface {
 	ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error)
@@ -51,21 +54,34 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 		i.fixReasonForMessage(suppMsg)
 		status := suppMsg.StatusInfo.Status
 		if status == iso18626.TypeStatusLoaned {
-			i.appendReturnAddressToNote(suppMsg)
+			i.stripReShareSuppMsgNote(suppMsg)
+			i.appendReturnAddressToSuppMsgNote(suppMsg)
 		}
 	}
 	if message != nil && message.Request != nil {
 		request := message.Request
 		i.fixServiceLevel(request)
-		i.appendDeliveryAddressToNote(request)
-		i.appendReturnAddressToReqNote(request)
 		i.fixBibItemIds(request)
 		i.fixBibRecIds(request)
+		i.stripReShareReqNote(request)
+		i.appendDeliveryAddressToReqNote(request)
+		i.appendReturnAddressToReqNote(request)
 	}
 	return xml.Marshal(message)
 }
 
-func (i *Iso18626AlmaShim) appendReturnAddressToNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+func (i *Iso18626AlmaShim) stripReShareSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	suppMsg.MessageInfo.Note = rsNoteRegexp.ReplaceAllString(suppMsg.MessageInfo.Note, "")
+}
+
+func (i *Iso18626AlmaShim) stripReShareReqNote(request *iso18626.Request) {
+	if request.ServiceInfo == nil {
+		return
+	}
+	request.ServiceInfo.Note = rsNoteRegexp.ReplaceAllString(request.ServiceInfo.Note, "")
+}
+
+func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
 	if strings.Contains(suppMsg.MessageInfo.Note, RETURN_ADDRESS_BEGIN) {
 		return
 	}
@@ -99,7 +115,7 @@ func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMe
 	}
 }
 
-func (i *Iso18626AlmaShim) appendDeliveryAddressToNote(request *iso18626.Request) {
+func (i *Iso18626AlmaShim) appendDeliveryAddressToReqNote(request *iso18626.Request) {
 	if request.ServiceInfo != nil && strings.Contains(request.ServiceInfo.Note, DELIVERY_ADDRESS_BEGIN) {
 		return
 	}

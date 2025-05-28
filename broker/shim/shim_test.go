@@ -43,7 +43,7 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 			},
 			MessageInfo: iso18626.MessageInfo{
 				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-				Note:             "original note",
+				Note:             "#seq:12#original note",
 			},
 			ReturnInfo: &iso18626.ReturnInfo{
 				Name: "University of Chicago (ISIL:US-IL-UC)",
@@ -193,7 +193,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 				},
 			},
 			ServiceInfo: &iso18626.ServiceInfo{
-				Note: "original note",
+				Note: "#seq:0#original note",
 				ServiceLevel: &iso18626.TypeSchemeValuePair{
 					Text: "secondarymail",
 				},
