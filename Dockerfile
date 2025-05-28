@@ -1,4 +1,4 @@
-FROM golang:1.24 AS build
+FROM golang:1.24
 
 # Builds from the workspace root dir
 WORKDIR /app
@@ -26,28 +26,9 @@ RUN adduser \
   --uid 65532 \
   mod-dms-user
 
-RUN mkdir -p /tmp \
-  && chmod 1777 /tmp \
-  && chown root:root /tmp
-
-# create small runtime image
-FROM scratch
-
-# need to copy SSL certs and runtime use
-COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /etc/passwd /etc/passwd
-COPY --from=build /etc/group /etc/group
-
-# copy the binary
-COPY --from=build /app/mod-dms /
-
-# Copy /tmp 
-COPY --from=build /tmp /tmp
-
 ENV HTTP_PORT=8086
 EXPOSE ${HTTP_PORT}
 
 # Run
 USER mod-dms-user:mod-dms-user
-CMD ["/mod-dms"]
+CMD ["/app/mod-dms"]
