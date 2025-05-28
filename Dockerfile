@@ -38,6 +38,9 @@ COPY --from=build /etc/group /etc/group
 # copy the binary
 COPY --from=build /app/mod-dms /
 
+# Copy /tmp 
+COPY --from=build /tmp /tmp
+
 ENV HTTP_PORT=8086
 EXPOSE ${HTTP_PORT}
 
