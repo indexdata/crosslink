@@ -63,14 +63,18 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	assert.Equal(t, peer0, peer00)
 	peers, _ := illRepo.GetCachedPeersBySymbols(ctx,
 		[]string{"ISIL:AU-NALB", "ISIL:AU-VU", "ISIL:AU-VUMC"}, da)
+	mapPeers := make(map[string]Peer)
+	for _, p := range peers {
+		mapPeers[p.ID] = p
+	}
 	assert.Equal(t, len(peers), 3)
 	peer1, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NALB")
-	assert.Equal(t, peers[1], peer1)
+	assert.Equal(t, mapPeers[peer1.ID], peer1)
 	peer2, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-VU")
-	assert.Equal(t, peers[2], peer2)
+	assert.Equal(t, mapPeers[peer2.ID], peer2)
 	peer3, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-VUMC")
 	assert.Equal(t, "University of Melbourne / The University of Melbourne: Museums and Collections", peer3.Name)
-	assert.Equal(t, peers[0], peer3)
+	assert.Equal(t, mapPeers[peer3.ID], peer3)
 	assert.NotEqual(t, peer00, peer3)
 	symbols1, _ := illRepo.GetSymbolsByPeerId(ctx, peer1.ID)
 	assert.Equal(t, len(symbols1), 1)
