@@ -79,12 +79,12 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 			}
 		}
 		if apiUrl != "" && len(symbols) > 0 {
-			vendor := getVendorFromUrl(apiUrl)
+			vendor := GetVendorFromUrl(apiUrl)
 			entry := DirectoryEntry{
 				Name:       d["name"].(string),
-				Symbol:     symbols,
+				Symbols:    symbols,
 				Vendor:     vendor,
-				BrokerMode: getBrokerMode(vendor),
+				BrokerMode: GetBrokerMode(vendor),
 				URL:        apiUrl,
 				CustomData: d,
 			}
@@ -94,7 +94,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	for i := range dirEntries {
 		de := &dirEntries[i]
 		if childSyms, ok := childSymbolsById[de.CustomData["id"].(string)]; ok {
-			de.Symbol = append(de.SecondarySymbols, childSyms...)
+			de.BranchSymbols = childSyms
 		}
 	}
 	return dirEntries, nil, query
@@ -221,7 +221,7 @@ func getPeerTiers(peerData map[string]any) []Tier {
 	return tiers
 }
 
-func getVendorFromUrl(url string) extctx.Vendor {
+func GetVendorFromUrl(url string) extctx.Vendor {
 	if strings.Contains(url, "alma.exlibrisgroup.com") {
 		return extctx.VendorAlma
 	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
@@ -231,7 +231,7 @@ func getVendorFromUrl(url string) extctx.Vendor {
 	}
 }
 
-func getBrokerMode(vendor extctx.Vendor) extctx.BrokerMode {
+func GetBrokerMode(vendor extctx.Vendor) extctx.BrokerMode {
 	switch vendor {
 	case extctx.VendorAlma:
 		return extctx.BrokerModeOpaque

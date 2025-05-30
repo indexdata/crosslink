@@ -76,16 +76,26 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 
 	peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
 	for _, peer := range peers {
-		//iterate over both primary and secondary symbols
 		peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
 			return logErrorAndReturnResult(ctx, "failed to read symbols", err)
 		}
+		var symbols = []string{}
 		for _, sym := range peerSymbols {
-			if localId, ok := symbolToLocalId[sym.SymbolValue]; ok {
+			symbols = append(symbols, sym.SymbolValue)
+		}
+		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+		if err != nil {
+			return logErrorAndReturnResult(ctx, "failed to read branch symbols", err)
+		}
+		for _, sym := range branchSymbols {
+			symbols = append(symbols, sym.SymbolValue)
+		}
+		for _, sym := range symbols {
+			if localId, ok := symbolToLocalId[sym]; ok {
 				local := false
 				if s.localSupply &&
-					illTrans.RequesterSymbol.Valid && sym.SymbolValue == illTrans.RequesterSymbol.String {
+					illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
 					local = true
 				}
 				potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
@@ -93,7 +103,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 					CustomData:      peer.CustomData,
 					LocalIdentifier: localId,
 					Ratio:           getPeerRatio(peer),
-					Symbol:          sym.SymbolValue,
+					Symbol:          sym,
 					Local:           local,
 				})
 			}

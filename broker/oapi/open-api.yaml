@@ -270,6 +270,11 @@ components:
           items:
             type: string
           description: Unique symbol representing the peer
+        BranchSymbols:
+          type: array
+          items:
+            type: string
+          description: Symbols of peer branches
         Name:
           type: string
           description: Name of the peer
