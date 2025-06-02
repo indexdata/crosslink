@@ -22,6 +22,17 @@ WHERE event_name = $1;
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
 
+-- name: GetNewEvent :one
+UPDATE event
+SET event_status = 'PROCESSING'
+WHERE event_status = (
+    SELECT event_status FROM event
+    WHERE event.id = $1 AND event_status = 'NEW'
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+)
+RETURNING sqlc.embed(event);
+
 -- name: GetIllTransactionEvents :many
 SELECT sqlc.embed(event), COUNT(*) OVER () as full_count
 FROM event
