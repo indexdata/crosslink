@@ -74,38 +74,42 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		symbolToLocalId[holding.Symbol] = holding.LocalIdentifier
 	}
 
-	peers, query := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
-	for _, peer := range peers {
-		peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
-		if err != nil {
-			return logErrorAndReturnResult(ctx, "failed to read symbols", err)
-		}
-		var symbols = []string{}
-		for _, sym := range peerSymbols {
-			symbols = append(symbols, sym.SymbolValue)
-		}
-		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
-		if err != nil {
-			return logErrorAndReturnResult(ctx, "failed to read branch symbols", err)
-		}
-		for _, sym := range branchSymbols {
-			symbols = append(symbols, sym.SymbolValue)
-		}
-		for _, sym := range symbols {
-			if localId, ok := symbolToLocalId[sym]; ok {
-				local := false
-				if s.localSupply &&
-					illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
-					local = true
+	peers, query, err := s.illRepo.GetCachedPeersBySymbols(ctx, holdingsSymbols, s.dirAdapter)
+	if err != nil {
+		directory["error"] = err.Error()
+	} else {
+		for _, peer := range peers {
+			peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
+			if err != nil {
+				return logErrorAndReturnResult(ctx, "failed to read symbols", err)
+			}
+			var symbols = []string{}
+			for _, sym := range peerSymbols {
+				symbols = append(symbols, sym.SymbolValue)
+			}
+			branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+			if err != nil {
+				return logErrorAndReturnResult(ctx, "failed to read branch symbols", err)
+			}
+			for _, sym := range branchSymbols {
+				symbols = append(symbols, sym.SymbolValue)
+			}
+			for _, sym := range symbols {
+				if localId, ok := symbolToLocalId[sym]; ok {
+					local := false
+					if s.localSupply &&
+						illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
+						local = true
+					}
+					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
+						PeerId:          peer.ID,
+						CustomData:      peer.CustomData,
+						LocalIdentifier: localId,
+						Ratio:           getPeerRatio(peer),
+						Symbol:          sym,
+						Local:           local,
+					})
 				}
-				potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
-					PeerId:          peer.ID,
-					CustomData:      peer.CustomData,
-					LocalIdentifier: localId,
-					Ratio:           getPeerRatio(peer),
-					Symbol:          sym,
-					Local:           local,
-				})
 			}
 		}
 	}

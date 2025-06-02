@@ -61,7 +61,7 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	assert.Equal(t, err, nil)
 	peer00, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-VUMC")
 	assert.Equal(t, peer0, peer00)
-	peers, _ := illRepo.GetCachedPeersBySymbols(ctx,
+	peers, _, _ := illRepo.GetCachedPeersBySymbols(ctx,
 		[]string{"ISIL:AU-NALB", "ISIL:AU-VU", "ISIL:AU-VUMC"}, da)
 	mapPeers := make(map[string]Peer)
 	for _, p := range peers {
