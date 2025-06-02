@@ -200,13 +200,43 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName Event
 	})
 }
 
-func (p *PostgresEventBus) BeginTask(eventId string) error {
+func (p *PostgresEventBus) BeginTask1(eventId string) error {
+	event, err := p.repo.GetEvent(p.ctx, eventId)
+	if err != nil {
+		return err
+	}
+	if event.EventType != EventTypeTask {
+		return errors.New("event is not a TASK")
+	}
+	if event.EventStatus != EventStatusNew {
+		return errors.New("event is not in state NEW")
+	}
 	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		event, err := eventRepo.GetEvent(p.ctx, eventId)
+		err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
+			ID:          eventId,
+			EventStatus: EventStatusProcessing,
+		})
 		if err != nil {
 			return err
 		}
-		p.ctx.Logger().Info("event_bus: BeginTask 1", "status", event.EventStatus, "id", eventId, "eventId", event.ID)
+		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
+		return err
+	})
+}
+
+func (p *PostgresEventBus) BeginTask2(eventId string) error {
+	event, err := p.repo.GetEvent(p.ctx, eventId)
+	if err != nil {
+		return err
+	}
+	p.ctx.Logger().Info("event_bus: BeginTask 1", "status", event.EventStatus, "id", eventId, "eventId", event.ID)
+	if event.EventType != EventTypeTask {
+		return errors.New("event is not a TASK")
+	}
+	if event.EventStatus != EventStatusNew {
+		return errors.New("event is not in state NEW")
+	}
+	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		_, err = eventRepo.GetNewEvent(p.ctx, eventId)
 		if err != nil {
 			p.ctx.Logger().Info("event_bus: BeginTask returning error")
@@ -216,11 +246,20 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 		if err != nil {
 			return err
 		}
+		if event.EventStatus != EventStatusProcessing {
+			return errors.New("event is not in state PROCESSING")
+		}
 		p.ctx.Logger().Info("event_bus: BeginTask 2", "status", event.EventStatus, "id", eventId, "eventId", event.ID)
 
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
+		p.ctx.Logger().Info("event_bus: BeginTask 3", "status", event.EventStatus, "id", eventId, "eventId", event.ID)
 		return err
 	})
+}
+
+func (p *PostgresEventBus) BeginTask(eventId string) error {
+	p.ctx.Logger().Info("event_bus: BeginTask", "eventId", eventId)
+	return p.BeginTask1(eventId)
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {

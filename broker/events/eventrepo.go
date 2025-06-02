@@ -42,11 +42,7 @@ func (r *PgEventRepo) SaveEvent(ctx extctx.ExtendedContext, params SaveEventPara
 }
 
 func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, error) {
-	ctx.Logger().Info("GetEvent", "id", id)
 	row, err := r.queries.GetEvent(ctx, r.GetConnOrTx(), id)
-	if err == nil {
-		ctx.Logger().Info("GetEvent", "status", row.Event.EventStatus)
-	}
 	return row.Event, err
 }
 

@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
@@ -44,16 +46,18 @@ func TestMain(m *testing.M) {
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
-
+	fmt.Print("Postgres connection string: ", connStr)
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	app.RunMigrateScripts()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
-	test.WaitForServiceUp(app.HTTP_PORT)
+	dbPool, err := dbutil.InitDbPool(connStr)
+	test.Expect(err, "failed to init db pool")
 
-	defer cancel()
+	eventRepo = app.CreateEventRepo(dbPool)
+	eventBus = app.CreateEventBus(eventRepo)
+	illRepo = app.CreateIllRepo(dbPool)
+
 	code := m.Run()
 
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
@@ -213,6 +217,11 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	}
 
 	eventId := eventsReceived[0].ID
+
+	event, err := eventRepo.GetEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), eventId)
+	assert.NoError(t, err, "Should not be error getting event")
+	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
+	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
 
 	err = eventBus.BeginTask(eventId)
 	if err != nil {
