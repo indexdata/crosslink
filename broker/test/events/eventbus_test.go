@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/google/uuid"
@@ -46,8 +45,9 @@ func TestMain(m *testing.M) {
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
-	fmt.Print("Postgres connection string: ", connStr)
 	app.ConnectionString = connStr
+
+	fmt.Print("Postgres connection string: ", connStr)
 	app.MigrationsFolder = "file://../../migrations"
 	app.RunMigrateScripts()
 
@@ -57,6 +57,7 @@ func TestMain(m *testing.M) {
 	eventRepo = app.CreateEventRepo(dbPool)
 	eventBus = app.CreateEventBus(eventRepo)
 	illRepo = app.CreateIllRepo(dbPool)
+	app.StartEventBus(ctx, eventBus)
 
 	code := m.Run()
 
@@ -65,17 +66,19 @@ func TestMain(m *testing.M) {
 }
 
 func TestMultipleEventHandlers(t *testing.T) {
-	var eventBus2 events.EventBus
-	var illRepo2 ill_db.IllRepo
-	var eventRepo2 events.EventRepo
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	eventBus2, illRepo2, eventRepo2 = apptest.StartApp(ctx2)
+	dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+	test.Expect(err, "failed to init db pool")
+
+	ctx := context.Background()
+	eventRepo2 := app.CreateEventRepo(dbPool)
+	eventBus2 := app.CreateEventBus(eventRepo2)
+	illRepo2 := app.CreateIllRepo(dbPool)
 
 	assert.NotNil(t, illRepo2, "Event bus should not be nil")
 	assert.NotNil(t, eventBus2, "Event bus should not be nil")
 	assert.NotNil(t, eventRepo2, "Event repo should not be nil")
-	defer cancel2()
+
+	app.StartEventBus(ctx, eventBus2)
 
 	var requestReceived2 []events.Event
 	eventBus2.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
@@ -88,7 +91,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	})
 
 	illId := apptest.GetIllTransId(t, illRepo2)
-	_, err := eventBus2.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+	_, err = eventBus2.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
 	assert.NoError(t, err, "Task should be created without errors")
 
 	if !test.WaitForPredicateToBeTrue(func() bool {

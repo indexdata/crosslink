@@ -29,7 +29,7 @@ WHERE event_status = (
     SELECT event_status FROM event
     WHERE event.id = $1 AND event_status = 'NEW'
     LIMIT 1
-    FOR UPDATE NOWAIT
+    FOR UPDATE SKIP LOCKED
 )
 RETURNING sqlc.embed(event);
 

@@ -237,7 +237,8 @@ func (p *PostgresEventBus) BeginTask2(eventId string) error {
 		return errors.New("event is not in state NEW")
 	}
 	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err = eventRepo.GetNewEvent(p.ctx, eventId)
+		var ev2 Event // we don't need this, but is used to check the result is ok
+		ev2, err = eventRepo.GetNewEvent(p.ctx, eventId)
 		if err != nil {
 			p.ctx.Logger().Info("event_bus: BeginTask returning error")
 			return err
@@ -249,6 +250,9 @@ func (p *PostgresEventBus) BeginTask2(eventId string) error {
 		if event.EventStatus != EventStatusProcessing {
 			return errors.New("event is not in state PROCESSING")
 		}
+		if ev2.EventName != event.EventName {
+			return errors.New("event name mismatch")
+		}
 		p.ctx.Logger().Info("event_bus: BeginTask 2", "status", event.EventStatus, "id", eventId, "eventId", event.ID)
 
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
@@ -259,7 +263,7 @@ func (p *PostgresEventBus) BeginTask2(eventId string) error {
 
 func (p *PostgresEventBus) BeginTask(eventId string) error {
 	p.ctx.Logger().Info("event_bus: BeginTask", "eventId", eventId)
-	return p.BeginTask1(eventId)
+	return p.BeginTask2(eventId)
 }
 
 func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {
