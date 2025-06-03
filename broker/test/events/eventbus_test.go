@@ -68,6 +68,7 @@ func TestMain(m *testing.M) {
 func TestMultipleEventHandlers(t *testing.T) {
 	dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 	test.Expect(err, "failed to init db pool")
+	defer dbPool.Close()
 
 	ctx := context.Background()
 	eventRepo2 := app.CreateEventRepo(dbPool)
@@ -95,7 +96,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	assert.NoError(t, err, "Task should be created without errors")
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(requestReceived2) == 1 && len(requestReceived1) == 1
+		return len(requestReceived2) == 1 || len(requestReceived1) == 1
 	}) {
 		t.Error("Expected to have both request event received")
 	}

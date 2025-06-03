@@ -24,13 +24,8 @@ WHERE id = $1 LIMIT 1;
 
 -- name: GetNewEvent :one
 UPDATE event
-SET event_status = 'PROCESSING'
-WHERE event_status = (
-    SELECT event_status FROM event
-    WHERE event.id = $1 AND event_status = 'NEW'
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
-)
+SET notified = TRUE
+WHERE notified = FALSE AND id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
@@ -41,9 +36,9 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, notified
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
@@ -53,7 +48,8 @@ ON CONFLICT (id) DO UPDATE
     event_type = EXCLUDED.event_type,
     event_status = EXCLUDED.event_status,
     event_data = EXCLUDED.event_data,
-    result_data = EXCLUDED.result_data
+    result_data = EXCLUDED.result_data,
+    notified = EXCLUDED.notified
 RETURNING sqlc.embed(event);
 
 -- name: DeleteEvent :exec
@@ -65,5 +61,5 @@ DELETE FROM event
 WHERE ill_transaction_id = $1;
 
 -- name: UpdateEventStatus :exec
-UPDATE event SET event_status = $2
+UPDATE event SET notified = FALSE, event_status = $2
 WHERE id = $1;
