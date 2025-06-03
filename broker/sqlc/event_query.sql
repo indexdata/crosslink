@@ -24,8 +24,12 @@ WHERE id = $1 LIMIT 1;
 
 -- name: GetNewEvent :one
 UPDATE event
-SET notified = TRUE
-WHERE notified = FALSE AND id = $1
+SET signal = $2
+WHERE id = (
+    SELECT id FROM event
+    WHERE signal != $2 AND event.id = $1
+    LIMIT 1
+)
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
@@ -36,7 +40,7 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, notified
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, signal
 ) VALUES (
              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
          )
@@ -49,7 +53,7 @@ ON CONFLICT (id) DO UPDATE
     event_status = EXCLUDED.event_status,
     event_data = EXCLUDED.event_data,
     result_data = EXCLUDED.result_data,
-    notified = EXCLUDED.notified
+    signal = EXCLUDED.signal
 RETURNING sqlc.embed(event);
 
 -- name: DeleteEvent :exec
@@ -61,5 +65,5 @@ DELETE FROM event
 WHERE ill_transaction_id = $1;
 
 -- name: UpdateEventStatus :exec
-UPDATE event SET notified = FALSE, event_status = $2
+UPDATE event SET signal = '', event_status = $2
 WHERE id = $1;

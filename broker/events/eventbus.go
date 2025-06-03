@@ -114,9 +114,11 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	p.ctx.Logger().Error("event_bus: handleNotify", "eventId", data.Event)
 
-	event, err := p.repo.GetNewEvent(p.ctx, data.Event)
+	event, err := p.repo.GetNewEvent(p.ctx, data.Event, string(data.Signal))
 	if err != nil {
-		p.ctx.Logger().Error("event_bus: failed to resolve event", "error", err, "eventId", data.Event, "signal", data.Signal)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			p.ctx.Logger().Error("event_bus: failed to resolve event", "error", err, "eventId", data.Event, "signal", data.Signal)
+		}
 		return
 	}
 	p.ctx.Logger().Info("event_bus: received event", "channel", EVENT_BUS_CHANNEL,
@@ -171,7 +173,7 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 			EventStatus:      EventStatusNew,
 			EventData:        data,
 			ParentID:         getPgText(parentId),
-			Notified:         false,
+			Signal:           "",
 		})
 		if err != nil && event.ParentID.Valid {
 			return err
@@ -193,7 +195,7 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName Event
 			EventName:        eventName,
 			EventStatus:      status,
 			EventData:        data,
-			Notified:         false,
+			Signal:           "",
 		})
 		if err != nil {
 			return err
@@ -247,7 +249,7 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		event.ResultData = *result
 	}
 	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		event.Notified = false // Reset notification status before saving
+		event.Signal = "" // Reset notification status before saving
 		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
 			return err

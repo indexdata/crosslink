@@ -118,7 +118,6 @@ func TestMessageRequester(t *testing.T) {
 	}
 	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
-	t.Error("TestMessageRequester completed successfully")
 }
 
 func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
