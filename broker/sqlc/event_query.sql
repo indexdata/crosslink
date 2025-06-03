@@ -25,12 +25,7 @@ WHERE id = $1 LIMIT 1;
 -- name: GetNewEvent :one
 UPDATE event
 SET event_status = 'PROCESSING'
-WHERE event_status = (
-    SELECT event_status FROM event
-    WHERE event.id = $1 AND event_status = 'NEW'
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
-)
+WHERE event_status = 'NEW' AND id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
