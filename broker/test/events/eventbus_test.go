@@ -68,6 +68,7 @@ func TestMain(m *testing.M) {
 func TestMultipleEventHandlers(t *testing.T) {
 	dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 	test.Expect(err, "failed to init db pool")
+	defer dbPool.Close()
 
 	ctx := context.Background()
 	eventRepo2 := app.CreateEventRepo(dbPool)
