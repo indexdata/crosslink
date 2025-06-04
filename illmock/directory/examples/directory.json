@@ -4,6 +4,7 @@
       "id": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
       "name": "Test tenant TTTZ",
       "description": "tttz",
+      "organizationId": "999999",
       "type": "institution",
       "email": "test@example.com",
       "hrid": "TTTZ",
