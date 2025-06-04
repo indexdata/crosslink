@@ -199,6 +199,8 @@ components:
           type: string
         description:
           type: string
+        organizationId:
+          type: string
         contactName:
           type: string
         email:
