@@ -17,8 +17,6 @@ const (
 
 type EventType string
 
-type EventNotified bool
-
 const (
 	EventTypeTask   EventType = "TASK"
 	EventTypeNotice EventType = "NOTICE"

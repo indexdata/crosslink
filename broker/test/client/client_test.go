@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -96,12 +95,10 @@ func TestMessageRequester(t *testing.T) {
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
-	log.Println("PREPARE TO NOTIFY TestMessageRequester Event ID:", eventId)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
-	log.Println("CREATED Event ID:", eventId)
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
