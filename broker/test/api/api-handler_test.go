@@ -427,6 +427,7 @@ func TestPeersCRUD(t *testing.T) {
 		RefreshPolicy: oapi.Transaction,
 		CustomData:    &custom,
 		HttpHeaders:   &headers,
+		BranchSymbols: &[]string{"ISIL:PEER-Branch"},
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err)
@@ -453,6 +454,13 @@ func TestPeersCRUD(t *testing.T) {
 
 	// Update peer
 	toCreate.Name = "Updated"
+	toCreate.Symbols = append(toCreate.Symbols, "ISIL:UPDATED")
+	branchSymbols := []string{}
+	if toCreate.BranchSymbols != nil {
+		branchSymbols = *toCreate.BranchSymbols
+	}
+	branchSymbols = append(branchSymbols, "ISIL:UPDATED-Branch")
+	toCreate.BranchSymbols = &branchSymbols
 	jsonBytes, err = json.Marshal(toCreate)
 	assert.NoError(t, err)
 	body = httpRequest(t, "PUT", "/peers/"+toCreate.ID, jsonBytes, "", http.StatusOK)
@@ -461,6 +469,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, toCreate.ID, respPeer.ID)
 	assert.Equal(t, "Updated", respPeer.Name)
+	assert.Len(t, respPeer.Symbols, 2)
+	assert.Equal(t, 2, len(*respPeer.BranchSymbols))
 	// Get peer
 	respPeer = getPeerById(t, toCreate.ID)
 	assert.Equal(t, toCreate.ID, respPeer.ID)
