@@ -22,7 +22,7 @@ WHERE event_name = $1;
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
 
--- name: GetNewEvent :one
+-- name: ClaimEventForSignal :one
 UPDATE event
 SET signal = $2
 WHERE id = (
