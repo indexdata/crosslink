@@ -58,3 +58,10 @@ CREATE TABLE located_supplier
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
+
+CREATE TABLE branch_symbol
+(
+    symbol_value VARCHAR PRIMARY KEY,
+    peer_id VARCHAR   NOT NULL,
+    FOREIGN KEY (peer_id) REFERENCES peer (id)
+);

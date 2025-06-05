@@ -201,3 +201,22 @@ WHERE id = $1;
 DELETE
 FROM located_supplier
 WHERE ill_transaction_id = $1;
+
+
+-- name: SaveBranchSymbol :one
+INSERT INTO branch_symbol (symbol_value, peer_id)
+VALUES ($1, $2)
+ON CONFLICT (symbol_value) DO UPDATE
+    SET symbol_value = EXCLUDED.symbol_value,
+        peer_id      = EXCLUDED.peer_id
+RETURNING sqlc.embed(branch_symbol);
+
+-- name: GetBranchSymbolsByPeerId :many
+SELECT sqlc.embed(branch_symbol)
+FROM branch_symbol
+WHERE peer_id = $1;
+
+-- name: DeleteBranchSymbolByPeerId :exec
+DELETE
+FROM branch_symbol
+WHERE peer_id = $1;

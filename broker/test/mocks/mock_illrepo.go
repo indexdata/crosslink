@@ -140,8 +140,8 @@ func (r *MockIllRepositorySuccess) GetSelectedSupplierForIllTransactionForUpdate
 	return ill_db.LocatedSupplier{}, nil
 }
 
-func (r *MockIllRepositorySuccess) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string) {
-	return []ill_db.Peer{{ID: uuid.NewString()}}, ""
+func (r *MockIllRepositorySuccess) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	return []ill_db.Peer{{ID: uuid.NewString()}}, "", nil
 }
 
 func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, id string) ([]ill_db.LocatedSupplier, int64, error) {
@@ -176,6 +176,16 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterId(ctx extctx.Ext
 }
 func (r *MockIllRepositorySuccess) GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{}, nil
+}
+
+func (r *MockIllRepositorySuccess) SaveBranchSymbol(ctx extctx.ExtendedContext, params ill_db.SaveBranchSymbolParams) (ill_db.BranchSymbol, error) {
+	return ill_db.BranchSymbol(params), nil
+}
+func (r *MockIllRepositorySuccess) GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.BranchSymbol, error) {
+	return []ill_db.BranchSymbol{{PeerID: peerId, SymbolValue: "ISIL:S1"}}, nil
+}
+func (r *MockIllRepositorySuccess) DeleteBranchSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
+	return nil
 }
 
 type MockIllRepositoryError struct {
@@ -266,8 +276,8 @@ func (r *MockIllRepositoryError) GetSelectedSupplierForIllTransactionForUpdate(c
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string) {
-	return []ill_db.Peer{}, ""
+func (r *MockIllRepositoryError) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	return []ill_db.Peer{}, "", errors.New("DB error")
 }
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, id string) ([]ill_db.LocatedSupplier, int64, error) {
@@ -300,4 +310,14 @@ func (r *MockIllRepositoryError) GetIllTransactionByRequesterId(ctx extctx.Exten
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.LocatedSupplier, error) {
 	return []ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) SaveBranchSymbol(ctx extctx.ExtendedContext, params ill_db.SaveBranchSymbolParams) (ill_db.BranchSymbol, error) {
+	return ill_db.BranchSymbol{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]ill_db.BranchSymbol, error) {
+	return []ill_db.BranchSymbol{}, errors.New("DB error")
+}
+func (r *MockIllRepositoryError) DeleteBranchSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
+	return errors.New("DB error")
 }

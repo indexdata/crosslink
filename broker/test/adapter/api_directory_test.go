@@ -141,17 +141,20 @@ func TestLookup(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
+	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
 	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
 	entries, err, _ := ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 4)
+	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Len(t, entries[0].Symbol, 1)
+	assert.Len(t, entries[0].Symbols, 1)
+	assert.Equal(t, extctx.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
-	assert.Len(t, entries[3].Symbol, 3)
+	assert.Len(t, entries[3].Symbols, 1)
+	assert.Len(t, entries[3].BranchSymbols, 2)
 
 	ad = createDirectoryAdapter(server.URL, server.URL)
 	p = adapter.DirectoryLookupParams{
@@ -159,9 +162,9 @@ func TestLookup(t *testing.T) {
 	}
 	entries, err, _ = ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 8)
+	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
-	assert.Len(t, entries[0].Symbol, 1)
+	assert.Len(t, entries[0].Symbols, 1)
 }
 
 func TestFilterAndSort(t *testing.T) {

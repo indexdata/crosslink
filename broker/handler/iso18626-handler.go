@@ -202,7 +202,7 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	}
 
 	requesterSymbol := createPgText(request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue)
-	peers, _ := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
+	peers, _, _ := repo.GetCachedPeersBySymbols(ctx, []string{requesterSymbol.String}, dirAdapter)
 	if len(peers) != 1 {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
 		return

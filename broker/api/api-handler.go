@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -309,7 +310,12 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			addInternalError(ctx, w, e)
 			return
 		}
-		resp.Items = append(resp.Items, toApiPeer(p, symbols))
+		branchSymbols, e := a.illRepo.GetBranchSymbolsByPeerId(ctx, p.ID)
+		if e != nil {
+			addInternalError(ctx, w, e)
+			return
+		}
+		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
 	}
 	resp.Items, err = filterPeers(params.Cql, resp.Items)
 	if err != nil {
@@ -461,6 +467,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	dbPeer := toDbPeer(newPeer)
 	var peer ill_db.Peer
 	var symbols = []ill_db.Symbol{}
+	var branchSymbols = []ill_db.BranchSymbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(dbPeer))
 		if err != nil {
@@ -476,6 +483,18 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 			}
 			symbols = append(symbols, sym)
 		}
+		if newPeer.BranchSymbols != nil {
+			for _, s := range *newPeer.BranchSymbols {
+				sym, e := repo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
+					SymbolValue: s,
+					PeerID:      peer.ID,
+				})
+				if e != nil {
+					return e
+				}
+				branchSymbols = append(branchSymbols, sym)
+			}
+		}
 		return nil
 	})
 
@@ -485,7 +504,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols))
+	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols, branchSymbols))
 }
 
 func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -521,6 +540,10 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 			}
 		}
 		err = repo.DeleteSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		err = repo.DeleteBranchSymbolByPeerId(ctx, peer.ID)
 		if err != nil {
 			return err
 		}
@@ -561,7 +584,12 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols))
+	branchSymbols, err := a.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -598,6 +626,7 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	var symbols = []ill_db.Symbol{}
+	var branchSymbols = []ill_db.BranchSymbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		peer, err = repo.SavePeer(ctx, ill_db.SavePeerParams(peer))
 		if err != nil {
@@ -617,6 +646,22 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 			}
 			symbols = append(symbols, sym)
 		}
+		err = repo.DeleteBranchSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			return err
+		}
+		if update.BranchSymbols != nil {
+			for _, s := range *update.BranchSymbols {
+				sym, e := repo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
+					SymbolValue: s,
+					PeerID:      peer.ID,
+				})
+				if e != nil {
+					return e
+				}
+				branchSymbols = append(branchSymbols, sym)
+			}
+		}
 		return nil
 	})
 
@@ -624,7 +669,7 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols))
+	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
 }
 
 func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
@@ -803,10 +848,23 @@ func getString(value pgtype.Text) string {
 	}
 }
 
-func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
+func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db.BranchSymbol) oapi.Peer {
 	list := make([]string, len(symbols))
 	for i, s := range symbols {
 		list[i] = s.SymbolValue
+	}
+	var branchList *[]string
+	if len(branchSymbols) > 0 {
+		branchList = new([]string)
+		for _, s := range branchSymbols {
+			*branchList = append(*branchList, s.SymbolValue)
+		}
+	}
+	if peer.Vendor == "" {
+		peer.Vendor = string(adapter.GetVendorFromUrl(peer.Url))
+	}
+	if peer.BrokerMode == "" {
+		peer.BrokerMode = string(adapter.GetBrokerMode(adapter.GetVendorFromUrl(peer.Url)))
 	}
 	return oapi.Peer{
 		ID:            peer.ID,
@@ -821,6 +879,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol) oapi.Peer {
 		CustomData:    &peer.CustomData,
 		HttpHeaders:   &peer.HttpHeaders,
 		BrokerMode:    peer.BrokerMode,
+		BranchSymbols: branchList,
 	}
 }
 

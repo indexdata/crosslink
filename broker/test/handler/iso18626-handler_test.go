@@ -469,11 +469,11 @@ type MockRepositoryOnlyPeersOK struct {
 	mocks.MockIllRepositoryError
 }
 
-func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string) {
+func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
 	return []ill_db.Peer{{
 		ID:   "peer1",
 		Name: symbols[0],
-	}}, ""
+	}}, "", nil
 }
 
 type MockRepositoryReqNotFound struct {
