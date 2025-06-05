@@ -109,6 +109,16 @@ func TestMultipleEventHandlers(t *testing.T) {
 		total += len(receivedAr[i])
 	}
 	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
+	if total != noEvents {
+		for e := range requestReceived1 {
+			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
+		}
+		for i := 0; i < noPools; i++ {
+			for e := range receivedAr[i] {
+				t.Logf("Received event %d from pool %d: %s", e, i, receivedAr[i][e].ID)
+			}
+		}
+	}
 }
 
 func TestCreateTask(t *testing.T) {

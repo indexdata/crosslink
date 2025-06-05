@@ -116,6 +116,8 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			p.ctx.Logger().Error("event_bus: failed to resolve event", "error", err, "eventId", data.Event, "signal", data.Signal)
+		} else {
+			p.ctx.Logger().Info("event_bus: no event found for notification", "eventId", data.Event, "signal", data.Signal)
 		}
 		return
 	}
