@@ -425,39 +425,39 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 	peer, err = r.SavePeer(ctx, SavePeerParams(peer))
 	if err != nil {
 		ctx.Logger().Error("could not update peer", "symbol", dir.Symbols, "error", err)
-	} else {
-		err = r.DeleteSymbolByPeerId(ctx, peer.ID)
-		if err != nil {
-			ctx.Logger().Error("could not delete peer symbols", "symbols", dir.Symbols, "error", err)
-			return
-		}
-		for _, s := range dir.Symbols {
-			_, e := r.SaveSymbol(ctx, SaveSymbolParams{
-				SymbolValue: s,
-				PeerID:      peer.ID,
-			})
-			if e != nil {
-				ctx.Logger().Error("could not save peer symbol", "symbol", s, "error", err)
-				return
-			}
-		}
-		err = r.DeleteBranchSymbolByPeerId(ctx, peer.ID)
-		if err != nil {
-			ctx.Logger().Error("could not delete peer branch symbols", "symbols", dir.Symbols, "error", err)
-			return
-		}
-		for _, s := range dir.BranchSymbols {
-			_, e := r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
-				SymbolValue: s,
-				PeerID:      peer.ID,
-			})
-			if e != nil {
-				ctx.Logger().Error("could not save peer branch symbol", "symbol", s, "error", err)
-				return
-			}
-		}
-		peers[peer.ID] = peer
+		return
 	}
+	err = r.DeleteSymbolByPeerId(ctx, peer.ID)
+	if err != nil {
+		ctx.Logger().Error("could not delete peer symbols", "symbols", dir.Symbols, "error", err)
+		return
+	}
+	for _, s := range dir.Symbols {
+		_, e := r.SaveSymbol(ctx, SaveSymbolParams{
+			SymbolValue: s,
+			PeerID:      peer.ID,
+		})
+		if e != nil {
+			ctx.Logger().Error("could not save peer symbol", "symbol", s, "error", err)
+			return
+		}
+	}
+	err = r.DeleteBranchSymbolByPeerId(ctx, peer.ID)
+	if err != nil {
+		ctx.Logger().Error("could not delete peer branch symbols", "symbols", dir.Symbols, "error", err)
+		return
+	}
+	for _, s := range dir.BranchSymbols {
+		_, e := r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
+			SymbolValue: s,
+			PeerID:      peer.ID,
+		})
+		if e != nil {
+			ctx.Logger().Error("could not save peer branch symbol", "symbol", s, "error", err)
+			return
+		}
+	}
+	peers[peer.ID] = peer
 }
 
 func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []string, peers map[string]Peer) []string {
