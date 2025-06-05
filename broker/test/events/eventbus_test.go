@@ -66,40 +66,49 @@ func TestMain(m *testing.M) {
 }
 
 func TestMultipleEventHandlers(t *testing.T) {
-	dbPool, err := dbutil.InitDbPool(app.ConnectionString)
-	test.Expect(err, "failed to init db pool")
-	defer dbPool.Close()
-
+	noPools := 3
+	noEvents := 2
+	var receivedAr [][]events.Event = make([][]events.Event, noPools)
 	ctx := context.Background()
-	eventRepo2 := app.CreateEventRepo(dbPool)
-	eventBus2 := app.CreateEventBus(eventRepo2)
-	illRepo2 := app.CreateIllRepo(dbPool)
+	for i := 0; i < noPools; i++ {
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		test.Expect(err, "failed to init db pool")
+		defer dbPool.Close()
 
-	assert.NotNil(t, illRepo2, "Event bus should not be nil")
-	assert.NotNil(t, eventBus2, "Event bus should not be nil")
-	assert.NotNil(t, eventRepo2, "Event repo should not be nil")
+		eventRepo := app.CreateEventRepo(dbPool)
+		eventBus := app.CreateEventBus(eventRepo)
 
-	app.StartEventBus(ctx, eventBus2)
-
-	var requestReceived2 []events.Event
-	eventBus2.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
-		requestReceived2 = append(requestReceived2, event)
-	})
+		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+			receivedAr[i] = append(receivedAr[i], event)
+		})
+		app.StartEventBus(ctx, eventBus)
+	}
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
 	})
 
-	illId := apptest.GetIllTransId(t, illRepo2)
-	_, err = eventBus2.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
-	assert.NoError(t, err, "Task should be created without errors")
+	for i := 0; i < noEvents; i++ {
+		illId := apptest.GetIllTransId(t, illRepo)
+		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+		assert.NoError(t, err, "Task should be created without errors")
+	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		return len(requestReceived2) == 1 || len(requestReceived1) == 1
+		total := len(requestReceived1)
+		for i := 0; i < noPools; i++ {
+			total += len(receivedAr[i])
+		}
+		return total >= noEvents
 	}) {
-		t.Error("Expected to have both request event received")
+		t.Error("Expected to have some events")
 	}
+	total := len(requestReceived1)
+	for i := 0; i < noPools; i++ {
+		total += len(receivedAr[i])
+	}
+	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
 }
 
 func TestCreateTask(t *testing.T) {
