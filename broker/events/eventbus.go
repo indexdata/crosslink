@@ -171,7 +171,7 @@ func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventNa
 			EventStatus:      EventStatusNew,
 			EventData:        data,
 			ParentID:         getPgText(parentId),
-			Signal:           "",
+			LastSignal:       "",
 		})
 		if err != nil && event.ParentID.Valid {
 			return err
@@ -193,7 +193,7 @@ func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName Event
 			EventName:        eventName,
 			EventStatus:      status,
 			EventData:        data,
-			Signal:           "",
+			LastSignal:       "",
 		})
 		if err != nil {
 			return err
@@ -244,7 +244,7 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		event.ResultData = *result
 	}
 	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		event.Signal = "" // Reset notification status before saving
+		event.LastSignal = "" // Reset notification status before saving
 		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
 			return err

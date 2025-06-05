@@ -1,0 +1,1 @@
+ALTER TABLE event ADD COLUMN last_signal VARCHAR NOT NULL;

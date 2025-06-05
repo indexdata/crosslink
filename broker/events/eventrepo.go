@@ -48,8 +48,8 @@ func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, er
 
 func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error) {
 	params := ClaimEventForSignalParams{
-		ID:     id,
-		Signal: string(signal),
+		ID:         id,
+		LastSignal: string(signal),
 	}
 	row, err := r.queries.ClaimEventForSignal(ctx, r.GetConnOrTx(), params)
 	return row.Event, err

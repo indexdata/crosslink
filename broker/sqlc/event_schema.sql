@@ -16,7 +16,7 @@ CREATE TABLE event
     event_status       VARCHAR   NOT NULL,
     event_data         jsonb,
     result_data        jsonb,
-    signal             VARCHAR   NOT NULL,
+    last_signal        VARCHAR   NOT NULL,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (event_name) REFERENCES event_config (event_name)
 );
