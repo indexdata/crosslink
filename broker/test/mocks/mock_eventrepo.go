@@ -58,7 +58,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 	}
 }
 
-func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal string) (events.Event, error) {
+func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
 	return r.GetEvent(ctx, id)
 }
 
@@ -92,7 +92,7 @@ func (r *MockEventRepositoryError) GetEvent(ctx extctx.ExtendedContext, id strin
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal string) (events.Event, error) {
+func (r *MockEventRepositoryError) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 

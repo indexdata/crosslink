@@ -112,7 +112,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
-	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, string(data.Signal))
+	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			p.ctx.Logger().Error("event_bus: failed to resolve event", "error", err, "eventId", data.Event, "signal", data.Signal)
