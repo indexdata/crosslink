@@ -25,11 +25,7 @@ WHERE id = $1 LIMIT 1;
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = $2
-WHERE id = (
-    SELECT id FROM event
-    WHERE last_signal != $2 AND event.id = $1
-    LIMIT 1
-)
+WHERE last_signal != $2 AND event.id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
