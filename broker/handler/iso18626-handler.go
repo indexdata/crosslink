@@ -34,7 +34,6 @@ const (
 	SupplierNotFound       ErrorValue = "supplyingAgencyId: located supplier cannot be found"
 	IncorrectSupplier      ErrorValue = "supplyingAgencyId: not a selected supplier for this request"
 	UnsupportedRequestType ErrorValue = "requestType: unsupported value"
-	SuppUniqueRecIdIsEmpty ErrorValue = "supplierUniqueRecordId: cannot be empty"
 	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
 	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
 	InvalidAction          ErrorValue = "%v is not a valid action"
@@ -199,11 +198,6 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 	request := illMessage.Request
 	if request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
-		return
-	}
-
-	if request.BibliographicInfo.SupplierUniqueRecordId == "" {
-		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, SuppUniqueRecIdIsEmpty)
 		return
 	}
 
