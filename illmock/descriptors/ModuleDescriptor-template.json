@@ -11,9 +11,7 @@
             "GET"
           ],
           "pathPattern": "/directory/entries",
-          "permissionsRequired": [
-            "illmock.directory.entries.get"
-          ]
+          "permissionsRequired": []
         }
       ]
     }
