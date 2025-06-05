@@ -25,7 +25,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	}
 	if strings.Contains(params.Symbols[0], "ISIL:NOCHANGE") {
 		return []DirectoryEntry{{
-			Symbol:     []string{"ISIL:NOCHANGE"},
+			Symbols:    []string{"ISIL:NOCHANGE"},
 			URL:        MOCK_CLIENT_URL,
 			Vendor:     extctx.VendorUnknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
@@ -35,7 +35,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	var dirs []DirectoryEntry
 	for _, value := range params.Symbols {
 		dirs = append(dirs, DirectoryEntry{
-			Symbol:     []string{value},
+			Symbols:    []string{value},
 			URL:        MOCK_CLIENT_URL,
 			Vendor:     extctx.VendorUnknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
