@@ -13,6 +13,7 @@ type EventRepo interface {
 	SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error)
 	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error
 	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
+	ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
 	GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
@@ -42,6 +43,15 @@ func (r *PgEventRepo) SaveEvent(ctx extctx.ExtendedContext, params SaveEventPara
 
 func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, error) {
 	row, err := r.queries.GetEvent(ctx, r.GetConnOrTx(), id)
+	return row.Event, err
+}
+
+func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error) {
+	params := ClaimEventForSignalParams{
+		ID:         id,
+		LastSignal: string(signal),
+	}
+	row, err := r.queries.ClaimEventForSignal(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
 }
 

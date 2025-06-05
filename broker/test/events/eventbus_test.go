@@ -2,17 +2,19 @@ package events
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/indexdata/go-utils/utils"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5"
@@ -43,20 +45,80 @@ func TestMain(m *testing.M) {
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
-
 	app.ConnectionString = connStr
+
+	fmt.Print("Postgres connection string: ", connStr)
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	app.RunMigrateScripts()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
-	test.WaitForServiceUp(app.HTTP_PORT)
+	dbPool, err := dbutil.InitDbPool(connStr)
+	test.Expect(err, "failed to init db pool")
 
-	defer cancel()
+	eventRepo = app.CreateEventRepo(dbPool)
+	eventBus = app.CreateEventBus(eventRepo)
+	illRepo = app.CreateIllRepo(dbPool)
+	app.StartEventBus(ctx, eventBus)
+
 	code := m.Run()
 
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
+}
+
+func TestMultipleEventHandlers(t *testing.T) {
+	noPools := 3
+	noEvents := 2
+	var receivedAr [][]events.Event = make([][]events.Event, noPools)
+	ctx := context.Background()
+	for i := 0; i < noPools; i++ {
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		assert.NoError(t, err, "failed to init db pool")
+		defer dbPool.Close()
+
+		eventRepo := app.CreateEventRepo(dbPool)
+		eventBus := app.CreateEventBus(eventRepo)
+
+		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+			receivedAr[i] = append(receivedAr[i], event)
+		})
+		app.StartEventBus(ctx, eventBus)
+	}
+
+	var requestReceived1 []events.Event
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+		requestReceived1 = append(requestReceived1, event)
+	})
+
+	for i := 0; i < noEvents; i++ {
+		illId := apptest.GetIllTransId(t, illRepo)
+		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+		assert.NoError(t, err, "Task should be created without errors")
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		total := len(requestReceived1)
+		for i := 0; i < noPools; i++ {
+			total += len(receivedAr[i])
+		}
+		return total >= noEvents
+	}) {
+		t.Error("Expected to have some events")
+	}
+	total := len(requestReceived1)
+	for i := 0; i < noPools; i++ {
+		total += len(receivedAr[i])
+	}
+	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
+	if total != noEvents {
+		for e := range requestReceived1 {
+			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
+		}
+		for i := 0; i < noPools; i++ {
+			for e := range receivedAr[i] {
+				t.Logf("Received event %d from pool %d: %s", e, i, receivedAr[i][e].ID)
+			}
+		}
+	}
 }
 
 func TestCreateTask(t *testing.T) {
@@ -178,6 +240,11 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	}
 
 	eventId := eventsReceived[0].ID
+
+	event, err := eventRepo.GetEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), eventId)
+	assert.NoError(t, err, "Should not be error getting event")
+	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
+	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
 
 	err = eventBus.BeginTask(eventId)
 	if err != nil {
