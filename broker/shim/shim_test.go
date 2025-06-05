@@ -257,3 +257,58 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	assert.Equal(t, "OCLC", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "12345678", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
 }
+
+func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{
+					Text: "#ReShareSupplierAwaitingConditionConfirmation#",
+				},
+			},
+		},
+	}
+	msgBytes, err := GetShim("default").ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim(VendorAlma).ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+}
+
+func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Action: iso18626.TypeActionNotification,
+			Note:   "Accept",
+		},
+	}
+	msgBytes, err := GetShim(VendorAlma).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "#ReShareLoanConditionAgreeResponse#", resmsg.RequestingAgencyMessage.Note)
+}
+
+func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Action: iso18626.TypeActionNotification,
+			Note:   "ReJeCT",
+		},
+	}
+	msgBytes, err := GetShim(VendorAlma).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "ReJeCT", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+}
