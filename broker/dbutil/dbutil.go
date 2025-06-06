@@ -30,13 +30,6 @@ func RunMigrateScripts(migrateDir, connStr string) (uint, uint, bool, error) {
 	if err != nil && err != migrate.ErrNilVersion {
 		return versionFrom, versionTo, dirty, fmt.Errorf("failed to get migration version: %w", err)
 	}
-	if dirty && versionFrom == 8 {
-		// we know that initial version of version 8 was bad, so we force it to version 7
-		err = m.Force(7)
-		if err != nil {
-			return versionFrom, versionTo, dirty, fmt.Errorf("failed to force migration to version 7: %w", err)
-		}
-	}
 	// Migrate up
 	err = m.Up()
 	if err != nil && err != migrate.ErrNoChange {
