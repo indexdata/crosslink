@@ -46,6 +46,20 @@ func TestCreateMessageHeaderOpaque(t *testing.T) {
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestCreateMessageHeaderTranslucent(t *testing.T) {
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
+	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
+	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
+
+	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTranslucent))
+	assert.Equal(t, "BROKER", reqHeader.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
+
+	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTranslucent))
+	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
+}
+
 func TestSendHttpPost(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "mytenant",

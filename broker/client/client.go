@@ -87,7 +87,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
 		} else if !locSupplier.LastStatus.Valid {
-			if requester.BrokerMode == string(extctx.BrokerModeTransparent) {
+			if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 				status = iso18626.TypeStatusExpectToSupply
 			} else {
 				resData.Note = "no need to message requester in broker mode " + requester.BrokerMode

@@ -50,7 +50,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 				ctx.Logger().Error("failed to process supplier selected event, no requester", "error", err)
 				return "", fmt.Errorf("failed to process supplier selected event, no requester")
 			}
-			if requester.BrokerMode == string(extctx.BrokerModeTransparent) {
+			if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
 				if err != nil {
 					return id, err
@@ -125,7 +125,7 @@ func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event
 		ctx.Logger().Error("failed to process ISO18626 message received event, no requester", "error", err)
 		return false
 	}
-	if requester.BrokerMode == string(extctx.BrokerModeTransparent) {
+	if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
 		if err != nil {
 			ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
