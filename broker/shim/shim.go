@@ -2,13 +2,13 @@ package shim
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/common"
 	"regexp"
 	"strings"
 
 	"github.com/indexdata/crosslink/iso18626"
 )
 
-const VendorAlma = "Alma"
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
@@ -25,8 +25,10 @@ type Iso18626Shim interface {
 func GetShim(vendor string) Iso18626Shim {
 	var shim Iso18626Shim
 	switch vendor {
-	case VendorAlma:
+	case string(common.VendorAlma):
 		shim = new(Iso18626AlmaShim)
+	case string(common.VendorReShare):
+		shim = new(Iso18626ReShareShim)
 	default:
 		shim = new(Iso18626DefaultShim)
 	}
@@ -58,9 +60,6 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 				i.stripReShareSuppMsgNote(suppMsg)
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
-		}
-		if message.RequestingAgencyMessage != nil {
-			i.fixRequesterConditionNote(message.RequestingAgencyMessage)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -160,15 +159,6 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 		if strings.HasPrefix(suppInfo.SupplierDescription, RETURN_ADDRESS_BEGIN) {
 			request.ServiceInfo.Note = request.ServiceInfo.Note + "\n" + suppInfo.SupplierDescription
 			return
-		}
-	}
-}
-func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
-	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
-		if strings.EqualFold(requestingAgencyMessage.Note, "ACCEPT") {
-			requestingAgencyMessage.Note = "#ReShareLoanConditionAgreeResponse#"
-		} else if strings.EqualFold(requestingAgencyMessage.Note, "REJECT") {
-			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
 	}
 }
@@ -285,7 +275,11 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	}
 }
 
-func (i *Iso18626AlmaShim) ApplyToIncoming(bytes []byte, message *iso18626.ISO18626Message) error {
+type Iso18626ReShareShim struct {
+	Iso18626DefaultShim
+}
+
+func (i *Iso18626ReShareShim) ApplyToIncoming(bytes []byte, message *iso18626.ISO18626Message) error {
 	err := xml.Unmarshal(bytes, message)
 	if err != nil {
 		return err
@@ -296,9 +290,25 @@ func (i *Iso18626AlmaShim) ApplyToIncoming(bytes []byte, message *iso18626.ISO18
 	return nil
 }
 
-func (i *Iso18626AlmaShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
+func (i *Iso18626ReShareShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
 	if supplyingAgencyMessage.DeliveryInfo != nil && supplyingAgencyMessage.DeliveryInfo.LoanCondition != nil &&
 		supplyingAgencyMessage.DeliveryInfo.LoanCondition.Text == "#ReShareSupplierAwaitingConditionConfirmation#" {
 		supplyingAgencyMessage.DeliveryInfo.LoanCondition.Text = "Conditions pending \nPlease respond `ACCEPT` or `REJECT`"
+	}
+}
+
+func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
+	if message != nil && message.RequestingAgencyMessage != nil {
+		i.fixRequesterConditionNote(message.RequestingAgencyMessage)
+	}
+	return xml.Marshal(message)
+}
+func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
+	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
+		if strings.EqualFold(requestingAgencyMessage.Note, "ACCEPT") {
+			requestingAgencyMessage.Note = "#ReShareLoanConditionAgreeResponse#"
+		} else if strings.EqualFold(requestingAgencyMessage.Note, "REJECT") {
+			requestingAgencyMessage.Action = iso18626.TypeActionCancel
+		}
 	}
 }
