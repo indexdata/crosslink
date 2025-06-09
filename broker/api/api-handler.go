@@ -878,7 +878,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 		BorrowsCount:  &peer.BorrowsCount,
 		CustomData:    &peer.CustomData,
 		HttpHeaders:   &peer.HttpHeaders,
-		BrokerMode:    peer.BrokerMode,
+		BrokerMode:    toApiBrokerMode(peer.BrokerMode),
 		BranchSymbols: branchList,
 	}
 }
@@ -888,6 +888,16 @@ func toApiPeerRefreshPolicy(policy ill_db.RefreshPolicy) oapi.PeerRefreshPolicy 
 		return oapi.Never
 	} else {
 		return oapi.Transaction
+	}
+}
+
+func toApiBrokerMode(brokerMode string) oapi.PeerBrokerMode {
+	if brokerMode == string(oapi.Transparent) {
+		return oapi.Transparent
+	} else if brokerMode == string(oapi.Translucent) {
+		return oapi.Translucent
+	} else {
+		return oapi.Opaque
 	}
 }
 
@@ -905,7 +915,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		Name:          peer.Name,
 		Url:           peer.Url,
 		Vendor:        peer.Vendor,
-		BrokerMode:    peer.BrokerMode,
+		BrokerMode:    string(peer.BrokerMode),
 		RefreshPolicy: toDbRefreshPolicy(peer.RefreshPolicy),
 		RefreshTime: pgtype.Timestamp{
 			Time:  time.Now(),
