@@ -13,6 +13,10 @@ const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
 const RETURN_ADDRESS_END = "#RT_END#"
+const SUPPLIER_AWAITING_CONDITION = "#ReShareSupplierAwaitingConditionConfirmation#"
+const LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
+const ACCEPT = "ACCEPT"
+const REJECT = "REJECT"
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 
@@ -291,9 +295,8 @@ func (i *Iso18626ReShareShim) ApplyToIncoming(bytes []byte, message *iso18626.IS
 }
 
 func (i *Iso18626ReShareShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
-	if supplyingAgencyMessage.DeliveryInfo != nil && supplyingAgencyMessage.DeliveryInfo.LoanCondition != nil &&
-		supplyingAgencyMessage.DeliveryInfo.LoanCondition.Text == "#ReShareSupplierAwaitingConditionConfirmation#" {
-		supplyingAgencyMessage.DeliveryInfo.LoanCondition.Text = "Conditions pending \nPlease respond `ACCEPT` or `REJECT`"
+	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, SUPPLIER_AWAITING_CONDITION) {
+		supplyingAgencyMessage.MessageInfo.Note = "Conditions pending \nPlease respond `ACCEPT` or `REJECT`"
 	}
 }
 
@@ -305,9 +308,9 @@ func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message)
 }
 func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
-		if strings.EqualFold(requestingAgencyMessage.Note, "ACCEPT") {
-			requestingAgencyMessage.Note = "#ReShareLoanConditionAgreeResponse#"
-		} else if strings.EqualFold(requestingAgencyMessage.Note, "REJECT") {
+		if strings.EqualFold(requestingAgencyMessage.Note, ACCEPT) {
+			requestingAgencyMessage.Note = LOAN_CONDITION_AGREE
+		} else if strings.EqualFold(requestingAgencyMessage.Note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
 	}

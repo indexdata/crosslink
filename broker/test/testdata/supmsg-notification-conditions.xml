@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ill:ISO18626Message xmlns:ill="http://illtransactions.org/2013/iso18626" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ill:version="1.2" xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <ill:supplyingAgencyMessage>
+        <ill:header>
+            <ill:supplyingAgencyId>
+                <ill:agencyIdType>ISIL</ill:agencyIdType>
+                <ill:agencyIdValue>AU-SYDNEY</ill:agencyIdValue>
+            </ill:supplyingAgencyId>
+            <ill:requestingAgencyId>
+                <ill:agencyIdType>ISIL</ill:agencyIdType>
+                <ill:agencyIdValue>BROKER_DEV</ill:agencyIdValue>
+            </ill:requestingAgencyId>
+            <ill:multipleItemRequestId></ill:multipleItemRequestId>
+            <ill:timestamp>2025-06-09T08:48:00.169797717Z</ill:timestamp>
+            <ill:requestingAgencyRequestId>MEL-261~norota</ill:requestingAgencyRequestId>
+            <ill:supplyingAgencyRequestId>19a7e888-f7e3-41c1-bea0-601dd59458d2</ill:supplyingAgencyRequestId>
+        </ill:header>
+        <ill:messageInfo>
+            <ill:reasonForMessage>Notification</ill:reasonForMessage>
+            <ill:note>#ReShareSupplierAwaitingConditionConfirmation##seq:1#</ill:note>
+            <ill:reasonUnfilled></ill:reasonUnfilled>
+            <ill:reasonRetry></ill:reasonRetry>
+        </ill:messageInfo>
+        <ill:statusInfo>
+            <ill:status>RequestReceived</ill:status>
+            <ill:lastChange>2025-06-09T08:48:00.170148353Z</ill:lastChange>
+        </ill:statusInfo>
+        <ill:deliveryInfo>
+            <ill:dateSent>2025-06-09T08:48:00.170191066Z</ill:dateSent>
+            <ill:sentToPatron>false</ill:sentToPatron>
+            <ill:loanCondition></ill:loanCondition>
+            <ill:deliveredFormat></ill:deliveredFormat>
+        </ill:deliveryInfo>
+    </ill:supplyingAgencyMessage>
+</ill:ISO18626Message>

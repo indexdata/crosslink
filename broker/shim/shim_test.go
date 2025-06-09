@@ -3,6 +3,7 @@ package shim
 import (
 	"encoding/xml"
 	"github.com/indexdata/crosslink/broker/common"
+	"os"
 	"testing"
 
 	"github.com/indexdata/crosslink/iso18626"
@@ -260,23 +261,13 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 }
 
 func TestIso18626ReShareShimSupplyingMessageLoanConditions(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				LoanCondition: &iso18626.TypeSchemeValuePair{
-					Text: "#ReShareSupplierAwaitingConditionConfirmation#",
-				},
-			},
-		},
-	}
-	msgBytes, err := GetShim("default").ApplyToOutgoing(&msg)
-	assert.Nil(t, err)
+	data, _ := os.ReadFile("../test/testdata/supmsg-notification-conditions.xml")
 
 	var resmsg iso18626.ISO18626Message
-	err = GetShim(string(common.VendorReShare)).ApplyToIncoming(msgBytes, &resmsg)
+	err := GetShim(string(common.VendorReShare)).ApplyToIncoming(data, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626ReShareShimRequestingMessageLoanConditionAccept(t *testing.T) {
