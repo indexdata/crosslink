@@ -623,6 +623,84 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 }
 
+func TestRequestLocallyAvailableT(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ") // Peer created by previous test
+	assert.Nil(t, err)
+	peer.BrokerMode = string(extctx.BrokerModeTranslucent)
+	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
+	assert.Nil(t, err)
+	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
+	data, _ := os.ReadFile("../testdata/request-locally-available.xml")
+	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)
+	reqId = reqId + "1"
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
+	req.Header.Add("Content-Type", "application/xml")
+	httpClient := &http.Client{}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	selSup, err := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
+	assert.Nil(t, err)
+	selSup.LastStatus = pgtype.Text{
+		String: string(iso18626.TypeStatusLoanCompleted),
+		Valid:  true,
+	}
+	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
+	assert.Nil(t, err)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	assert.Nil(t, err)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: &iso18626.ISO18626Message{
+				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+					StatusInfo: iso18626.StatusInfo{
+						Status: iso18626.TypeStatusLoaned,
+					},
+				},
+			},
+		},
+	}, events.EventStatusSuccess)
+	assert.Nil(t, err)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"NOTICE, requester-msg-received = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS doNotSend=true\n"+
+			"TASK, message-requester = SUCCESS doNotSend=true\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
+			if e.EventName == "select-supplier" {
+				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
+			}
+			if (e.EventName == "message-supplier" || e.EventName == "message-requester") && e.ResultData.CustomData != nil {
+				return fmt.Sprintf(apptest.EventRecordFormat+" doNotSend=%v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["doNotSend"])
+			}
+			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		}))
+	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
+	assert.Nil(t, err)
+	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+}
+
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {
 	var requesterId pgtype.Text
 	if requester != "" {

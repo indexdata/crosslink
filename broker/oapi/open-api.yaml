@@ -302,7 +302,8 @@ components:
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
         BrokerMode:
           type: string
-          description: Broker mode, e.g "opaque" or "transparent"
+          enum: [opaque, transparent, translucent]
+          description: Broker mode, e.g "opaque", "transparent" or "translucent"
         CustomData:
           type: object
           description: Custom data of peer

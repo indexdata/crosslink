@@ -125,7 +125,9 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, getBrokerMode(BROKER_MODE) == extctx.BrokerModeTransparent)
+	var brokerMode = getBrokerMode(BROKER_MODE)
+	var locallySupply = brokerMode == extctx.BrokerModeTransparent || brokerMode == extctx.BrokerModeTranslucent
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, locallySupply)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	StartEventBus(ctx, eventBus)
@@ -240,6 +242,8 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 func getBrokerMode(mode string) extctx.BrokerMode {
 	if strings.EqualFold(mode, string(extctx.BrokerModeTransparent)) {
 		return extctx.BrokerModeTransparent
+	} else if strings.EqualFold(mode, string(extctx.BrokerModeTranslucent)) {
+		return extctx.BrokerModeTranslucent
 	} else {
 		return extctx.BrokerModeOpaque
 	}
