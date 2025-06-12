@@ -63,8 +63,8 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			status := suppMsg.StatusInfo.Status
+			i.stripReShareSuppMsgNote(suppMsg)
 			if status == iso18626.TypeStatusLoaned {
-				i.stripReShareSuppMsgNote(suppMsg)
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
 			i.fixSupplierConditionNote(message.SupplyingAgencyMessage)
@@ -78,12 +78,20 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
 		}
+		if message.RequestingAgencyMessage != nil {
+			reqMsg := message.RequestingAgencyMessage
+			i.stripReShareReqMsgNote(reqMsg)
+		}
 	}
 	return xml.Marshal(message)
 }
 
 func (i *Iso18626AlmaShim) stripReShareSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
 	suppMsg.MessageInfo.Note = rsNoteRegexp.ReplaceAllString(suppMsg.MessageInfo.Note, "")
+}
+
+func (i *Iso18626AlmaShim) stripReShareReqMsgNote(reqMsg *iso18626.RequestingAgencyMessage) {
+	reqMsg.Note = rsNoteRegexp.ReplaceAllString(reqMsg.Note, "")
 }
 
 func (i *Iso18626AlmaShim) stripReShareReqNote(request *iso18626.Request) {

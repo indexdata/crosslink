@@ -281,6 +281,23 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	assert.Equal(t, "12345678", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
 }
 
+func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Action: iso18626.TypeActionNotification,
+			Note:   "#seq:2#original note",
+		},
+	}
+	msgBytes, err := GetShim(string(common.VendorAlma)).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "original note", resmsg.RequestingAgencyMessage.Note)
+}
+
 func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
