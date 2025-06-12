@@ -708,7 +708,12 @@ func TestPostArchiveIllTransactions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "Archive process started", resp.Status)
 
-	illTr, err = illRepo.GetIllTransactionById(ctx, illId)
+	test.WaitForPredicateToBeTrue(func() bool {
+		_, err = illRepo.GetIllTransactionById(ctx, illId)
+		return errors.Is(err, pgx.ErrNoRows)
+	})
+
+	_, err = illRepo.GetIllTransactionById(ctx, illId)
 	assert.True(t, errors.Is(err, pgx.ErrNoRows))
 
 	_, err = illRepo.GetIllTransactionById(ctx, illId2)
