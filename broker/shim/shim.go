@@ -15,9 +15,11 @@ const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
 const RETURN_ADDRESS_END = "#RT_END#"
 const RESHARE_SUPPLIER_AWAITING_CONDITION = "#ReShareSupplierAwaitingConditionConfirmation#"
-const ALMA_SUPPLIER_AWAITING_CONDITION = "Conditions pending, please respond `ACCEPT` or `REJECT`"
+const ALMA_SUPPLIER_AWAITING_CONDITION = "Conditions pending approval, please respond `ACCEPT` or `REJECT`"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 const ALMA_ADD_LOAN_CONDITION = "New condition added by supplier"
+const RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "#ReShareSupplierConditionsAssumedAgreed"
+const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of conditions unless `REJECT` is sent"
 const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
@@ -303,9 +305,15 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 func (i *Iso18626AlmaShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_AWAITING_CONDITION) {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_AWAITING_CONDITION
+		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_ADD_LOAN_CONDITION
+		return
+	}
+	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED) {
+		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED
+		return
 	}
 }
 
