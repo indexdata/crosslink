@@ -33,6 +33,7 @@ var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
+var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
 	limitDefault   int32
@@ -731,7 +732,7 @@ func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.R
 		}
 	}()
 	writeJsonResponse(w, oapi.StatusMessage{
-		Status: "Archive process started",
+		Status: ARCHIVE_PROCESS_STARTED,
 	})
 }
 
