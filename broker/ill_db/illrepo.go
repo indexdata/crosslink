@@ -46,6 +46,7 @@ type IllRepo interface {
 	SaveBranchSymbol(ctx extctx.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error)
 	GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	DeleteBranchSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
+	CallArchiveIllTransactionByDateAndStatus(ctx extctx.ExtendedContext, toDate time.Time, statuses []string) error
 }
 
 type PgIllRepo struct {
@@ -479,6 +480,11 @@ func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []str
 		}
 	}
 	return symbolsToFetch
+}
+
+func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx extctx.ExtendedContext, toDate time.Time, statuses []string) error {
+	_, err := r.queries.CallArchiveIllTransactionByDateAndStatus(ctx, r.GetConnOrTx(), CallArchiveIllTransactionByDateAndStatusParams{toDate, statuses})
+	return err
 }
 
 func MapToPeerSlice(m map[string]Peer) []Peer {

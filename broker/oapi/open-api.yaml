@@ -46,6 +46,20 @@ components:
       schema:
         type: integer
         format: int32
+    ArchiveDelay:
+      name: archive_delay
+      in: query
+      description: How old ILL Transaction to archive, for example "10d"
+      required: true
+      schema:
+        type: string
+    ArchiveStatus:
+      name: archive_status
+      in: query
+      description: Comma separated list of statuses to archive, for example "LoanCompleted,CopyCompleted,Unfilled"
+      required: true
+      schema:
+        type: string
   schemas:
     Index:
       type: object
@@ -86,6 +100,14 @@ components:
         error:
           type: string
           description: Error message
+    StatusMessage:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Process status
+      required:
+        - status
     IllTransactions:
       type: object
       required:
@@ -671,6 +693,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LocatedSuppliers'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /archive_ill_transactions:
+    post:
+      summary: Trigger ILL Transaction archive process
+      parameters:
+        - $ref: '#/components/parameters/ArchiveDelay'
+        - $ref: '#/components/parameters/ArchiveStatus'
+      responses:
+        '200':
+          description: Process started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusMessage'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
