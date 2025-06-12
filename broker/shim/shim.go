@@ -305,12 +305,15 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 func (i *Iso18626AlmaShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_AWAITING_CONDITION) {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_AWAITING_CONDITION
+		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_ADD_LOAN_CONDITION
+		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED) {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED
+		return
 	}
 }
 
