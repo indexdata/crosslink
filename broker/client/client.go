@@ -252,7 +252,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		if appendRequestingAgencyInfo {
 			populateRequesterInfo(message, requesterName, deliveryAddress, email)
 		}
-		populateDeliveryAddress(message, requesterName, deliveryAddress, email)
+		populateDeliveryAddress(message, deliveryAddress, email)
 		if appendSupplierInfo {
 			supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(supplier, selected.SupplierSymbol)
 			populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
@@ -348,7 +348,7 @@ func populateRequesterInfo(message *iso18626.ISO18626Message, name string, addre
 	}
 }
 
-func populateDeliveryAddress(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
+func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
 	var hasAddress, hasEmail bool
 	for _, di := range message.Request.RequestedDeliveryInfo {
 		if di.Address != nil {

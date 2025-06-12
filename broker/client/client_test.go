@@ -150,7 +150,6 @@ func TestPopulateDeliveryAddress(t *testing.T) {
 	message := iso18626.ISO18626Message{
 		Request: &iso18626.Request{},
 	}
-	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
@@ -160,12 +159,12 @@ func TestPopulateDeliveryAddress(t *testing.T) {
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		},
 	}
-	populateDeliveryAddress(&message, name, address, email)
+	populateDeliveryAddress(&message, address, email)
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
 	// does override if already set
-	populateDeliveryAddress(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
+	populateDeliveryAddress(&message, iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
@@ -196,7 +195,6 @@ func TestPopulateDeliveryAddressPatron(t *testing.T) {
 			},
 		},
 	}
-	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
@@ -206,7 +204,7 @@ func TestPopulateDeliveryAddressPatron(t *testing.T) {
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		},
 	}
-	populateDeliveryAddress(&message, name, address, email)
+	populateDeliveryAddress(&message, address, email)
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, message.Request.PatronInfo.Address[0].PhysicalAddress.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, message.Request.PatronInfo.Address[1].ElectronicAddress.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
