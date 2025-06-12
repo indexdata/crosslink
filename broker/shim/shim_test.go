@@ -2,8 +2,9 @@ package shim
 
 import (
 	"encoding/xml"
-	"github.com/indexdata/crosslink/broker/common"
 	"testing"
+
+	"github.com/indexdata/crosslink/broker/common"
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
@@ -144,6 +145,27 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 		t.Errorf("expected to have message reason %s but got %s", iso18626.TypeReasonForMessageRequestResponse,
 			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	}
+}
+
+func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			StatusInfo: iso18626.StatusInfo{
+				Status: iso18626.TypeStatusExpectToSupply,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			},
+		},
+	}
+	shim := GetShim(string(common.VendorAlma))
+	bytes, err := shim.ApplyToOutgoing(&msg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	var resmsg iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 }
 
 func TestIso18626DefaultShim(t *testing.T) {

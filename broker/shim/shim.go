@@ -2,9 +2,10 @@ package shim
 
 import (
 	"encoding/xml"
-	"github.com/indexdata/crosslink/broker/common"
 	"regexp"
 	"strings"
+
+	"github.com/indexdata/crosslink/broker/common"
 
 	"github.com/indexdata/crosslink/iso18626"
 )
@@ -59,6 +60,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 	if message != nil {
 		if message.SupplyingAgencyMessage != nil {
 			suppMsg := message.SupplyingAgencyMessage
+			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			status := suppMsg.StatusInfo.Status
 			if status == iso18626.TypeStatusLoaned {
@@ -106,6 +108,13 @@ func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.Su
 		MarshalReturnLabel(&sb, suppMsg.ReturnInfo.Name, addr)
 		// put in the note
 		suppMsg.MessageInfo.Note = sb.String()
+	}
+}
+
+func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
+	status := suppMsg.StatusInfo.Status
+	if status == iso18626.TypeStatusExpectToSupply {
+		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 	}
 }
 
