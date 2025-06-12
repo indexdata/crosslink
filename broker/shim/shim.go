@@ -317,9 +317,10 @@ func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message)
 
 func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
-		if strings.EqualFold(requestingAgencyMessage.Note, ACCEPT) {
+		note := rsNoteRegexp.ReplaceAllString(requestingAgencyMessage.Note, "") //this is only needed to test human-notes from ReShare
+		if strings.EqualFold(note, ACCEPT) {
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE
-		} else if strings.EqualFold(requestingAgencyMessage.Note, REJECT) {
+		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
 	}
