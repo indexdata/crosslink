@@ -334,6 +334,24 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 	assert.Equal(t, ALMA_ADD_LOAN_CONDITION, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
+func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			MessageInfo: iso18626.MessageInfo{
+				Note: RESHARE_ADD_LOAN_CONDITION + "conditional note#seq:1#",
+			},
+		},
+	}
+
+	msgBytes, err := GetShim(string(common.VendorAlma)).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, ALMA_ADD_LOAN_CONDITION+" with note: conditional note", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
 func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{

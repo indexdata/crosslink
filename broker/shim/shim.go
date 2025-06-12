@@ -17,7 +17,7 @@ const RETURN_ADDRESS_END = "#RT_END#"
 const RESHARE_SUPPLIER_AWAITING_CONDITION = "#ReShareSupplierAwaitingConditionConfirmation#"
 const ALMA_SUPPLIER_AWAITING_CONDITION = "Conditions pending approval, please respond `ACCEPT` or `REJECT`"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
-const ALMA_ADD_LOAN_CONDITION = "New condition added by supplier"
+const ALMA_ADD_LOAN_CONDITION = "New condition"
 const RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "#ReShareSupplierConditionsAssumedAgreed"
 const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of conditions unless `REJECT` is sent"
 const ACCEPT = "ACCEPT"
@@ -308,7 +308,12 @@ func (i *Iso18626AlmaShim) fixSupplierConditionNote(supplyingAgencyMessage *iso1
 		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
-		supplyingAgencyMessage.MessageInfo.Note = ALMA_ADD_LOAN_CONDITION
+		note := strings.ReplaceAll(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION, "")
+		note = strings.TrimSpace(note)
+		if note != "" {
+			note = " with note: " + note
+		}
+		supplyingAgencyMessage.MessageInfo.Note = ALMA_ADD_LOAN_CONDITION + note
 		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED) {
