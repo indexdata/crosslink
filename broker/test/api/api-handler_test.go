@@ -445,6 +445,11 @@ func TestPeersCRUD(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
+	assert.Equal(t, "Peer", respPeers.Items[0].Name)
+	assert.Equal(t, "ISIL:PEER", respPeers.Items[0].Symbols[0])
+	assert.Equal(t, "https://url.com", respPeers.Items[0].Url)
+	assert.Equal(t, oapi.Opaque, respPeers.Items[0].BrokerMode)
+	assert.Equal(t, "Unknown", respPeers.Items[0].Vendor)
 	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
 	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
@@ -461,6 +466,10 @@ func TestPeersCRUD(t *testing.T) {
 	}
 	branchSymbols = append(branchSymbols, "ISIL:UPDATED-Branch")
 	toCreate.BranchSymbols = &branchSymbols
+	toCreate.Url = "https://url2.com"
+	toCreate.BrokerMode = oapi.Transparent
+	toCreate.Vendor = "Known"
+
 	jsonBytes, err = json.Marshal(toCreate)
 	assert.NoError(t, err)
 	body = httpRequest(t, "PUT", "/peers/"+toCreate.ID, jsonBytes, "", http.StatusOK)
@@ -471,6 +480,9 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "Updated", respPeer.Name)
 	assert.Len(t, respPeer.Symbols, 2)
 	assert.Equal(t, 2, len(*respPeer.BranchSymbols))
+	assert.Equal(t, "https://url2.com", respPeer.Url)
+	assert.Equal(t, oapi.Transparent, respPeer.BrokerMode)
+	assert.Equal(t, "Known", respPeer.Vendor)
 	// Get peer
 	respPeer = getPeerById(t, toCreate.ID)
 	assert.Equal(t, toCreate.ID, respPeer.ID)

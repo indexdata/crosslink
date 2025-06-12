@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/adapter"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/adapter"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -623,6 +624,12 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		peer.CustomData = *update.CustomData
 	} else {
 		peer.CustomData = make(map[string]interface{})
+	}
+	if update.BrokerMode != "" {
+		peer.BrokerMode = string(update.BrokerMode)
+	}
+	if update.Vendor != "" {
+		peer.Vendor = update.Vendor
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
 	var symbols = []ill_db.Symbol{}
