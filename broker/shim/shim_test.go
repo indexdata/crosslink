@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/common"
 	"testing"
 
 	"github.com/indexdata/crosslink/iso18626"
@@ -19,7 +20,7 @@ func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
 			},
 		},
 	}
-	shim := GetShim(VendorAlma)
+	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -62,7 +63,7 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 			},
 		},
 	}
-	shim := GetShim(VendorAlma)
+	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -111,7 +112,7 @@ func TestIso18626AlmaShimIncoming(t *testing.T) {
 		t.Errorf("failed to marshal xml")
 	}
 	var resmsg iso18626.ISO18626Message
-	shim := GetShim(VendorAlma)
+	shim := GetShim(string(common.VendorAlma))
 	err = shim.ApplyToIncoming(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to apply incoming")
@@ -129,7 +130,7 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 			},
 		},
 	}
-	shim := GetShim(VendorAlma)
+	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -232,7 +233,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		BibliographicRecordIdentifier: "val",
 	}
 	msg.Request.BibliographicInfo.BibliographicRecordId = append(msg.Request.BibliographicInfo.BibliographicRecordId, lccn, badRecId)
-	shim := GetShim(VendorAlma)
+	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
@@ -261,21 +262,19 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				LoanCondition: &iso18626.TypeSchemeValuePair{
-					Text: "#ReShareSupplierAwaitingConditionConfirmation#",
-				},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "#ReShareSupplierAwaitingConditionConfirmation##seq:1#",
 			},
 		},
 	}
-	msgBytes, err := GetShim("default").ApplyToOutgoing(&msg)
-	assert.Nil(t, err)
 
+	msgBytes, err := GetShim(string(common.VendorAlma)).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
 	var resmsg iso18626.ISO18626Message
-	err = GetShim(VendorAlma).ApplyToIncoming(msgBytes, &resmsg)
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
@@ -285,7 +284,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 			Note:   "Accept",
 		},
 	}
-	msgBytes, err := GetShim(VendorAlma).ApplyToOutgoing(&msg)
+	msgBytes, err := GetShim(string(common.VendorReShare)).ApplyToOutgoing(&msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
@@ -302,7 +301,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 			Note:   "ReJeCT",
 		},
 	}
-	msgBytes, err := GetShim(VendorAlma).ApplyToOutgoing(&msg)
+	msgBytes, err := GetShim(string(common.VendorReShare)).ApplyToOutgoing(&msg)
 	assert.Nil(t, err)
 
 	var resmsg iso18626.ISO18626Message
