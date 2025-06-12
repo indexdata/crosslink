@@ -302,7 +302,7 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			MessageInfo: iso18626.MessageInfo{
-				Note: "#ReShareSupplierAwaitingConditionConfirmation##seq:1#",
+				Note: RESHARE_SUPPLIER_AWAITING_CONDITION + "#seq:1#",
 			},
 		},
 	}
@@ -313,14 +313,14 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Conditions pending approval, please respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, ALMA_SUPPLIER_AWAITING_CONDITION, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			MessageInfo: iso18626.MessageInfo{
-				Note: "#ReShareAddLoanCondition##seq:1#",
+				Note: RESHARE_ADD_LOAN_CONDITION + "#seq:1#",
 			},
 		},
 	}
@@ -331,14 +331,14 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "New condition added by supplier", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, ALMA_ADD_LOAN_CONDITION, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			MessageInfo: iso18626.MessageInfo{
-				Note: "#ReShareSupplierConditionsAssumedAgreed##seq:1#",
+				Note: RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED + "#seq:1#",
 			},
 		},
 	}
@@ -349,7 +349,7 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Supplier assumes approval of conditions unless `REJECT` is sent", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
@@ -366,7 +366,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "#ReShareLoanConditionAgreeResponse#Accept", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"Accept", resmsg.RequestingAgencyMessage.Note)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
