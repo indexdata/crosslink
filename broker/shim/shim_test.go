@@ -330,7 +330,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "#ReShareLoanConditionAgreeResponse#", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "#ReShareLoanConditionAgreeResponse#Accept", resmsg.RequestingAgencyMessage.Note)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
