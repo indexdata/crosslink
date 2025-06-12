@@ -313,7 +313,25 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Conditions pending \nPlease respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, "Conditions pending, please respond `ACCEPT` or `REJECT`", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			MessageInfo: iso18626.MessageInfo{
+				Note: "#ReShareAddLoanCondition##seq:1#",
+			},
+		},
+	}
+
+	msgBytes, err := GetShim(string(common.VendorAlma)).ApplyToOutgoing(&msg)
+	assert.Nil(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "New condition added by supplier", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
