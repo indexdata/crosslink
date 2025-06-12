@@ -296,7 +296,7 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	if line3 {
 		sb.WriteString("\n")
 	}
-	if addr.Country != nil {
+	if addr.Country != nil && len(addr.Country.Text) > 0 {
 		sb.WriteString(addr.Country.Text)
 		sb.WriteString("\n")
 	}
