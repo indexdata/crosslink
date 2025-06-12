@@ -132,7 +132,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
 	if status == iso18626.TypeStatusLoaned && appendReturnInfo {
-		name, agencyId, address := getPeerNameAgencyIdAddress(supplier, locSupplier.SupplierSymbol)
+		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
 
@@ -248,13 +248,13 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			RequestingAgencyInfo:  illTrans.IllTransactionData.RequestingAgencyInfo,
 		}
 		message.Request.BibliographicInfo.SupplierUniqueRecordId = selected.LocalID.String
-		requesterName, _, deliveryAddress := getPeerNameAgencyIdAddress(&requester, illTrans.RequesterSymbol.String)
+		requesterName, _, deliveryAddress, email := getPeerInfo(&requester, illTrans.RequesterSymbol.String)
 		if appendRequestingAgencyInfo {
-			populateRequesterInfo(message, requesterName, deliveryAddress)
+			populateRequesterInfo(message, requesterName, deliveryAddress, email)
 		}
-		populateDeliveryAddress(message, requesterName, deliveryAddress)
+		populateDeliveryAddress(message, deliveryAddress, email)
 		if appendSupplierInfo {
-			supplierName, suppAgencyId, supplierAddress := getPeerNameAgencyIdAddress(supplier, selected.SupplierSymbol)
+			supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(supplier, selected.SupplierSymbol)
 			populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 		}
 		action = ill_db.RequestAction
@@ -320,38 +320,74 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	return status, &resData
 }
 
-func populateRequesterInfo(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
+func populateRequesterInfo(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
 	if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
 		if message.Request.RequestingAgencyInfo == nil {
 			message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
 		}
 		message.Request.RequestingAgencyInfo.Name = name
-		if len(message.Request.RequestingAgencyInfo.Address) == 0 || message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress == nil {
-			if len(message.Request.RequestingAgencyInfo.Address) == 0 {
-				message.Request.RequestingAgencyInfo.Address = []iso18626.Address{{PhysicalAddress: &address}}
-			} else {
-				message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress = &address
+		var hasAddress, hasEmail bool
+		for _, addr := range message.Request.RequestingAgencyInfo.Address {
+			if addr.PhysicalAddress != nil && len(addr.PhysicalAddress.Line1) > 0 {
+				hasAddress = true
 			}
+			if addr.ElectronicAddress != nil && len(addr.ElectronicAddress.ElectronicAddressData) > 0 {
+				hasEmail = true
+			}
+		}
+		if !hasAddress && address.Line1 != "" {
+			message.Request.RequestingAgencyInfo.Address = append(message.Request.RequestingAgencyInfo.Address, iso18626.Address{
+				PhysicalAddress: &address,
+			})
+		}
+		if !hasEmail && email.ElectronicAddressData != "" {
+			message.Request.RequestingAgencyInfo.Address = append(message.Request.RequestingAgencyInfo.Address, iso18626.Address{
+				ElectronicAddress: &email,
+			})
 		}
 	}
 }
 
-func populateDeliveryAddress(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress) {
-	if len(message.Request.RequestedDeliveryInfo) == 0 {
-		message.Request.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{}}
+func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
+	var hasAddress, hasEmail bool
+	for _, di := range message.Request.RequestedDeliveryInfo {
+		if di.Address != nil {
+			addr := di.Address
+			if addr.PhysicalAddress != nil && len(addr.PhysicalAddress.Line1) > 0 {
+				hasAddress = true
+			}
+			if addr.ElectronicAddress != nil && len(addr.ElectronicAddress.ElectronicAddressData) > 0 {
+				hasEmail = true
+			}
+		}
 	}
-	if message.Request.RequestedDeliveryInfo[0].Address == nil {
-		message.Request.RequestedDeliveryInfo[0].Address = &iso18626.Address{}
-	}
+	//send to patron
 	if message.Request.PatronInfo != nil && message.Request.PatronInfo.SendToPatron != nil &&
 		*message.Request.PatronInfo.SendToPatron == iso18626.TypeYesNoY {
-		if len(message.Request.PatronInfo.Address) > 0 && message.Request.RequestedDeliveryInfo[0].Address == nil {
-			message.Request.RequestedDeliveryInfo[0].Address = &message.Request.PatronInfo.Address[0]
+		address = iso18626.PhysicalAddress{}
+		email = iso18626.ElectronicAddress{}
+		for _, addr := range message.Request.PatronInfo.Address {
+			if addr.PhysicalAddress != nil {
+				address = *addr.PhysicalAddress
+			}
+			if addr.ElectronicAddress != nil {
+				email = *addr.ElectronicAddress
+			}
 		}
-	} else {
-		if message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress == nil {
-			message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress = &address
-		}
+	}
+	if !hasAddress && address.Line1 != "" {
+		message.Request.RequestedDeliveryInfo = append(message.Request.RequestedDeliveryInfo, iso18626.RequestedDeliveryInfo{
+			Address: &iso18626.Address{
+				PhysicalAddress: &address,
+			},
+		})
+	}
+	if !hasEmail && email.ElectronicAddressData != "" {
+		message.Request.RequestedDeliveryInfo = append(message.Request.RequestedDeliveryInfo, iso18626.RequestedDeliveryInfo{
+			Address: &iso18626.Address{
+				ElectronicAddress: &email,
+			},
+		})
 	}
 }
 
@@ -492,7 +528,7 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	return &resmsg, nil
 }
 
-func getPeerNameAgencyIdAddress(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyId, iso18626.PhysicalAddress) {
+func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyId, iso18626.PhysicalAddress, iso18626.ElectronicAddress) {
 	name := peer.Name
 	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
@@ -538,5 +574,12 @@ func getPeerNameAgencyIdAddress(peer *ill_db.Peer, symbol string) (string, iso18
 			}
 		}
 	}
-	return name, agencyId, address
+	email := iso18626.ElectronicAddress{}
+	if listMap, ok := peer.CustomData["email"].(string); ok && len(listMap) > 0 {
+		email.ElectronicAddressData = listMap
+		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
+			Text: string(iso18626.ElectronicAddressTypeEmail),
+		}
+	}
+	return name, agencyId, address, email
 }

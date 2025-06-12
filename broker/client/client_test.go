@@ -3,11 +3,12 @@ package client
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/indexdata/crosslink/broker/common"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/common"
 
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -100,7 +101,7 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 		Name:       "ACTLegislativeAssemblyLibrary",
 		CustomData: data,
 	}
-	name, agencyId, address := getPeerNameAgencyIdAddress(&peer, "")
+	name, agencyId, address, email := getPeerInfo(&peer, "")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary", name)
 	assert.Equal(t, "", agencyId.AgencyIdValue)
 	assert.Equal(t, "", agencyId.AgencyIdType.Text)
@@ -109,12 +110,14 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 	assert.Equal(t, "2601", address.PostalCode)
 	assert.Equal(t, "ACT", address.Region.Text)
 	assert.Equal(t, "AUS", address.Country.Text)
+	assert.Equal(t, "LALibrary@parliament.act.gov.au", email.ElectronicAddressData)
 
-	name, agencyId, address = getPeerNameAgencyIdAddress(&peer, "ISIL:ACT")
+	name, agencyId, address, email = getPeerInfo(&peer, "ISIL:ACT")
 	assert.Equal(t, "ACTLegislativeAssemblyLibrary (ISIL:ACT)", name)
 	assert.Equal(t, "ACT", agencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", agencyId.AgencyIdType.Text)
 	assert.Equal(t, "196LondonCircuit", address.Line1)
+	assert.Equal(t, "LALibrary@parliament.act.gov.au", email.ElectronicAddressData)
 }
 
 func TestPopulateRequesterInfo(t *testing.T) {
@@ -125,32 +128,86 @@ func TestPopulateRequesterInfo(t *testing.T) {
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
-	populateRequesterInfo(&message, name, address)
+	email := iso18626.ElectronicAddress{
+		ElectronicAddressData: "me@box.com",
+		ElectronicAddressType: iso18626.TypeSchemeValuePair{
+			Text: string(iso18626.ElectronicAddressTypeEmail),
+		},
+	}
+	populateRequesterInfo(&message, name, address, email)
 
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line1, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line1)
-
-	// Don't override
-	populateRequesterInfo(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
+	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestingAgencyInfo.Address[1].ElectronicAddress.ElectronicAddressData)
+	// does not override if already set
+	populateRequesterInfo(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line1, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line1)
+	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestingAgencyInfo.Address[1].ElectronicAddress.ElectronicAddressData)
 }
 
 func TestPopulateDeliveryAddress(t *testing.T) {
 	message := iso18626.ISO18626Message{
 		Request: &iso18626.Request{},
 	}
-	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
-	populateDeliveryAddress(&message, name, address)
-
+	email := iso18626.ElectronicAddress{
+		ElectronicAddressData: "me@box.com",
+		ElectronicAddressType: iso18626.TypeSchemeValuePair{
+			Text: string(iso18626.ElectronicAddressTypeEmail),
+		},
+	}
+	populateDeliveryAddress(&message, address, email)
+	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
-
-	// Don't override
-	populateDeliveryAddress(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"})
+	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
+	// does override if already set
+	populateDeliveryAddress(&message, iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
+	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
+	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
+}
+
+func TestPopulateDeliveryAddressPatron(t *testing.T) {
+	yes := iso18626.TypeYesNoY
+	message := iso18626.ISO18626Message{
+		Request: &iso18626.Request{
+			PatronInfo: &iso18626.PatronInfo{
+				GivenName:    "Patron 1",
+				SendToPatron: &yes,
+				Address: []iso18626.Address{
+					{
+						PhysicalAddress: &iso18626.PhysicalAddress{
+							Line1: "Patron Home 1",
+						},
+					},
+					{
+						ElectronicAddress: &iso18626.ElectronicAddress{
+							ElectronicAddressData: "patron@email.com",
+							ElectronicAddressType: iso18626.TypeSchemeValuePair{
+								Text: string(iso18626.ElectronicAddressTypeEmail),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	address := iso18626.PhysicalAddress{
+		Line1: "Home 1",
+	}
+	email := iso18626.ElectronicAddress{
+		ElectronicAddressData: "me@box.com",
+		ElectronicAddressType: iso18626.TypeSchemeValuePair{
+			Text: string(iso18626.ElectronicAddressTypeEmail),
+		},
+	}
+	populateDeliveryAddress(&message, address, email)
+	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
+	assert.Equal(t, message.Request.PatronInfo.Address[0].PhysicalAddress.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
+	assert.Equal(t, message.Request.PatronInfo.Address[1].ElectronicAddress.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
 }
 
 func TestPopulateSupplierAddress(t *testing.T) {
