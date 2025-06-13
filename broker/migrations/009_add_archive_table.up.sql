@@ -13,7 +13,15 @@ CREATE OR REPLACE FUNCTION archive_ill_transaction_by_date_and_status(
 DECLARE
     v_deleted_ids TEXT[];
     v_deleted_count INT := 0;
+    lock_id BIGINT := 8372910465;
+    lock_acquired BOOLEAN;
 BEGIN
+    SELECT pg_try_advisory_lock(lock_id) INTO lock_acquired;
+
+    IF NOT lock_acquired THEN
+        RAISE NOTICE 'Function archive_ill_transaction_by_date_and_status() is already running. Exiting.';
+        RETURN 0;
+    END IF;
 
     SELECT array_agg(id) INTO v_deleted_ids
     FROM ill_transaction
@@ -73,5 +81,9 @@ BEGIN
     RAISE NOTICE 'Deleted % ill_transaction rows.', v_deleted_count;
 
     RETURN v_deleted_count;
+EXCEPTION
+    WHEN OTHERS THEN
+        PERFORM pg_advisory_unlock(lock_id);
+        RAISE;
 END;
 $$ LANGUAGE plpgsql;
