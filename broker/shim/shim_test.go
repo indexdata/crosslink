@@ -168,6 +168,27 @@ func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 }
 
+func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			StatusInfo: iso18626.StatusInfo{
+				Status: iso18626.TypeStatusRequestReceived,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			},
+		},
+	}
+	shim := GetShim(string(common.VendorAlma))
+	bytes, err := shim.ApplyToOutgoing(&msg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	var resmsg iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+}
+
 func TestIso18626DefaultShim(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{

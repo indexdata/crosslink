@@ -470,6 +470,9 @@ func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, 
 }
 
 func (c *Iso18626Client) validateReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string) iso18626.TypeReasonForMessage {
+	if reason == iso18626.TypeReasonForMessageNotification {
+		return reason
+	}
 	var expectedReason iso18626.TypeReasonForMessage
 	switch requesterAction {
 	case ill_db.RequestAction:
@@ -480,8 +483,6 @@ func (c *Iso18626Client) validateReason(reason iso18626.TypeReasonForMessage, re
 		}
 	case string(iso18626.TypeActionStatusRequest):
 		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
-	case string(iso18626.TypeActionNotification):
-		expectedReason = ""
 	case string(iso18626.TypeActionRenew):
 		expectedReason = iso18626.TypeReasonForMessageRenewResponse
 	case string(iso18626.TypeActionCancel):
