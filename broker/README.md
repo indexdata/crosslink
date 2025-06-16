@@ -14,21 +14,22 @@ See the [Broker API Specification](./oapi/open-api.yaml) for details.
 
 The broker's API uses hyperlinks to connect JSON resources.
 If you're using Chrome or another browser to explore the API,
-consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows to easily navigate hyperlinked JSON.
+consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows easy navigation hyperlinked JSON.
 
 Note that selected read-only API endpoints are accessible with the base path `/broker`
 if env `TENANT_TO_SYMBOL` is defined.
-This is allows the broker to be used as a FOLIO/Okapi module,
+This allows the broker to be used as a FOLIO/Okapi module,
 see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for details.
 
 # Mode of operation
 
-CrossLink broker can operate in two modes:
+CrossLink broker can operate in three modes:
 
-1. `opaque` -- in this mode the broker behaves like a regular ISO18626 peer and does not reveal any information about the located supplier. Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the header of outgoing messages.
+1. `opaque` -- in this mode, the broker behaves like a regular ISO18626 peer and does not reveal any information about the located supplier. Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the header of outgoing messages.
 
-2. `transparent` -- in this mode the broker reveals the supplier located for a request. It does so by using the supplier's symbol in the proxied supplying message header. Additionally, when selecting a supplier, the broker will send an `ExpectToSupply` message to the requester to inform it about a new or changed supplier.
-  When in this mode, the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
+2. `translucent` -- in this mode the broker sends an ISO `ExpectToSupply` message to the requester to notify it each time a new or changed supplier is selected. Also in this mode, the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
+
+3. `transparent` -- this mode is identical to the `translucent` mode but, additionally, the broker transmits the requester and supplier symbols in the proxied message header, thus fully revealing both parties to each other.
 
 The broker mode can be configured for each peer individually by setting the `BrokerMode` field on the `peer` entity (via the `/peers/:id` endpoint). Unless explicitly set, the broker will configure the `BrokerMode` based on the peer `Vendor` field as follows:
 
@@ -36,7 +37,7 @@ The broker mode can be configured for each peer individually by setting the `Bro
 * vendor `ReShare` -> mode `transparent`
 * vendor `Unknown` -> fallback mode set via the `BROKER_MODE` env var, `opaque` by default
 
-Note, that for both modes the broker will attach Directory information about the supplier and the requester by
+Note that for all modes, the broker attaches Directory information about the supplier and the requester by
 
 * appending `requestingAgencyInfo` and `supplierInfo` fields to the outgoing lending `request` message
 * appending `returnInfo` field to the outgoing `Loaned` supplying agency message
