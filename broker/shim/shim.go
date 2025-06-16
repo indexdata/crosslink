@@ -127,6 +127,13 @@ func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 	status := suppMsg.StatusInfo.Status
 	if status == iso18626.TypeStatusExpectToSupply {
 		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
+		return
+	}
+	if status == iso18626.TypeStatusRequestReceived {
+		if suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+			suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
+			return
+		}
 	}
 }
 
