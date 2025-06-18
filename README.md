@@ -7,6 +7,15 @@ See individual components docs for details:
 * [broker](broker/README.md): ISO18626 transaction broker
 * [illmock](illmock/README.md): ISO18626 and SRU mocking service
 
+# Project goals and architecture
+
+The CrossLink project improves the efficiency and reduces the cost of resource sharing by fostering interoperability between library systems, including facilitating cross-consortial lending. It focuses on promoting technology that allows libraries to engage in consortial resource sharing while maintaining flexible local ILL workflows. For all integration points, the project leverages various library IT standards, including ISO18626, SRU (Search/Retrieve via URL), and NCIP (NISO Circulation Interchange Protocol). The project improves the current state by encouraging vendors to implement new functionality and by providing middleware that helps libraries utilize existing systems more effectively. A central component is a broker system that receives requests, identifies suitable suppliers, and routes requests to them, supporting a wide range of automation and service levels for resource sharing. Another key component is an ILL mock service. This service provides a way to test and verify the compliance of existing systems with ILL standards.
+
+See the diagram below for an illustration of the platform's architecture:
+
+![CrossLink Architecture](misc/crosslink-arch.png)
+*Figure 1: High-level architecture of the CrossLink platform showing component interactions*
+
 ## Setting up local development environment
 
 `go` CLI requires additional config to resolve private module dependencies for this repo.
