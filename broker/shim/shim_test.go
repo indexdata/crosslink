@@ -247,6 +247,11 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 					SupplierDescription: RETURN_ADDRESS_BEGIN + "\nsome address\n" + RETURN_ADDRESS_END + "\n",
 				},
 			},
+			PublicationInfo: &iso18626.PublicationInfo{
+				PublicationType: &iso18626.TypeSchemeValuePair{
+					Text: "book",
+				},
+			},
 		},
 	}
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
@@ -300,6 +305,8 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	//we pass supplierUniqeRecordId as the OCLC number
 	assert.Equal(t, "OCLC", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "12345678", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifier)
+	//fix publication type
+	assert.Equal(t, "Book", resmsg.Request.PublicationInfo.PublicationType.Text)
 }
 
 func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
