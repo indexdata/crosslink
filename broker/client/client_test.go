@@ -326,3 +326,15 @@ func TestValidateReason(t *testing.T) {
 	reason = client.validateReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
 }
+
+func TestPopulateVendorInNote(t *testing.T) {
+	message := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
+	}
+	message.SupplyingAgencyMessage.MessageInfo.Note = "some note"
+	populateVendor(message.SupplyingAgencyMessage, "Alma")
+	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "#Vendor: Alma#\nsome note")
+	message.SupplyingAgencyMessage.MessageInfo.Note = "some note"
+	populateVendor(message.SupplyingAgencyMessage, "ReShare")
+	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "#Vendor: ReShare#\nsome note")
+}

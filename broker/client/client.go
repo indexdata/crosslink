@@ -24,6 +24,7 @@ var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
+var prependVendor, _ = utils.GetEnvBool("VENDOR_INFO", true)
 
 type Iso18626Client struct {
 	eventBus   events.EventBus
@@ -135,6 +136,9 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
+	if supplier != nil && prependVendor {
+		populateVendor(message.SupplyingAgencyMessage, supplier.Vendor)
+	}
 
 	resData.OutgoingMessage = message
 	if !isDoNotSend(event) {
@@ -182,6 +186,10 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 	if message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress == nil {
 		message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress = &address
 	}
+}
+
+func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
+	message.MessageInfo.Note = "#Vendor: " + vendor + "#\n" + message.MessageInfo.Note
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
