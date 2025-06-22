@@ -101,3 +101,28 @@ const (
 	ServiceLevelStandard      ServiceLevel = "Standard"
 	ServiceLevelUrgent        ServiceLevel = "Urgent"
 )
+
+type PublicationType string
+
+const (
+	PublicationTypeArchiveMaterial PublicationType = "ArchiveMaterial"
+	PublicationTypeArticle         PublicationType = "Article"
+	PublicationTypeAudioBook       PublicationType = "AudioBook"
+	PublicationTypeBook            PublicationType = "Book"
+	PublicationTypeChapter         PublicationType = "Chapter"
+	PublicationTypeConferenceProc  PublicationType = "ConferenceProc"
+	PublicationTypeGame            PublicationType = "Game"
+	PublicationTypeGovernmentPubl  PublicationType = "GovernmentPubl"
+	PublicationTypeImage           PublicationType = "Image"
+	PublicationTypeJournal         PublicationType = "Journal"
+	PublicationTypeManuscript      PublicationType = "Manuscript"
+	PublicationTypeMap             PublicationType = "Map"
+	PublicationTypeMovie           PublicationType = "Movie"
+	PublicationTypeMusicRecording  PublicationType = "MusicRecording"
+	PublicationTypeMusicScore      PublicationType = "MusicScore"
+	PublicationTypeNewspaper       PublicationType = "Newspaper"
+	PublicationTypePatent          PublicationType = "Patent"
+	PublicationTypeReport          PublicationType = "Report"
+	PublicationTypeSoundRecording  PublicationType = "SoundRecording"
+	PublicationTypeThesis          PublicationType = "Thesis"
+)

@@ -50,3 +50,32 @@ func ServiceLevelFromStringCI(s string) (ServiceLevel, bool) {
 	level, ok := serviceLevelMap[strings.ToLower(s)]
 	return level, ok
 }
+
+var publicationTypeMap = map[string]PublicationType{
+	strings.ToLower(string(PublicationTypeArchiveMaterial)): PublicationTypeArchiveMaterial,
+	strings.ToLower(string(PublicationTypeArticle)):         PublicationTypeArticle,
+	strings.ToLower(string(PublicationTypeAudioBook)):       PublicationTypeAudioBook,
+	strings.ToLower(string(PublicationTypeBook)):            PublicationTypeBook,
+	strings.ToLower(string(PublicationTypeChapter)):         PublicationTypeChapter,
+	strings.ToLower(string(PublicationTypeConferenceProc)):  PublicationTypeConferenceProc,
+	strings.ToLower(string(PublicationTypeGame)):            PublicationTypeGame,
+	strings.ToLower(string(PublicationTypeGovernmentPubl)):  PublicationTypeGovernmentPubl,
+	strings.ToLower(string(PublicationTypeImage)):           PublicationTypeImage,
+	strings.ToLower(string(PublicationTypeJournal)):         PublicationTypeJournal,
+	strings.ToLower(string(PublicationTypeManuscript)):      PublicationTypeManuscript,
+	strings.ToLower(string(PublicationTypeMap)):             PublicationTypeMap,
+	strings.ToLower(string(PublicationTypeMovie)):           PublicationTypeMovie,
+	strings.ToLower(string(PublicationTypeMusicRecording)):  PublicationTypeMusicRecording,
+	strings.ToLower(string(PublicationTypeMusicScore)):      PublicationTypeMusicScore,
+	strings.ToLower(string(PublicationTypeNewspaper)):       PublicationTypeNewspaper,
+	strings.ToLower(string(PublicationTypePatent)):          PublicationTypePatent,
+	strings.ToLower(string(PublicationTypeReport)):          PublicationTypeReport,
+	strings.ToLower(string(PublicationTypeSoundRecording)):  PublicationTypeSoundRecording,
+	strings.ToLower(string(PublicationTypeThesis)):          PublicationTypeThesis,
+}
+
+// PublicationTypeFromStringCI converts a string to a PublicationType. Case-insensitive.
+func PublicationTypeFromStringCI(s string) (PublicationType, bool) {
+	pubType, ok := publicationTypeMap[strings.ToLower(s)]
+	return pubType, ok
+}

@@ -78,6 +78,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixServiceLevel(request)
 			i.fixBibItemIds(request)
 			i.fixBibRecIds(request)
+			i.fixPublicationType(request)
 			i.stripReShareReqNote(request)
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
@@ -206,6 +207,16 @@ func (i *Iso18626AlmaShim) fixServiceLevel(request *iso18626.Request) {
 		serviceLevel = iso18626.ServiceLevelStandard
 	}
 	request.ServiceInfo.ServiceLevel.Text = string(serviceLevel)
+}
+
+func (i *Iso18626AlmaShim) fixPublicationType(request *iso18626.Request) {
+	if request.PublicationInfo == nil || request.PublicationInfo.PublicationType == nil {
+		return
+	}
+	pubType, ok := iso18626.PublicationTypeFromStringCI(request.PublicationInfo.PublicationType.Text)
+	if ok {
+		request.PublicationInfo.PublicationType.Text = string(pubType)
+	}
 }
 
 func (i *Iso18626AlmaShim) fixBibItemIds(request *iso18626.Request) {
