@@ -62,39 +62,32 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 					},
 				},
 			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{
+					Text: "libraryuseonly",
+				},
+			},
 		},
 	}
 	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
-	if err != nil {
-		t.Errorf("failed to apply outgoing")
-	}
+	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
 	err = xml.Unmarshal(bytes, &resmsg)
-	if err != nil {
-		t.Errorf("failed to parse xml")
-	}
-	if resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageStatusChange {
-		t.Errorf("expected to have message reason %s but got %s", iso18626.TypeReasonForMessageStatusChange,
-			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-	}
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange,
+		resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	//loaned message should not be changed if reasonForMessage is not request response
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
 	bytes, err = shim.ApplyToOutgoing(&msg)
-	if err != nil {
-		t.Errorf("failed to apply outgoing")
-	}
+	assert.Nil(t, err, "failed to apply outgoing")
 	err = xml.Unmarshal(bytes, &resmsg)
-	if err != nil {
-		t.Errorf("failed to parse xml")
-	}
-	if resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange {
-		t.Errorf("expected to have message reason %s but got %s", iso18626.TypeReasonForMessageRenewResponse,
-			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-	}
+	assert.Nil(t, err, "failed to parse xml")
+	assert.NotEqual(t, iso18626.TypeReasonForMessageStatusChange, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, "original note\n"+
 		RETURN_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
 }
 
 func TestIso18626AlmaShimIncoming(t *testing.T) {
