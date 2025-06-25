@@ -66,6 +66,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			suppMsg := message.SupplyingAgencyMessage
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
+			i.fixLoanCondition(suppMsg)
 			status := suppMsg.StatusInfo.Status
 			i.stripReShareSuppMsgNote(suppMsg)
 			if status == iso18626.TypeStatusLoaned {
@@ -151,6 +152,16 @@ func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMe
 		if status == iso18626.TypeStatusLoanCompleted {
 			suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
 		}
+	}
+}
+
+func (i *Iso18626AlmaShim) fixLoanCondition(request *iso18626.SupplyingAgencyMessage) {
+	if request.DeliveryInfo == nil || request.DeliveryInfo.LoanCondition == nil {
+		return
+	}
+	lc, ok := iso18626.LoanConditionFromStringCI(request.DeliveryInfo.LoanCondition.Text)
+	if ok {
+		request.DeliveryInfo.LoanCondition.Text = string(lc)
 	}
 }
 
