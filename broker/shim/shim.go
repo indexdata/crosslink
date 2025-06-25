@@ -66,12 +66,14 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			suppMsg := message.SupplyingAgencyMessage
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
+			i.fixLoanCondition(suppMsg)
 			status := suppMsg.StatusInfo.Status
 			i.stripReShareSuppMsgNote(suppMsg)
 			if status == iso18626.TypeStatusLoaned {
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
 			i.fixSupplierConditionNote(message.SupplyingAgencyMessage)
+			i.appendURLToSuppMsgNote(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -124,6 +126,17 @@ func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.Su
 	}
 }
 
+func (i *Iso18626AlmaShim) appendURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil && suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) {
+		url := suppMsg.DeliveryInfo.ItemId
+		if suppMsg.MessageInfo.Note != "" {
+			suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + "\n" + "URL: " + url
+		} else {
+			suppMsg.MessageInfo.Note = "URL: " + url
+		}
+	}
+}
+
 func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 	status := suppMsg.StatusInfo.Status
 	if status == iso18626.TypeStatusExpectToSupply {
@@ -151,6 +164,16 @@ func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMe
 		if status == iso18626.TypeStatusLoanCompleted {
 			suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
 		}
+	}
+}
+
+func (i *Iso18626AlmaShim) fixLoanCondition(request *iso18626.SupplyingAgencyMessage) {
+	if request.DeliveryInfo == nil || request.DeliveryInfo.LoanCondition == nil {
+		return
+	}
+	lc, ok := iso18626.LoanConditionFromStringCI(request.DeliveryInfo.LoanCondition.Text)
+	if ok {
+		request.DeliveryInfo.LoanCondition.Text = string(lc)
 	}
 }
 

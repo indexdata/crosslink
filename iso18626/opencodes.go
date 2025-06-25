@@ -126,3 +126,13 @@ const (
 	PublicationTypeSoundRecording  PublicationType = "SoundRecording"
 	PublicationTypeThesis          PublicationType = "Thesis"
 )
+
+type LoanCondition string
+
+const (
+	LoanConditionLibraryUseOnly      LoanCondition = "LibraryUseOnly"
+	LoanConditionNoReproduction      LoanCondition = "NoReproduction"
+	LoanConditionSignatureRequired   LoanCondition = "SignatureRequired"
+	LoanConditionSpecCollSupervReq   LoanCondition = "SpecCollSupervReq"
+	LoanConditionWatchLibraryUseOnly LoanCondition = "WatchLibraryUseOnly"
+)

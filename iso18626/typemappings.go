@@ -79,3 +79,17 @@ func PublicationTypeFromStringCI(s string) (PublicationType, bool) {
 	pubType, ok := publicationTypeMap[strings.ToLower(s)]
 	return pubType, ok
 }
+
+var loanConditionMap = map[string]LoanCondition{
+	strings.ToLower(string(LoanConditionLibraryUseOnly)):      LoanConditionLibraryUseOnly,
+	strings.ToLower(string(LoanConditionNoReproduction)):      LoanConditionNoReproduction,
+	strings.ToLower(string(LoanConditionSignatureRequired)):   LoanConditionSignatureRequired,
+	strings.ToLower(string(LoanConditionSpecCollSupervReq)):   LoanConditionSpecCollSupervReq,
+	strings.ToLower(string(LoanConditionWatchLibraryUseOnly)): LoanConditionWatchLibraryUseOnly,
+}
+
+// LoanConditionFromStringCI converts a string to a LoanCondition. Case-insensitive.
+func LoanConditionFromStringCI(s string) (LoanCondition, bool) {
+	condition, ok := loanConditionMap[strings.ToLower(s)]
+	return condition, ok
+}
