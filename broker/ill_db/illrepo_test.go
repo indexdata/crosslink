@@ -7,11 +7,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,6 +93,40 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	assert.Equal(t, symbols3[0].SymbolValue, "ISIL:AU-VUMC")
 	branchSymbols3, _ := illRepo.GetBranchSymbolsByPeerId(ctx, peer3.ID)
 	assert.Equal(t, len(branchSymbols3), 0)
+}
+
+func TestUpdateCachedPeers(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write(respBody)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	da := createDirectoryAdapter(server.URL)
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
+	assert.Equal(t, err, nil)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
+	assert.Equal(t, err, nil)
+	peerBefore, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
+	assert.Equal(t, peerBefore, peer)
+	assert.Equal(t, "Alma", peerBefore.Vendor)
+	assert.Equal(t, "opaque", peerBefore.BrokerMode)
+	peers, _, _ := illRepo.GetCachedPeersBySymbols(ctx,
+		[]string{"ISIL:AU-NU"}, da)
+	assert.Equal(t, len(peers), 1)
+	peerCached := peers[0]
+	peerAfter, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
+	assert.Equal(t, peerAfter, peerCached)
+	assert.Equal(t, "ReShare", peerAfter.Vendor)
+	assert.Equal(t, "transparent", peerAfter.BrokerMode)
+}
+
+func Get10MinsAgo() pgtype.Timestamp {
+	return pgtype.Timestamp{
+		Time:  time.Now().UTC().Add(-20 * time.Minute),
+		Valid: true,
+	}
 }
 
 func TestSymCheck(t *testing.T) {
