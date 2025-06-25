@@ -72,6 +72,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
 			i.fixSupplierConditionNote(message.SupplyingAgencyMessage)
+			i.appendURLToSuppMsgNote(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -121,6 +122,17 @@ func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.Su
 		MarshalReturnLabel(&sb, suppMsg.ReturnInfo.Name, addr)
 		// put in the note
 		suppMsg.MessageInfo.Note = sb.String()
+	}
+}
+
+func (i *Iso18626AlmaShim) appendURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil && suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) {
+		url := suppMsg.DeliveryInfo.ItemId
+		if suppMsg.MessageInfo.Note != "" {
+			suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + "\n" + "URL: " + url
+		} else {
+			suppMsg.MessageInfo.Note = "URL: " + url
+		}
 	}
 }
 
