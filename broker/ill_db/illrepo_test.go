@@ -124,7 +124,7 @@ func TestUpdateCachedPeers(t *testing.T) {
 
 func Get10MinsAgo() pgtype.Timestamp {
 	return pgtype.Timestamp{
-		Time:  time.Now().UTC().Add(-20 * time.Minute),
+		Time:  time.Now().UTC().Add(-10 * time.Minute),
 		Valid: true,
 	}
 }
