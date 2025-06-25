@@ -421,6 +421,8 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 	peer.Url = dir.URL
 	peer.CustomData = dir.CustomData
 	peer.Name = dir.Name
+	peer.Vendor = string(dir.Vendor)
+	peer.BrokerMode = string(dir.BrokerMode)
 	peer.RefreshTime = GetPgNow()
 	peer, err = r.SavePeer(ctx, SavePeerParams(peer))
 	if err != nil {

@@ -136,7 +136,7 @@
       "email": "library.resourcesharing@sydney.edu.au",
       "endpoints": [
         {
-          "address": "http://localhost:8083/iso18626",
+          "address": "http://localhost:8083/rs/externalApi/iso18626",
           "entry": "8a1be802-4431-5a56-bb17-ea7d23d5a234",
           "id": "be711bb5-7ffc-5b3d-8019-7122c2177545",
           "name": "NU ISO18626 Service",
