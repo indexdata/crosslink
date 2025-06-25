@@ -82,11 +82,13 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
+	firstMessage := true
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
+			firstMessage = false
 		} else if !locSupplier.LastStatus.Valid {
 			if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 				status = iso18626.TypeStatusExpectToSupply
@@ -136,7 +138,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	if supplier != nil && prependVendor {
+	if prependVendor && firstMessage && supplier != nil {
 		populateVendor(message.SupplyingAgencyMessage, supplier.Vendor)
 	}
 
@@ -189,7 +191,15 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 }
 
 func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
-	message.MessageInfo.Note = "#Vendor: " + vendor + "#\n" + message.MessageInfo.Note
+	if message.MessageInfo.Note != "" {
+		sep := ", "
+		if strings.HasPrefix(message.MessageInfo.Note, "#") {
+			sep = ""
+		}
+		message.MessageInfo.Note = "Vendor: " + vendor + sep + message.MessageInfo.Note
+	} else {
+		message.MessageInfo.Note = "Vendor: " + vendor
+	}
 }
 
 func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
