@@ -38,7 +38,6 @@ func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, 
 
 func (q *Queries) ListIllTransactionsCql(ctx context.Context, db DBTX, arg ListIllTransactionsParams,
 	cqlString *string) ([]ListIllTransactionsRow, error) {
-
 	if cqlString == nil {
 		return q.ListIllTransactions(ctx, db, arg)
 	}
@@ -96,7 +95,6 @@ func (q *Queries) ListIllTransactionsCql(ctx context.Context, db DBTX, arg ListI
 
 func (q *Queries) GetIllTransactionsByRequesterSymbolCql(ctx context.Context, db DBTX, arg GetIllTransactionsByRequesterSymbolParams,
 	cqlString *string) ([]GetIllTransactionsByRequesterSymbolRow, error) {
-
 	if cqlString == nil {
 		return q.GetIllTransactionsByRequesterSymbol(ctx, db, arg)
 	}
