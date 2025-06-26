@@ -152,6 +152,8 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	var resp oapi.IllTransactions
 	resp.Items = make([]oapi.IllTransaction, 0)
 
+	cql := params.Cql
+
 	var limit int32 = a.limitDefault
 	if params.Limit != nil {
 		limit = *params.Limit
@@ -207,7 +209,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		var trans []ill_db.IllTransaction
 		var err error
-		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams)
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
