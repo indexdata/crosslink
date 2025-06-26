@@ -320,11 +320,12 @@ func symCheck(searchSymbols []string, foundSymbols []string) bool {
 }
 
 func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
+	smap := make(map[string]string) // symbol to peer ID map
 	peers := make(map[string]Peer)
 	var query string
-	symbolsToFetch := r.collectCurrentData(ctx, symbols, peers)
+	symbolsToFetch := r.collectCurrentData(ctx, symbols, peers, smap)
 	if len(symbolsToFetch) == 0 {
-		return MapToPeerSlice(peers), query, nil
+		return MapToPeerSlice(peers, smap, symbols), query, nil
 	}
 	dirEntries, err, queryVal := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 		Symbols: symbolsToFetch,
@@ -332,11 +333,11 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 	query = queryVal
 	if err != nil {
 		ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
-		return MapToPeerSlice(peers), query, err
+		return MapToPeerSlice(peers, smap, symbols), query, err
 	}
 	if len(dirEntries) == 0 {
 		ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
-		return MapToPeerSlice(peers), query, errors.New("did not find dirEntries by symbols")
+		return MapToPeerSlice(peers, smap, symbols), query, errors.New("did not find dirEntries by symbols")
 	}
 	for _, dir := range dirEntries {
 		if !symCheck(symbols, dir.Symbols) {
@@ -363,9 +364,9 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 		}
 		if err == nil {
 			// cached peer found
-			r.updateExistingPeer(ctx, peer, dir, peers)
+			r.updateExistingPeer(ctx, peer, dir, peers, smap)
 		} else {
-			peer, err = r.createNewPeer(ctx, dir)
+			peer, err = r.createNewPeer(ctx, dir, smap)
 			if err != nil {
 				ctx.Logger().Error("failed to save peer", "symbol", dir.Symbols, "error", err)
 			} else {
@@ -373,10 +374,10 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			}
 		}
 	}
-	return MapToPeerSlice(peers), query, nil
+	return MapToPeerSlice(peers, smap, symbols), query, nil
 }
 
-func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry) (Peer, error) {
+func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, smap map[string]string) (Peer, error) {
 	var peer Peer
 	var err error
 	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
@@ -401,6 +402,7 @@ func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.Direct
 			if err != nil {
 				break
 			}
+			smap[sym] = peer.ID
 		}
 		for _, sym := range dir.BranchSymbols {
 			_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
@@ -416,7 +418,7 @@ func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.Direct
 	return peer, err
 }
 
-func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, dir adapter.DirectoryEntry, peers map[string]Peer) {
+func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, dir adapter.DirectoryEntry, peers map[string]Peer, smap map[string]string) {
 	var err error
 	peer.Url = dir.URL
 	peer.CustomData = dir.CustomData
@@ -443,6 +445,7 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 			ctx.Logger().Error("could not save peer symbol", "symbol", s, "error", err)
 			return
 		}
+		smap[s] = peer.ID
 	}
 	err = r.DeleteBranchSymbolByPeerId(ctx, peer.ID)
 	if err != nil {
@@ -462,7 +465,7 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 	peers[peer.ID] = peer
 }
 
-func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []string, peers map[string]Peer) []string {
+func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []string, peers map[string]Peer, smap map[string]string) []string {
 	var symbolsToFetch []string
 	for _, sym := range symbols {
 		peer, err := r.GetPeerBySymbol(ctx, sym)
@@ -477,14 +480,26 @@ func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []str
 				symbolsToFetch = append(symbolsToFetch, sym)
 			} else {
 				peers[peer.ID] = peer
+				smap[sym] = peer.ID
 			}
 		}
 	}
 	return symbolsToFetch
 }
 
-func MapToPeerSlice(m map[string]Peer) []Peer {
+func MapToPeerSlice(m map[string]Peer, smap map[string]string, symbols []string) []Peer {
 	peers := make([]Peer, 0, len(m))
+	// first add peers that match the original symbols
+	for _, sym := range symbols {
+		if peerId, ok := smap[sym]; ok {
+			if peer, ok := m[peerId]; ok {
+				peers = append(peers, peer)
+				// remove from m to avoid duplicates
+				delete(m, peerId)
+			}
+		}
+	}
+	// then add remaining peers
 	for _, peer := range m {
 		peers = append(peers, peer)
 	}
