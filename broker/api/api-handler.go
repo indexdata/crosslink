@@ -194,7 +194,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		var trans []ill_db.IllTransaction
 		var err error
-		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
+		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams, cql)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return

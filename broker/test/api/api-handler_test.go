@@ -316,6 +316,10 @@ func TestBrokerCRUD(t *testing.T) {
 
 	assert.Equal(t, 1, len(httpGetTrans(t, "/broker/ill_transactions", "diku", http.StatusOK)))
 
+	assert.Equal(t, 1, len(httpGetTrans(t, "/broker/ill_transactions?cql="+url.QueryEscape("requester_symbol=ISIL:DK-DIKU"), "diku", http.StatusOK)))
+
+	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions?cql="+url.QueryEscape("requester_symbol=ISIL:DK-RUC"), "diku", http.StatusOK)))
+
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
 
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "", http.StatusOK)))
