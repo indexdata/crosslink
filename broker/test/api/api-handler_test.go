@@ -216,6 +216,31 @@ func TestGetIllTransactions(t *testing.T) {
 	prevLink = *resp.About.PrevLink
 	assert.True(t, strings.HasPrefix(prevLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, prevLink, "offset=0")
+
+	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB1"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 10)
+
+	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB2"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 6)
+
+	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol <> ISIL:DK-BIB2"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 10)
+
+	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB3"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 0)
+
+	body = getResponseBody(t, "/ill_transactions?cql="+url.QueryEscape("requester_symbol = ISIL:DK-BIB3 or requester_symbol = ISIL:DK-BIB2"))
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Len(t, resp.Items, 6)
 }
 
 func TestGetIllTransactionsId(t *testing.T) {
