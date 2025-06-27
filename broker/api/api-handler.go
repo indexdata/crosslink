@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	icql "github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -279,6 +280,20 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *ApiHandler) returnHttpError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
+	// check if error is cql.ParserError
+	if cqlErr, ok := err.(*icql.ParseError); ok {
+		addBadRequestError(ctx, w, fmt.Errorf("cql parser error: %s", cqlErr.Error()))
+		return
+	}
+
+	if cqlErr, ok := err.(*pgcql.PgError); ok {
+		addBadRequestError(ctx, w, fmt.Errorf("pgcql error: %s", cqlErr.Error()))
+		return
+	}
+	addInternalError(ctx, w, err)
+}
+
 func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
@@ -287,21 +302,15 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		Limit:  a.limitDefault,
 		Offset: 0,
 	}
-	if params.Cql != nil && *params.Cql != "" {
-		// paging does not work with CQL as the filter is applied after the paging
-		// the count is also number of peers before filtering
-		dbparams.Limit = 10_000
-	} else {
-		if params.Limit != nil {
-			dbparams.Limit = *params.Limit
-		}
-		if params.Offset != nil {
-			dbparams.Offset = *params.Offset
-		}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
 	}
-	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	peers, count, err := a.illRepo.ListPeers(ctx, dbparams, params.Cql)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		a.returnHttpError(ctx, w, err)
 		return
 	}
 	var resp oapi.Peers
@@ -319,11 +328,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			return
 		}
 		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
-	}
-	resp.Items, err = filterPeers(params.Cql, resp.Items)
-	if err != nil {
-		addBadRequestError(ctx, w, err)
-		return
 	}
 
 	if dbparams.Offset > 0 {
@@ -345,29 +349,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	}
 
 	writeJsonResponse(w, resp)
-}
-
-func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
-	if cql == nil || *cql == "" {
-		return peers, nil
-	}
-	var filtered []oapi.Peer
-	var p icql.Parser
-	query, err := p.Parse(*cql)
-	if err != nil {
-		return peers, err
-	}
-	for _, entry := range peers {
-		match, err := matchQuery(query, entry.Symbols)
-		if err != nil {
-			return peers, err
-		}
-		if !match {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered, nil
 }
 
 func matchQuery(query icql.Query, symbols []string) (bool, error) {

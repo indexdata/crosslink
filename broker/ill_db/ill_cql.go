@@ -36,6 +36,25 @@ func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, 
 	return def.Parse(query, noBaseArgs+1)
 }
 
+func handlePeersQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+	def := pgcql.NewPgDefinition()
+
+	f := &pgcql.FieldString{}
+	f.WithSplit().SetColumn("symbol_value")
+	def.AddField("symbol", f)
+
+	f = &pgcql.FieldString{}
+	f.WithExact().SetColumn("id")
+	def.AddField("id", f)
+
+	var parser cql.Parser
+	query, err := parser.Parse(cqlString)
+	if err != nil {
+		return nil, err
+	}
+	return def.Parse(query, noBaseArgs+1)
+}
+
 func (q *Queries) ListIllTransactionsCql(ctx context.Context, db DBTX, arg ListIllTransactionsParams,
 	cqlString *string) ([]ListIllTransactionsRow, error) {
 	if cqlString == nil {
@@ -139,6 +158,61 @@ func (q *Queries) GetIllTransactionsByRequesterSymbolCql(ctx context.Context, db
 			&i.IllTransaction.LastSupplierStatus,
 			&i.IllTransaction.PrevSupplierStatus,
 			&i.IllTransaction.IllTransactionData,
+			&i.FullCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (q *Queries) ListPeersCql(ctx context.Context, db DBTX, arg ListPeersParams, cqlString *string) ([]ListPeersRow, error) {
+	if cqlString == nil {
+		return q.ListPeers(ctx, db, arg)
+	}
+	noBaseArgs := 2 // we have two base arguments: limit and offset
+	res, err := handlePeersQuery(*cqlString, noBaseArgs)
+	if err != nil {
+		return nil, err
+	}
+	whereClause := ""
+	if res.GetWhereClause() != "" {
+		whereClause = "JOIN symbol ON peer_id = id WHERE " + res.GetWhereClause() + " "
+	}
+	orgSql := listPeers
+	pos := strings.Index(orgSql, "ORDER BY")
+	if pos == -1 {
+		return nil, fmt.Errorf("CQL query must contain an ORDER BY clause")
+	}
+	sql := orgSql[:pos] + whereClause + orgSql[pos:]
+	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
+	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
+	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)
+
+	rows, err := db.Query(ctx, sql, sqlArguments...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPeersRow
+	for rows.Next() {
+		var i ListPeersRow
+		if err := rows.Scan(
+			&i.Peer.ID,
+			&i.Peer.Name,
+			&i.Peer.RefreshPolicy,
+			&i.Peer.RefreshTime,
+			&i.Peer.Url,
+			&i.Peer.LoansCount,
+			&i.Peer.BorrowsCount,
+			&i.Peer.Vendor,
+			&i.Peer.BrokerMode,
+			&i.Peer.CustomData,
+			&i.Peer.HttpHeaders,
 			&i.FullCount,
 		); err != nil {
 			return nil, err
