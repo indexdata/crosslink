@@ -10,11 +10,14 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
+var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
+
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
 const RETURN_ADDRESS_END = "#RT_END#"
-const LOAN_CONDITION_PRE = "Loan condition: "
+const URL_PRE = "URL: "
+const LOAN_CONDITION_PRE = "Condition: "
 const COST_CONDITION_PRE = "Cost: "
 const RESHARE_SUPPLIER_AWAITING_CONDITION = "#ReShareSupplierAwaitingConditionConfirmation#"
 const ALMA_SUPPLIER_AWAITING_CONDITION = "Conditions pending approval, please respond `ACCEPT` or `REJECT`"
@@ -70,8 +73,8 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixLoanCondition(suppMsg)
 			i.stripReShareSuppMsgSeqNote(suppMsg)
 			i.humanizeReShareSupplierConditionNote(suppMsg)
+			i.prependURLToSuppMsgNote(suppMsg)
 			i.prependLoanConditionOrCostToNote(suppMsg)
-			i.appendURLToSuppMsgNote(suppMsg)
 			if suppMsg.StatusInfo.Status == iso18626.TypeStatusLoaned {
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
@@ -146,11 +149,11 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	origNote := suppMsg.MessageInfo.Note
 	if len(condition) > 0 && !strings.Contains(origNote, LOAN_CONDITION_PRE) {
 		prependNote = LOAN_CONDITION_PRE + condition
-		sep = ", "
+		sep = NOTE_FIELD_SEP
 	}
 	if len(cost) > 0 && !strings.Contains(origNote, COST_CONDITION_PRE) {
 		prependNote = prependNote + sep + COST_CONDITION_PRE + cost
-		sep = ", "
+		sep = NOTE_FIELD_SEP
 	}
 	suppMsg.MessageInfo.Note = prependNote
 	if len(origNote) > 0 {
@@ -158,13 +161,15 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	}
 }
 
-func (i *Iso18626AlmaShim) appendURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
-	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil && suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) {
+func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil &&
+		suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) &&
+		!strings.Contains(suppMsg.MessageInfo.Note, URL_PRE) {
 		url := suppMsg.DeliveryInfo.ItemId
 		if suppMsg.MessageInfo.Note != "" {
-			suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + ", " + "URL: " + url
+			suppMsg.MessageInfo.Note = URL_PRE + url + NOTE_FIELD_SEP + suppMsg.MessageInfo.Note
 		} else {
-			suppMsg.MessageInfo.Note = "URL: " + url
+			suppMsg.MessageInfo.Note = URL_PRE + url
 		}
 	}
 }
