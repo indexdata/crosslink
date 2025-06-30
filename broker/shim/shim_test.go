@@ -66,7 +66,7 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 	var resmsg2 iso18626.ISO18626Message
 	err = xml.Unmarshal(bytes, &resmsg2)
 	assert.Nil(t, err, "failed to parse xml")
-	assert.Equal(t, "URL: http://example.com/item/12345678, sending you the URL", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, "URL: http://example.com/item/12345678, sending you the URL", resmsg2.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
