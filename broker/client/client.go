@@ -192,7 +192,7 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 
 func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
 	if message.MessageInfo.Note != "" {
-		sep := ", "
+		sep := shim.NOTE_FIELD_SEP
 		if strings.HasPrefix(message.MessageInfo.Note, "#") {
 			sep = ""
 		}
