@@ -2,8 +2,6 @@ module github.com/indexdata/crosslink/broker
 
 go 1.24
 
-replace github.com/indexdata/cql-go => /home/adam/proj/cql-go
-
 require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.18.1
@@ -47,7 +45,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/indexdata/cql-go v1.0.1-0.20250526074446-460e7a17734f // indirect
+	github.com/indexdata/cql-go v1.0.1-0.20250630143453-e9983ca1e1da // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

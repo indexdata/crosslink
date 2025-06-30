@@ -6,19 +6,23 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
-
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 )
+
+var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
 
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
 const RETURN_ADDRESS_END = "#RT_END#"
+const URL_PRE = "URL: "
+const LOAN_CONDITION_PRE = "Condition: "
+const COST_CONDITION_PRE = "Cost: "
 const RESHARE_SUPPLIER_AWAITING_CONDITION = "#ReShareSupplierAwaitingConditionConfirmation#"
 const ALMA_SUPPLIER_AWAITING_CONDITION = "Conditions pending approval, please respond `ACCEPT` or `REJECT`"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
-const ALMA_ADD_LOAN_CONDITION = "New condition"
-const RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "#ReShareSupplierConditionsAssumedAgreed"
+const RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "#ReShareSupplierConditionsAssumedAgreed#"
 const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of conditions unless `REJECT` is sent"
 const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
@@ -67,13 +71,13 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			i.fixLoanCondition(suppMsg)
-			status := suppMsg.StatusInfo.Status
-			i.stripReShareSuppMsgNote(suppMsg)
-			if status == iso18626.TypeStatusLoaned {
+			i.stripReShareSuppMsgSeqNote(suppMsg)
+			i.humanizeReShareSupplierConditionNote(suppMsg)
+			i.prependURLToSuppMsgNote(suppMsg)
+			i.prependLoanConditionOrCostToNote(suppMsg)
+			if suppMsg.StatusInfo.Status == iso18626.TypeStatusLoaned {
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
-			i.fixSupplierConditionNote(message.SupplyingAgencyMessage)
-			i.appendURLToSuppMsgNote(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -81,27 +85,27 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixBibItemIds(request)
 			i.fixBibRecIds(request)
 			i.fixPublicationType(request)
-			i.stripReShareReqNote(request)
+			i.stripReShareReqSeqNote(request)
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
 		}
 		if message.RequestingAgencyMessage != nil {
 			reqMsg := message.RequestingAgencyMessage
-			i.stripReShareReqMsgNote(reqMsg)
+			i.stripReShareReqMsgSeqNote(reqMsg)
 		}
 	}
 	return xml.Marshal(message)
 }
 
-func (i *Iso18626AlmaShim) stripReShareSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+func (i *Iso18626AlmaShim) stripReShareSuppMsgSeqNote(suppMsg *iso18626.SupplyingAgencyMessage) {
 	suppMsg.MessageInfo.Note = rsNoteRegexp.ReplaceAllString(suppMsg.MessageInfo.Note, "")
 }
 
-func (i *Iso18626AlmaShim) stripReShareReqMsgNote(reqMsg *iso18626.RequestingAgencyMessage) {
+func (i *Iso18626AlmaShim) stripReShareReqMsgSeqNote(reqMsg *iso18626.RequestingAgencyMessage) {
 	reqMsg.Note = rsNoteRegexp.ReplaceAllString(reqMsg.Note, "")
 }
 
-func (i *Iso18626AlmaShim) stripReShareReqNote(request *iso18626.Request) {
+func (i *Iso18626AlmaShim) stripReShareReqSeqNote(request *iso18626.Request) {
 	if request.ServiceInfo == nil {
 		return
 	}
@@ -126,13 +130,46 @@ func (i *Iso18626AlmaShim) appendReturnAddressToSuppMsgNote(suppMsg *iso18626.Su
 	}
 }
 
-func (i *Iso18626AlmaShim) appendURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
-	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil && suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) {
+func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	condition := ""
+	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.LoanCondition != nil {
+		condition = suppMsg.DeliveryInfo.LoanCondition.Text
+	}
+	cost := ""
+	if suppMsg.MessageInfo.OfferedCosts != nil {
+		decimal := suppMsg.MessageInfo.OfferedCosts.MonetaryValue
+		cost = utils.FormatDecimal(decimal.Base, decimal.Exp)
+		currencyCode := suppMsg.MessageInfo.OfferedCosts.CurrencyCode.Text
+		if len(cost) > 0 && len(currencyCode) > 0 {
+			cost += " " + currencyCode
+		}
+	}
+	sep := ""
+	prependNote := ""
+	origNote := suppMsg.MessageInfo.Note
+	if len(condition) > 0 && !strings.Contains(origNote, LOAN_CONDITION_PRE) {
+		prependNote = LOAN_CONDITION_PRE + condition
+		sep = NOTE_FIELD_SEP
+	}
+	if len(cost) > 0 && !strings.Contains(origNote, COST_CONDITION_PRE) {
+		prependNote = prependNote + sep + COST_CONDITION_PRE + cost
+		sep = NOTE_FIELD_SEP
+	}
+	suppMsg.MessageInfo.Note = prependNote
+	if len(origNote) > 0 {
+		suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + sep + origNote
+	}
+}
+
+func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil &&
+		suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) &&
+		!strings.Contains(suppMsg.MessageInfo.Note, URL_PRE) {
 		url := suppMsg.DeliveryInfo.ItemId
 		if suppMsg.MessageInfo.Note != "" {
-			suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + "\n" + "URL: " + url
+			suppMsg.MessageInfo.Note = URL_PRE + url + NOTE_FIELD_SEP + suppMsg.MessageInfo.Note
 		} else {
-			suppMsg.MessageInfo.Note = "URL: " + url
+			suppMsg.MessageInfo.Note = URL_PRE + url
 		}
 	}
 }
@@ -343,21 +380,18 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	}
 }
 
-func (i *Iso18626AlmaShim) fixSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
-	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_AWAITING_CONDITION) {
+func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
+	if strings.TrimSpace(supplyingAgencyMessage.MessageInfo.Note) == RESHARE_SUPPLIER_AWAITING_CONDITION {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_AWAITING_CONDITION
 		return
 	}
 	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
 		note := strings.ReplaceAll(supplyingAgencyMessage.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION, "")
 		note = strings.TrimSpace(note)
-		if note != "" {
-			note = " with note: " + note
-		}
-		supplyingAgencyMessage.MessageInfo.Note = ALMA_ADD_LOAN_CONDITION + note
+		supplyingAgencyMessage.MessageInfo.Note = note
 		return
 	}
-	if strings.Contains(supplyingAgencyMessage.MessageInfo.Note, RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED) {
+	if strings.TrimSpace(supplyingAgencyMessage.MessageInfo.Note) == RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED
 		return
 	}

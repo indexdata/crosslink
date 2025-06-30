@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/go-utils/utils"
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
@@ -58,7 +59,16 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusCopyCompleted, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-	assert.Equal(t, "sending you the URL\nURL: http://example.com/item/12345678", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, URL_PRE+"http://example.com/item/12345678"+NOTE_FIELD_SEP+
+		"sending you the URL", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	//apply again that URL is added once
+	bytes, err = shim.ApplyToOutgoing(&resmsg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	var resmsg2 iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg2)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, URL_PRE+"http://example.com/item/12345678"+NOTE_FIELD_SEP+
+		"sending you the URL", resmsg2.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
@@ -136,7 +146,8 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.NotEqual(t, iso18626.TypeReasonForMessageStatusChange, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-	assert.Equal(t, "original note\n"+
+	assert.Equal(t, LOAN_CONDITION_PRE+string(iso18626.LoanConditionLibraryUseOnly)+NOTE_FIELD_SEP+
+		"original note\n"+
 		RETURN_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 	assert.Equal(t, string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
@@ -395,6 +406,11 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 			MessageInfo: iso18626.MessageInfo{
 				Note: RESHARE_ADD_LOAN_CONDITION + "#seq:1#",
 			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{
+					Text: "libraryuseonly",
+				},
+			},
 		},
 	}
 
@@ -403,15 +419,27 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
 	var resmsg iso18626.ISO18626Message
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
-
-	assert.Equal(t, ALMA_ADD_LOAN_CONDITION, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, LOAN_CONDITION_PRE+string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			MessageInfo: iso18626.MessageInfo{
-				Note: RESHARE_ADD_LOAN_CONDITION + "conditional note#seq:1#",
+				Note: RESHARE_ADD_LOAN_CONDITION + "staff note#seq:1#",
+				OfferedCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 20,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "EUR",
+					},
+				},
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{
+					Text: "libraryuseonly",
+				},
 			},
 		},
 	}
@@ -422,7 +450,9 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) 
 	err = GetShim("default").ApplyToIncoming(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
-	assert.Equal(t, ALMA_ADD_LOAN_CONDITION+" with note: conditional note", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, LOAN_CONDITION_PRE+"LibraryUseOnly"+NOTE_FIELD_SEP+
+		COST_CONDITION_PRE+"20 EUR"+NOTE_FIELD_SEP+
+		"staff note", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.T) {

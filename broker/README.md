@@ -62,7 +62,8 @@ Configuration is provided via environment variables:
 | `REQ_AGENCY_INFO`      | Should `request/requestingAgencyInfo` be populated from Directory                         | `true`                                    |
 | `SUPPLIER_INFO`        | Should `request/supplierInfo` be populated from Directory                                 | `true`                                    |
 | `RETURN_INFO`          | Should `returnInfo` be populated from Directory for supplier `Loaned` message             | `true`                                    |
-| `VENDOR_INFO`          | Should `note` be prepended with `#Vendor: xxx` note                                       | `true`                                    |
+| `VENDOR_INFO`          | Should `note` be prepended with `Vendor: xxx` note                                        | `true`                                    |
+| `NOTE_FIELD_SEP`       | Separator for fields (e.g. Vendor) prepended to the note                                  | `, `                                    |
 | `CLIENT_DELAY`         | Delay duration for outgoing ISO18626 messages                                             | `0ms`                                     |
 | `MAX_MESSAGE_SIZE`     | Max accepted ISO18626 message size                                                        | `100KB`                                   |
 | `HOLDINGS_ADAPTER`     | Holdings lookup method: `mock` or `sru`                                                   | `mock`                                    |
