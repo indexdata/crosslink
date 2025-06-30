@@ -10,7 +10,8 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
-const NOTE_FIELD_SEP = ", "
+var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
+
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
 const RETURN_ADDRESS_BEGIN = "#RETURN_TO#"
