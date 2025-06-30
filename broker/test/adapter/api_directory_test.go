@@ -189,11 +189,13 @@ func TestFilterAndSort(t *testing.T) {
 			},
 		},
 	}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var matchResult adapter.MatchResult
+	entries, matchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
 	assert.Equal(t, "2", entries[2].PeerId)
+	assert.Equal(t, "copy", matchResult.Request.ServiceType)
 }
 
 func TestFilterAndSortFilterByCost(t *testing.T) {
@@ -215,9 +217,11 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 			},
 		},
 	}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var matchMatchResult adapter.MatchResult
+	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
+	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
 }
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
@@ -239,9 +243,11 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 			},
 		},
 	}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var matchMatchResult adapter.MatchResult
+	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
+	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
 }
 
 func TestFilterAndSortByType(t *testing.T) {
@@ -266,10 +272,12 @@ func TestFilterAndSortByType(t *testing.T) {
 			},
 		},
 	}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var matchMatchResult adapter.MatchResult
+	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "2", entries[1].PeerId)
+	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
 }
 
 func TestFilterAndSortByLevel(t *testing.T) {
@@ -294,9 +302,11 @@ func TestFilterAndSortByLevel(t *testing.T) {
 			},
 		},
 	}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var matchMatchResult adapter.MatchResult
+	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "3", entries[0].PeerId)
+	assert.Equal(t, "copy", matchMatchResult.Request.ServiceType)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
@@ -307,11 +317,13 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
 		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
 		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
-	entries = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
+	var matchMatchResult adapter.MatchResult
+	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
 	assert.Equal(t, "2", entries[2].PeerId)
+	assert.Equal(t, "", matchMatchResult.Request.ServiceType)
 }
 
 func TestCompareSuppliers(t *testing.T) {
