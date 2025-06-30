@@ -109,13 +109,13 @@ func (r *MockIllRepositorySuccess) GetIllTransactionByRequesterRequestIdForUpdat
 	}, nil
 }
 
-func (r *MockIllRepositorySuccess) ListIllTransactions(ctx extctx.ExtendedContext, params ill_db.ListIllTransactionsParams) ([]ill_db.IllTransaction, int64, error) {
+func (r *MockIllRepositorySuccess) ListIllTransactions(ctx extctx.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string) ([]ill_db.IllTransaction, int64, error) {
 	return []ill_db.IllTransaction{{
 		ID: "id",
 	}}, 0, nil
 }
 
-func (r *MockIllRepositorySuccess) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, int64, error) {
+func (r *MockIllRepositorySuccess) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams, cql *string) ([]ill_db.IllTransaction, int64, error) {
 	return []ill_db.IllTransaction{{
 		ID: "id",
 	}}, 0, nil
@@ -252,11 +252,11 @@ func (r *MockIllRepositoryError) GetIllTransactionByRequesterRequestIdForUpdate(
 	return ill_db.IllTransaction{}, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) ListIllTransactions(ctx extctx.ExtendedContext, params ill_db.ListIllTransactionsParams) ([]ill_db.IllTransaction, int64, error) {
+func (r *MockIllRepositoryError) ListIllTransactions(ctx extctx.ExtendedContext, params ill_db.ListIllTransactionsParams, cql *string) ([]ill_db.IllTransaction, int64, error) {
 	return []ill_db.IllTransaction{}, 0, errors.New("DB error")
 }
 
-func (r *MockIllRepositoryError) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams) ([]ill_db.IllTransaction, int64, error) {
+func (r *MockIllRepositoryError) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params ill_db.GetIllTransactionsByRequesterSymbolParams, cql *string) ([]ill_db.IllTransaction, int64, error) {
 	return []ill_db.IllTransaction{}, 0, errors.New("DB error")
 }
 
