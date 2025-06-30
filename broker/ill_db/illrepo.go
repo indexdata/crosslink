@@ -20,8 +20,8 @@ type IllRepo interface {
 	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error)
-	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error)
+	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error)
+	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
@@ -90,8 +90,8 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error) {
-	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.ListIllTransactionsCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
 	if err == nil {
@@ -104,7 +104,7 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListI
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err = r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+			rows, err = r.queries.ListIllTransactionsCql(ctx, r.GetConnOrTx(), params, cql)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}
@@ -113,8 +113,8 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListI
 	return transactions, fullCount, err
 }
 
-func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error) {
-	rows, err := r.queries.GetIllTransactionsByRequesterSymbol(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.GetIllTransactionsByRequesterSymbolCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
 	if err == nil {
