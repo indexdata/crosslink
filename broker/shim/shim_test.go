@@ -59,7 +59,14 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusCopyCompleted, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-	assert.Equal(t, "sending you the URL, URL: http://example.com/item/12345678", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, "URL: http://example.com/item/12345678, sending you the URL", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	//apply again that URL is added once
+	bytes, err = shim.ApplyToOutgoing(&resmsg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	var resmsg2 iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg2)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, "URL: http://example.com/item/12345678, sending you the URL", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
