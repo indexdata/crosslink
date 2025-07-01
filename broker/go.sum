@@ -84,6 +84,8 @@ github.com/indexdata/cql-go v1.0.0 h1:qDUsR2EDY6p/ahcXtX+X9gc9e3r4foqXtRHOKrcb1Z
 github.com/indexdata/cql-go v1.0.0/go.mod h1:OLbbfbTpWvwQvSnrF+syMkf9ta2ANGVkLYz/GrRGJJk=
 github.com/indexdata/cql-go v1.0.1-0.20250526074446-460e7a17734f h1:37hijHk4+e1RFMPZeGjQ1YNhM5oAPAr7jrpD3Yk3OxQ=
 github.com/indexdata/cql-go v1.0.1-0.20250526074446-460e7a17734f/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
+github.com/indexdata/cql-go v1.0.1-0.20250630143453-e9983ca1e1da h1:kxviOK5Div55LnO7293keKmDScDa0c1Hmo3PEd4UgzA=
+github.com/indexdata/cql-go v1.0.1-0.20250630143453-e9983ca1e1da/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72 h1:/ssOlpKK1EOeWMCOUrxCOCZP+0Z1LD58Xg1nrU01TAQ=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.3.0 h1:LZGBORHnO6olHBtvc6hQEefymdRuiM77FgtW4pCek7g=

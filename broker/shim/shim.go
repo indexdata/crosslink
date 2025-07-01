@@ -193,13 +193,28 @@ func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMe
 	if reason == iso18626.TypeReasonForMessageRequestResponse || reason == iso18626.TypeReasonForMessageStatusChange {
 		status := suppMsg.StatusInfo.Status
 		if status == iso18626.TypeStatusWillSupply {
+			if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.LoanCondition != nil &&
+				suppMsg.DeliveryInfo.LoanCondition.Text != "" {
+				//we append loan conditions to the note for Alma and need to change the reason so Alma shows the note
+				suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
+				return
+			}
+			if suppMsg.MessageInfo.OfferedCosts != nil &&
+				suppMsg.MessageInfo.OfferedCosts.MonetaryValue.Base > 0 {
+				//we append cost to the note for Alma and need to change the reason so Alma shows the note
+				suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
+				return
+			}
 			suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+			return
 		}
 		if status == iso18626.TypeStatusLoaned {
 			suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+			return
 		}
 		if status == iso18626.TypeStatusLoanCompleted {
 			suppMsg.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRequestResponse
+			return
 		}
 	}
 }
