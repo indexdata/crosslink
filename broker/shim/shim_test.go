@@ -189,18 +189,43 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 	}
 	shim := GetShim(string(common.VendorAlma))
 	bytes, err := shim.ApplyToOutgoing(&msg)
-	if err != nil {
-		t.Errorf("failed to apply outgoing")
-	}
+	assert.Nil(t, err, "failed to apply outgoing")
 	var resmsg iso18626.ISO18626Message
 	err = xml.Unmarshal(bytes, &resmsg)
-	if err != nil {
-		t.Errorf("failed to parse xml")
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	//set loan condition
+	msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{
+		LoanCondition: &iso18626.TypeSchemeValuePair{
+			Text: "libraryuseonly",
+		},
 	}
-	if resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageRequestResponse {
-		t.Errorf("expected to have message reason %s but got %s", iso18626.TypeReasonForMessageRequestResponse,
-			resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	bytes, err = shim.ApplyToOutgoing(&msg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	err = xml.Unmarshal(bytes, &resmsg)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.Equal(t, LOAN_CONDITION_PRE+string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	//set cost
+	msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = nil
+	msg.SupplyingAgencyMessage.MessageInfo.Note = ""
+	msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts = &iso18626.TypeCosts{
+		MonetaryValue: utils.XSDDecimal{
+			Base: 20,
+		},
+		CurrencyCode: iso18626.TypeSchemeValuePair{
+			Text: "EUR",
+		},
 	}
+	bytes, err = shim.ApplyToOutgoing(&msg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	err = xml.Unmarshal(bytes, &resmsg)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.Equal(t, COST_CONDITION_PRE+"20 EUR", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
