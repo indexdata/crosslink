@@ -28,6 +28,10 @@ func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, 
 	f.WithExact().SetColumn("supplier_symbol")
 	def.AddField("supplier_symbol", f)
 
+	f = &pgcql.FieldString{}
+	f.WithExact()
+	def.AddField("last_requester_action", f)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
