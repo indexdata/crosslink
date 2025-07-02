@@ -49,7 +49,8 @@ func TestMain(m *testing.M) {
 
 	fmt.Print("Postgres connection string: ", connStr)
 	app.MigrationsFolder = "file://../../migrations"
-	app.RunMigrateScripts()
+	err = app.RunMigrateScripts()
+	test.Expect(err, "failed to run migrations")
 
 	dbPool, err := dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to init db pool")
@@ -57,7 +58,8 @@ func TestMain(m *testing.M) {
 	eventRepo = app.CreateEventRepo(dbPool)
 	eventBus = app.CreateEventBus(eventRepo)
 	illRepo = app.CreateIllRepo(dbPool)
-	app.StartEventBus(ctx, eventBus)
+	err = app.StartEventBus(ctx, eventBus)
+	test.Expect(err, "failed to start event bus")
 
 	code := m.Run()
 
@@ -81,7 +83,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
-		app.StartEventBus(ctx, eventBus)
+		err = app.StartEventBus(ctx, eventBus)
+		assert.NoError(t, err, "failed to start event bus")
 	}
 
 	var requestReceived1 []events.Event
