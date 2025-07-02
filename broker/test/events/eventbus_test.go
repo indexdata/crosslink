@@ -66,8 +66,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestMultipleEventHandlers(t *testing.T) {
-	noPools := 3
-	noEvents := 2
+	noPools := 10
+	noEvents := 100
 	var receivedAr [][]events.Event = make([][]events.Event, noPools)
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
@@ -105,7 +105,9 @@ func TestMultipleEventHandlers(t *testing.T) {
 		t.Error("Expected to have some events")
 	}
 	total := len(requestReceived1)
+	t.Logf("Pool main received %d events", total)
 	for i := 0; i < noPools; i++ {
+		t.Logf("Pool %d received %d events", i, len(receivedAr[i]))
 		total += len(receivedAr[i])
 	}
 	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
