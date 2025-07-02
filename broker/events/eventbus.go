@@ -112,6 +112,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
+	p.ctx.Logger().Info("event_bus: start claim for signal", "eventId", data.Event, "signal", data.Signal)
 	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -121,6 +122,7 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 		}
 		return
 	}
+	p.ctx.Logger().Info("event_bus: got event found for signal", "eventId", data.Event, "signal", data.Signal)
 	p.ctx.Logger().Debug("event_bus: received event", "channel", EVENT_BUS_CHANNEL,
 		"signal", data.Signal,
 		"eventName", event.EventName,
