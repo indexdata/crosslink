@@ -27,7 +27,7 @@ type IllRepo interface {
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
+	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -145,8 +145,8 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error) {
-	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error) {
+	rows, err := r.queries.ListPeersCql(ctx, r.GetConnOrTx(), params, cql)
 	var peers []Peer
 	var fullCount int64
 	if err == nil {

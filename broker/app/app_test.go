@@ -30,6 +30,14 @@ func TestConfigLogger(t *testing.T) {
 	}
 }
 
+func TestMigrationFailed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err := Init(ctx)
+	assert.ErrorContains(t, err, "DB migration failed:")
+}
+
 func TestBadHoldingsAdapter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
