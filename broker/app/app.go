@@ -98,18 +98,6 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	RunMigrateScripts()
-	pool := InitDbPool()
-	eventRepo := CreateEventRepo(pool)
-	eventBus := CreateEventBus(eventRepo)
-	illRepo := CreateIllRepo(pool)
-	delay, err := time.ParseDuration(CLIENT_DELAY)
-	if err != nil {
-		return Context{}, err
-	}
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
-	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
-
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
 		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
 		adapter.SruUrl:          SRU_URL,
@@ -117,6 +105,7 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
+
 	adapter.DEFAULT_BROKER_MODE = getBrokerMode(BROKER_MODE)
 	dirAdapter, err := adapter.CreateDirectoryLookupAdapter(map[string]string{
 		adapter.DirectoryAdapter: DIRECTORY_ADAPTER,
@@ -125,12 +114,37 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
+
+	delay, err := time.ParseDuration(CLIENT_DELAY)
+	if err != nil {
+		return Context{}, err
+	}
+
+	err = RunMigrateScripts()
+	if err != nil {
+		return Context{}, err
+	}
+
+	pool, err := InitDbPool()
+	if err != nil {
+		return Context{}, err
+	}
+
+	eventRepo := CreateEventRepo(pool)
+	eventBus := CreateEventBus(eventRepo)
+	illRepo := CreateIllRepo(pool)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
+	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
+
 	var brokerMode = getBrokerMode(BROKER_MODE)
 	var locallySupply = brokerMode == extctx.BrokerModeTransparent || brokerMode == extctx.BrokerModeTranslucent
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, locallySupply)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
-	StartEventBus(ctx, eventBus)
+	err = StartEventBus(ctx, eventBus)
+	if err != nil {
+		return Context{}, err
+	}
 	return Context{
 		EventBus:   eventBus,
 		IllRepo:    illRepo,
@@ -176,22 +190,21 @@ func StartServer(context Context) error {
 	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), signatureHandler)
 }
 
-func RunMigrateScripts() {
+func RunMigrateScripts() error {
 	verFrom, verTo, dirty, err := dbutil.RunMigrateScripts(MigrationsFolder, ConnectionString)
 	if err != nil {
-		appCtx.Logger().Error("DB migration failed", "error", err, "versionFrom", verFrom, "versionTo", verTo, "dirty", dirty)
-		return
+		return fmt.Errorf("DB migration failed: err=%w versionFrom=%d versionTo=%d dirty=%t", err, verFrom, verTo, dirty)
 	}
 	appCtx.Logger().Info("DB migration success", "versionFrom", verFrom, "versionTo", verTo, "dirty", dirty)
+	return nil
 }
 
-func InitDbPool() *pgxpool.Pool {
+func InitDbPool() (*pgxpool.Pool, error) {
 	dbPool, err := dbutil.InitDbPool(ConnectionString)
 	if err != nil {
-		appCtx.Logger().Error("Unable to create pool to database", "error", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("unable to create pool to database: %w", err)
 	}
-	return dbPool
+	return dbPool, nil
 }
 
 func CreateEventRepo(dbPool *pgxpool.Pool) events.EventRepo {
@@ -221,12 +234,12 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 }
-func StartEventBus(ctx context.Context, eventBus events.EventBus) {
+func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
-		appCtx.Logger().Error("starting event bus failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
+	return nil
 }
 
 func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
