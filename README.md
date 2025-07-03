@@ -1,6 +1,6 @@
 # CrossLink Inter-Library Loan Platform
 
-CrossLink project provides software services for implementation of Inter-Library Loan (ILL) solutions.
+CrossLink project provides software services for the implementation of Inter-Library Loan (ILL) solutions. It was developed by Index Data, led by the IDS Project, and supported by the Institute of Museum and Library Services.
 
 See individual components docs for details:
 
