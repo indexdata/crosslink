@@ -65,7 +65,7 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 		EventName:        eventName,
 		EventStatus:      status,
 		EventData:        events.EventData{},
-		LastSignal:       "",
+		LastSignal:       string(events.SignalTaskCreated),
 	})
 
 	if err != nil {
