@@ -12,21 +12,20 @@ import (
 func handleIllTransactionsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
-	f := &pgcql.FieldString{}
-	f.WithExact().SetColumn("last_supplier_status")
+	f := pgcql.NewFieldString().WithExact()
 	def.AddField("last_supplier_status", f)
 
-	f = &pgcql.FieldString{}
-	f.WithExact().SetColumn("id")
+	f = pgcql.NewFieldString().WithExact()
 	def.AddField("id", f)
 
-	f = &pgcql.FieldString{}
-	f.WithExact().SetColumn("requester_symbol")
+	f = pgcql.NewFieldString().WithExact()
 	def.AddField("requester_symbol", f)
 
-	f = &pgcql.FieldString{}
-	f.WithExact().SetColumn("supplier_symbol")
+	f = pgcql.NewFieldString().WithExact()
 	def.AddField("supplier_symbol", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("last_requester_action", f)
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
