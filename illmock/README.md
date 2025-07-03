@@ -136,20 +136,20 @@ By default each substring is taken verbatim, except for some special cases:
 
 For example to get a MARCXML with identifier 123, use:
 
-    curl 'http://localhost:8081/sru?query=id%3D123'
+    curl 'http://localhost:8081/sru?query=rec.id%3D123'
 
 With yaz-client:
 
     yaz-client http://localhost:8081/sru
     Z> sru get 2.0
-    Z> f id=123
+    Z> f rec.id=123
     Z> s
 
 With zoomsh:
 
     zoomsh "set sru_version 2.0" "set sru get" \
         "connect http://localhost:8081/sru" \
-        "search cql:id=123" "show 0 1" "quit"
+        "search cql:rec.id=123" "show 0 1" "quit"
 
 # Directory service
 
