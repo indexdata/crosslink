@@ -196,6 +196,43 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, "3", entries[1].PeerId)
 	assert.Equal(t, "2", entries[2].PeerId)
 	assert.Equal(t, "copy", matchResult.Request.ServiceType)
+	assert.Equal(t, "core", matchResult.Request.ServiceLevel)
+	assert.Equal(t, "35.00", matchResult.Request.Cost)
+	assert.Contains(t, matchResult.Requester.Networks, "NSW & ACT", "Queensland", "Victoria")
+	assert.Len(t, matchResult.Requester.Networks, 3)
+	assert.Len(t, matchResult.Suppliers, 3)
+
+	sup := matchResult.Suppliers[0]
+	assert.Equal(t, "", sup.Symbol)
+	assert.Len(t, sup.Networks, 3)
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "NSW & ACT", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Queensland", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Victoria", Match: true})
+	assert.Len(t, sup.Tiers, 4)
+
+	sup = matchResult.Suppliers[1]
+	assert.Equal(t, "", sup.Symbol)
+	assert.Len(t, sup.Networks, 6)
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "NSW & ACT", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Queensland", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Victoria", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "National", Match: false})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "South Australia", Match: false})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Western Australia", Match: false})
+	assert.Len(t, sup.Tiers, 4)
+
+	sup = matchResult.Suppliers[2]
+	assert.Equal(t, "", sup.Symbol)
+	assert.Len(t, sup.Networks, 4)
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Victoria", Match: true})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "National", Match: false})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Victoria Health", Match: false})
+	assert.Contains(t, sup.Networks, adapter.MatchValue{Value: "Victoria Govt & Arts", Match: false})
+	assert.Len(t, sup.Tiers, 4)
+
+	bytes, err := json.MarshalIndent(matchResult, "", "  ")
+	assert.NoError(t, err)
+	assert.Contains(t, string(bytes), "\"request\"")
 }
 
 func TestFilterAndSortFilterByCost(t *testing.T) {

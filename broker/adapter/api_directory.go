@@ -135,12 +135,14 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 	for name := range requesterNetworks {
 		matchResult.Requester.Networks = append(matchResult.Requester.Networks, name)
 	}
-
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
 		floatV := utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32))
 		maxCost = &floatV
-		matchResult.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) +
-			" " + billingInfo.MaximumCosts.CurrencyCode.Text
+		curSuffix := ""
+		if billingInfo.MaximumCosts.CurrencyCode.Text != "" {
+			curSuffix = " " + billingInfo.MaximumCosts.CurrencyCode.Text
+		}
+		matchResult.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
 	for _, e := range entries {
 		var matchSupplier MatchSupplier
@@ -177,8 +179,8 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			for _, t := range tiers {
 				var matchTier MatchTier
 				matchTier.TierId = t.Name
-				matchTier.ServiceLevel.Value = t.Level
-				matchTier.ServiceType.Value = t.Type
+				matchTier.ServiceLevel.Value = strings.ToLower(t.Level)
+				matchTier.ServiceType.Value = strings.ToLower(t.Type)
 				matchTier.Cost.Value = fmt.Sprintf("%f", t.Cost)
 
 				matchTier.ServiceType.Match = sType == "" || sType == strings.ToLower(t.Type)
@@ -193,6 +195,9 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				}
 				matchSupplier.Tiers = append(matchSupplier.Tiers, matchTier)
 			}
+			slices.SortFunc(matchSupplier.Tiers, func(a, b MatchTier) int {
+				return cmp.Compare(a.TierId, b.TierId)
+			})
 			if cost != nil {
 				e.Cost = *cost
 				filtered = append(filtered, e)
@@ -200,6 +205,9 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		}
 		matchResult.Suppliers = append(matchResult.Suppliers, matchSupplier)
 	}
+	slices.SortFunc(matchResult.Suppliers, func(a, b MatchSupplier) int {
+		return cmp.Compare(a.Symbol, b.Symbol)
+	})
 	slices.SortFunc(filtered, CompareSuppliers)
 	return filtered, matchResult
 }
