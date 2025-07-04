@@ -9,7 +9,7 @@ var DEFAULT_BROKER_MODE extctx.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string)
-	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) []Supplier
+	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, MatchResult)
 }
 
 type DirectoryLookupParams struct {
@@ -35,4 +35,40 @@ type Supplier struct {
 	NetworkPriority float64
 	Cost            float64
 	Local           bool
+}
+
+type MatchRequest struct {
+	ServiceLevel string `json:"serviceLevel"`
+	ServiceType  string `json:"serviceType"`
+	Cost         string `json:"cost"`
+}
+
+type MatchRequester struct {
+	Networks []string `json:"networks"`
+}
+
+type MatchValue struct {
+	Value string `json:"value"`
+	Match bool   `json:"match"`
+}
+
+type MatchTier struct {
+	TierId       string     `json:"tierId"`
+	ServiceLevel MatchValue `json:"serviceLevel"`
+	ServiceType  MatchValue `json:"serviceType"`
+	Cost         MatchValue `json:"cost"`
+	Match        bool       `json:"match"`
+}
+
+type MatchSupplier struct {
+	Symbol   string       `json:"symbol"`
+	Networks []MatchValue `json:"networks"`
+	Match    bool         `json:"match"`
+	Tiers    []MatchTier  `json:"tiers"`
+}
+
+type MatchResult struct {
+	Request   MatchRequest    `json:"request"`
+	Requester MatchRequester  `json:"requester"`
+	Suppliers []MatchSupplier `json:"suppliers"`
 }
