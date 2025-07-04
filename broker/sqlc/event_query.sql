@@ -25,7 +25,7 @@ WHERE id = $1 LIMIT 1;
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = ''
-WHERE last_signal = $2 AND event.id = $1
+WHERE (last_signal = $2 OR event_name = 'confirm-requester-msg') AND event.id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many

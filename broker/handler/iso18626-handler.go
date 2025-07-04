@@ -577,6 +577,15 @@ func createNoticeAndCheckDBError(ctx extctx.ExtendedContext, w http.ResponseWrit
 }
 
 func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
+	// called for all eventbus instances.
+	responseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
+	originalEvent := h.eventBus.FindAncestor(ctx, responseEvent, events.EventNameRequesterMsgReceived)
+	if originalEvent != nil {
+		if _, ok := requestMapping[originalEvent.ID]; !ok {
+			return // if we don't have a wait for this request, we should not process it
+		}
+	}
+	// this is our event, process it
 	h.eventBus.ProcessTask(ctx, event, h.handleConfirmRequesterMsgTask)
 }
 
@@ -591,7 +600,7 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedConte
 		if err != nil {
 			status = events.EventStatusError
 			resData.EventError = &events.EventError{
-				Message: "failed tp confirm supplier message",
+				Message: "failed to confirm supplier message",
 				Cause:   err.Error(),
 			}
 		}
@@ -607,41 +616,40 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedConte
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, requestId string, illMessage *iso18626.ISO18626Message, result events.EventResult) (*iso18626.ISO18626Message, error) {
 	wait, ok := requestMapping[requestId]
-	if ok {
-		delete(requestMapping, requestId)
-		var errorMessage = ""
-		var errorType *iso18626.TypeErrorType
-		var messageStatus = iso18626.TypeMessageStatusOK
-		if result.IncomingMessage != nil {
-			if result.IncomingMessage.RequestingAgencyMessageConfirmation != nil {
-				messageStatus = result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
-				if result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData != nil {
-					errorMessage = result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
-					errorType = &result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
-				}
-			}
-		} else {
-			// We don't have response, so it was http error or connection error
-			if result.HttpFailure != nil {
-				(*wait.w).WriteHeader(result.HttpFailure.StatusCode)
-				if len(result.HttpFailure.Body) > 0 {
-					(*wait.w).Write(result.HttpFailure.Body)
-				}
-				wait.wg.Done()
-				return nil, result.HttpFailure
-			}
-			eType := iso18626.TypeErrorTypeBadlyFormedMessage
-			errorMessage = string(CouldNotSendReqToPeer)
-			errorType = &eType
-			messageStatus = iso18626.TypeMessageStatusERROR
-		}
-		var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
-		writeResponse(ctx, resmsg, *wait.w)
-		wait.wg.Done()
-		return resmsg, nil
-	} else {
+	if !ok {
 		return nil, fmt.Errorf("cannot confirm request %s, not found", requestId)
 	}
+	delete(requestMapping, requestId)
+	var errorMessage = ""
+	var errorType *iso18626.TypeErrorType
+	var messageStatus = iso18626.TypeMessageStatusOK
+	if result.IncomingMessage != nil {
+		if result.IncomingMessage.RequestingAgencyMessageConfirmation != nil {
+			messageStatus = result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
+			if result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData != nil {
+				errorMessage = result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
+				errorType = &result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
+			}
+		}
+	} else {
+		// We don't have response, so it was http error or connection error
+		if result.HttpFailure != nil {
+			(*wait.w).WriteHeader(result.HttpFailure.StatusCode)
+			if len(result.HttpFailure.Body) > 0 {
+				(*wait.w).Write(result.HttpFailure.Body)
+			}
+			wait.wg.Done()
+			return nil, result.HttpFailure
+		}
+		eType := iso18626.TypeErrorTypeBadlyFormedMessage
+		errorMessage = string(CouldNotSendReqToPeer)
+		errorType = &eType
+		messageStatus = iso18626.TypeMessageStatusERROR
+	}
+	var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
+	writeResponse(ctx, resmsg, *wait.w)
+	wait.wg.Done()
+	return resmsg, nil
 }
 
 type RequestWait struct {
