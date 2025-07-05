@@ -49,7 +49,8 @@ func TestMain(m *testing.M) {
 
 	fmt.Print("Postgres connection string: ", connStr)
 	app.MigrationsFolder = "file://../../migrations"
-	app.RunMigrateScripts()
+	err = app.RunMigrateScripts()
+	test.Expect(err, "failed to run migrations")
 
 	dbPool, err := dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to init db pool")
@@ -57,7 +58,8 @@ func TestMain(m *testing.M) {
 	eventRepo = app.CreateEventRepo(dbPool)
 	eventBus = app.CreateEventBus(eventRepo)
 	illRepo = app.CreateIllRepo(dbPool)
-	app.StartEventBus(ctx, eventBus)
+	err = app.StartEventBus(ctx, eventBus)
+	test.Expect(err, "failed to start event bus")
 
 	code := m.Run()
 
@@ -81,7 +83,8 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
-		app.StartEventBus(ctx, eventBus)
+		err = app.StartEventBus(ctx, eventBus)
+		assert.NoError(t, err, "failed to start event bus")
 	}
 
 	var requestReceived1 []events.Event
@@ -109,6 +112,63 @@ func TestMultipleEventHandlers(t *testing.T) {
 		total += len(receivedAr[i])
 	}
 	assert.Equal(t, noEvents, total, "Total number of events should match the number of created tasks")
+	if total != noEvents {
+		for e := range requestReceived1 {
+			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
+		}
+		for i := 0; i < noPools; i++ {
+			for e := range receivedAr[i] {
+				t.Logf("Received event %d from pool %d: %s", e, i, receivedAr[i][e].ID)
+			}
+		}
+	}
+}
+
+func TestBroadcastEventHandlers(t *testing.T) {
+	noPools := 3
+	noEvents := 2
+	var receivedAr [][]events.Event = make([][]events.Event, noPools)
+	ctx := context.Background()
+	for i := 0; i < noPools; i++ {
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		assert.NoError(t, err, "failed to init db pool")
+		defer dbPool.Close()
+
+		eventRepo := app.CreateEventRepo(dbPool)
+		eventBus := app.CreateEventBus(eventRepo)
+
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx extctx.ExtendedContext, event events.Event) {
+			receivedAr[i] = append(receivedAr[i], event)
+		})
+		err = app.StartEventBus(ctx, eventBus)
+		assert.NoError(t, err, "failed to start event bus")
+	}
+
+	var requestReceived1 []events.Event
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx extctx.ExtendedContext, event events.Event) {
+		requestReceived1 = append(requestReceived1, event)
+	})
+
+	for i := 0; i < noEvents; i++ {
+		illId := apptest.GetIllTransId(t, illRepo)
+		_, err := eventBus.CreateTaskBroadcast(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, nil)
+		assert.NoError(t, err, "Task should be created without errors")
+	}
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		total := len(requestReceived1)
+		for i := 0; i < noPools; i++ {
+			total += len(receivedAr[i])
+		}
+		return total >= noEvents*(noPools+1) // +1 for the main event bus
+	}) {
+		t.Error("Expected to have some events")
+	}
+	total := len(requestReceived1)
+	for i := 0; i < noPools; i++ {
+		total += len(receivedAr[i])
+	}
+	assert.Equal(t, noEvents*(noPools+1), total, "Total number of events should match the number of created tasks")
 	if total != noEvents {
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)

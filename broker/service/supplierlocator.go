@@ -119,9 +119,10 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(holdingsSymbols, ","))
 	}
 
-	potentialSuppliers = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	var matchResult adapter.MatchResult
+	potentialSuppliers, matchResult = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
 	if len(potentialSuppliers) == 0 {
-		return logProblemAndReturnResult(ctx, "no suppliers after filtering")
+		return logProblemAndReturnResultMatch(ctx, "no suppliers after filtering", matchResult)
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	var dirEntries = []any{}
@@ -137,7 +138,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	directory["entries"] = dirEntries
 
 	return events.EventStatusSuccess, &events.EventResult{
-		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdings, "directory": directory},
+		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdings, "directory": directory, "matchResult": matchResult},
 	}
 }
 
@@ -225,6 +226,12 @@ func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (even
 			Details: message,
 		},
 	}
+}
+
+func logProblemAndReturnResultMatch(ctx extctx.ExtendedContext, message string, matchResult adapter.MatchResult) (events.EventStatus, *events.EventResult) {
+	evStatus, evResult := logProblemAndReturnResult(ctx, message)
+	evResult.CustomData = map[string]any{"matchResult": matchResult}
+	return evStatus, evResult
 }
 
 func getPeerRatio(peer ill_db.Peer) float32 {

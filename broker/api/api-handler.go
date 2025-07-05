@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	icql "github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -153,6 +154,8 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	var resp oapi.IllTransactions
 	resp.Items = make([]oapi.IllTransaction, 0)
 
+	cql := params.Cql
+
 	var limit int32 = a.limitDefault
 	if params.Limit != nil {
 		limit = *params.Limit
@@ -193,7 +196,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		var trans []ill_db.IllTransaction
 		var err error
-		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams)
+		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams, cql)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
@@ -208,7 +211,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 		var trans []ill_db.IllTransaction
 		var err error
-		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams)
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
@@ -278,6 +281,20 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *ApiHandler) returnHttpError(ctx extctx.ExtendedContext, w http.ResponseWriter, err error) {
+	// check if error is cql.ParserError
+	if cqlErr, ok := err.(*icql.ParseError); ok {
+		addBadRequestError(ctx, w, fmt.Errorf("cql parser error: %s", cqlErr.Error()))
+		return
+	}
+
+	if cqlErr, ok := err.(*pgcql.PgError); ok {
+		addBadRequestError(ctx, w, fmt.Errorf("pgcql error: %s", cqlErr.Error()))
+		return
+	}
+	addInternalError(ctx, w, err)
+}
+
 func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
@@ -286,21 +303,15 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		Limit:  a.limitDefault,
 		Offset: 0,
 	}
-	if params.Cql != nil && *params.Cql != "" {
-		// paging does not work with CQL as the filter is applied after the paging
-		// the count is also number of peers before filtering
-		dbparams.Limit = 10_000
-	} else {
-		if params.Limit != nil {
-			dbparams.Limit = *params.Limit
-		}
-		if params.Offset != nil {
-			dbparams.Offset = *params.Offset
-		}
+	if params.Limit != nil {
+		dbparams.Limit = *params.Limit
 	}
-	peers, count, err := a.illRepo.ListPeers(ctx, dbparams)
+	if params.Offset != nil {
+		dbparams.Offset = *params.Offset
+	}
+	peers, count, err := a.illRepo.ListPeers(ctx, dbparams, params.Cql)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		a.returnHttpError(ctx, w, err)
 		return
 	}
 	var resp oapi.Peers
@@ -318,11 +329,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			return
 		}
 		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
-	}
-	resp.Items, err = filterPeers(params.Cql, resp.Items)
-	if err != nil {
-		addBadRequestError(ctx, w, err)
-		return
 	}
 
 	if dbparams.Offset > 0 {
@@ -342,104 +348,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		link := toLinkUrlValues(r, urlValues)
 		resp.About.NextLink = &link
 	}
-
 	writeJsonResponse(w, resp)
-}
-
-func filterPeers(cql *string, peers []oapi.Peer) ([]oapi.Peer, error) {
-	if cql == nil || *cql == "" {
-		return peers, nil
-	}
-	var filtered []oapi.Peer
-	var p icql.Parser
-	query, err := p.Parse(*cql)
-	if err != nil {
-		return peers, err
-	}
-	for _, entry := range peers {
-		match, err := matchQuery(query, entry.Symbols)
-		if err != nil {
-			return peers, err
-		}
-		if !match {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered, nil
-}
-
-func matchQuery(query icql.Query, symbols []string) (bool, error) {
-	return matchClause(&query.Clause, symbols)
-}
-func matchClause(clause *icql.Clause, symbols []string) (bool, error) {
-	if symbols == nil {
-		return false, nil
-	}
-	if clause.SearchClause != nil {
-		sc := clause.SearchClause
-		if sc.Index != "symbol" {
-			return false, fmt.Errorf("unsupported index %s", sc.Index)
-		}
-		tSymbols := strings.Split(sc.Term, " ")
-		switch sc.Relation {
-		case icql.ANY:
-			for _, t := range tSymbols {
-				for _, s := range symbols {
-					if s == t {
-						return true, nil
-					}
-				}
-			}
-			return false, nil
-		case icql.ALL:
-			for _, t := range tSymbols {
-				found := false
-				for _, s := range symbols {
-					if s == t {
-						found = true
-					}
-				}
-				if !found {
-					return false, nil
-				}
-			}
-			return true, nil
-		case "=":
-			// all match match in order
-			if len(tSymbols) != len(symbols) {
-				return false, nil
-			}
-			for i, t := range tSymbols {
-				if t != symbols[i] {
-					return false, nil
-				}
-			}
-			return true, nil
-		}
-	}
-	if clause.BoolClause != nil {
-		bc := clause.BoolClause
-		left, err := matchClause(&bc.Left, symbols)
-		if err != nil {
-			return false, err
-		}
-		right, err := matchClause(&bc.Right, symbols)
-		if err != nil {
-			return false, err
-		}
-		switch bc.Operator {
-		case icql.AND:
-			return left && right, nil
-		case icql.OR:
-			return left || right, nil
-		case icql.NOT:
-			return left && !right, nil
-		default:
-			return false, fmt.Errorf("unsupported operator %s", bc.Operator)
-		}
-	}
-	return false, nil
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {

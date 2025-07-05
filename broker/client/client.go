@@ -24,6 +24,7 @@ var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
+var prependVendor, _ = utils.GetEnvBool("VENDOR_INFO", true)
 
 type Iso18626Client struct {
 	eventBus   events.EventBus
@@ -81,11 +82,13 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 
 	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
+	firstMessage := true
 	if locSupplier == nil {
 		status = iso18626.TypeStatusUnfilled
 	} else {
 		if s, ok := iso18626.StatusMap[locSupplier.LastStatus.String]; ok {
 			status = s
+			firstMessage = false
 		} else if !locSupplier.LastStatus.Valid {
 			if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 				status = iso18626.TypeStatusExpectToSupply
@@ -135,6 +138,9 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
+	if prependVendor && firstMessage && supplier != nil {
+		populateVendor(message.SupplyingAgencyMessage, supplier.Vendor)
+	}
 
 	resData.OutgoingMessage = message
 	if !isDoNotSend(event) {
@@ -181,6 +187,18 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 	}
 	if message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress == nil {
 		message.SupplyingAgencyMessage.ReturnInfo.PhysicalAddress = &address
+	}
+}
+
+func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
+	if message.MessageInfo.Note != "" {
+		sep := shim.NOTE_FIELD_SEP
+		if strings.HasPrefix(message.MessageInfo.Note, "#") {
+			sep = ""
+		}
+		message.MessageInfo.Note = "Vendor: " + vendor + sep + message.MessageInfo.Note
+	} else {
+		message.MessageInfo.Note = "Vendor: " + vendor
 	}
 }
 

@@ -58,6 +58,10 @@ components:
       in: query
       description: Comma separated list of statuses to archive, for example "LoanCompleted,CopyCompleted,Unfilled"
       required: true
+    Cql:
+      name: cql
+      in: query
+      description: CQL query for filtering results
       schema:
         type: string
   schemas:
@@ -513,6 +517,7 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
         - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Cql'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:
@@ -544,11 +549,7 @@ paths:
     get:
       summary: Get all peers
       parameters:
-        - in: query
-          name: cql
-          schema:
-            type: string
-          description: Filter peers by symbol
+        - $ref: '#/components/parameters/Cql'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       responses:

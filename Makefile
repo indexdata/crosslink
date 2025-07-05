@@ -3,10 +3,10 @@ GOALS := $(or $(MAKECMDGOALS),all)
 
 .PHONY: $(GOALS) $(SUBDIRS)
 
-$(GOALS): .git/hooks/pre-commit $(SUBDIRS)
+$(GOALS): .git/hooks/pre-push $(SUBDIRS)
 
 $(SUBDIRS):
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
-.git/hooks/pre-commit: pre-commit
-	cp pre-commit .git/hooks/pre-commit
+.git/hooks/pre-push: pre-push
+	cp pre-push .git/hooks/pre-push

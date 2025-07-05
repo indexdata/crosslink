@@ -20,14 +20,14 @@ type IllRepo interface {
 	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
 	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
 	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error)
-	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error)
+	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error)
+	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error)
 	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
 	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
 	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
 	GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error)
 	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error)
+	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error)
 	DeletePeer(ctx extctx.ExtendedContext, id string) error
 	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
@@ -91,8 +91,8 @@ func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, i
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams) ([]IllTransaction, int64, error) {
-	rows, err := r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.ListIllTransactionsCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
 	if err == nil {
@@ -105,7 +105,7 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListI
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err = r.queries.ListIllTransactions(ctx, r.GetConnOrTx(), params)
+			rows, err = r.queries.ListIllTransactionsCql(ctx, r.GetConnOrTx(), params, cql)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}
@@ -114,8 +114,8 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListI
 	return transactions, fullCount, err
 }
 
-func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams) ([]IllTransaction, int64, error) {
-	rows, err := r.queries.GetIllTransactionsByRequesterSymbol(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error) {
+	rows, err := r.queries.GetIllTransactionsByRequesterSymbolCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
 	if err == nil {
@@ -146,8 +146,8 @@ func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams) ([]Peer, int64, error) {
-	rows, err := r.queries.ListPeers(ctx, r.GetConnOrTx(), params)
+func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error) {
+	rows, err := r.queries.ListPeersCql(ctx, r.GetConnOrTx(), params, cql)
 	var peers []Peer
 	var fullCount int64
 	if err == nil {
@@ -321,11 +321,12 @@ func symCheck(searchSymbols []string, foundSymbols []string) bool {
 }
 
 func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
+	smap := make(map[string]string) // symbol to peer ID map
 	peers := make(map[string]Peer)
 	var query string
-	symbolsToFetch := r.collectCurrentData(ctx, symbols, peers)
+	symbolsToFetch := r.collectCurrentData(ctx, symbols, peers, smap)
 	if len(symbolsToFetch) == 0 {
-		return MapToPeerSlice(peers), query, nil
+		return MapToPeerSlice(peers, smap, symbols), query, nil
 	}
 	dirEntries, err, queryVal := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 		Symbols: symbolsToFetch,
@@ -333,11 +334,11 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 	query = queryVal
 	if err != nil {
 		ctx.Logger().Error("failed to get dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
-		return MapToPeerSlice(peers), query, err
+		return MapToPeerSlice(peers, smap, symbols), query, err
 	}
 	if len(dirEntries) == 0 {
 		ctx.Logger().Error("did not find dirEntries by symbols", "symbols", symbolsToFetch, "error", err)
-		return MapToPeerSlice(peers), query, errors.New("did not find dirEntries by symbols")
+		return MapToPeerSlice(peers, smap, symbols), query, errors.New("did not find dirEntries by symbols")
 	}
 	for _, dir := range dirEntries {
 		if !symCheck(symbols, dir.Symbols) {
@@ -364,9 +365,9 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 		}
 		if err == nil {
 			// cached peer found
-			r.updateExistingPeer(ctx, peer, dir, peers)
+			r.updateExistingPeer(ctx, peer, dir, peers, smap)
 		} else {
-			peer, err = r.createNewPeer(ctx, dir)
+			peer, err = r.createNewPeer(ctx, dir, smap)
 			if err != nil {
 				ctx.Logger().Error("failed to save peer", "symbol", dir.Symbols, "error", err)
 			} else {
@@ -374,10 +375,10 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols 
 			}
 		}
 	}
-	return MapToPeerSlice(peers), query, nil
+	return MapToPeerSlice(peers, smap, symbols), query, nil
 }
 
-func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry) (Peer, error) {
+func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.DirectoryEntry, smap map[string]string) (Peer, error) {
 	var peer Peer
 	var err error
 	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
@@ -402,6 +403,7 @@ func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.Direct
 			if err != nil {
 				break
 			}
+			smap[sym] = peer.ID
 		}
 		for _, sym := range dir.BranchSymbols {
 			_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
@@ -417,11 +419,13 @@ func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dir adapter.Direct
 	return peer, err
 }
 
-func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, dir adapter.DirectoryEntry, peers map[string]Peer) {
+func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, dir adapter.DirectoryEntry, peers map[string]Peer, smap map[string]string) {
 	var err error
 	peer.Url = dir.URL
 	peer.CustomData = dir.CustomData
 	peer.Name = dir.Name
+	peer.Vendor = string(dir.Vendor)
+	peer.BrokerMode = string(dir.BrokerMode)
 	peer.RefreshTime = GetPgNow()
 	peer, err = r.SavePeer(ctx, SavePeerParams(peer))
 	if err != nil {
@@ -442,6 +446,7 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 			ctx.Logger().Error("could not save peer symbol", "symbol", s, "error", err)
 			return
 		}
+		smap[s] = peer.ID
 	}
 	err = r.DeleteBranchSymbolByPeerId(ctx, peer.ID)
 	if err != nil {
@@ -461,7 +466,7 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 	peers[peer.ID] = peer
 }
 
-func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []string, peers map[string]Peer) []string {
+func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []string, peers map[string]Peer, smap map[string]string) []string {
 	var symbolsToFetch []string
 	for _, sym := range symbols {
 		peer, err := r.GetPeerBySymbol(ctx, sym)
@@ -476,6 +481,7 @@ func (r *PgIllRepo) collectCurrentData(ctx extctx.ExtendedContext, symbols []str
 				symbolsToFetch = append(symbolsToFetch, sym)
 			} else {
 				peers[peer.ID] = peer
+				smap[sym] = peer.ID
 			}
 		}
 	}
@@ -487,8 +493,19 @@ func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx extctx.Extended
 	return err
 }
 
-func MapToPeerSlice(m map[string]Peer) []Peer {
+func MapToPeerSlice(m map[string]Peer, smap map[string]string, symbols []string) []Peer {
 	peers := make([]Peer, 0, len(m))
+	// first add peers that match the original symbols
+	for _, sym := range symbols {
+		if peerId, ok := smap[sym]; ok {
+			if peer, ok := m[peerId]; ok {
+				peers = append(peers, peer)
+				// remove from m to avoid duplicates
+				delete(m, peerId)
+			}
+		}
+	}
+	// then add remaining peers
 	for _, peer := range m {
 		peers = append(peers, peer)
 	}
