@@ -25,7 +25,7 @@ WHERE id = $1 LIMIT 1;
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = ''
-WHERE last_signal = $2 AND event.id = $1
+WHERE (last_signal = $2 OR event.broadcast = true) AND event.id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
@@ -36,9 +36,9 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, broadcast
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
@@ -49,7 +49,8 @@ ON CONFLICT (id) DO UPDATE
     event_status = EXCLUDED.event_status,
     event_data = EXCLUDED.event_data,
     result_data = EXCLUDED.result_data,
-    last_signal = EXCLUDED.last_signal
+    last_signal = EXCLUDED.last_signal,
+    broadcast = EXCLUDED.broadcast
 RETURNING sqlc.embed(event);
 
 -- name: DeleteEvent :exec

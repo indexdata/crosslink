@@ -110,7 +110,7 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	}
 	if selSup.LastAction.String != ill_db.RequestAction {
 		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
 	} else if event.EventStatus != events.EventStatusSuccess {
 		extctx.Must(ctx, func() (string, error) {
