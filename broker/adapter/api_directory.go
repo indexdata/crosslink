@@ -209,9 +209,10 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				} else if !a.Match && b.Match {
 					return 1
 				}
-				c := cmp.Compare(a.Cost, b.Cost)
-				if c != 0 {
-					return c
+				if a.Cost < b.Cost {
+					return -1
+				} else if a.Cost > b.Cost {
+					return 1
 				}
 				return cmp.Compare(a.Tier, b.Tier)
 			})
