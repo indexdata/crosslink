@@ -151,7 +151,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 
 	for i := 0; i < noEvents; i++ {
 		illId := apptest.GetIllTransId(t, illRepo)
-		_, err := eventBus.CreateTask(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, nil)
+		_, err := eventBus.CreateTaskBroadcast(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, nil)
 		assert.NoError(t, err, "Task should be created without errors")
 	}
 
