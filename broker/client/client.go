@@ -138,7 +138,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	if prependVendor && firstMessage && supplier != nil {
+	if prependVendor && firstMessage && supplier != nil && supplier.Vendor != requester.Vendor {
 		populateVendor(message.SupplyingAgencyMessage, supplier.Vendor)
 	}
 
