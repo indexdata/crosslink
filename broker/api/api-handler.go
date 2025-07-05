@@ -34,6 +34,7 @@ var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
+var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
 	limitDefault   int32
@@ -619,6 +620,29 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
+	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": params.ArchiveDelay, "ArchiveStatus": params.ArchiveStatus}
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: logParams,
+	})
+	var delayInterval, err = time.ParseDuration(params.ArchiveDelay)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	var fromTime = time.Now().Add(-delayInterval)
+	var statusList = strings.Split(params.ArchiveStatus, ",")
+	go func() {
+		err := a.illRepo.CallArchiveIllTransactionByDateAndStatus(ctx, fromTime, statusList)
+		if err != nil {
+			ctx.Logger().Error("failed to archive ill transactions", "error", err)
+		}
+	}()
+	writeJsonResponse(w, oapi.StatusMessage{
+		Status: ARCHIVE_PROCESS_STARTED,
+	})
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {
