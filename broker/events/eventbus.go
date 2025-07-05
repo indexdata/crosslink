@@ -117,14 +117,15 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			p.ctx.Logger().Error("event_bus: failed to resolve event", "error", err, "eventId", data.Event, "signal", data.Signal)
+			p.ctx.Logger().Error("event_bus: failure claiming event", "error", err, "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
 		} else {
-			p.ctx.Logger().Info("event_bus: no event found for signal", "eventId", data.Event, "signal", data.Signal)
+			p.ctx.Logger().Debug("event_bus: no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
 		}
 		return
 	}
 	p.ctx.Logger().Debug("event_bus: received event", "channel", EVENT_BUS_CHANNEL,
 		"signal", data.Signal,
+		"broadcast", event.Broadcast,
 		"eventName", event.EventName,
 		"eventType", event.EventType,
 		"eventStatus", event.EventStatus)
