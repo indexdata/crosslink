@@ -170,6 +170,14 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				}
 			}
 		}
+		slices.SortFunc(matchSupplier.Networks, func(a, b MatchValue) int {
+			if a.Match && !b.Match {
+				return -1
+			} else if !a.Match && b.Match {
+				return 1
+			}
+			return cmp.Compare(a.Value, b.Value)
+		})
 		if priority != nil {
 			matchSupplier.Match = true
 			e.NetworkPriority = *priority
@@ -178,16 +186,16 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			var cost *float64
 			for _, t := range tiers {
 				var matchTier MatchTier
-				matchTier.TierId = t.Name
-				matchTier.ServiceLevel.Value = strings.ToLower(t.Level)
-				matchTier.ServiceType.Value = strings.ToLower(t.Type)
-				matchTier.Cost.Value = fmt.Sprintf("%f", t.Cost)
+				matchTier.Tier = t.Name
+				matchTier.ServiceLevel = strings.ToLower(t.Level)
+				matchTier.ServiceType = strings.ToLower(t.Type)
+				matchTier.Cost = fmt.Sprintf("%.2f", t.Cost)
 
-				matchTier.ServiceType.Match = sType == "" || sType == strings.ToLower(t.Type)
-				matchTier.ServiceLevel.Match = sLevel == "" || sLevel == strings.ToLower(t.Level)
-				matchTier.Cost.Match = maxCost == nil || *maxCost >= t.Cost
+				sTypeMatch := sType == "" || sType == strings.ToLower(t.Type)
+				sLevelMatch := sLevel == "" || sLevel == strings.ToLower(t.Level)
+				costMatch := maxCost == nil || *maxCost >= t.Cost
 
-				if matchTier.ServiceType.Match && matchTier.ServiceLevel.Match && matchTier.Cost.Match {
+				if sTypeMatch && sLevelMatch && costMatch {
 					matchTier.Match = true
 					if cost == nil || *cost > t.Cost {
 						cost = &t.Cost
@@ -196,7 +204,16 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				matchSupplier.Tiers = append(matchSupplier.Tiers, matchTier)
 			}
 			slices.SortFunc(matchSupplier.Tiers, func(a, b MatchTier) int {
-				return cmp.Compare(a.TierId, b.TierId)
+				if a.Match && !b.Match {
+					return -1
+				} else if !a.Match && b.Match {
+					return 1
+				}
+				c := cmp.Compare(a.Cost, b.Cost)
+				if c != 0 {
+					return c
+				}
+				return cmp.Compare(a.Tier, b.Tier)
 			})
 			if cost != nil {
 				e.Cost = *cost

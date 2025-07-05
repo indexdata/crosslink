@@ -53,11 +53,11 @@ type MatchValue struct {
 }
 
 type MatchTier struct {
-	TierId       string     `json:"tierId"`
-	ServiceLevel MatchValue `json:"serviceLevel"`
-	ServiceType  MatchValue `json:"serviceType"`
-	Cost         MatchValue `json:"cost"`
-	Match        bool       `json:"match"`
+	Tier         string `json:"tierId"`
+	ServiceLevel string `json:"serviceLevel"`
+	ServiceType  string `json:"serviceType"`
+	Cost         string `json:"cost"`
+	Match        bool   `json:"match"`
 }
 
 type MatchSupplier struct {
