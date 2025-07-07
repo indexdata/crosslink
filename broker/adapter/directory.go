@@ -32,7 +32,7 @@ type Supplier struct {
 	CustomData      map[string]any
 	Ratio           float32
 	Symbol          string
-	NetworkPriority float64
+	NetworkPriority int
 	Cost            float64
 	Local           bool
 }
