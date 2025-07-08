@@ -75,9 +75,10 @@ type Requester struct {
 	Networks []string `json:"networks"`
 }
 
-type ValueMatch struct {
-	Value string `json:"value"`
-	Match bool   `json:"match"`
+type NetworkMatch struct {
+	Name     string `json:"name"`
+	Priority int    `json:"priority"`
+	Match    bool   `json:"match"`
 }
 
 type TierMatch struct {
@@ -89,14 +90,14 @@ type TierMatch struct {
 }
 
 type SupplierMatch struct {
-	Match    bool         `json:"match"`
-	Networks []ValueMatch `json:"networks"`
-	Tiers    []TierMatch  `json:"tiers"`
-	Symbol   string       `json:"symbol"`
-	Priority int          `json:"priority"`
-	Cost     string       `json:"cost"`
-	Local    bool         `json:"local"`
-	Ratio    float32      `json:"ratio"`
+	Match    bool           `json:"match"`
+	Networks []NetworkMatch `json:"networks"`
+	Tiers    []TierMatch    `json:"tiers"`
+	Symbol   string         `json:"symbol"`
+	Priority int            `json:"priority"`
+	Cost     string         `json:"cost"`
+	Local    bool           `json:"local"`
+	Ratio    float32        `json:"ratio"`
 }
 
 func (s SupplierMatch) GetSymbol() string { return s.Symbol }
