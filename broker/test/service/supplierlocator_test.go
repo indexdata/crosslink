@@ -208,14 +208,14 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	customData := event.ResultData.CustomData
 	assert.NotNil(t, customData, "Expected to have custom data in event result")
 
-	jsonBytes, err := json.Marshal(customData["matchResult"])
-	assert.NoError(t, err, "Failed to marshal matchResult to JSON")
+	jsonBytes, err := json.Marshal(customData[service.ROTA_INFO_KEY])
+	assert.NoError(t, err, "Failed to marshal")
 
-	var matchResult adapter.MatchResult
-	err = json.Unmarshal(jsonBytes, &matchResult)
-	assert.NoError(t, err, "Failed to unmarshal matchResult from JSON")
-	assert.Equal(t, "mock", matchResult.Request.ServiceType, "Expected service type to be 'mock'")
-	assert.Len(t, matchResult.Suppliers, 2)
+	var rotaInfo adapter.RotaInfo
+	err = json.Unmarshal(jsonBytes, &rotaInfo)
+	assert.NoError(t, err, "Failed to unmarshal")
+	assert.Equal(t, "mock", rotaInfo.Request.Type, "Expected service type to be 'mock'")
+	assert.Len(t, rotaInfo.Suppliers, 2)
 
 	if supId := getSupplierId(0, customData); supId != sup2.ID {
 		t.Errorf("Expected to sup2 be first supplier, expected %s, got %s", sup2.ID, supId)

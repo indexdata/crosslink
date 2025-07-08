@@ -44,12 +44,12 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	return dirs, nil, strings.Join(params.Symbols, ",")
 }
 
-func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, MatchResult) {
-	var matchResult MatchResult
-	matchResult.Request.ServiceType = "mock"
-	matchResult.Suppliers = make([]MatchSupplier, 0, len(entries))
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+	var rotaInfo RotaInfo
+	rotaInfo.Request.Type = "mock"
+	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))
 	for _, sup := range entries {
-		matchResult.Suppliers = append(matchResult.Suppliers, MatchSupplier{
+		rotaInfo.Suppliers = append(rotaInfo.Suppliers, SupplierMatch{
 			Symbol: sup.Symbol,
 			Match:  true,
 		})
@@ -63,5 +63,5 @@ func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, e
 		}
 		return cmp.Compare(a.Ratio, b.Ratio)
 	})
-	return entries, matchResult
+	return entries, rotaInfo
 }
