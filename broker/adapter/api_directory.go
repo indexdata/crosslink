@@ -148,11 +148,12 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		var supMatch SupplierMatch
 		supMatch.Symbol = sup.Symbol
 		supNetworks := getPeerNetworks(sup.CustomData)
-		supMatch.Networks = make([]ValueMatch, 0, len(supNetworks))
+		supMatch.Networks = make([]NetworkMatch, 0, len(supNetworks))
 		for name := range supNetworks {
-			supMatch.Networks = append(supMatch.Networks, ValueMatch{
-				Value: name,
-				Match: false,
+			supMatch.Networks = append(supMatch.Networks, NetworkMatch{
+				Name:     name,
+				Priority: supNetworks[name].Priority,
+				Match:    false,
 			})
 		}
 		priority := math.MaxInt
@@ -162,19 +163,24 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 					priority = net.Priority
 				}
 				for i, n := range supMatch.Networks {
-					if n.Value == name {
+					if n.Name == name {
 						supMatch.Networks[i].Match = true
 					}
 				}
 			}
 		}
-		slices.SortFunc(supMatch.Networks, func(a, b ValueMatch) int {
+		slices.SortFunc(supMatch.Networks, func(a, b NetworkMatch) int {
 			if a.Match && !b.Match {
 				return -1
 			} else if !a.Match && b.Match {
 				return 1
 			}
-			return cmp.Compare(a.Value, b.Value)
+			if a.Priority < b.Priority {
+				return -1
+			} else if a.Priority > b.Priority {
+				return 1
+			}
+			return cmp.Compare(a.Name, b.Name)
 		})
 		if priority < math.MaxInt {
 			sup.Priority = priority
