@@ -184,57 +184,68 @@ func TestFilterAndSort(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 3500,
+				Base: 2000,
 				Exp:  2,
 			},
 		},
 	}
-	var matchResult adapter.MatchResult
-	entries, matchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
-	assert.Len(t, entries, 3)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
-	assert.Equal(t, "2", entries[2].PeerId)
-	assert.Equal(t, "copy", matchResult.Request.ServiceType)
-	assert.Equal(t, "core", matchResult.Request.ServiceLevel)
-	assert.Equal(t, "35.00", matchResult.Request.Cost)
-	assert.Contains(t, matchResult.Requester.Networks, "NSW & ACT", "Queensland", "Victoria")
-	assert.Len(t, matchResult.Requester.Networks, 3)
-	assert.Len(t, matchResult.Suppliers, 3)
+	assert.Equal(t, "copy", rotaInfo.Request.Type)
+	assert.Equal(t, "core", rotaInfo.Request.Level)
+	assert.Equal(t, "20.00", rotaInfo.Request.Cost)
+	assert.Contains(t, rotaInfo.Requester.Networks, "NSW & ACT", "Queensland", "Victoria")
+	assert.Len(t, rotaInfo.Requester.Networks, 3)
+	assert.Len(t, rotaInfo.Suppliers, 3)
 
-	sup := matchResult.Suppliers[0]
+	sup := rotaInfo.Suppliers[0]
 	assert.Equal(t, "", sup.Symbol)
+	assert.True(t, sup.Match)
 	assert.Len(t, sup.Networks, 3)
-	assert.Equal(t, sup.Networks[0], adapter.MatchValue{Value: "NSW & ACT", Match: true})
-	assert.Equal(t, sup.Networks[1], adapter.MatchValue{Value: "Queensland", Match: true})
-	assert.Equal(t, sup.Networks[2], adapter.MatchValue{Value: "Victoria", Match: true})
+	assert.Equal(t, sup.Networks[0], adapter.ValueMatch{Value: "NSW & ACT", Match: true})
+	assert.Equal(t, sup.Networks[1], adapter.ValueMatch{Value: "Queensland", Match: true})
+	assert.Equal(t, sup.Networks[2], adapter.ValueMatch{Value: "Victoria", Match: true})
+	assert.Equal(t, "0.00", sup.Cost)
+	assert.Equal(t, 1, sup.Priority)
+	assert.Equal(t, float32(0.5), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
 
-	sup = matchResult.Suppliers[1]
+	sup = rotaInfo.Suppliers[1]
 	assert.Equal(t, "", sup.Symbol)
-	assert.Len(t, sup.Networks, 6)
-	assert.Equal(t, sup.Networks[0], adapter.MatchValue{Value: "NSW & ACT", Match: true})
-	assert.Equal(t, sup.Networks[1], adapter.MatchValue{Value: "Queensland", Match: true})
-	assert.Equal(t, sup.Networks[2], adapter.MatchValue{Value: "Victoria", Match: true})
-	assert.Equal(t, sup.Networks[3], adapter.MatchValue{Value: "National", Match: false})
-	assert.Equal(t, sup.Networks[4], adapter.MatchValue{Value: "South Australia", Match: false})
-	assert.Equal(t, sup.Networks[5], adapter.MatchValue{Value: "Western Australia", Match: false})
-	assert.Len(t, sup.Tiers, 4)
-	assert.Equal(t, sup.Tiers[0], adapter.MatchTier{Tier: "Premium Pay for Peer - Core Copy", ServiceLevel: "core", ServiceType: "copy", Cost: "22.40", Match: true})
-	assert.Equal(t, sup.Tiers[1], adapter.MatchTier{Tier: "Premium Pay for Peer - Core Loan", ServiceLevel: "core", ServiceType: "loan", Cost: "34.40", Match: false})
-	assert.Equal(t, sup.Tiers[2], adapter.MatchTier{Tier: "Premium Pay for Peer - Rush Copy", ServiceLevel: "rush", ServiceType: "copy", Cost: "44.50", Match: false})
-	assert.Equal(t, sup.Tiers[3], adapter.MatchTier{Tier: "Premium Pay for Peer - Rush Loan", ServiceLevel: "rush", ServiceType: "loan", Cost: "62.80", Match: false})
-
-	sup = matchResult.Suppliers[2]
-	assert.Equal(t, "", sup.Symbol)
+	assert.True(t, sup.Match)
 	assert.Len(t, sup.Networks, 4)
-	assert.Equal(t, sup.Networks[0], adapter.MatchValue{Value: "Victoria", Match: true})
-	assert.Equal(t, sup.Networks[1], adapter.MatchValue{Value: "National", Match: false})
-	assert.Equal(t, sup.Networks[2], adapter.MatchValue{Value: "Victoria Govt & Arts", Match: false})
-	assert.Equal(t, sup.Networks[3], adapter.MatchValue{Value: "Victoria Health", Match: false})
+	assert.Equal(t, sup.Networks[0], adapter.ValueMatch{Value: "Victoria", Match: true})
+	assert.Equal(t, sup.Networks[1], adapter.ValueMatch{Value: "National", Match: false})
+	assert.Equal(t, sup.Networks[2], adapter.ValueMatch{Value: "Victoria Govt & Arts", Match: false})
+	assert.Equal(t, sup.Networks[3], adapter.ValueMatch{Value: "Victoria Health", Match: false})
+	assert.Equal(t, "0.00", sup.Cost)
+	assert.Equal(t, 1, sup.Priority)
+	assert.Equal(t, float32(0.7), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
 
-	bytes, err := json.MarshalIndent(matchResult, "", "  ")
+	sup = rotaInfo.Suppliers[2]
+	assert.Equal(t, "", sup.Symbol)
+	assert.False(t, sup.Match)
+	assert.Len(t, sup.Networks, 6)
+	assert.Equal(t, sup.Networks[0], adapter.ValueMatch{Value: "NSW & ACT", Match: true})
+	assert.Equal(t, sup.Networks[1], adapter.ValueMatch{Value: "Queensland", Match: true})
+	assert.Equal(t, sup.Networks[2], adapter.ValueMatch{Value: "Victoria", Match: true})
+	assert.Equal(t, sup.Networks[3], adapter.ValueMatch{Value: "National", Match: false})
+	assert.Equal(t, sup.Networks[4], adapter.ValueMatch{Value: "South Australia", Match: false})
+	assert.Equal(t, sup.Networks[5], adapter.ValueMatch{Value: "Western Australia", Match: false})
+	assert.Equal(t, "", sup.Cost)
+	assert.Equal(t, 1, sup.Priority)
+	assert.Equal(t, float32(0.7), sup.Ratio)
+	assert.Len(t, sup.Tiers, 4)
+	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Core Copy", Level: "core", Type: "copy", Cost: "22.40", Match: false})
+	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Premium Pay for Peer - Core Loan", Level: "core", Type: "loan", Cost: "34.40", Match: false})
+	assert.Equal(t, sup.Tiers[2], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.50", Match: false})
+	assert.Equal(t, sup.Tiers[3], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Loan", Level: "rush", Type: "loan", Cost: "62.80", Match: false})
+
+	bytes, err := json.MarshalIndent(rotaInfo, "", "  ")
 	assert.NoError(t, err)
 	assert.Contains(t, string(bytes), "\"request\"")
 }
@@ -258,11 +269,11 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 			},
 		},
 	}
-	var matchMatchResult adapter.MatchResult
-	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
-	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
+	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
@@ -284,11 +295,11 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 			},
 		},
 	}
-	var matchMatchResult adapter.MatchResult
-	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "1", entries[0].PeerId)
-	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
+	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortByType(t *testing.T) {
@@ -313,12 +324,12 @@ func TestFilterAndSortByType(t *testing.T) {
 			},
 		},
 	}
-	var matchMatchResult adapter.MatchResult
-	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "2", entries[1].PeerId)
-	assert.Equal(t, "loan", matchMatchResult.Request.ServiceType)
+	assert.Equal(t, "loan", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortByLevel(t *testing.T) {
@@ -343,11 +354,11 @@ func TestFilterAndSortByLevel(t *testing.T) {
 			},
 		},
 	}
-	var matchMatchResult adapter.MatchResult
-	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "3", entries[0].PeerId)
-	assert.Equal(t, "copy", matchMatchResult.Request.ServiceType)
+	assert.Equal(t, "copy", rotaInfo.Request.Type)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
@@ -358,62 +369,64 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
 		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
 		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
-	var matchMatchResult adapter.MatchResult
-	entries, matchMatchResult = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
 	assert.Len(t, entries, 3)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
 	assert.Equal(t, "2", entries[2].PeerId)
-	assert.Equal(t, "", matchMatchResult.Request.ServiceType)
+	assert.Equal(t, "", rotaInfo.Request.Type)
 }
 
 func TestCompareSuppliers(t *testing.T) {
 	assert.True(t, adapter.CompareSuppliers(adapter.Supplier{}, adapter.Supplier{}) == 0)
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) == 0)
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) == 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 0, NetworkPriority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 0, Priority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 0, NetworkPriority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 0}) < 0)
+		adapter.Supplier{Cost: 0, Priority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 0}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 0, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 0}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 0, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 0}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 0},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 0},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 2, NetworkPriority: 1, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 2, Priority: 1, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 2, Ratio: 1},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 2, Ratio: 1},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 2},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 2},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1}) > 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}) < 0)
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false}) < 0)
 
 	assert.True(t, adapter.CompareSuppliers(
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false},
-		adapter.Supplier{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}) > 0)
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false},
+		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true}) > 0)
 
-	suppliers := []adapter.Supplier{{Cost: 1, NetworkPriority: 1, Ratio: 1, Local: false}, {Cost: 1, NetworkPriority: 1, Ratio: 1, Local: true}}
-	slices.SortFunc(suppliers, adapter.CompareSuppliers)
+	suppliers := []adapter.Supplier{{Cost: 1, Priority: 1, Ratio: 1, Local: false}, {Cost: 1, Priority: 1, Ratio: 1, Local: true}}
+	slices.SortFunc(suppliers, func(a, b adapter.Supplier) int {
+		return adapter.CompareSuppliers(a, b)
+	})
 	assert.True(t, suppliers[0].Local) // Local sorted as first
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const ROTA_INFO_KEY = "rotaInfo"
+
 type SupplierLocator struct {
 	eventBus        events.EventBus
 	illRepo         ill_db.IllRepo
@@ -119,10 +121,10 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logProblemAndReturnResult(ctx, "failed to add any supplier from: "+strings.Join(holdingsSymbols, ","))
 	}
 
-	var matchResult adapter.MatchResult
-	potentialSuppliers, matchResult = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	var rotaInfo adapter.RotaInfo
+	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
 	if len(potentialSuppliers) == 0 {
-		return logProblemAndReturnResultMatch(ctx, "no suppliers after filtering", matchResult)
+		return logProblemAndReturnResultMatch(ctx, "no suppliers after filtering", rotaInfo)
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	var dirEntries = []any{}
@@ -138,7 +140,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	directory["entries"] = dirEntries
 
 	return events.EventStatusSuccess, &events.EventResult{
-		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdings, "directory": directory, "matchResult": matchResult},
+		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdings, "directory": directory, ROTA_INFO_KEY: rotaInfo},
 	}
 }
 
@@ -228,9 +230,9 @@ func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string) (even
 	}
 }
 
-func logProblemAndReturnResultMatch(ctx extctx.ExtendedContext, message string, matchResult adapter.MatchResult) (events.EventStatus, *events.EventResult) {
+func logProblemAndReturnResultMatch(ctx extctx.ExtendedContext, message string, rotaInfo adapter.RotaInfo) (events.EventStatus, *events.EventResult) {
 	evStatus, evResult := logProblemAndReturnResult(ctx, message)
-	evResult.CustomData = map[string]any{"matchResult": matchResult}
+	evResult.CustomData = map[string]any{ROTA_INFO_KEY: rotaInfo}
 	return evStatus, evResult
 }
 
