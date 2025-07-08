@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -119,49 +120,47 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 
 	filtered := []Supplier{}
 	requesterNetworks := getPeerNetworks(requesterData)
-	sType := ""
-	sLevel := ""
-	var maxCost *float64
+	var svcType string
+	var svcLevel string
+	maxCost := math.MaxFloat64 //TODO keeping original behavior, but should be set to 0.0 if no cost is specified
 	if serviceInfo != nil {
 		t := string(serviceInfo.ServiceType)
-		sType = strings.ToLower(t)
+		svcType = strings.ToLower(t)
 		if serviceInfo.ServiceLevel != nil {
-			sLevel = strings.ToLower(serviceInfo.ServiceLevel.Text)
+			svcLevel = strings.ToLower(serviceInfo.ServiceLevel.Text)
 		}
 	}
-	matchResult.Request.ServiceType = sType
-	matchResult.Request.ServiceLevel = sLevel
+	matchResult.Request.ServiceType = svcType
+	matchResult.Request.ServiceLevel = svcLevel
 	matchResult.Requester.Networks = make([]string, 0, len(requesterNetworks))
 	for name := range requesterNetworks {
 		matchResult.Requester.Networks = append(matchResult.Requester.Networks, name)
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
-		floatV := utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32))
-		maxCost = &floatV
+		maxCost = utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32))
 		curSuffix := ""
 		if billingInfo.MaximumCosts.CurrencyCode.Text != "" {
 			curSuffix = " " + billingInfo.MaximumCosts.CurrencyCode.Text
 		}
 		matchResult.Request.Cost = utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp) + curSuffix
 	}
-	for _, e := range entries {
+	for _, sup := range entries {
 		var matchSupplier MatchSupplier
-		matchSupplier.Symbol = e.Symbol
+		matchSupplier.Symbol = sup.Symbol
 
-		eNetworks := getPeerNetworks(e.CustomData)
-		matchSupplier.Networks = make([]MatchValue, 0, len(eNetworks))
-		for name := range eNetworks {
+		supNetworks := getPeerNetworks(sup.CustomData)
+		matchSupplier.Networks = make([]MatchValue, 0, len(supNetworks))
+		for name := range supNetworks {
 			matchSupplier.Networks = append(matchSupplier.Networks, MatchValue{
 				Value: name,
 				Match: false,
 			})
 		}
-
-		var priority *float64
+		priority := math.MaxInt
 		for name := range requesterNetworks {
-			if net, ok := eNetworks[name]; ok {
-				if priority == nil || *priority > net.Priority {
-					priority = &net.Priority
+			if net, ok := supNetworks[name]; ok {
+				if priority > net.Priority {
+					priority = net.Priority
 				}
 				for i, n := range matchSupplier.Networks {
 					if n.Value == name {
@@ -178,12 +177,12 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			}
 			return cmp.Compare(a.Value, b.Value)
 		})
-		if priority != nil {
+		if priority < math.MaxInt {
 			matchSupplier.Match = true
-			e.NetworkPriority = *priority
-			tiers := getPeerTiers(e.CustomData)
+			sup.NetworkPriority = priority
+			tiers := getPeerTiers(sup.CustomData)
 			matchSupplier.Tiers = make([]MatchTier, 0, len(tiers))
-			var cost *float64
+			cost := math.MaxFloat64
 			for _, t := range tiers {
 				var matchTier MatchTier
 				matchTier.Tier = t.Name
@@ -191,14 +190,14 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				matchTier.ServiceType = strings.ToLower(t.Type)
 				matchTier.Cost = fmt.Sprintf("%.2f", t.Cost)
 
-				sTypeMatch := sType == "" || sType == strings.ToLower(t.Type)
-				sLevelMatch := sLevel == "" || sLevel == strings.ToLower(t.Level)
-				costMatch := maxCost == nil || *maxCost >= t.Cost
+				sTypeMatch := svcType == "" || svcType == strings.ToLower(t.Type)
+				sLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(t.Level)
+				costMatch := maxCost >= t.Cost
 
 				if sTypeMatch && sLevelMatch && costMatch {
 					matchTier.Match = true
-					if cost == nil || *cost > t.Cost {
-						cost = &t.Cost
+					if cost > t.Cost {
+						cost = t.Cost
 					}
 				}
 				matchSupplier.Tiers = append(matchSupplier.Tiers, matchTier)
@@ -216,9 +215,9 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 				}
 				return cmp.Compare(a.Tier, b.Tier)
 			})
-			if cost != nil {
-				e.Cost = *cost
-				filtered = append(filtered, e)
+			if cost < math.MaxFloat64 {
+				sup.Cost = cost
+				filtered = append(filtered, sup)
 			}
 		}
 		matchResult.Suppliers = append(matchResult.Suppliers, matchSupplier)
@@ -257,7 +256,7 @@ func getPeerNetworks(peerData map[string]any) map[string]Network {
 				if nameOk && priorityOk {
 					networks[name] = Network{
 						Name:     name,
-						Priority: priority,
+						Priority: int(priority),
 					}
 				}
 			}
@@ -315,8 +314,8 @@ type EntriesResponse struct {
 }
 
 type Network struct {
-	Name     string  `json:"name"`
-	Priority float64 `json:"priority"`
+	Name     string `json:"name"`
+	Priority int    `json:"priority"`
 }
 
 type Tier struct {
