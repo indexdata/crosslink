@@ -137,7 +137,7 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		rotaInfo.Requester.Networks = append(rotaInfo.Requester.Networks, name)
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
-		maxCost = utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 32))
+		maxCost = utils.Must(strconv.ParseFloat(utils.FormatDecimal(billingInfo.MaximumCosts.MonetaryValue.Base, billingInfo.MaximumCosts.MonetaryValue.Exp), 64))
 		curSuffix := ""
 		if billingInfo.MaximumCosts.CurrencyCode.Text != "" {
 			curSuffix = " " + billingInfo.MaximumCosts.CurrencyCode.Text
