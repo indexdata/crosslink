@@ -81,7 +81,8 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	directoryLog["lookupQuery"] = query
 	if err != nil {
 		directoryLog["error"] = err.Error()
-	} else {
+	}
+	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
 			peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
