@@ -31,8 +31,8 @@ func TestSru500(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "500")
 }
 
@@ -48,8 +48,8 @@ func TestSruBadXml(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unexpected EOF")
 }
 
@@ -82,8 +82,8 @@ func TestSruBadDiagnostics(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "General system error: Something went wrong")
 }
 
@@ -107,8 +107,8 @@ func TestSruMarcxmlNoHits(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	holdings, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
 	assert.Len(t, holdings, 0)
 }
@@ -145,8 +145,8 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unsupported RecordXMLEscapiong: string")
 }
 
@@ -182,8 +182,8 @@ func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unsupported RecordSchema: info:srw/schema/1/dc-v1.1")
 }
 
@@ -219,8 +219,8 @@ func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "decoding surrogate diagnostic failed:")
 }
 
@@ -262,8 +262,8 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "surrogate diagnostic: General system error: Something went wrong")
 }
 
@@ -301,8 +301,8 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	_, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	_, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "decoding marcxml failed")
 }
 
@@ -373,8 +373,8 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	holdings, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
 	assert.Len(t, holdings, 0)
 }
@@ -443,8 +443,8 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, queries, err := ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	holdings, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
 	assert.Len(t, holdings, 2)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
@@ -456,8 +456,8 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	p = adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
-	holdings, queries, err = ad.Lookup(p)
-	assert.NotEmpty(t, queries)
+	holdings, query, err = ad.Lookup(p)
+	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
 	assert.Len(t, holdings, 4)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)

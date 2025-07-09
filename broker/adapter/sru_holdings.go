@@ -96,16 +96,14 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, identifier string)
 
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, string, error) {
 	var holdings []Holding
-	queries := ""
-	sep := ""
+	logQuery := ""
 	for _, sruUrl := range s.sruUrl {
 		h, query, err := s.getHoldings(sruUrl, params.Identifier)
 		if err != nil {
 			return nil, query, err
 		}
 		holdings = append(holdings, h...)
-		queries += sep + query
-		sep = ", "
+		logQuery = query
 	}
-	return holdings, queries, nil
+	return holdings, logQuery, nil
 }
