@@ -68,7 +68,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		return logProblemAndReturnResult(ctx, "no holdings located",
 			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId})
 	}
-
+	holdingsLog["entries"] = holdings
 	holdingsSymbols := make([]string, 0, len(holdings))
 	symbolToLocalId := make(map[string]string, len(holdings))
 	potentialSuppliers := make([]adapter.Supplier, 0, len(holdings))
