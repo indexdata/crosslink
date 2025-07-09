@@ -339,26 +339,26 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		{
 			name:        "FailedToLocateHoldings",
 			supReqId:    "error",
-			eventStatus: events.EventStatusError,
-			message:     "failed to locate holdings",
+			eventStatus: events.EventStatusProblem,
+			problem:     "failed to locate holdings",
 		},
 		{
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			problem:     "could not find holdings for supplier request id: not-found",
+			problem:     "no holdings located",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			problem:     "failed to add any supplier from: error",
+			problem:     "no suppliers located",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			problem:     "failed to add any supplier from: d-not-found",
+			problem:     "no suppliers located",
 		},
 	}
 
@@ -398,13 +398,13 @@ func TestLocateSuppliersErrors(t *testing.T) {
 
 			if tt.message != "" {
 				if event.ResultData.EventError.Message != tt.message {
-					t.Errorf("Expected message '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
+					t.Errorf("Expected error '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
 				}
 			}
 
 			if tt.problem != "" {
 				if event.ResultData.Problem.Details != tt.problem {
-					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
+					t.Errorf("Expected problem '%s' got :'%s'", tt.problem, event.ResultData.Problem.Details)
 				}
 			}
 
