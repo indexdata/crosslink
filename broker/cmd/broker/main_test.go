@@ -39,15 +39,23 @@ func TestMain(m *testing.M) {
 
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
-
-	go main()
-	test.WaitForServiceUp(app.HTTP_PORT)
+	startApp(ctx)
 
 	code := m.Run()
 
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
+}
+
+func startApp(ctx context.Context) {
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		err := app.Run(ctx)
+		test.Expect(err, "failed to start app")
+	}()
+	test.WaitForServiceUp(app.HTTP_PORT)
 }
 
 func TestStartProcess(t *testing.T) {
@@ -139,11 +147,4 @@ func TestGracefulShutdown(t *testing.T) {
 		conn.Close()
 		assert.Fail(t, "Server did not shut down as expected")
 	}
-
-	// The original TestMain will restart the server for subsequent tests
-	// Wait for the server to be available again before proceeding
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	app.ServeMux = http.NewServeMux() // Reinitialize the ServeMux
-	go main()
-	test.WaitForServiceUp(app.HTTP_PORT)
 }

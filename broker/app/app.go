@@ -68,7 +68,7 @@ var SHUTDOWN_DELAY, _ = utils.GetEnvAny("SHUTDOWN_DELAY", time.Duration(15*float
 	return d, nil
 })
 
-var ServeMux = http.NewServeMux()
+var ServeMux *http.ServeMux
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
@@ -172,6 +172,7 @@ func Run(ctx context.Context) error {
 }
 
 func StartServer(ctx Context) error {
+	ServeMux = http.NewServeMux()
 	ServeMux.HandleFunc("GET /healthz", HandleHealthz)
 	//all methods must be mapped explicitly to avoid conflicts with the index handler
 	ServeMux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
