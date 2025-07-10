@@ -92,7 +92,9 @@ func TestGracefulShutdown(t *testing.T) {
 
 		// Complete the request
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Slow response completed"))
+		if _, err := w.Write([]byte("Slow response completed")); err != nil {
+			t.Error("Failed to write response:", err)
+		}
 	})
 
 	// Start a goroutine that makes a request to our slow endpoint
