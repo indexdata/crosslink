@@ -8,8 +8,10 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -58,7 +60,15 @@ var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), fun
 var BROKER_MODE = utils.GetEnv("BROKER_MODE", "opaque")
 var TENANT_TO_SYMBOL = os.Getenv("TENANT_TO_SYMBOL")
 var CLIENT_DELAY = utils.GetEnv("CLIENT_DELAY", "0ms")
+var SHUTDOWN_DELAY, _ = utils.GetEnvAny("SHUTDOWN_DELAY", time.Duration(15*float64(time.Second)), func(val string) (time.Duration, error) {
+	d, err := time.ParseDuration(val)
+	if err != nil {
+		return 0, fmt.Errorf("invalid SHUTDOWN_DELAY value: %s", val)
+	}
+	return d, nil
+})
 
+var ServeMux = http.NewServeMux()
 var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
@@ -161,33 +171,61 @@ func Run(ctx context.Context) error {
 	return StartServer(context)
 }
 
-func StartServer(context Context) error {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /healthz", HandleHealthz)
+func StartServer(ctx Context) error {
+	ServeMux.HandleFunc("GET /healthz", HandleHealthz)
 	//all methods must be mapped explicitly to avoid conflicts with the index handler
-	mux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
-	mux.HandleFunc("POST /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
-	mux.HandleFunc("PUT /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
-	mux.HandleFunc("DELETE /iso18626", handler.Iso18626PostHandler(context.IllRepo, context.EventBus, context.DirAdapter, MAX_MESSAGE_SIZE))
-	mux.HandleFunc("GET /v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
+	ServeMux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
+	ServeMux.HandleFunc("POST /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
+	ServeMux.HandleFunc("PUT /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
+	ServeMux.HandleFunc("DELETE /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
+	ServeMux.HandleFunc("GET /v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, "", API_PAGE_SIZE)
-	oapi.HandlerFromMux(&apiHandler, mux)
+	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, "", API_PAGE_SIZE)
+	oapi.HandlerFromMux(&apiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
-		apiHandler := api.NewApiHandler(context.EventRepo, context.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
-		oapi.HandlerFromMuxWithBaseURL(&apiHandler, mux, "/broker")
+		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
+		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
-		mux.ServeHTTP(w, r)
+		ServeMux.ServeHTTP(w, r)
 	})
-
-	appCtx.Logger().Info("HTTP server started on port " + strconv.Itoa(HTTP_PORT))
-	return http.ListenAndServe(":"+strconv.Itoa(HTTP_PORT), signatureHandler)
+	server := &http.Server{
+		Addr:              ":" + strconv.Itoa(HTTP_PORT),
+		Handler:           signatureHandler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	// channel to listen for server errors
+	serverErrors := make(chan error, 1)
+	go func() {
+		appCtx.Logger().Info("HTTP server started on port " + strconv.Itoa(HTTP_PORT))
+		serverErrors <- server.ListenAndServe()
+	}()
+	// channel to listen for OS signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	// block until we receive a signal or server error
+	select {
+	case err := <-serverErrors:
+		return fmt.Errorf("HTTP server error: %w", err)
+	case sig := <-shutdown:
+		appCtx.Logger().Info("HTTP server shutdown initiated", "signal", sig)
+		// give outstanding requests a timeout to complete
+		ctx, cancel := context.WithTimeout(appCtx, SHUTDOWN_DELAY)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			server.Close()
+			return fmt.Errorf("HTTP server could not shutdown gracefully: %w", err)
+		}
+		appCtx.Logger().Info("HTTP server shutdown complete")
+		return nil
+	}
 }
 
 func RunMigrateScripts() error {
