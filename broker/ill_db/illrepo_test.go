@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -53,7 +54,8 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	peer0, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "123", Name: "Old ISIL:AU-VUMC peer", RefreshTime: test.GetNow()})
+	// create a local peer which will be subsequently updated during directory refresh
+	peer0, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "123", Name: "Old ISIL:AU-VUMC peer", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-VUMC", PeerID: peer0.ID})
 	assert.Equal(t, err, nil)
@@ -75,9 +77,11 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	peer2, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-VU")
 	assert.Equal(t, mapPeers[peer2.ID], peer2)
 	peer3, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-VUMC")
+	// check that the peer was updated
 	assert.Equal(t, "University of Melbourne / The University of Melbourne: Museums and Collections", peer3.Name)
-	assert.Equal(t, mapPeers[peer3.ID], peer3)
 	assert.NotEqual(t, peer00, peer3)
+	assert.Equal(t, mapPeers[peer3.ID], peer3)
+	// check symbols
 	symbols1, _ := illRepo.GetSymbolsByPeerId(ctx, peer1.ID)
 	assert.Equal(t, len(symbols1), 1)
 	assert.Equal(t, symbols1[0].SymbolValue, "ISIL:AU-NALB")
@@ -95,7 +99,58 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	assert.Equal(t, len(branchSymbols3), 0)
 }
 
-func TestUpdateCachedPeers(t *testing.T) {
+func TestUpdateCachedPeersNoRefresh(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write(respBody)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	da := createDirectoryAdapter(server.URL)
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
+	assert.Equal(t, err, nil)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
+	assert.NoError(t, err)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:GONE", PeerID: peer.ID})
+	assert.NoError(t, err)
+	_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: "ISIL:GONE-BRANCH", PeerID: peer.ID})
+	assert.NoError(t, err)
+	peerBefore, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
+	assert.Equal(t, peerBefore, peer)
+	assert.Equal(t, "Old ISIL:NU peer", peerBefore.Name)
+	assert.Equal(t, "Alma", peerBefore.Vendor)
+	assert.Equal(t, "opaque", peerBefore.BrokerMode)
+	symbolsBefore, err := illRepo.GetSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(symbolsBefore), 2)
+	assert.Equal(t, symbolsBefore[0].SymbolValue, "ISIL:AU-NU")
+	assert.Equal(t, symbolsBefore[1].SymbolValue, "ISIL:GONE")
+	branchSymbolsBefore, err := illRepo.GetBranchSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(branchSymbolsBefore), 1)
+	assert.Equal(t, branchSymbolsBefore[0].SymbolValue, "ISIL:GONE-BRANCH")
+	peers, _, _ := illRepo.GetCachedPeersBySymbols(ctx,
+		[]string{"ISIL:AU-NU"}, da)
+	assert.Equal(t, len(peers), 1)
+	peerCached := peers[0]
+	peerAfter, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
+	assert.Equal(t, peerAfter, peerCached)
+	assert.Equal(t, "Old ISIL:NU peer", peerAfter.Name)
+	assert.Equal(t, "Alma", peerAfter.Vendor)
+	assert.Equal(t, "opaque", peerAfter.BrokerMode)
+	symbolsAfter, err := illRepo.GetSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(symbolsAfter), 2)
+	assert.Equal(t, symbolsAfter[0].SymbolValue, "ISIL:AU-NU")
+	assert.Equal(t, symbolsAfter[1].SymbolValue, "ISIL:GONE")
+	branchSymbolsAfter, err := illRepo.GetBranchSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(branchSymbolsAfter), 1)
+	assert.Equal(t, branchSymbolsAfter[0].SymbolValue, "ISIL:GONE-BRANCH")
+}
+
+func TestUpdateCachedPeersWithRefresh(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		w.Write(respBody)
@@ -107,19 +162,41 @@ func TestUpdateCachedPeers(t *testing.T) {
 	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
-	assert.Equal(t, err, nil)
+	assert.NoError(t, err)
+	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:GONE", PeerID: peer.ID})
+	assert.NoError(t, err)
+	_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{SymbolValue: "ISIL:GONE-BRANCH", PeerID: peer.ID})
+	assert.NoError(t, err)
 	peerBefore, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
 	assert.Equal(t, peerBefore, peer)
+	assert.Equal(t, "Old ISIL:NU peer", peerBefore.Name)
 	assert.Equal(t, "Alma", peerBefore.Vendor)
 	assert.Equal(t, "opaque", peerBefore.BrokerMode)
+	symbolsBefore, err := illRepo.GetSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(symbolsBefore), 2)
+	assert.Equal(t, symbolsBefore[0].SymbolValue, "ISIL:AU-NU")
+	assert.Equal(t, symbolsBefore[1].SymbolValue, "ISIL:GONE")
+	branchSymbolsBefore, err := illRepo.GetBranchSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(branchSymbolsBefore), 1)
+	assert.Equal(t, branchSymbolsBefore[0].SymbolValue, "ISIL:GONE-BRANCH")
 	peers, _, _ := illRepo.GetCachedPeersBySymbols(ctx,
 		[]string{"ISIL:AU-NU"}, da)
 	assert.Equal(t, len(peers), 1)
 	peerCached := peers[0]
 	peerAfter, _ := illRepo.GetPeerBySymbol(ctx, "ISIL:AU-NU")
 	assert.Equal(t, peerAfter, peerCached)
+	assert.Equal(t, "University of Sydney", peerAfter.Name)
 	assert.Equal(t, "ReShare", peerAfter.Vendor)
 	assert.Equal(t, "transparent", peerAfter.BrokerMode)
+	symbolsAfter, err := illRepo.GetSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(symbolsAfter), 1)
+	assert.Equal(t, symbolsAfter[0].SymbolValue, "ISIL:AU-NU")
+	branchSymbolsAfter, err := illRepo.GetBranchSymbolsByPeerId(ctx, peerBefore.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, len(branchSymbolsAfter), 0)
 }
 
 func Get10MinsAgo() pgtype.Timestamp {
@@ -157,4 +234,13 @@ func TestSymCheck(t *testing.T) {
 			t.Errorf("symMatch(%v, %v) = %v; expected %v", test.searchSymbols, test.foundSymbols, result, test.expected)
 		}
 	}
+}
+
+func containsSlice(searchSymbols []string, foundSymbols []string) bool {
+	for _, sym := range foundSymbols {
+		if slices.Contains(searchSymbols, sym) {
+			return true
+		}
+	}
+	return false
 }
