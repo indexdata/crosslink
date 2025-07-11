@@ -314,7 +314,7 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, lookupSymbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
 	symbolToPeer, symbolsToFetch := r.mapSymbolsAndFilterStale(ctx, lookupSymbols)
 	if len(symbolsToFetch) == 0 {
-		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), "", nil
+		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), "<cached>", nil
 	}
 	dirEntries, err, query := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 		Symbols: symbolsToFetch,
