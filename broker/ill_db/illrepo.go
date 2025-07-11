@@ -428,11 +428,11 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 		return peer, err
 	}
 	for _, s := range dirEntry.Symbols {
-		_, e := r.SaveSymbol(ctx, SaveSymbolParams{
+		_, err = r.SaveSymbol(ctx, SaveSymbolParams{
 			SymbolValue: s,
 			PeerID:      peer.ID,
 		})
-		if e != nil {
+		if err != nil {
 			ctx.Logger().Warn("could not save peer symbol", "peerId", peer.ID, "symbol", s, "error", err)
 			return peer, err
 		}
@@ -443,11 +443,11 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 		return peer, err
 	}
 	for _, s := range dirEntry.BranchSymbols {
-		_, e := r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
+		_, err = r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
 			SymbolValue: s,
 			PeerID:      peer.ID,
 		})
-		if e != nil {
+		if err != nil {
 			ctx.Logger().Warn("could not save peer branch symbol", "peerId", peer.ID, "symbol", s, "error", err)
 			return peer, err
 		}
