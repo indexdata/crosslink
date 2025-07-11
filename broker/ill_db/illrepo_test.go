@@ -152,7 +152,7 @@ func TestSymCheck(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		result := symCheck(test.searchSymbols, test.foundSymbols)
+		result := containsSlice(test.searchSymbols, test.foundSymbols)
 		if result != test.expected {
 			t.Errorf("symMatch(%v, %v) = %v; expected %v", test.searchSymbols, test.foundSymbols, result, test.expected)
 		}
