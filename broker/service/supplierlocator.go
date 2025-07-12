@@ -232,9 +232,11 @@ func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string, custo
 	ctx.Logger().Debug("supplier_locator: " + message)
 	status := events.EventStatusProblem
 	result := &events.EventResult{
-		Problem: &events.Problem{
-			Kind:    "no-suppliers",
-			Details: message,
+		CommonEventData: events.CommonEventData{
+			Problem: &events.Problem{
+				Kind:    "no-suppliers",
+				Details: message,
+			},
 		},
 	}
 	if customResult != nil {

@@ -431,7 +431,8 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound)
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
+				eventBus, illTrans.ID)
 			return
 		}
 		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
@@ -439,7 +440,8 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		return
 	}
 	if supplier.SupplierSymbol != symbol {
-		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier)
+		handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier,
+			eventBus, illTrans.ID)
 		return
 	}
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusOK, nil, "")
@@ -564,6 +566,29 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
 	writeResponse(ctx, resmsg, w)
 	return resmsg
+}
+
+func handleSupplyingAgencyErrorWithNotice(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
+	errorType iso18626.TypeErrorType, errorValue ErrorValue,
+	eventBus events.EventBus, illTransId string) {
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
+	eventData := events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+			OutgoingMessage: resmsg,
+			Problem: &events.Problem{
+				Kind:    "supplier-message-problem",
+				Details: string(errorValue),
+			},
+		},
+	}
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
+	if err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+	} else {
+		writeResponse(ctx, resmsg, w)
+	}
 }
 
 func createNoticeAndCheckDBError(ctx extctx.ExtendedContext, w http.ResponseWriter, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) string {
