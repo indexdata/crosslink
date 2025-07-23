@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -60,7 +61,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
 	})
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, "failed to locate holdings for query '"+query+"'", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
