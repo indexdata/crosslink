@@ -57,13 +57,11 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	holdings, query, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
 		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
 	})
+	if err != nil {
+		return logErrorAndReturnResult(ctx, "failed to locate holdings for query '"+query+"'", err)
+	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
-	if err != nil {
-		holdingsLog["error"] = err.Error()
-		return logProblemAndReturnResult(ctx, "failed to locate holdings", map[string]any{"holdings": holdingsLog})
-	}
-
 	if len(holdings) == 0 {
 		return logProblemAndReturnResult(ctx, "no holdings located",
 			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId})
