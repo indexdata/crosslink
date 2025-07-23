@@ -16,15 +16,15 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 	var holdings []Holding
 	for _, id := range ids {
 		if id == "error" {
-			return []Holding{}, "", errors.New("there is error")
+			return []Holding{}, id, errors.New("there is error")
 		}
 		if id == "not-found" { // we could also just not append?
-			return []Holding{}, "", nil
+			return []Holding{}, id, nil
 		}
 		if strings.Index(id, "return-") == 0 {
 			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "::", 2)
 			if len(val) < 1 || len(val[0]) < 1 {
-				return nil, "", fmt.Errorf("invalid return- value")
+				return nil, id, fmt.Errorf("invalid return- value")
 			}
 			var s, l string
 			if len(val) == 1 {
@@ -47,5 +47,5 @@ func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holdin
 		}
 		i++
 	}
-	return holdings, "", nil
+	return holdings, params.Identifier, nil
 }

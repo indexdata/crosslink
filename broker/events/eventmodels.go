@@ -78,3 +78,25 @@ type NotifyData struct {
 	Event  string `json:"event"`
 	Signal Signal `json:"signal"`
 }
+
+func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {
+	return EventStatusError, &EventResult{
+		CommonEventData: CommonEventData{
+			EventError: &EventError{
+				Message: message,
+				Cause:   cause,
+			},
+		},
+	}
+}
+
+func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
+	return EventStatusProblem, &EventResult{
+		CommonEventData: CommonEventData{
+			Problem: &Problem{
+				Kind:    kind,
+				Details: details,
+			},
+		},
+	}
+}

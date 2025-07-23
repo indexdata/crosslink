@@ -339,8 +339,8 @@ func TestLocateSuppliersErrors(t *testing.T) {
 		{
 			name:        "FailedToLocateHoldings",
 			supReqId:    "error",
-			eventStatus: events.EventStatusProblem,
-			problem:     "failed to locate holdings",
+			eventStatus: events.EventStatusError,
+			message:     "failed to locate holdings for query 'error'",
 		},
 		{
 			name:        "NoHoldingsFound",
@@ -395,15 +395,18 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			}) {
 				t.Error("Expected to have request event received and processed")
 			}
-
 			if tt.message != "" {
-				if event.ResultData.EventError.Message != tt.message {
+				if event.ResultData.EventError == nil {
+					t.Error("Expected to have error in event result")
+				} else if event.ResultData.EventError.Message != tt.message {
 					t.Errorf("Expected error '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
 				}
 			}
 
 			if tt.problem != "" {
-				if event.ResultData.Problem.Details != tt.problem {
+				if event.ResultData.Problem == nil {
+					t.Error("Expected problem to be set")
+				} else if event.ResultData.Problem.Details != tt.problem {
 					t.Errorf("Expected problem '%s' got :'%s'", tt.problem, event.ResultData.Problem.Details)
 				}
 			}
