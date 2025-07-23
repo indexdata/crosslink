@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -11,6 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const COMP = "supplier_locator"
+const SUP_PROBLEM = "no-suppliers"
 const ROTA_INFO_KEY = "rotaInfo"
 
 type SupplierLocator struct {
@@ -42,30 +45,28 @@ func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event event
 func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, "failed to read ILL transaction", err)
 	}
 
 	if illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId == "" {
-		return logProblemAndReturnResult(ctx, "ILL transaction missing SupplierUniqueRecordId", nil)
+		return events.LogProblemAndReturnResult(ctx, COMP, SUP_PROBLEM, "ILL transaction missing SupplierUniqueRecordId", nil)
 	}
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read requester peer", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, "failed to read requester peer", err)
 	}
 
 	holdings, query, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
 		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
 	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, COMP, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
+	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
-	if err != nil {
-		holdingsLog["error"] = err.Error()
-		return logProblemAndReturnResult(ctx, "failed to locate holdings", map[string]any{"holdings": holdingsLog})
-	}
-
 	if len(holdings) == 0 {
-		return logProblemAndReturnResult(ctx, "no holdings located",
+		return events.LogProblemAndReturnResult(ctx, COMP, SUP_PROBLEM, "no holdings located",
 			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId})
 	}
 	holdingsLog["entries"] = holdings
@@ -87,7 +88,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		for _, peer := range peers {
 			peerSymbols, err := s.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 			if err != nil {
-				return logErrorAndReturnResult(ctx, "failed to read symbols", err)
+				return events.LogErrorAndReturnResult(ctx, COMP, "failed to read symbols", err)
 			}
 			var symbols = []string{}
 			symbolsLog := ""
@@ -99,7 +100,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 			}
 			branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
 			if err != nil {
-				return logErrorAndReturnResult(ctx, "failed to read branch symbols", err)
+				return events.LogErrorAndReturnResult(ctx, COMP, "failed to read branch symbols", err)
 			}
 			branchSymbolsLog := ""
 			sep = ""
@@ -130,12 +131,15 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		directoryLog["entries"] = dirEntriesLog
 	}
 	if len(potentialSuppliers) == 0 {
-		return logProblemAndReturnResult(ctx, "no suppliers located", map[string]any{"holdings": holdingsLog, "directory": directoryLog})
+		return events.LogProblemAndReturnResult(ctx, COMP, SUP_PROBLEM, "no suppliers located",
+			map[string]any{"holdings": holdingsLog, "directory": directoryLog})
 	}
 	var rotaInfo adapter.RotaInfo
-	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData, illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
+	potentialSuppliers, rotaInfo = s.dirAdapter.FilterAndSort(ctx, potentialSuppliers, requester.CustomData,
+		illTrans.IllTransactionData.ServiceInfo, illTrans.IllTransactionData.BillingInfo)
 	if len(potentialSuppliers) == 0 {
-		return logProblemAndReturnResult(ctx, "no located suppliers match", map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
+		return events.LogProblemAndReturnResult(ctx, COMP, SUP_PROBLEM, "no located suppliers match",
+			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	for i, sup := range potentialSuppliers {
@@ -143,7 +147,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 		if loopErr == nil {
 			locatedSuppliers = append(locatedSuppliers, added)
 		} else {
-			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+			ctx.Logger().Error("failed to add supplier", "error", loopErr, "component", COMP)
 		}
 	}
 
@@ -178,7 +182,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 	})
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, "could not find selected suppliers", err)
 	}
 	if len(suppliers) > 0 {
 		for _, supplier := range suppliers {
@@ -188,7 +192,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 			}
 			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
 			if err != nil {
-				return logErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
+				return events.LogErrorAndReturnResult(ctx, COMP, "could not update previous selected supplier", err)
 			}
 		}
 	}
@@ -200,49 +204,20 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 		},
 	})
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "could not find located suppliers", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, "could not find located suppliers", err)
 	}
 	if len(suppliers) == 0 {
-		return logProblemAndReturnResult(ctx, "no suppliers with new status", nil)
+		return events.LogProblemAndReturnResult(ctx, COMP, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
 	locSup := suppliers[0]
 	locSup.SupplierStatus = ill_db.SupplierStatusSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to update located supplier status", err)
+		return events.LogErrorAndReturnResult(ctx, COMP, "failed to update located supplier status", err)
 	}
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier},
 	}
-}
-
-func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
-	ctx.Logger().Error(message, "error", err)
-	return events.EventStatusError, &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			EventError: &events.EventError{
-				Message: message,
-				Cause:   err.Error(),
-			},
-		},
-	}
-}
-
-func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string, customResult map[string]any) (events.EventStatus, *events.EventResult) {
-	ctx.Logger().Debug("supplier_locator: " + message)
-	status := events.EventStatusProblem
-	result := &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			Problem: &events.Problem{
-				Kind:    "no-suppliers",
-				Details: message,
-			},
-		},
-	}
-	if customResult != nil {
-		result.CustomData = customResult
-	}
-	return status, result
 }
 
 func getPeerRatio(peer ill_db.Peer) float32 {
