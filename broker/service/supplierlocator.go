@@ -216,27 +216,12 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 
 func logErrorAndReturnResult(ctx extctx.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Error(message, "error", err)
-	return events.EventStatusError, &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			EventError: &events.EventError{
-				Message: message,
-				Cause:   err.Error(),
-			},
-		},
-	}
+	return events.NewErrorResult(message, err.Error())
 }
 
 func logProblemAndReturnResult(ctx extctx.ExtendedContext, message string, customResult map[string]any) (events.EventStatus, *events.EventResult) {
 	ctx.Logger().Debug("supplier_locator: " + message)
-	status := events.EventStatusProblem
-	result := &events.EventResult{
-		CommonEventData: events.CommonEventData{
-			Problem: &events.Problem{
-				Kind:    "no-suppliers",
-				Details: message,
-			},
-		},
-	}
+	status, result := events.NewProblemResult("no-suppliers", message)
 	if customResult != nil {
 		result.CustomData = customResult
 	}
