@@ -66,42 +66,44 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 	return nil
 }
 
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, identifier string) ([]Holding, error) {
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, identifier string) ([]Holding, string, error) {
 	var holdings []Holding
 	cql := "rec.id=\"" + identifier + "\"" // TODO: should do proper CQL string escaping
-	query := url.QueryEscape(cql)
+	query := "?maximumRecords=1000&recordSchema=marcxml&query=" + url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
 	// For now, perform just one request and get "all" records
-	err := httpclient.NewClient().GetXml(s.client, sruUrl+"?maximumRecords=1000&recordSchema=marcxml&query="+query, &sruResponse)
+	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	if err != nil {
-		return nil, err
+		return nil, query, err
 	}
 	if sruResponse.Diagnostics != nil {
 		// non-surrogate diagnostics
 		diags := sruResponse.Diagnostics.Diagnostic
 		if len(diags) > 0 {
-			return nil, errors.New(diags[0].Message + ": " + diags[0].Details)
+			return nil, query, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
 			err := parseRecord(&record, &holdings)
 			if err != nil {
-				return nil, err
+				return nil, query, err
 			}
 		}
 	}
-	return holdings, nil
+	return holdings, query, nil
 }
 
-func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, error) {
+func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, string, error) {
 	var holdings []Holding
+	logQuery := ""
 	for _, sruUrl := range s.sruUrl {
-		h, err := s.getHoldings(sruUrl, params.Identifier)
+		h, query, err := s.getHoldings(sruUrl, params.Identifier)
 		if err != nil {
-			return nil, err
+			return nil, query, err
 		}
 		holdings = append(holdings, h...)
+		logQuery = query
 	}
-	return holdings, nil
+	return holdings, logQuery, nil
 }

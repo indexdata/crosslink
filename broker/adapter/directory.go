@@ -1,6 +1,8 @@
 package adapter
 
 import (
+	"strconv"
+
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 )
@@ -9,7 +11,7 @@ var DEFAULT_BROKER_MODE extctx.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string)
-	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, MatchResult)
+	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
@@ -26,49 +28,89 @@ type DirectoryEntry struct {
 	CustomData    map[string]any
 }
 
+type SupplierOrdering interface {
+	GetSymbol() string
+	GetPriority() int
+	GetCost() float64
+	GetRatio() float32
+	IsLocal() bool
+}
+
 type Supplier struct {
 	LocalIdentifier string
 	PeerId          string
 	CustomData      map[string]any
-	Ratio           float32
 	Symbol          string
-	NetworkPriority float64
+	Priority        int
 	Cost            float64
 	Local           bool
+	Ratio           float32
 }
 
-type MatchRequest struct {
-	ServiceLevel string `json:"serviceLevel"`
-	ServiceType  string `json:"serviceType"`
-	Cost         string `json:"cost"`
+func (s Supplier) GetSymbol() string { return s.Symbol }
+func (s Supplier) GetPriority() int  { return s.Priority }
+func (s Supplier) GetCost() float64  { return s.Cost }
+func (s Supplier) IsLocal() bool     { return s.Local }
+func (s Supplier) GetRatio() float32 { return s.Ratio }
+
+type Network struct {
+	Name     string `json:"name"`
+	Priority int    `json:"priority"`
 }
 
-type MatchRequester struct {
+type Tier struct {
+	Name  string  `json:"name"`
+	Cost  float64 `json:"cost"`
+	Level string  `json:"level"`
+	Type  string  `json:"type"`
+}
+
+type Request struct {
+	Level string `json:"level"`
+	Type  string `json:"type"`
+	Cost  string `json:"cost"`
+}
+
+type Requester struct {
 	Networks []string `json:"networks"`
 }
 
-type MatchValue struct {
-	Value string `json:"value"`
+type NetworkMatch struct {
+	Name     string `json:"name"`
+	Priority int    `json:"priority"`
+	Match    bool   `json:"match"`
+}
+
+type TierMatch struct {
+	Name  string `json:"name"`
+	Level string `json:"level"`
+	Type  string `json:"type"`
+	Cost  string `json:"cost"`
 	Match bool   `json:"match"`
 }
 
-type MatchTier struct {
-	TierId       string     `json:"tierId"`
-	ServiceLevel MatchValue `json:"serviceLevel"`
-	ServiceType  MatchValue `json:"serviceType"`
-	Cost         MatchValue `json:"cost"`
-	Match        bool       `json:"match"`
+type SupplierMatch struct {
+	Match    bool           `json:"match"`
+	Networks []NetworkMatch `json:"networks"`
+	Tiers    []TierMatch    `json:"tiers"`
+	Symbol   string         `json:"symbol"`
+	Priority int            `json:"priority"`
+	Cost     string         `json:"cost"`
+	Local    bool           `json:"local"`
+	Ratio    float32        `json:"ratio"`
 }
 
-type MatchSupplier struct {
-	Symbol   string       `json:"symbol"`
-	Networks []MatchValue `json:"networks"`
-	Match    bool         `json:"match"`
-	Tiers    []MatchTier  `json:"tiers"`
+func (s SupplierMatch) GetSymbol() string { return s.Symbol }
+func (s SupplierMatch) GetPriority() int  { return s.Priority }
+func (s SupplierMatch) GetCost() float64 {
+	f, _ := strconv.ParseFloat(s.Cost, 64)
+	return f
 }
+func (s SupplierMatch) IsLocal() bool     { return s.Local }
+func (s SupplierMatch) GetRatio() float32 { return s.Ratio }
 
-type MatchResult struct {
-	Request   MatchRequest    `json:"request"`
-	Requester MatchRequester  `json:"requester"`
-	Suppliers []MatchSupplier `json:"suppliers"`
+type RotaInfo struct {
+	Request   Request         `json:"request"`
+	Requester Requester       `json:"requester"`
+	Suppliers []SupplierMatch `json:"suppliers"`
 }

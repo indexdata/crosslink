@@ -58,6 +58,8 @@ components:
       in: query
       description: Comma separated list of statuses to archive, for example "LoanCompleted,CopyCompleted,Unfilled"
       required: true
+      schema:
+        type: string
     Cql:
       name: cql
       in: query

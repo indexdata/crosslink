@@ -19,6 +19,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const COMP = "iso18626_client"
+
+const FailedToReadTransaction = "failed to read ILL transaction"
+const FailedToSendMessage = "failed to send ISO18626 message"
+const FailedToGetSupplier = "failed to get supplier"
+const FailedToGetRequester = "failed to get requester"
+const FailedToUpdateSupplierStatus = "failed to update supplier status"
+
 // TODO this must be removed and saved from the initial request
 var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
@@ -59,27 +67,15 @@ func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event event
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	resData := events.EventResult{}
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to read ILL transaction",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to read ILL transaction", "error", err)
-		return events.EventStatusError, nil
+		return events.LogErrorAndReturnResult(ctx, COMP, FailedToReadTransaction, err)
 	}
-
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to get requester",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to get requester", "error", err)
-		return events.EventStatusError, &resData
+		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetRequester, err)
 	}
-
+	resData := events.EventResult{}
 	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
 	var status iso18626.TypeStatus
 	firstMessage := true
@@ -98,11 +94,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			}
 		} else {
 			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
-			resData.EventError = &events.EventError{
-				Message: msg,
-			}
-			ctx.Logger().Error(msg)
-			return events.EventStatusError, &resData
+			return events.LogErrorAndReturnResult(ctx, COMP, msg, nil)
 		}
 		//in opaque mode we proxy ExpectToSupply and WillSupply once
 		if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
@@ -138,7 +130,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		name, agencyId, address, _ := getPeerInfo(supplier, locSupplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	if prependVendor && firstMessage && supplier != nil {
+	if prependVendor && firstMessage && supplier != nil && supplier.Vendor != requester.Vendor {
 		populateVendor(message.SupplyingAgencyMessage, supplier.Vendor)
 	}
 
@@ -149,12 +141,11 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			resData.IncomingMessage = response
 		}
 		if err != nil {
-			resData.EventError = &events.EventError{
-				Message: "failed to send ISO18626 message",
-				Cause:   err.Error(),
+			var httpErr *httpclient.HttpError
+			if errors.As(err, &httpErr) {
+				resData.HttpFailure = httpErr
 			}
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			return events.EventStatusError, &resData
+			return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToSendMessage, err, &resData)
 		}
 	} else {
 		if resData.CustomData == nil {
@@ -165,12 +156,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to update supplier status",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to update supplier status", "error", err)
-		return events.EventStatusError, &resData
+		return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToUpdateSupplierStatus, err, &resData)
 	}
 	return events.EventStatusSuccess, &resData
 }
@@ -220,34 +206,17 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	resData := events.EventResult{}
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to read ILL transaction",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to read ILL transaction", "error", err)
-		return events.EventStatusError, &resData
+		return events.LogErrorAndReturnResult(ctx, COMP, FailedToReadTransaction, err)
 	}
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to get requester",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to get requester", "error", err)
-		return events.EventStatusError, &resData
+		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetRequester, err)
 	}
-
 	selected, supplier, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		resData.EventError = &events.EventError{
-			Message: "failed to get supplier",
-			Cause:   err.Error(),
-		}
-		ctx.Logger().Error("failed to get supplier", "error", err)
-		return events.EventStatusError, &resData
+		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetSupplier, err)
 	}
 	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
 	var status = events.EventStatusSuccess
@@ -279,13 +248,8 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	} else {
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
 		if !ok {
-			var internalErr = "did not find action for value: " + illTrans.LastRequesterAction.String
-			resData.EventError = &events.EventError{
-				Message: "failed to create message",
-				Cause:   internalErr,
-			}
-			ctx.Logger().Error("failed to create message", "error", internalErr)
-			return events.EventStatusError, &resData
+			var msg = "failed to resolve action for value: " + illTrans.LastRequesterAction.String
+			return events.LogErrorAndReturnResult(ctx, COMP, msg, nil)
 		}
 		var note = ""
 		if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
@@ -298,6 +262,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		}
 		action = string(found)
 	}
+	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(event) {
 		response, err := c.SendHttpPost(supplier, message)
@@ -309,12 +274,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			if errors.As(err, &httpErr) {
 				resData.HttpFailure = httpErr
 			}
-			resData.EventError = &events.EventError{
-				Message: "failed to send ISO18626 message",
-				Cause:   err.Error(),
-			}
-			ctx.Logger().Error("failed to send ISO18626 message", "error", err)
-			status = events.EventStatusError
+			return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToSendMessage, err, &resData)
 		} else {
 			status = c.checkConfirmationError(isRequest, response, status)
 		}
@@ -328,12 +288,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	// check for status == EvenStatusError and NOT save??
 	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
 	if err != nil {
-		ctx.Logger().Error("failed updating supplier", "error", err)
-		resData.EventError = &events.EventError{
-			Message: "failed updating supplier",
-			Cause:   err.Error(),
-		}
-		status = events.EventStatusError
+		return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToUpdateSupplierStatus, err, &resData)
 	}
 	return status, &resData
 }

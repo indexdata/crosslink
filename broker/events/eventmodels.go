@@ -53,6 +53,7 @@ type EventData struct {
 type CommonEventData struct {
 	IncomingMessage *iso18626.ISO18626Message `json:"incomingMessage,omitempty"`
 	OutgoingMessage *iso18626.ISO18626Message `json:"outgoingMessage,omitempty"`
+	Problem         *Problem                  `json:"problem,omitempty"`
 	HttpFailure     *httpclient.HttpError     `json:"httpFailure,omitempty"`
 	EventError      *EventError               `json:"eventError,omitempty"`
 	Note            string                    `json:"note,omitempty"`
@@ -70,11 +71,32 @@ type Problem struct {
 
 type EventResult struct {
 	CommonEventData
-	Problem    *Problem       `json:"problem,omitempty"`
 	CustomData map[string]any `json:"customData,omitempty"`
 }
 
 type NotifyData struct {
 	Event  string `json:"event"`
 	Signal Signal `json:"signal"`
+}
+
+func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {
+	return EventStatusError, &EventResult{
+		CommonEventData: CommonEventData{
+			EventError: &EventError{
+				Message: message,
+				Cause:   cause,
+			},
+		},
+	}
+}
+
+func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
+	return EventStatusProblem, &EventResult{
+		CommonEventData: CommonEventData{
+			Problem: &Problem{
+				Kind:    kind,
+				Details: details,
+			},
+		},
+	}
 }

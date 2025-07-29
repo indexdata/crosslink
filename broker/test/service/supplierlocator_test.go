@@ -208,14 +208,14 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	customData := event.ResultData.CustomData
 	assert.NotNil(t, customData, "Expected to have custom data in event result")
 
-	jsonBytes, err := json.Marshal(customData["matchResult"])
-	assert.NoError(t, err, "Failed to marshal matchResult to JSON")
+	jsonBytes, err := json.Marshal(customData[service.ROTA_INFO_KEY])
+	assert.NoError(t, err, "Failed to marshal")
 
-	var matchResult adapter.MatchResult
-	err = json.Unmarshal(jsonBytes, &matchResult)
-	assert.NoError(t, err, "Failed to unmarshal matchResult from JSON")
-	assert.Equal(t, "mock", matchResult.Request.ServiceType, "Expected service type to be 'mock'")
-	assert.Len(t, matchResult.Suppliers, 2)
+	var rotaInfo adapter.RotaInfo
+	err = json.Unmarshal(jsonBytes, &rotaInfo)
+	assert.NoError(t, err, "Failed to unmarshal")
+	assert.Equal(t, "mock", rotaInfo.Request.Type, "Expected service type to be 'mock'")
+	assert.Len(t, rotaInfo.Suppliers, 2)
 
 	if supId := getSupplierId(0, customData); supId != sup2.ID {
 		t.Errorf("Expected to sup2 be first supplier, expected %s, got %s", sup2.ID, supId)
@@ -340,25 +340,25 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "FailedToLocateHoldings",
 			supReqId:    "error",
 			eventStatus: events.EventStatusError,
-			message:     "failed to locate holdings",
+			message:     "failed to locate holdings for query 'error'",
 		},
 		{
 			name:        "NoHoldingsFound",
 			supReqId:    "not-found",
 			eventStatus: events.EventStatusProblem,
-			problem:     "could not find holdings for supplier request id: not-found",
+			problem:     "no holdings located",
 		},
 		{
 			name:        "FailedToGetDirectories",
 			supReqId:    "return-error",
 			eventStatus: events.EventStatusProblem,
-			problem:     "failed to add any supplier from: error",
+			problem:     "no suppliers located",
 		},
 		{
 			name:        "NoDirectoriesFound",
 			supReqId:    "return-d-not-found",
 			eventStatus: events.EventStatusProblem,
-			problem:     "failed to add any supplier from: d-not-found",
+			problem:     "no suppliers located",
 		},
 	}
 
@@ -395,16 +395,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			}) {
 				t.Error("Expected to have request event received and processed")
 			}
-
 			if tt.message != "" {
-				if event.ResultData.EventError.Message != tt.message {
-					t.Errorf("Expected message '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
+				if event.ResultData.EventError == nil {
+					t.Error("Expected to have error in event result")
+				} else if event.ResultData.EventError.Message != tt.message {
+					t.Errorf("Expected error '%s' got :'%s'", tt.message, event.ResultData.EventError.Message)
 				}
 			}
 
 			if tt.problem != "" {
-				if event.ResultData.Problem.Details != tt.problem {
-					t.Errorf("Expected error message '%s' got :'%v'", tt.message, event.ResultData.Problem.Details)
+				if event.ResultData.Problem == nil {
+					t.Error("Expected problem to be set")
+				} else if event.ResultData.Problem.Details != tt.problem {
+					t.Errorf("Expected problem '%s' got :'%s'", tt.problem, event.ResultData.Problem.Details)
 				}
 			}
 
