@@ -218,7 +218,10 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetSupplier, err)
 	}
-	var isRequest = illTrans.LastRequesterAction.String == ill_db.RequestAction
+	// if requester sends a message (e.g notification) to supplier and then a new supplier is selected,
+	// the action on the transaction is not relevant and we need to look at the new supplier's last action
+	// however, if requester sends a retry request it is captured on the transaction
+	var isRequest = selected.LastAction.String == "" || illTrans.LastRequesterAction.String == ill_db.RequestAction
 	var status = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	var action string

@@ -115,6 +115,10 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 			String: status,
 			Valid:  status != "",
 		},
+		LastAction: pgtype.Text{
+			String: ill_db.RequestAction,
+			Valid:  true,
+		},
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)
