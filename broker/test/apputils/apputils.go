@@ -103,7 +103,7 @@ func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url
 	return peer
 }
 
-func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId string, supplierId string, supplierSymbol string, status string) ill_db.LocatedSupplier {
+func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId string, supplierId string, supplierSymbol string, status string, action string) ill_db.LocatedSupplier {
 	supplier, err := illRepo.SaveLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: illTransId,
@@ -114,6 +114,10 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 		LastStatus: pgtype.Text{
 			String: status,
 			Valid:  status != "",
+		},
+		LastAction: pgtype.Text{
+			String: ill_db.RequestAction,
+			Valid:  true,
 		},
 	})
 	if err != nil {

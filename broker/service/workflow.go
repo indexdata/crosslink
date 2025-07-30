@@ -108,6 +108,7 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 		ctx.Logger().Error("failed to read selected supplier", "error", err)
 		return
 	}
+	ctx.Logger().Info(("onMessageSupplierComplete"), "LastAction", selSup.LastAction.String)
 	if selSup.LastAction.String != ill_db.RequestAction {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)

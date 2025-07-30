@@ -261,7 +261,7 @@ func TestGetIllTransactionsId(t *testing.T) {
 func TestGetLocatedSuppliers(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
 	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
-	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned), ill_db.RequestAction)
 	httpGet(t, "/located_suppliers", "", http.StatusBadRequest)
 	var resp oapi.LocatedSuppliers
 	body := getResponseBody(t, "/located_suppliers?ill_transaction_id="+illId)
@@ -332,7 +332,7 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Equal(t, illId, resp.Items[0].ID)
 
 	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
-	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned), ill_db.RequestAction)
 
 	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var supps oapi.LocatedSuppliers
