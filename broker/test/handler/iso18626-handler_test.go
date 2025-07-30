@@ -338,7 +338,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 		t.Errorf("failed to create ill transaction: %s", err)
 	}
 	peer := apptest.CreatePeer(t, illRepo, "isil:reqTest", adapter.MOCK_CLIENT_URL)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "isil:reqTest", "selected", ill_db.RequestAction)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "isil:reqTest", "selected")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

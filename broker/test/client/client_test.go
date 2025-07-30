@@ -93,7 +93,7 @@ func TestMessageRequester(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned), string(iso18626.TypeActionNotification))
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", LocalAddress, string(extctx.BrokerModeOpaque))
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", LocalAddress, string(extctx.BrokerModeOpaque))
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned), string(iso18626.TypeActionNotification))
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -162,7 +162,7 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "", string(iso18626.TypeActionNotification))
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -198,7 +198,7 @@ func TestMessageSupplier(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned), string(iso18626.TypeActionNotification))
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -233,7 +233,7 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ3", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP3", "invalid")
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP3", string(iso18626.TypeStatusLoaned), ill_db.RequestAction)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP3", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -266,7 +266,7 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ4", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP4", "invalid")
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP4", string(iso18626.TypeStatusLoaned), ill_db.RequestAction)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP4", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -382,7 +382,7 @@ func TestMessageRequesterInvalidStatus(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ5", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP5", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP5", "invalid", ill_db.RequestAction)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP5", "invalid")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestMessageSupplierInvalidAction(t *testing.T) {
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", LocalAddress)
 	illId := createIllTrans(t, illRepo, req.ID, "invalid")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned), ill_db.RequestAction)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
