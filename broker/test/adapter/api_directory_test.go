@@ -269,7 +269,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 1000,
+				Base: 3440,
 				Exp:  2,
 			},
 		},
@@ -384,7 +384,7 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 3500,
+				Base: 0,
 				Exp:  2,
 			},
 		},
@@ -406,10 +406,9 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
 	var rotaInfo adapter.RotaInfo
 	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
-	assert.Len(t, entries, 3)
+	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
-	assert.Equal(t, "2", entries[2].PeerId)
 	assert.Equal(t, "", rotaInfo.Request.Type)
 }
 

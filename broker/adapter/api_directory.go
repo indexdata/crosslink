@@ -197,7 +197,7 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 
 				suppTypeMatch := svcType == "" || svcType == strings.ToLower(suppTier.Type)
 				suppLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(suppTier.Level)
-				suppCostMatch := maxCost >= suppTier.Cost
+				suppCostMatch := costMatches(suppTier.Cost, maxCost)
 
 				if suppTypeMatch && suppLevelMatch && suppCostMatch {
 					reciprocal := true
@@ -258,6 +258,16 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		return CompareSuppliers(a, b)
 	})
 	return filtered, rotaInfo
+}
+
+func costMatches(suppCost, maxCost float64) bool {
+	if maxCost > 0 && maxCost < math.MaxFloat64 {
+		// cost is specified, we are in pay for peer mode
+		return suppCost > 0 && suppCost <= maxCost
+	} else {
+		// no cost or zero, reciprocal mode
+		return suppCost == 0
+	}
 }
 
 func CompareSuppliers(a, b SupplierOrdering) int {
