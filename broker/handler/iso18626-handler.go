@@ -44,6 +44,7 @@ const (
 const PublicFailedToProcessReqMsg = "failed to process request"
 const InternalFailedToLookupTx = "failed to lookup ILL transaction"
 const InternalFailedToSaveTx = "failed to save ILL transaction"
+const InternalFailedToLookupSupplier = "failed to lookup supplier"
 const InternalFailedToCreateNotice = "failed to create notice event"
 
 var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
@@ -232,7 +233,6 @@ func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO1
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdAlreadyExists)
 		} else if errors.Is(err, ErrRetryNotPossible) {
-			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
 			handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, RetryNotPossible)
 		} else {
 			ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
@@ -266,8 +266,8 @@ func writeResponse(ctx extctx.ExtendedContext, resmsg *iso18626.ISO18626Message,
 }
 
 func handleRequestError(ctx extctx.ExtendedContext, w http.ResponseWriter, request *iso18626.Request, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
-	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	ctx.Logger().Warn("request confirmation error", "errorType", errorType, "errorValue", errorValue)
+	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	writeResponse(ctx, resmsg, w)
 }
 
@@ -352,7 +352,6 @@ func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessag
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
 			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
 			return
 		}
@@ -403,8 +402,9 @@ func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messag
 }
 
 func handleRequestingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
-	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue)
+	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
+	//TODO create error notice when possible
 	writeResponse(ctx, resmsg, w)
 	return resmsg
 }
@@ -430,12 +430,12 @@ func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
 			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
 				eventBus, illTrans.ID)
 			return
 		}
-		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
@@ -562,8 +562,8 @@ func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, message
 }
 
 func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
-	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
+	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	writeResponse(ctx, resmsg, w)
 	return resmsg
 }
@@ -571,6 +571,7 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 func handleSupplyingAgencyErrorWithNotice(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
 	errorType iso18626.TypeErrorType, errorValue ErrorValue,
 	eventBus events.EventBus, illTransId string) {
+	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
