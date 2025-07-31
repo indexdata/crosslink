@@ -305,9 +305,9 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	if len(selSup) == 1 {
 		return selSup[0], nil
 	} else if len(selSup) == 0 {
-		return LocatedSupplier{}, errors.New("did not find selected supplier for ILL transaction: " + illTransId)
+		return LocatedSupplier{}, fmt.Errorf("did not find selected supplier for ILL transaction '%s': %w", illTransId, pgx.ErrNoRows)
 	} else {
-		return LocatedSupplier{}, errors.New("too many selected suppliers found for ILL transaction: " + illTransId)
+		return LocatedSupplier{}, fmt.Errorf("too many selected suppliers found for ILL transaction '%s': %w", illTransId, pgx.ErrTooManyRows)
 	}
 }
 
