@@ -1,0 +1,2 @@
+DROP FUNCTION archive_ill_transaction_by_date_and_status;
+DROP TABLE archived_ill_transactions;
