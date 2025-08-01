@@ -114,7 +114,6 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
-		return
 	} else if event.EventStatus != events.EventStatusSuccess {
 		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		extctx.Must(ctx, func() (string, error) {
