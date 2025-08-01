@@ -9,6 +9,8 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 )
 
+const _COMP = "workflow_manager"
+
 type WorkflowManager struct {
 	eventBus events.EventBus
 	illRepo  ill_db.IllRepo
@@ -47,7 +49,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 		if event.EventStatus == events.EventStatusSuccess {
 			requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
 			if err != nil {
-				ctx.Logger().Error("failed to process supplier selected event, no requester", "error", err)
+				ctx.Logger().Error("failed to process supplier selected event, no requester", "error", err, "component", _COMP)
 				return "", fmt.Errorf("failed to process supplier selected event, no requester")
 			}
 			if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
@@ -76,7 +78,7 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		return
 	}
 	if event.EventData.IncomingMessage == nil || event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
-		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
+		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage", "component", _COMP)
 		return
 	}
 	status := event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status
@@ -103,16 +105,18 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
-	selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
+	illTrans, err := w.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		ctx.Logger().Error("failed to read selected supplier", "error", err)
+		ctx.Logger().Error("failed to read ILL transaction", "error", err, "component", _COMP)
 		return
 	}
-	if selSup.LastAction.String != ill_db.RequestAction {
+	if illTrans.LastRequesterAction.String != ill_db.RequestAction {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
+		return
 	} else if event.EventStatus != events.EventStatusSuccess {
+		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
@@ -122,13 +126,13 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event events.Event) bool {
 	requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
 	if err != nil {
-		ctx.Logger().Error("failed to process ISO18626 message received event, no requester", "error", err)
+		ctx.Logger().Error("failed to process ISO18626 message received event, no requester", "error", err, "component", _COMP)
 		return false
 	}
 	if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
 		if err != nil {
-			ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
+			ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err, "component", _COMP)
 			return false
 		}
 		return !sup.LocalSupplier
