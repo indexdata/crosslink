@@ -6,7 +6,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/google/uuid"
 )
+
+var pid = strconv.Itoa(os.Getpid())
 
 type ExtendedContext interface {
 	context.Context
@@ -77,7 +81,7 @@ func CreateExtCtxWithLogArgsAndHandler(ctx context.Context, args *LoggerArgs, lo
 }
 
 func createChildLoggerWithArgs(logger *slog.Logger, args *LoggerArgs) *slog.Logger {
-	loggerWithArgs := logger.With("process", strconv.Itoa(os.Getpid()))
+	loggerWithArgs := logger.With("pid", pid, "inst", uuid.New().String())
 	if args != nil {
 		if args.RequestId != "" {
 			loggerWithArgs = loggerWithArgs.With("requestId", args.RequestId)
