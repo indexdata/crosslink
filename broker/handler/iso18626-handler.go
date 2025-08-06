@@ -24,6 +24,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const COMP = "iso18626_handler"
+
 type ErrorValue string
 
 const (
@@ -65,7 +67,7 @@ func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo)
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString()})
+		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString(), Component: COMP})
 		if r.Method != http.MethodPost {
 			ctx.Logger().Error("method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
@@ -99,11 +101,11 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 		}
 
 		if illMessage.Request != nil {
-			handleIso18626Request(ctx, &illMessage, w, repo, eventBus, dirAdapter)
+			handleRequest(ctx, &illMessage, w, repo, eventBus, dirAdapter)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			handleIso18626RequestingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
+			handleRequestingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			handleIso18626SupplyingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
+			handleSupplyingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
 		} else {
 			ctx.Logger().Error("invalid ISO18626 message", "error", err, "body", string(byteReq))
 			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
@@ -195,7 +197,7 @@ func handleRetryRequest(ctx extctx.ExtendedContext, request *iso18626.Request, r
 	return id, err
 }
 
-func handleIso18626Request(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
+func handleRequest(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
 	request := illMessage.Request
 	if request.Header.RequestingAgencyRequestId == "" {
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
@@ -266,7 +268,10 @@ func writeResponse(ctx extctx.ExtendedContext, resmsg *iso18626.ISO18626Message,
 }
 
 func handleRequestError(ctx extctx.ExtendedContext, w http.ResponseWriter, request *iso18626.Request, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
-	ctx.Logger().Warn("request confirmation error", "errorType", errorType, "errorValue", errorValue)
+	ctx.Logger().Warn("request confirmation error", "errorType", errorType, "errorValue", errorValue,
+		"requesterSymbol", request.Header.RequestingAgencyId.AgencyIdValue,
+		"supplierSymbol", request.Header.SupplyingAgencyId.AgencyIdValue,
+		"requesterRequestId", request.Header.RequestingAgencyRequestId)
 	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	writeResponse(ctx, resmsg, w)
 }
@@ -320,7 +325,7 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 	return header
 }
 
-func handleIso18626RequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
 		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
@@ -402,14 +407,17 @@ func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messag
 }
 
 func handleRequestingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
-	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue)
+	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue,
+		"requesterSymbol", illMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
+		"supplierSymbol", illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
+		"requesterRequestId", illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	//TODO create error notice when possible
 	writeResponse(ctx, resmsg, w)
 	return resmsg
 }
 
-func handleIso18626SupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
+func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
 		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
@@ -562,7 +570,10 @@ func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, message
 }
 
 func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
-	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
+	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue,
+		"requesterSymbol", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
+		"supplierSymbol", illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
+		"requesterRequestId", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	writeResponse(ctx, resmsg, w)
 	return resmsg
@@ -571,7 +582,10 @@ func handleSupplyingAgencyError(ctx extctx.ExtendedContext, w http.ResponseWrite
 func handleSupplyingAgencyErrorWithNotice(ctx extctx.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
 	errorType iso18626.TypeErrorType, errorValue ErrorValue,
 	eventBus events.EventBus, illTransId string) {
-	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue)
+	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue, "transactionId", illTransId,
+		"requesterSymbol", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
+		"supplierSymbol", illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
+		"requesterRequestId", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{

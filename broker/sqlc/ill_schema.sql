@@ -35,7 +35,8 @@ CREATE TABLE ill_transaction
     last_supplier_status      VARCHAR,
     prev_supplier_status      VARCHAR,
     ill_transaction_data      jsonb     NOT NULL,
-    FOREIGN KEY (requester_id) REFERENCES peer (id)
+    FOREIGN KEY (requester_id) REFERENCES peer (id),
+    UNIQUE (requester_request_id)
 );
 
 CREATE TABLE located_supplier
