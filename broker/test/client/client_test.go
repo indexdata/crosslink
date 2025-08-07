@@ -161,7 +161,7 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", adapter.MOCK_CLIENT_URL)
-	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ_1", string(iso18626.TypeActionReceived), "ISIL:RESP_1")
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1_1", string(iso18626.TypeActionReceived), "ISIL:RESP1_1")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", adapter.MOCK_CLIENT_URL)
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1_1", "") //no status
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
@@ -183,7 +183,7 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
 	}
-	assert.Equal(t, "REQ_1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ1_1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "RESP1_1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, event.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 }
@@ -410,7 +410,7 @@ func TestMessageSupplierInvalidAction(t *testing.T) {
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", "whatever")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", "whatever")
-	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ5", "invalid", "ISIL:RESP6")
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ6", "invalid", "ISIL:RESP6")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
