@@ -19,13 +19,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const COMP = "iso18626_client"
+const CLIENT_COMP = "iso18626_client"
 
 const FailedToReadTransaction = "failed to read ILL transaction"
 const FailedToSendMessage = "failed to send ISO18626 message"
 const FailedToGetSupplier = "failed to get supplier"
 const FailedToGetRequester = "failed to get requester"
 const FailedToUpdateSupplierStatus = "failed to update supplier status"
+
+const KindConfirmationError = "confirmation-error"
 
 // TODO this must be removed and saved from the initial request
 var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
@@ -59,21 +61,23 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 }
 
 func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
 	c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
 	c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, FailedToReadTransaction, err)
+		return events.LogErrorAndReturnResult(ctx, FailedToReadTransaction, err)
 	}
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetRequester, err)
+		return events.LogErrorAndReturnResult(ctx, FailedToGetRequester, err)
 	}
 	resData := events.EventResult{}
 	locSupplier, supplier, _ := c.getSupplier(ctx, illTrans)
@@ -94,7 +98,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			}
 		} else {
 			msg := "failed to resolve status for value: " + locSupplier.LastStatus.String
-			return events.LogErrorAndReturnResult(ctx, COMP, msg, nil)
+			return events.LogErrorAndReturnResult(ctx, msg, nil)
 		}
 		//in opaque mode we proxy ExpectToSupply and WillSupply once
 		if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
@@ -135,6 +139,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 
 	resData.OutgoingMessage = message
+	eventStatus := events.EventStatusSuccess
 	if !isDoNotSend(event) {
 		response, err := c.SendHttpPost(&requester, message)
 		if response != nil {
@@ -145,7 +150,9 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 			if errors.As(err, &httpErr) {
 				resData.HttpFailure = httpErr
 			}
-			return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToSendMessage, err, &resData)
+			return events.LogErrorAndReturnExistingResult(ctx, FailedToSendMessage, err, &resData)
+		} else {
+			eventStatus = c.checkConfirmationError(ctx, response, eventStatus, &resData)
 		}
 	} else {
 		if resData.CustomData == nil {
@@ -156,9 +163,9 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	err = c.updateSupplierStatus(ctx, event.IllTransactionID, string(message.SupplyingAgencyMessage.StatusInfo.Status))
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToUpdateSupplierStatus, err, &resData)
+		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}
-	return events.EventStatusSuccess, &resData
+	return eventStatus, &resData
 }
 
 func populateReturnAddress(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
@@ -208,21 +215,21 @@ func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id str
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, FailedToReadTransaction, err)
+		return events.LogErrorAndReturnResult(ctx, FailedToReadTransaction, err)
 	}
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetRequester, err)
+		return events.LogErrorAndReturnResult(ctx, FailedToGetRequester, err)
 	}
 	selected, supplier, err := c.getSupplier(ctx, illTrans)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, COMP, FailedToGetSupplier, err)
+		return events.LogErrorAndReturnResult(ctx, FailedToGetSupplier, err)
 	}
 	// if requester sends a message (e.g notification) to supplier and then a new supplier is selected,
 	// the action on the transaction is not relevant and we need to look at the new supplier's last action
 	// however, if requester sends a retry request it is captured on the transaction
 	var isRequest = selected.LastAction.String == "" || illTrans.LastRequesterAction.String == ill_db.RequestAction
-	var status = events.EventStatusSuccess
+	var eventStatus = events.EventStatusSuccess
 	var message = &iso18626.ISO18626Message{}
 	var action string
 	if isRequest {
@@ -252,7 +259,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 		found, ok := iso18626.ActionMap[illTrans.LastRequesterAction.String]
 		if !ok {
 			var msg = "failed to resolve action for value: " + illTrans.LastRequesterAction.String
-			return events.LogErrorAndReturnResult(ctx, COMP, msg, nil)
+			return events.LogErrorAndReturnResult(ctx, msg, nil)
 		}
 		var note = ""
 		if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
@@ -277,9 +284,9 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 			if errors.As(err, &httpErr) {
 				resData.HttpFailure = httpErr
 			}
-			return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToSendMessage, err, &resData)
+			return events.LogErrorAndReturnExistingResult(ctx, FailedToSendMessage, err, &resData)
 		} else {
-			status = c.checkConfirmationError(isRequest, response, status)
+			eventStatus = c.checkConfirmationError(ctx, response, eventStatus, &resData)
 		}
 	} else {
 		if resData.CustomData == nil {
@@ -291,9 +298,9 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	// check for status == EvenStatusError and NOT save??
 	err = c.updateSelectedSupplierAction(ctx, illTrans.ID, action)
 	if err != nil {
-		return events.LogErrorAndReturnExistingResult(ctx, COMP, FailedToUpdateSupplierStatus, err, &resData)
+		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}
-	return status, &resData
+	return eventStatus, &resData
 }
 
 func populateRequesterInfo(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
@@ -469,13 +476,52 @@ func (c *Iso18626Client) guessReason(reason iso18626.TypeReasonForMessage, reque
 	return expectedReason
 }
 
-func (c *Iso18626Client) checkConfirmationError(isRequest bool, response *iso18626.ISO18626Message, defaultStatus events.EventStatus) events.EventStatus {
-	if isRequest && response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
-		return events.EventStatusProblem
-	} else if !isRequest && response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
-		return events.EventStatusProblem
+func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
+	status := defaultStatus
+	if response.RequestConfirmation != nil &&
+		response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		msg := "request confirmation error"
+		status = events.EventStatusProblem
+		result.Problem = &events.Problem{
+			Kind:    KindConfirmationError,
+			Details: msg,
+		}
+		ctx.Logger().Warn(msg,
+			"errorType", response.RequestConfirmation.ErrorData.ErrorType,
+			"errorValue", response.RequestConfirmation.ErrorData.ErrorValue,
+			"requesterSymbol", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
+			"supplierSymbol", response.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"requesterRequestId", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+	} else if response.RequestingAgencyMessageConfirmation != nil &&
+		response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		msg := "requester message confirmation error"
+		status = events.EventStatusProblem
+		result.Problem = &events.Problem{
+			Kind:    KindConfirmationError,
+			Details: msg,
+		}
+		ctx.Logger().Warn(msg,
+			"errorType", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorType,
+			"errorValue", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue,
+			"requesterSymbol", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
+			"supplierSymbol", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"requesterRequestId", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+	} else if response.SupplyingAgencyMessageConfirmation != nil &&
+		response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
+		msg := "supplier message confirmation error"
+		status = events.EventStatusProblem
+		result.Problem = &events.Problem{
+			Kind:    KindConfirmationError,
+			Details: msg,
+		}
+		ctx.Logger().Warn(msg,
+			"errorType", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType,
+			"errorValue", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue,
+			"requesterSymbol", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
+			"supplierSymbol", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"requesterRequestId", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 	}
-	return defaultStatus
+	return status
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {

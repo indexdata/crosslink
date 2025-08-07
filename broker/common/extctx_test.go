@@ -3,15 +3,42 @@ package common
 import (
 	"context"
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var errorToThrow = errors.New("throwing error")
 var errMsg = "this is test error message"
 var ctx = CreateExtCtxWithArgs(context.Background(), nil)
+
+func TestCreateExtCtxWithArgs(t *testing.T) {
+	inArgs := &LoggerArgs{
+		RequestId:     "test-request-id",
+		TransactionId: "test-transaction-id",
+		EventId:       "test-event-id",
+		Component:     "test-component",
+		Other:         map[string]string{"key": "value"},
+	}
+	extCtx := CreateExtCtxWithArgs(context.Background(), inArgs)
+
+	assert.NotNil(t, extCtx)
+	outArgs := extCtx.LoggerArgs()
+	assert.Equal(t, inArgs, &outArgs)
+	assert.NotNil(t, extCtx.Logger())
+	outArgs.RequestId = "modified-request-id"
+	extCtx2 := extCtx.WithArgs(&outArgs)
+	outArgs2 := extCtx2.LoggerArgs()
+	assert.Equal(t, outArgs, outArgs2)
+	assert.NotEqual(t, inArgs, outArgs)
+	assert.NotEqual(t, inArgs, outArgs2)
+	assert.NotEqual(t, extCtx.LoggerArgs(), extCtx2.LoggerArgs())
+	outArgs3 := outArgs2.WithComponent("new-component")
+	assert.Equal(t, "new-component", outArgs3.Component)
+	assert.NotEqual(t, outArgs2, *outArgs3)
+}
 
 func TestMust(t *testing.T) {
 	value := "return value"

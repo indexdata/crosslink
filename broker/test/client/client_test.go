@@ -89,21 +89,20 @@ func TestMessageRequester(t *testing.T) {
 	})
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
+	//we use the mock as the destination for the request to get a valid ISO18626 response
+	reqPeer := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL)
+	supPeer := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL)
+	illId := createIllTrans(t, illRepo, reqPeer.ID, "ISIL:REQ1", string(iso18626.TypeActionReceived), "ISIL:RESP1")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, supPeer.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
-
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			return event.EventStatus == events.EventStatusProblem //mock will report confirmation error bc of missing request
 		}
 		return false
 	}) {
@@ -125,20 +124,19 @@ func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", LocalAddress, string(extctx.BrokerModeOpaque))
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", LocalAddress, string(extctx.BrokerModeOpaque))
+	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1", string(iso18626.TypeActionReceived), "ISIL:RESP1")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
-
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			return event.EventStatus == events.EventStatusProblem //mock will report confirmation error bc of missing request
 		}
 		return false
 	}) {
@@ -147,6 +145,9 @@ func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
 	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
+	}
+	if event.ResultData.OutgoingMessage == nil {
+		t.Error("Should have request in result data")
 	}
 	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "BROKER", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
@@ -159,10 +160,10 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", LocalAddress)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", "")
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", adapter.MOCK_CLIENT_URL)
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ_1", string(iso18626.TypeActionReceived), "ISIL:RESP_1")
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", adapter.MOCK_CLIENT_URL)
+	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1_1", "") //no status
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -172,7 +173,7 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) == 1 {
 			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			return event.EventStatus == events.EventStatusProblem //mock will report confirmation error bc of missing request
 		}
 		return false
 	}) {
@@ -182,8 +183,8 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
 	}
-	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, "RESP1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ_1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "RESP1_1", event.ResultData.OutgoingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, event.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 }
 
@@ -195,31 +196,30 @@ func TestMessageSupplier(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", adapter.MOCK_CLIENT_URL)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", adapter.MOCK_CLIENT_URL)
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ2", string(iso18626.TypeActionReceived), "ISIL:RESP2")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
-
+	var event events.Event
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedTask) == 1 {
-			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.ResultData.IncomingMessage != nil
+		if len(completedTask) >= 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess //mock will report success even though the request does not exist
 		}
 		return false
 	}) {
 		t.Error("Expected to have request event received and successfully processed")
 	}
-	event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
 	if event.ResultData.IncomingMessage == nil {
 		t.Error("Should have response in result data")
 	}
 	assert.Equal(t, "RESP2", event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
-	assert.Equal(t, "REQ1", event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ2", event.ResultData.OutgoingMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 }
 
 func TestMessageRequesterInvalidAddress(t *testing.T) {
@@ -231,7 +231,7 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ3", "invalid")
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ3", string(iso18626.TypeActionReceived), "ISIL:RESP3")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP3", "invalid")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP3", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
@@ -264,7 +264,7 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ4", "invalid")
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP4", "invalid")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP4", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
@@ -296,8 +296,8 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ7", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ7", "whatever")
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ7", string(iso18626.TypeActionReceived), "ISIL:RESP7")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -327,7 +327,7 @@ func TestMessageRequesterFailToBegin(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
+	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -353,7 +353,7 @@ func TestMessageRequesterCompleteWithError(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	illId := createIllTrans(t, illRepo, "", string(iso18626.TypeActionReceived))
+	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -379,9 +379,9 @@ func TestMessageRequesterInvalidStatus(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ5", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, string(iso18626.TypeActionReceived))
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP5", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ5", "whatever")
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP5", "whatever")
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ5", string(iso18626.TypeActionReceived), "ISIL:RESP5")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP5", "invalid")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -408,9 +408,9 @@ func TestMessageSupplierInvalidAction(t *testing.T) {
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", LocalAddress)
-	illId := createIllTrans(t, illRepo, req.ID, "invalid")
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", LocalAddress)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", "whatever")
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", "whatever")
+	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ5", "invalid", "ISIL:RESP6")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP6", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
@@ -701,11 +701,11 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 }
 
-func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, action string) string {
-	var requesterId pgtype.Text
-	if requester != "" {
-		requesterId = pgtype.Text{
-			String: requester,
+func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requesterId string, requesterSymbol string, action string, supplierSymbol string) string {
+	var reqId pgtype.Text
+	if requesterId != "" {
+		reqId = pgtype.Text{
+			String: requesterId,
 			Valid:  true,
 		}
 	}
@@ -713,13 +713,21 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requester string, acti
 	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:          illId,
 		Timestamp:   test.GetNow(),
-		RequesterID: requesterId,
+		RequesterID: reqId,
 		RequesterSymbol: pgtype.Text{
-			String: "ISIL:REQ1",
+			String: requesterSymbol,
 			Valid:  true,
 		},
 		LastRequesterAction: pgtype.Text{
 			String: action,
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: uuid.New().String(),
+			Valid:  true,
+		},
+		SupplierSymbol: pgtype.Text{
+			String: supplierSymbol,
 			Valid:  true,
 		},
 	})
