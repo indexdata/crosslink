@@ -24,7 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const COMP = "iso18626_handler"
+const HANDLER_COMP = "iso18626_handler"
 
 type ErrorValue string
 
@@ -68,7 +68,7 @@ func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo)
 
 func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter, maxMsgSize int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString(), Component: COMP})
+		ctx := extctx.CreateExtCtxWithArgs(r.Context(), &extctx.LoggerArgs{RequestId: uuid.NewString(), Component: HANDLER_COMP})
 		if r.Method != http.MethodPost {
 			ctx.Logger().Error("method not allowed", "method", r.Method, "url", r.URL)
 			http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
