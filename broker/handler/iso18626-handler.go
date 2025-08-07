@@ -681,7 +681,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, il
 			if result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData != nil {
 				errorMessage = result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
 				errorType = &result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
-				ctx.Logger().Warn("requester message confirmation error (forwarded)", "errorType", errorType, "errorValue", errorMessage, "transactionId", illTransId,
+				ctx.Logger().Warn("requester message confirmation error (forwarded)", "errorType", *errorType, "errorValue", errorMessage, "transactionId", illTransId,
 					"requesterSymbol", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
 					"supplierSymbol", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
 					"requesterRequestId", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
