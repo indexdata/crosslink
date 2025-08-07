@@ -7,10 +7,10 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/google/uuid"
+	"github.com/indexdata/go-utils/utils"
 )
 
-var pid = strconv.Itoa(os.Getpid())
+var pid = utils.Must(os.Hostname()) + "/" + strconv.Itoa(os.Getpid())
 
 type ExtendedContext interface {
 	context.Context
@@ -97,8 +97,11 @@ func CreateExtCtxWithLogArgsAndHandler(ctx context.Context, args *LoggerArgs, lo
 }
 
 func createChildLoggerWithArgs(logger *slog.Logger, args *LoggerArgs) *slog.Logger {
-	loggerWithArgs := logger.With("pid", pid, "inst", uuid.New().String())
+	loggerWithArgs := logger.With("pid", pid)
 	if args != nil {
+		if args.Component != "" {
+			loggerWithArgs = loggerWithArgs.With("component", args.Component)
+		}
 		if args.RequestId != "" {
 			loggerWithArgs = loggerWithArgs.With("requestId", args.RequestId)
 		}
@@ -107,9 +110,6 @@ func createChildLoggerWithArgs(logger *slog.Logger, args *LoggerArgs) *slog.Logg
 		}
 		if args.EventId != "" {
 			loggerWithArgs = loggerWithArgs.With("eventId", args.EventId)
-		}
-		if args.Component != "" {
-			loggerWithArgs = loggerWithArgs.With("component", args.Component)
 		}
 		for k, v := range args.Other {
 			loggerWithArgs = loggerWithArgs.With(k, v)
