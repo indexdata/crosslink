@@ -677,14 +677,29 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, il
 	var messageStatus = iso18626.TypeMessageStatusOK
 	if result.IncomingMessage != nil {
 		if result.IncomingMessage.RequestingAgencyMessageConfirmation != nil {
-			messageStatus = result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus
-			if result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData != nil {
-				errorMessage = result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
-				errorType = &result.IncomingMessage.RequestingAgencyMessageConfirmation.ErrorData.ErrorType
-				ctx.Logger().Warn("requester message confirmation error (forwarded)", "errorType", *errorType, "errorValue", errorMessage, "transactionId", illTransId,
-					"requesterSymbol", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
-					"supplierSymbol", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
-					"requesterRequestId", illMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+			confirmMsg := result.IncomingMessage.RequestingAgencyMessageConfirmation
+			messageStatus = confirmMsg.ConfirmationHeader.MessageStatus
+			if messageStatus != iso18626.TypeMessageStatusOK {
+				if confirmMsg.ErrorData != nil {
+					errorMessage = confirmMsg.ErrorData.ErrorValue
+					errorType = &confirmMsg.ErrorData.ErrorType
+				}
+				var eType string
+				if errorType != nil {
+					eType = string(*errorType)
+				}
+				var requesterSymbol string
+				if confirmMsg.ConfirmationHeader.RequestingAgencyId != nil {
+					requesterSymbol = string(confirmMsg.ConfirmationHeader.RequestingAgencyId.AgencyIdValue)
+				}
+				var supplierSymbol string
+				if confirmMsg.ConfirmationHeader.SupplyingAgencyId != nil {
+					supplierSymbol = string(confirmMsg.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue)
+				}
+				ctx.Logger().Warn("requester message confirmation error (forwarded)", "errorType", eType, "errorValue", errorMessage, "transactionId", illTransId,
+					"requesterSymbol", requesterSymbol,
+					"supplierSymbol", supplierSymbol,
+					"requesterRequestId", confirmMsg.ConfirmationHeader.RequestingAgencyRequestId)
 			}
 		}
 	} else {
@@ -695,12 +710,14 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, il
 				(*wait.w).Write(result.HttpFailure.Body)
 			}
 			wait.wg.Done()
+			ctx.Logger().Warn("forwarded HTTP error response from supplier to requester", "transactionId", illTransId, "error", result.HttpFailure)
 			return nil, result.HttpFailure
 		}
 		eType := iso18626.TypeErrorTypeBadlyFormedMessage
 		errorMessage = string(CouldNotSendReqToPeer)
 		errorType = &eType
 		messageStatus = iso18626.TypeMessageStatusERROR
+		ctx.Logger().Warn("requester message confirmation error (send failed)", "transactionId", illTransId, "errorType", eType, "errorValue", errorMessage)
 	}
 	var resmsg = createRequestingAgencyResponse(illMessage, messageStatus, errorType, ErrorValue(errorMessage))
 	writeResponse(ctx, resmsg, *wait.w)
