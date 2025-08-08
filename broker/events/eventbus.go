@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"errors"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -82,16 +83,33 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 				if er.Error() == "conn closed" {
 					ctx.Logger().Warn("event_bus: connection closed, attempting to reconnect")
 
-					for attempt := 1; ; attempt++ {
-						time.Sleep(time.Duration(attempt) * time.Second)
-						if err = connectAndListen(); err == nil {
-							break
-						}
-						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "attempt", attempt)
+					baseDelay := 1 * time.Second
+					maxDelay := 30 * time.Second
+					delay := baseDelay
 
-						if attempt >= 5 {
-							ctx.Logger().Error("event_bus: max reconnection attempts reached, exiting retry loop")
-							return
+					for { // Loop indefinitely until context is cancelled
+						// Add jitter: a random duration up to 500ms
+						// #nosec G404 - math/rand is sufficient for connection jitter
+						jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+
+						select {
+						case <-time.After(delay + jitter):
+							// Wait for the delay and continue to retry
+						case <-ctx.Done():
+							ctx.Logger().Info("event_bus: context cancelled during reconnect, stopping retries.")
+							return // Exit goroutine if parent context is cancelled
+						}
+
+						if err = connectAndListen(); err == nil {
+							ctx.Logger().Info("event_bus: successfully reconnected")
+							break // Exit the retry loop on success
+						}
+						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
+
+						// Exponentially increase the delay for the next attempt
+						delay *= 2
+						if delay > maxDelay {
+							delay = maxDelay
 						}
 					}
 				}
