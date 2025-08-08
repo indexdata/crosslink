@@ -112,7 +112,7 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.ResultData.OutgoingMessage != nil && event.ResultData.OutgoingMessage.Request == nil {
-		//message was not a request so we need to confirm it
+		// message was not a request so we need to confirm it
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
