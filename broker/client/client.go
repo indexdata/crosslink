@@ -486,11 +486,24 @@ func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, resp
 			Kind:    KindConfirmationError,
 			Details: msg,
 		}
+		var errorType, errorValue string
+		if response.RequestConfirmation.ErrorData != nil {
+			errorType = string(response.RequestConfirmation.ErrorData.ErrorType)
+			errorValue = response.RequestConfirmation.ErrorData.ErrorValue
+		}
+		var requesterSymbol string
+		if response.RequestConfirmation.ConfirmationHeader.RequestingAgencyId != nil {
+			requesterSymbol = response.RequestConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue
+		}
+		var supplierSymbol string
+		if response.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId != nil {
+			supplierSymbol = response.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue
+		}
 		ctx.Logger().Warn(msg,
-			"errorType", response.RequestConfirmation.ErrorData.ErrorType,
-			"errorValue", response.RequestConfirmation.ErrorData.ErrorValue,
-			"requesterSymbol", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
-			"supplierSymbol", response.RequestConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"errorType", errorType,
+			"errorValue", errorValue,
+			"requesterSymbol", requesterSymbol,
+			"supplierSymbol", supplierSymbol,
 			"requesterRequestId", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 	} else if response.RequestingAgencyMessageConfirmation != nil &&
 		response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
@@ -500,11 +513,24 @@ func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, resp
 			Kind:    KindConfirmationError,
 			Details: msg,
 		}
+		var errorType, errorValue string
+		if response.RequestingAgencyMessageConfirmation.ErrorData != nil {
+			errorType = string(response.RequestingAgencyMessageConfirmation.ErrorData.ErrorType)
+			errorValue = response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue
+		}
+		var requesterSymbol string
+		if response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId != nil {
+			requesterSymbol = response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue
+		}
+		var supplierSymbol string
+		if response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId != nil {
+			supplierSymbol = response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue
+		}
 		ctx.Logger().Warn(msg,
-			"errorType", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorType,
-			"errorValue", response.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue,
-			"requesterSymbol", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
-			"supplierSymbol", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"errorType", errorType,
+			"errorValue", errorValue,
+			"requesterSymbol", requesterSymbol,
+			"supplierSymbol", supplierSymbol,
 			"requesterRequestId", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 	} else if response.SupplyingAgencyMessageConfirmation != nil &&
 		response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
@@ -514,11 +540,24 @@ func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, resp
 			Kind:    KindConfirmationError,
 			Details: msg,
 		}
+		var errorType, errorValue string
+		if response.SupplyingAgencyMessageConfirmation.ErrorData != nil {
+			errorType = string(response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
+			errorValue = response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue
+		}
+		var requesterSymbol string
+		if response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId != nil {
+			requesterSymbol = response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue
+		}
+		var supplierSymbol string
+		if response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId != nil {
+			supplierSymbol = response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue
+		}
 		ctx.Logger().Warn(msg,
-			"errorType", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType,
-			"errorValue", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue,
-			"requesterSymbol", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyId.AgencyIdValue,
-			"supplierSymbol", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue,
+			"errorType", errorType,
+			"errorValue", errorValue,
+			"requesterSymbol", requesterSymbol,
+			"supplierSymbol", supplierSymbol,
 			"requesterRequestId", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
 	}
 	return status
