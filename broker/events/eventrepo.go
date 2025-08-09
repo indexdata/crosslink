@@ -11,8 +11,9 @@ import (
 type EventRepo interface {
 	repo.Transactional[EventRepo]
 	SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error)
-	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error
+	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) (Event, error)
 	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
+	GetEventForUpdate(ctx extctx.ExtendedContext, id string) (Event, error)
 	ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
 	GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error)
@@ -46,6 +47,11 @@ func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, er
 	return row.Event, err
 }
 
+func (r *PgEventRepo) GetEventForUpdate(ctx extctx.ExtendedContext, id string) (Event, error) {
+	row, err := r.queries.GetEventForUpdate(ctx, r.GetConnOrTx(), id)
+	return row.Event, err
+}
+
 func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error) {
 	params := ClaimEventForSignalParams{
 		ID:         id,
@@ -55,8 +61,9 @@ func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string,
 	return row.Event, err
 }
 
-func (r *PgEventRepo) UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) error {
-	return r.queries.UpdateEventStatus(ctx, r.GetConnOrTx(), params)
+func (r *PgEventRepo) UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) (Event, error) {
+	row, err := r.queries.UpdateEventStatus(ctx, r.GetConnOrTx(), params)
+	return row.Event, err
 }
 
 func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error {
