@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"errors"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -38,12 +39,15 @@ type PostgresEventBus struct {
 	EventCreatedHandlers  map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskStartedHandlers   map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskCompletedHandlers map[EventName][]func(ctx extctx.ExtendedContext, event Event)
+	randGen               *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
 		repo:             repo,
 		ConnectionString: connString,
+		// #nosec G404 - math/rand is sufficient for connection jitter
+		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -82,16 +86,32 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 				if er.Error() == "conn closed" {
 					ctx.Logger().Warn("event_bus: connection closed, attempting to reconnect")
 
-					for attempt := 1; ; attempt++ {
-						time.Sleep(time.Duration(attempt) * time.Second)
-						if err = connectAndListen(); err == nil {
-							break
-						}
-						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "attempt", attempt)
+					baseDelay := 1 * time.Second
+					maxDelay := 30 * time.Second
+					delay := baseDelay
 
-						if attempt >= 5 {
-							ctx.Logger().Error("event_bus: max reconnection attempts reached, exiting retry loop")
-							return
+					for {
+						// add random duration for jitter between instances
+						jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
+
+						select {
+						case <-time.After(delay + jitter):
+							// Wait for the delay and continue to retry
+						case <-ctx.Done():
+							ctx.Logger().Info("event_bus: context cancelled during reconnect, stopping retries.")
+							return // Exit goroutine if parent context is cancelled
+						}
+
+						if err = connectAndListen(); err == nil {
+							ctx.Logger().Info("event_bus: successfully reconnected")
+							break // Exit the retry loop on success
+						}
+						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
+
+						// Gradually increase the delay for the next attempt
+						delay = time.Duration(float64(delay) * 1.5)
+						if delay > maxDelay {
+							delay = maxDelay
 						}
 					}
 				}
