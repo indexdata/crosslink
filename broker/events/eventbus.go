@@ -106,8 +106,8 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 						}
 						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
 
-						// Exponentially increase the delay for the next attempt
-						delay *= 2
+						// Gradually increase the delay for the next attempt (multiplier 1.5)
+						delay = time.Duration(float64(delay) * 1.5)
 						if delay > maxDelay {
 							delay = maxDelay
 						}
