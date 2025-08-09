@@ -39,12 +39,15 @@ type PostgresEventBus struct {
 	EventCreatedHandlers  map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskStartedHandlers   map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskCompletedHandlers map[EventName][]func(ctx extctx.ExtendedContext, event Event)
+	randGen               *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
 		repo:             repo,
 		ConnectionString: connString,
+		// #nosec G404 - math/rand is sufficient for connection jitter
+		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -87,10 +90,9 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 					maxDelay := 30 * time.Second
 					delay := baseDelay
 
-					for { // Loop indefinitely until context is cancelled
-						// Add jitter: a random duration up to 500ms
-						// #nosec G404 - math/rand is sufficient for connection jitter
-						jitter := time.Duration(rand.Intn(500)) * time.Millisecond
+					for {
+						// add random duration for jitter between instances
+						jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
 
 						select {
 						case <-time.After(delay + jitter):
@@ -106,7 +108,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 						}
 						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
 
-						// Gradually increase the delay for the next attempt (multiplier 1.5)
+						// Gradually increase the delay for the next attempt
 						delay = time.Duration(float64(delay) * 1.5)
 						if delay > maxDelay {
 							delay = maxDelay
