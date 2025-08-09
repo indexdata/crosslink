@@ -52,7 +52,7 @@ const InternalFailedToConfirmRequesterMessage = "failed to confirm requester mes
 
 var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
 
-var requestMapping = map[string]RequestWait{}
+var waitingReqs = map[string]RequestWait{}
 
 type Iso18626Handler struct {
 	eventBus  events.EventBus
@@ -375,7 +375,7 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
-	requestMapping[eventId] = RequestWait{
+	waitingReqs[eventId] = RequestWait{
 		w:  &w,
 		wg: &wg,
 	}
@@ -635,7 +635,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 		})
 		return
 	}
-	if _, ok := requestMapping[reqRequestEvent.ID]; !ok {
+	if _, ok := waitingReqs[reqRequestEvent.ID]; !ok {
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
@@ -674,11 +674,11 @@ func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedConte
 
 func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, illTransId string, waitRequestId string, requesterIllMsg *iso18626.ISO18626Message,
 	supplierResult events.EventResult) (*iso18626.ISO18626Message, error) {
-	wait, ok := requestMapping[waitRequestId]
+	wait, ok := waitingReqs[waitRequestId]
 	if !ok {
 		return nil, fmt.Errorf("cannot confirm request %s, not found", waitRequestId)
 	}
-	delete(requestMapping, waitRequestId)
+	delete(waitingReqs, waitRequestId)
 	var errorMessage = ""
 	var errorType *iso18626.TypeErrorType
 	var messageStatus = iso18626.TypeMessageStatusOK

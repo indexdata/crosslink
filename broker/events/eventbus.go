@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
@@ -23,8 +24,8 @@ type EventBus interface {
 	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
-	BeginTask(eventId string) error
-	CompleteTask(eventId string, result *EventResult, status EventStatus) error
+	BeginTask(eventId string) (Event, error)
+	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
@@ -247,19 +248,21 @@ func (p *PostgresEventBus) createNotice(illTransactionID string, eventName Event
 	})
 }
 
-func (p *PostgresEventBus) BeginTask(eventId string) error {
-	event, err := p.repo.GetEvent(p.ctx, eventId)
-	if err != nil {
-		return err
-	}
-	if event.EventType != EventTypeTask {
-		return errors.New("event is not a TASK")
-	}
-	if event.EventStatus != EventStatusNew {
-		return errors.New("event is not in state NEW")
-	}
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
+func (p *PostgresEventBus) BeginTask(eventId string) (Event, error) {
+	var event Event
+	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		var err error
+		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		if err != nil {
+			return err
+		}
+		if event.EventType != EventTypeTask {
+			return fmt.Errorf("cannot begin task processing, event is not a TASK but %s", event.EventType)
+		}
+		if event.EventStatus != EventStatusNew {
+			return fmt.Errorf("cannot begin task processing, event is not in state NEW but %s", event.EventStatus)
+		}
+		event, err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
 			LastSignal:  string(SignalTaskBegin),
@@ -270,32 +273,36 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
 		return err
 	})
+	return event, err
 }
 
-func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {
-	event, err := p.repo.GetEvent(p.ctx, eventId)
-	if err != nil {
-		return err
-	}
-	if event.EventType != EventTypeTask {
-		return errors.New("event is not a TASK")
-	}
-	if event.EventStatus != EventStatusProcessing {
-		return errors.New("event is not in state PROCESSING")
-	}
-	event.EventStatus = status
-	if result != nil {
-		event.ResultData = *result
-	}
-	event.LastSignal = string(SignalTaskComplete)
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
+func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error) {
+	var event Event
+	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		var err error
+		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		if err != nil {
+			return err
+		}
+		if event.EventType != EventTypeTask {
+			return fmt.Errorf("cannot complete task processing, event is not a TASK but %s", event.EventType)
+		}
+		if event.EventStatus != EventStatusProcessing {
+			return fmt.Errorf("cannot complete task processing, event is not in state PROCESSING but %s", event.EventStatus)
+		}
+		event.EventStatus = status
+		if result != nil {
+			event.ResultData = *result
+		}
+		event.LastSignal = string(SignalTaskComplete)
+		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete)
 		return err
 	})
+	return event, err
 }
 
 func (p *PostgresEventBus) HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event)) {
@@ -329,17 +336,18 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx e
 }
 
 func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) {
-	err := p.BeginTask(event.ID)
+	eventName := event.EventName
+	_, err := p.BeginTask(event.ID)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to start processing TASK event", "error", err, "eventName", event.EventName, "eventStatus", event.EventStatus)
+		ctx.Logger().Error("event_bus: failed to start processing TASK event", "error", err, "eventName", eventName)
 		return
 	}
 
 	status, result := h(ctx, event)
 
-	err = p.CompleteTask(event.ID, result, status)
+	_, err = p.CompleteTask(event.ID, result, status)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", event.EventName)
+		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", eventName)
 	}
 }
 
