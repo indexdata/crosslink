@@ -3,6 +3,8 @@ package events
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -22,8 +24,8 @@ type EventBus interface {
 	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
-	BeginTask(eventId string) error
-	CompleteTask(eventId string, result *EventResult, status EventStatus) error
+	BeginTask(eventId string) (Event, error)
+	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
@@ -38,12 +40,15 @@ type PostgresEventBus struct {
 	EventCreatedHandlers  map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskStartedHandlers   map[EventName][]func(ctx extctx.ExtendedContext, event Event)
 	TaskCompletedHandlers map[EventName][]func(ctx extctx.ExtendedContext, event Event)
+	randGen               *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	return &PostgresEventBus{
 		repo:             repo,
 		ConnectionString: connString,
+		// #nosec G404 - math/rand is sufficient for connection jitter
+		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -82,16 +87,32 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 				if er.Error() == "conn closed" {
 					ctx.Logger().Warn("event_bus: connection closed, attempting to reconnect")
 
-					for attempt := 1; ; attempt++ {
-						time.Sleep(time.Duration(attempt) * time.Second)
-						if err = connectAndListen(); err == nil {
-							break
-						}
-						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "attempt", attempt)
+					baseDelay := 1 * time.Second
+					maxDelay := 30 * time.Second
+					delay := baseDelay
 
-						if attempt >= 5 {
-							ctx.Logger().Error("event_bus: max reconnection attempts reached, exiting retry loop")
-							return
+					for {
+						// add random duration for jitter between instances
+						jitter := time.Duration(p.randGen.Intn(500)) * time.Millisecond
+
+						select {
+						case <-time.After(delay + jitter):
+							// Wait for the delay and continue to retry
+						case <-ctx.Done():
+							ctx.Logger().Info("event_bus: context cancelled during reconnect, stopping retries.")
+							return // Exit goroutine if parent context is cancelled
+						}
+
+						if err = connectAndListen(); err == nil {
+							ctx.Logger().Info("event_bus: successfully reconnected")
+							break // Exit the retry loop on success
+						}
+						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
+
+						// Gradually increase the delay for the next attempt
+						delay = time.Duration(float64(delay) * 1.5)
+						if delay > maxDelay {
+							delay = maxDelay
 						}
 					}
 				}
@@ -227,19 +248,21 @@ func (p *PostgresEventBus) createNotice(illTransactionID string, eventName Event
 	})
 }
 
-func (p *PostgresEventBus) BeginTask(eventId string) error {
-	event, err := p.repo.GetEvent(p.ctx, eventId)
-	if err != nil {
-		return err
-	}
-	if event.EventType != EventTypeTask {
-		return errors.New("event is not a TASK")
-	}
-	if event.EventStatus != EventStatusNew {
-		return errors.New("event is not in state NEW")
-	}
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
+func (p *PostgresEventBus) BeginTask(eventId string) (Event, error) {
+	var event Event
+	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		var err error
+		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		if err != nil {
+			return err
+		}
+		if event.EventType != EventTypeTask {
+			return fmt.Errorf("cannot begin task processing, event is not a TASK but %s", event.EventType)
+		}
+		if event.EventStatus != EventStatusNew {
+			return fmt.Errorf("cannot begin task processing, event is not in state NEW but %s", event.EventStatus)
+		}
+		event, err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
 			LastSignal:  string(SignalTaskBegin),
@@ -250,32 +273,36 @@ func (p *PostgresEventBus) BeginTask(eventId string) error {
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
 		return err
 	})
+	return event, err
 }
 
-func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) error {
-	event, err := p.repo.GetEvent(p.ctx, eventId)
-	if err != nil {
-		return err
-	}
-	if event.EventType != EventTypeTask {
-		return errors.New("event is not a TASK")
-	}
-	if event.EventStatus != EventStatusProcessing {
-		return errors.New("event is not in state PROCESSING")
-	}
-	event.EventStatus = status
-	if result != nil {
-		event.ResultData = *result
-	}
-	event.LastSignal = string(SignalTaskComplete)
-	return p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
-		_, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
+func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error) {
+	var event Event
+	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
+		var err error
+		event, err = eventRepo.GetEventForUpdate(p.ctx, eventId)
+		if err != nil {
+			return err
+		}
+		if event.EventType != EventTypeTask {
+			return fmt.Errorf("cannot complete task processing, event is not a TASK but %s", event.EventType)
+		}
+		if event.EventStatus != EventStatusProcessing {
+			return fmt.Errorf("cannot complete task processing, event is not in state PROCESSING but %s", event.EventStatus)
+		}
+		event.EventStatus = status
+		if result != nil {
+			event.ResultData = *result
+		}
+		event.LastSignal = string(SignalTaskComplete)
+		event, err = eventRepo.SaveEvent(p.ctx, SaveEventParams(event))
 		if err != nil {
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete)
 		return err
 	})
+	return event, err
 }
 
 func (p *PostgresEventBus) HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event)) {
@@ -309,17 +336,18 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx e
 }
 
 func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) {
-	err := p.BeginTask(event.ID)
+	eventName := event.EventName
+	_, err := p.BeginTask(event.ID)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to start processing TASK event", "error", err, "eventName", event.EventName, "eventStatus", event.EventStatus)
+		ctx.Logger().Error("event_bus: failed to start processing TASK event", "error", err, "eventName", eventName)
 		return
 	}
 
 	status, result := h(ctx, event)
 
-	err = p.CompleteTask(event.ID, result, status)
+	_, err = p.CompleteTask(event.ID, result, status)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", event.EventName)
+		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", eventName)
 	}
 }
 

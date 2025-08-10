@@ -22,6 +22,12 @@ WHERE event_name = $1;
 SELECT sqlc.embed(event) FROM event
 WHERE id = $1 LIMIT 1;
 
+-- name: GetEventForUpdate :one
+SELECT sqlc.embed(event) FROM event
+WHERE id = $1
+    FOR UPDATE
+LIMIT 1;
+
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = ''
@@ -61,6 +67,7 @@ WHERE id = $1;
 DELETE FROM event
 WHERE ill_transaction_id = $1;
 
--- name: UpdateEventStatus :exec
+-- name: UpdateEventStatus :one
 UPDATE event SET last_signal = $3, event_status = $2
-WHERE id = $1;
+WHERE id = $1
+RETURNING sqlc.embed(event);
