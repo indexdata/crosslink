@@ -448,6 +448,8 @@ func TestPeersCRUD(t *testing.T) {
 		"k2": "v2",
 	}
 	// Create peer
+	loanCount := int32(5)
+	borrowCount := int32(10)
 	toCreate := oapi.Peer{
 		ID:            uuid.New().String(),
 		Name:          "Peer",
@@ -457,6 +459,8 @@ func TestPeersCRUD(t *testing.T) {
 		CustomData:    &custom,
 		HttpHeaders:   &headers,
 		BranchSymbols: &[]string{"ISIL:PEER-Branch"},
+		LoansCount:    &loanCount,
+		BorrowsCount:  &borrowCount,
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err)
@@ -482,6 +486,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
 	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
+	assert.Equal(t, int32(5), *respPeers.Items[0].LoansCount)
+	assert.Equal(t, int32(10), *respPeers.Items[0].BorrowsCount)
 
 	// Cannot post same again
 	httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusBadRequest)
@@ -498,6 +504,10 @@ func TestPeersCRUD(t *testing.T) {
 	toCreate.Url = "https://url2.com"
 	toCreate.BrokerMode = oapi.Transparent
 	toCreate.Vendor = "Known"
+	updLoanCount := int32(10)
+	toCreate.LoansCount = &updLoanCount
+	updBorrowCount := int32(15)
+	toCreate.BorrowsCount = &updBorrowCount
 
 	jsonBytes, err = json.Marshal(toCreate)
 	assert.NoError(t, err)
@@ -512,9 +522,14 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "https://url2.com", respPeer.Url)
 	assert.Equal(t, oapi.Transparent, respPeer.BrokerMode)
 	assert.Equal(t, "Known", respPeer.Vendor)
+	assert.Equal(t, int32(10), *respPeer.LoansCount)
+	assert.Equal(t, int32(15), *respPeer.BorrowsCount)
 	// Get peer
 	respPeer = getPeerById(t, toCreate.ID)
 	assert.Equal(t, toCreate.ID, respPeer.ID)
+	assert.Equal(t, "Updated", respPeer.Name)
+	assert.Equal(t, int32(10), *respPeer.LoansCount)
+	assert.Equal(t, int32(15), *respPeer.BorrowsCount)
 	// Get peers
 	respPeers = getPeers(t)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
