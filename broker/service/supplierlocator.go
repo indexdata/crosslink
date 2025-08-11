@@ -36,12 +36,12 @@ func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dir
 
 func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
-	s.eventBus.ProcessTask(ctx, event, s.locateSuppliers)
+	_, _ = s.eventBus.ProcessTask(ctx, event, s.locateSuppliers)
 }
 
 func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
-	s.eventBus.ProcessTask(ctx, event, s.selectSupplier)
+	_, _ = s.eventBus.ProcessTask(ctx, event, s.selectSupplier)
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

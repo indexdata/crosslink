@@ -618,19 +618,20 @@ func createNoticeAndCheckDBError(ctx extctx.ExtendedContext, w http.ResponseWrit
 }
 
 func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(HANDLER_COMP))
 	// called for all event bus instances.
-	suppResponseEvent := h.eventBus.FindAncestor(ctx, &event, events.EventNameMessageSupplier)
+	suppResponseEvent := h.eventBus.FindAncestor(&event, events.EventNameMessageSupplier)
 	if suppResponseEvent == nil {
 		// all instances will try to process the event on lookup failure
-		h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 			return handleConfirmReqMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameMessageSupplier))
 		})
 		return
 	}
-	reqRequestEvent := h.eventBus.FindAncestor(ctx, suppResponseEvent, events.EventNameRequesterMsgReceived)
+	reqRequestEvent := h.eventBus.FindAncestor(suppResponseEvent, events.EventNameRequesterMsgReceived)
 	if reqRequestEvent == nil {
 		// all instances will try to process the event on lookup failure
-		h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 			return handleConfirmReqMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameRequesterMsgReceived))
 		})
 		return
@@ -639,7 +640,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx extctx.ExtendedContext, event 
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
-	h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+	_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 		return h.handleConfirmRequesterMsgTask(ec, e, reqRequestEvent.ID, reqRequestEvent.EventData.IncomingMessage, suppResponseEvent.ResultData)
 	})
 }
