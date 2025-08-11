@@ -62,12 +62,12 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 
 func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
-	c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
+	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
-	c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
+	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
