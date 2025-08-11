@@ -17,6 +17,7 @@ import (
 )
 
 const EVENT_BUS_CHANNEL = "crosslink_channel"
+const EB_COMP = "event_bus"
 
 type EventBus interface {
 	Start(ctx extctx.ExtendedContext) error
@@ -29,8 +30,8 @@ type EventBus interface {
 	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
-	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult))
-	FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event
+	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
+	FindAncestor(descendant *Event, eventName EventName) *Event
 }
 
 type PostgresEventBus struct {
@@ -53,24 +54,24 @@ func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 }
 
 func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
-	p.ctx = ctx
+	p.ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(EB_COMP))
 	var conn *pgx.Conn
 	var err error
 
 	connectAndListen := func() error {
 		conn, err = pgx.Connect(ctx, p.ConnectionString)
 		if err != nil {
-			ctx.Logger().Error("event_bus: unable to connect to database", "error", err)
+			ctx.Logger().Error("unable to connect to database", "error", err)
 			return err
 		}
 
 		_, err = conn.Exec(ctx, "LISTEN "+EVENT_BUS_CHANNEL)
 		if err != nil {
-			ctx.Logger().Error("event_bus: unable to listen to channel "+EVENT_BUS_CHANNEL, "error", err)
+			ctx.Logger().Error("unable to listen to channel", "channel", EVENT_BUS_CHANNEL, "error", err)
 			return err
 		}
 
-		ctx.Logger().Info("event_bus: successfully connected and listening to channel " + EVENT_BUS_CHANNEL)
+		ctx.Logger().Info("successfully connected and listening to channel", "channel", EVENT_BUS_CHANNEL)
 		return nil
 	}
 
@@ -82,10 +83,10 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 		for {
 			notification, er := conn.WaitForNotification(ctx)
 			if er != nil {
-				ctx.Logger().Error("event_bus: unable to receive notification", "error", err, "channel", EVENT_BUS_CHANNEL)
+				ctx.Logger().Error("unable to receive notification", "error", err, "channel", EVENT_BUS_CHANNEL)
 
 				if er.Error() == "conn closed" {
-					ctx.Logger().Warn("event_bus: connection closed, attempting to reconnect")
+					ctx.Logger().Warn("connection closed, attempting to reconnect")
 
 					baseDelay := 1 * time.Second
 					maxDelay := 30 * time.Second
@@ -99,15 +100,15 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 						case <-time.After(delay + jitter):
 							// Wait for the delay and continue to retry
 						case <-ctx.Done():
-							ctx.Logger().Info("event_bus: context cancelled during reconnect, stopping retries.")
+							ctx.Logger().Info("context cancelled during reconnect, stopping retries")
 							return // Exit goroutine if parent context is cancelled
 						}
 
 						if err = connectAndListen(); err == nil {
-							ctx.Logger().Info("event_bus: successfully reconnected")
+							ctx.Logger().Info("successfully reconnected")
 							break // Exit the retry loop on success
 						}
-						ctx.Logger().Error("event_bus: reconnection attempt failed", "error", err, "next_try_in", delay)
+						ctx.Logger().Error("reconnection attempt failed", "error", err, "next_try_in", delay)
 
 						// Gradually increase the delay for the next attempt
 						delay = time.Duration(float64(delay) * 1.5)
@@ -117,7 +118,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 					}
 				}
 				if strings.Contains(er.Error(), "context canceled") {
-					ctx.Logger().Error("event_bus: context cancelled, terminating")
+					ctx.Logger().Error("context cancelled, terminating")
 					break
 				}
 				continue
@@ -126,7 +127,7 @@ func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
 			var notifyData NotifyData
 			var err = json.Unmarshal([]byte(notification.Payload), &notifyData)
 			if err != nil {
-				ctx.Logger().Error("event_bus: failed to unmarshal notification", "error", err, "payload", notification.Payload)
+				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
 			}
 			p.handleNotify(notifyData)
 		}
@@ -138,51 +139,47 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			p.ctx.Logger().Error("event_bus: failure claiming event", "error", err, "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
+			p.ctx.Logger().Error("failure claiming event", "error", err, "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
 		} else {
-			p.ctx.Logger().Debug("event_bus: no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
+			p.ctx.Logger().Debug("no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
 		}
 		return
 	}
-	p.ctx.Logger().Debug("event_bus: received event", "channel", EVENT_BUS_CHANNEL,
+	p.ctx.Logger().Debug("received event", "channel", EVENT_BUS_CHANNEL,
 		"signal", data.Signal,
 		"broadcast", event.Broadcast,
 		"eventName", event.EventName,
 		"eventType", event.EventType,
 		"eventStatus", event.EventStatus)
-	eventCtx := p.ctx.WithArgs(&extctx.LoggerArgs{
-		TransactionId: event.IllTransactionID,
-		EventId:       event.ID,
-	})
 	switch data.Signal {
 	case SignalTaskCreated, SignalNoticeCreated:
-		triggerHandlers(eventCtx, event, p.EventCreatedHandlers, data.Signal)
+		triggerHandlers(p.getEventContext(&event), event, p.EventCreatedHandlers, data.Signal)
 	case SignalTaskBegin:
-		triggerHandlers(eventCtx, event, p.TaskStartedHandlers, data.Signal)
+		triggerHandlers(p.getEventContext(&event), event, p.TaskStartedHandlers, data.Signal)
 	case SignalTaskComplete:
-		triggerHandlers(eventCtx, event, p.TaskCompletedHandlers, data.Signal)
+		triggerHandlers(p.getEventContext(&event), event, p.TaskCompletedHandlers, data.Signal)
 	default:
-		p.ctx.Logger().Error("event_bus: unsupported signal", "signal", data.Signal, "eventName", event.EventName)
+		p.ctx.Logger().Error("unsupported signal", "signal", data.Signal, "eventName", event.EventName)
 	}
 }
 
-func triggerHandlers(ctx extctx.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx extctx.ExtendedContext, event Event), signal Signal) {
+func triggerHandlers(eventCtx extctx.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx extctx.ExtendedContext, event Event), signal Signal) {
 	var wg sync.WaitGroup
 	handlers, ok := handlersMap[event.EventName]
 	if ok {
-		ctx.Logger().Debug("event_bus: found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
+		eventCtx.Logger().Debug("found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
 		for _, handler := range handlers {
 			wg.Add(1)
 			go func(h func(extctx.ExtendedContext, Event), e Event) {
 				defer wg.Done()
-				h(ctx.WithArgs(&extctx.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
+				h(eventCtx.WithArgs(&extctx.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
 			}(handler, event)
 		}
 	} else {
-		ctx.Logger().Debug("event_bus: no handlers found for event", "eventName", event.EventName, "signal", signal)
+		eventCtx.Logger().Debug("no handlers found for event", "eventName", event.EventName, "signal", signal)
 	}
 	wg.Wait() // Wait for all goroutines to finish
-	ctx.Logger().Debug("event_bus: all handlers finished", "eventName", event.EventName, "signal", signal)
+	eventCtx.Logger().Debug("all handlers finished", "eventName", event.EventName, "signal", signal)
 }
 
 func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
@@ -212,7 +209,7 @@ func (p *PostgresEventBus) createTask(illTransactionID string, eventName EventNa
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
-		p.ctx.Logger().Debug("event_bus: created TASK", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
+		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
 		return err
 	})
 }
@@ -243,7 +240,7 @@ func (p *PostgresEventBus) createNotice(illTransactionID string, eventName Event
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated)
-		p.ctx.Logger().Debug("event_bus: created NOTICE", "eventName", eventName, "eventId", event.ID, "status", status)
+		p.ctx.Logger().Debug("created NOTICE event", "eventName", eventName, "eventId", event.ID, "status", status)
 		return err
 	})
 }
@@ -335,33 +332,35 @@ func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx e
 	p.TaskCompletedHandlers[eventName] = append(p.TaskCompletedHandlers[eventName], f)
 }
 
-func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) {
-	eventName := event.EventName
-	_, err := p.BeginTask(event.ID)
+func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
+	inEvent := &event
+	event, err := p.BeginTask(event.ID)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to start processing TASK event", "error", err, "eventName", eventName)
-		return
+		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
+		return event, err
 	}
 
 	status, result := h(ctx, event)
 
-	_, err = p.CompleteTask(event.ID, result, status)
+	event, err = p.CompleteTask(event.ID, result, status)
 	if err != nil {
-		ctx.Logger().Error("event_bus: failed to complete processing TASK event", "error", err, "eventName", eventName)
+		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
+		return event, err
 	}
+	return event, nil
 }
 
-func (p *PostgresEventBus) FindAncestor(ctx extctx.ExtendedContext, descendant *Event, eventName EventName) *Event {
+func (p *PostgresEventBus) FindAncestor(descendant *Event, ancestorName EventName) *Event {
 	var event *Event
 	parentId := getParentId(descendant)
 	for {
 		if parentId == nil {
 			break
 		}
-		found, err := p.repo.GetEvent(ctx, *parentId)
+		found, err := p.repo.GetEvent(p.ctx, *parentId)
 		if err != nil {
-			ctx.Logger().Error("event_bus: failed to get parent event", "eventName", eventName, "parentId", parentId, "error", err)
-		} else if found.EventName == eventName {
+			p.getEventContext(descendant).Logger().Warn("failed to get parent event", "eventName", ancestorName, "parentId", parentId, "error", err)
+		} else if found.EventName == ancestorName {
 			event = &found
 			break
 		} else {
@@ -369,6 +368,15 @@ func (p *PostgresEventBus) FindAncestor(ctx extctx.ExtendedContext, descendant *
 		}
 	}
 	return event
+}
+
+func (p *PostgresEventBus) getEventContext(event *Event) extctx.ExtendedContext {
+	//TODO extend context with event name and status
+	return p.ctx.WithArgs(&extctx.LoggerArgs{
+		TransactionId: event.IllTransactionID,
+		EventId:       event.ID,
+		Component:     EB_COMP,
+	})
 }
 
 func getParentId(event *Event) *string {
