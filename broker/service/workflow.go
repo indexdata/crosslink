@@ -111,8 +111,13 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
-	if event.ResultData.OutgoingMessage != nil && event.ResultData.OutgoingMessage.Request == nil {
-		// message was not a request so we need to confirm it
+	// there are three cases when we message supplier:
+	// 1. new supplier was selected and we send a request message
+	// 2. requester has sent a retry request and we forward it to the supplier
+	// 3. requester has sent an action message to the supplier
+	// only in case 3 we suspended the HTTP request in the handler and must resume it here
+	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
+		// action message was send by requester so we must relay the confirmation
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
