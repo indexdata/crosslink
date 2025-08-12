@@ -4,8 +4,10 @@ go 1.24
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/indexdata/crosslink/httpclient v0.0.0-20250811155455-55ea6f930339
+	github.com/indexdata/crosslink/iso18626 v0.0.0-20250811155455-55ea6f930339
 	github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72
-	github.com/magiconair/properties v1.8.7
+	github.com/magiconair/properties v1.8.10
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/stretchr/testify v1.10.0
 )
@@ -17,7 +19,7 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/indexdata/cql-go v1.0.0
+	github.com/indexdata/cql-go v1.0.1-0.20250630143453-e9983ca1e1da
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
