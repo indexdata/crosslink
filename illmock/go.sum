@@ -9,10 +9,6 @@ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/indexdata/cql-go v1.0.1-0.20250630143453-e9983ca1e1da h1:kxviOK5Div55LnO7293keKmDScDa0c1Hmo3PEd4UgzA=
-github.com/indexdata/crosslink/httpclient v0.0.0-20250811155455-55ea6f930339 h1:c88w9egpFWayd84fKRio8mJTG7gPJZeh3eDdOb0VWQs=
-github.com/indexdata/crosslink/httpclient v0.0.0-20250811155455-55ea6f930339/go.mod h1:0K4UJtfeCrMVSKmy+1DxvIhaNI3fSeSYw+v5p4yEihE=
-github.com/indexdata/crosslink/iso18626 v0.0.0-20250811155455-55ea6f930339 h1:VXLbufcz/MRdAhPgFENFepDmN1Js9X+oGpKZR7BbBhM=
-github.com/indexdata/crosslink/iso18626 v0.0.0-20250811155455-55ea6f930339/go.mod h1:J7/PnauNWr8xBF6M/oBmWdPf3DJ7usvika7rDakUBXc=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72 h1:/ssOlpKK1EOeWMCOUrxCOCZP+0Z1LD58Xg1nrU01TAQ=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/juju/gnuflag v0.0.0-20171113085948-2ce1bb71843d/go.mod h1:2PavIy+JPciBPrBUjwbNvtwB6RQlve+hkpll6QSNmOE=
