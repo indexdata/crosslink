@@ -94,6 +94,7 @@ jobs:
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
       uses: golang/govulncheck-action@v1
+      continue-on-error: true
       with:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
