@@ -333,6 +333,17 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 					Text: "book",
 				},
 			},
+			BillingInfo: &iso18626.BillingInfo{
+				MaximumCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 1061,
+						Exp:  2,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "USD",
+					},
+				},
+			},
 		},
 	}
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
@@ -373,6 +384,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		t.Errorf("failed to apply incoming")
 	}
 	assert.Equal(t, "original note\n"+
+		COST_CONDITION_PRE+"10.61 USD"+"\n"+
 		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n"+"\n"+
 		RETURN_ADDRESS_BEGIN+"\nsome address\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
