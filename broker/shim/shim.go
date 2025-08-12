@@ -86,6 +86,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixBibRecIds(request)
 			i.fixPublicationType(request)
 			i.stripReShareReqSeqNote(request)
+			i.appendMaxCostToReqNote(request)
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
 		}
@@ -135,15 +136,7 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.LoanCondition != nil {
 		condition = suppMsg.DeliveryInfo.LoanCondition.Text
 	}
-	cost := ""
-	if suppMsg.MessageInfo.OfferedCosts != nil {
-		decimal := suppMsg.MessageInfo.OfferedCosts.MonetaryValue
-		cost = utils.FormatDecimal(decimal.Base, decimal.Exp)
-		currencyCode := suppMsg.MessageInfo.OfferedCosts.CurrencyCode.Text
-		if len(cost) > 0 && len(currencyCode) > 0 {
-			cost += " " + currencyCode
-		}
-	}
+	cost := i.MarshalCost(suppMsg.MessageInfo.OfferedCosts)
 	sep := ""
 	prependNote := ""
 	origNote := suppMsg.MessageInfo.Note
@@ -159,6 +152,19 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	if len(origNote) > 0 {
 		suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + sep + origNote
 	}
+}
+
+func (*Iso18626AlmaShim) MarshalCost(tcost *iso18626.TypeCosts) string {
+	cost := ""
+	if tcost != nil {
+		decimal := tcost.MonetaryValue
+		cost = utils.FormatDecimal(decimal.Base, decimal.Exp)
+		currencyCode := tcost.CurrencyCode.Text
+		if len(cost) > 0 && len(currencyCode) > 0 {
+			cost += " " + currencyCode
+		}
+	}
+	return cost
 }
 
 func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
@@ -226,6 +232,27 @@ func (i *Iso18626AlmaShim) fixLoanCondition(request *iso18626.SupplyingAgencyMes
 	lc, ok := iso18626.LoanConditionFromStringCI(request.DeliveryInfo.LoanCondition.Text)
 	if ok {
 		request.DeliveryInfo.LoanCondition.Text = string(lc)
+	}
+}
+
+func (i *Iso18626AlmaShim) appendMaxCostToReqNote(request *iso18626.Request) {
+	if request.ServiceInfo != nil && strings.Contains(request.ServiceInfo.Note, COST_CONDITION_PRE) {
+		// already appended
+		return
+	}
+	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
+		tCost := request.BillingInfo.MaximumCosts
+		if tCost.MonetaryValue.Base > 0 {
+			cost := i.MarshalCost(tCost)
+
+			if request.ServiceInfo == nil {
+				request.ServiceInfo = new(iso18626.ServiceInfo)
+			}
+			if len(request.ServiceInfo.Note) > 0 {
+				request.ServiceInfo.Note = request.ServiceInfo.Note + "\n"
+			}
+			request.ServiceInfo.Note = request.ServiceInfo.Note + COST_CONDITION_PRE + cost
+		}
 	}
 }
 
