@@ -71,6 +71,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			i.fixLoanCondition(suppMsg)
+			i.transferOfferedCostsToDeliveryCosts(suppMsg)
 			i.stripReShareSuppMsgSeqNote(suppMsg)
 			i.humanizeReShareSupplierConditionNote(suppMsg)
 			i.prependURLToSuppMsgNote(suppMsg)
@@ -151,6 +152,18 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	suppMsg.MessageInfo.Note = prependNote
 	if len(origNote) > 0 {
 		suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + sep + origNote
+	}
+}
+
+func (i *Iso18626AlmaShim) transferOfferedCostsToDeliveryCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.MessageInfo.OfferedCosts == nil {
+		return
+	}
+	if suppMsg.DeliveryInfo == nil {
+		suppMsg.DeliveryInfo = &iso18626.DeliveryInfo{}
+	}
+	if suppMsg.DeliveryInfo.DeliveryCosts == nil {
+		suppMsg.DeliveryInfo.DeliveryCosts = suppMsg.MessageInfo.OfferedCosts
 	}
 }
 
