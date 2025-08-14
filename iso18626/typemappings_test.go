@@ -22,9 +22,8 @@ func TestIsTransitionValid(t *testing.T) {
 		{"", TypeStatusUnfilled, true},         // Empty from should allow transition to valid status only
 		{"", TypeStatusCopyCompleted, true},    // Empty from should allow transition to valid status only
 		{"", TypeStatusLoanCompleted, true},    // Empty from should allow transition to valid status only
-		{TypeStatusRequestReceived, TypeStatusRequestReceived, false},
 		{TypeStatusRequestReceived, "", false},
-		{TypeStatusRequestReceived, TypeStatusRequestReceived, false},
+		{TypeStatusRequestReceived, TypeStatusRequestReceived, true},
 		{TypeStatusRequestReceived, TypeStatusRetryPossible, true},
 		{TypeStatusRequestReceived, TypeStatusExpectToSupply, true},
 		{TypeStatusRequestReceived, TypeStatusWillSupply, true},
@@ -34,7 +33,7 @@ func TestIsTransitionValid(t *testing.T) {
 		{TypeStatusRequestReceived, TypeStatusLoanCompleted, true},
 		{TypeStatusExpectToSupply, TypeStatusRequestReceived, false},
 		{TypeStatusExpectToSupply, TypeStatusRetryPossible, false},
-		{TypeStatusExpectToSupply, TypeStatusExpectToSupply, false},
+		{TypeStatusExpectToSupply, TypeStatusExpectToSupply, true},
 		{TypeStatusExpectToSupply, TypeStatusWillSupply, true},
 		{TypeStatusExpectToSupply, TypeStatusLoaned, true},
 		{TypeStatusExpectToSupply, TypeStatusUnfilled, true},
@@ -42,7 +41,7 @@ func TestIsTransitionValid(t *testing.T) {
 		{TypeStatusWillSupply, TypeStatusRequestReceived, false},
 		{TypeStatusWillSupply, TypeStatusRetryPossible, false},
 		{TypeStatusWillSupply, TypeStatusExpectToSupply, false},
-		{TypeStatusWillSupply, TypeStatusWillSupply, false},
+		{TypeStatusWillSupply, TypeStatusWillSupply, true},
 		{TypeStatusWillSupply, TypeStatusLoaned, true},
 		{TypeStatusWillSupply, TypeStatusUnfilled, true},
 		{TypeStatusWillSupply, TypeStatusLoanCompleted, true},

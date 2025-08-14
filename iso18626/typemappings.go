@@ -20,7 +20,7 @@ var StatusMap = map[string]TypeStatus{
 const TypeStatusLoanedOrOverdue = TypeStatus("LoanedOrOverdue")
 const TypeStatusEmpty = TypeStatus("")
 
-var StatusOrder = []TypeStatus{
+var _StatusOrder = []TypeStatus{
 	TypeStatusEmpty,
 	TypeStatusRequestReceived,
 	TypeStatusRetryPossible,
@@ -37,7 +37,7 @@ var StatusOrder = []TypeStatus{
 	TypeStatusLoanCompleted,
 }
 
-var Terminals = []TypeStatus{
+var _Terminals = []TypeStatus{
 	TypeStatusUnfilled,
 	TypeStatusCancelled,
 	TypeStatusCompletedWithoutReturn,
@@ -49,7 +49,7 @@ func IsTransitionValid(from, to TypeStatus) bool {
 	if len(to) == 0 {
 		return false
 	}
-	for _, terminal := range Terminals {
+	for _, terminal := range _Terminals {
 		if from == terminal {
 			return false
 		}
@@ -58,11 +58,11 @@ func IsTransitionValid(from, to TypeStatus) bool {
 	if to == TypeStatusLoaned || to == TypeStatusOverdue {
 		to = TypeStatusLoanedOrOverdue
 	}
-	for i := 0; i < len(StatusOrder); i++ {
-		if StatusOrder[i] == from {
-			for j := i; j < len(StatusOrder); j++ {
-				if StatusOrder[j] == to {
-					return i < j
+	for i := 0; i < len(_StatusOrder); i++ {
+		if _StatusOrder[i] == from {
+			for j := i; j < len(_StatusOrder); j++ {
+				if _StatusOrder[j] == to {
+					return i <= j
 				}
 			}
 		}

@@ -525,9 +525,11 @@ func updateLocatedSupplier(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illT
 			return err
 		}
 		if iso18626.IsTransitionValid(iso18626.TypeStatus(locSup.LastStatus.String), status) {
-			// only update if the transition is possible
-			locSup.PrevStatus = locSup.LastStatus
-			locSup.LastStatus = createPgText(string(status))
+			// transition is valid but only update if it's not the same status to keep the history clean
+			if locSup.LastStatus.String != string(status) {
+				locSup.PrevStatus = locSup.LastStatus
+				locSup.LastStatus = createPgText(string(status))
+			}
 		} else {
 			ctx.Logger().Warn("status transition not valid, ignoring", "from", locSup.LastStatus.String, "to", status, "transactionId", illTrans.ID)
 		}
