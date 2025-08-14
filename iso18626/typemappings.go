@@ -17,6 +17,8 @@ var StatusMap = map[string]TypeStatus{
 	string(TypeStatusCancelled):              TypeStatusCancelled,
 }
 
+const LoanedOrOverdue = "LoanedOrOverdue"
+
 var StatusOrder = []TypeStatus{
 	TypeStatusRequestReceived,
 	TypeStatusRetryPossible,
@@ -25,7 +27,7 @@ var StatusOrder = []TypeStatus{
 	TypeStatusUnfilled,
 	TypeStatusLoaned,
 	TypeStatusOverdue,
-	TypeStatus("LoanedOrOverdue"), // Special case for Loaned or Overdue
+	TypeStatus(LoanedOrOverdue), // Special case for Loaned or Overdue
 	TypeStatusRecalled,
 	TypeStatusCancelled,
 	TypeStatusCompletedWithoutReturn,
@@ -55,7 +57,7 @@ func IsTransitionValid(from, to TypeStatus) bool {
 	}
 	//overdue and loaned are special case
 	if to == TypeStatusLoaned || to == TypeStatusOverdue {
-		to = TypeStatus("LoanedOrOverdue")
+		to = TypeStatus(LoanedOrOverdue)
 	}
 	for i := 0; i < len(StatusOrder); i++ {
 		if StatusOrder[i] == from {
