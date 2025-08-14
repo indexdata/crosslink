@@ -195,16 +195,13 @@ func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAg
 
 func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 	status := suppMsg.StatusInfo.Status
+	// Alma does not support the status "ExpectToSupply" so we change it to "WillSupply"
 	if status == iso18626.TypeStatusExpectToSupply {
 		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 		return
 	}
-	if status == iso18626.TypeStatusRequestReceived {
-		if suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
-			suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
-			return
-		}
-	}
+	// note: Alma sets an empty status for its notifications so we may need to do the same here
+	// ReShare on the other hand always sets status of Notifications to RequestReceived, so we may need to fix that the ReShare shim
 }
 
 func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMessage) {

@@ -463,7 +463,7 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 
 	supReqId := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId
 	status, reason := validateStatusAndReasonForMessage(ctx, illMessage, w, eventData, eventBus, illTrans)
-	if status == "" {
+	if reason == "" {
 		return
 	}
 	err = updateLocatedSupplier(ctx, repo, illTrans, symbol, status, reason, supReqId)
@@ -479,14 +479,21 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 }
 
 func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage) {
-	status, ok := iso18626.StatusMap[string(illMessage.SupplyingAgencyMessage.StatusInfo.Status)]
-	if !ok {
-		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(fmt.Sprintf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)))
-		eventData.OutgoingMessage = resp
-		if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
+	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
+	if len(status) > 0 {
+		var ok bool
+		status, ok = iso18626.StatusMap[string(status)]
+		if !ok {
+			resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(fmt.Sprintf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)))
+			eventData.OutgoingMessage = resp
+			if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem) == "" {
+				return "", ""
+			}
 			return "", ""
 		}
-		return "", ""
+	} else {
+		// suppliers like Alma/Rapido, may send an empty status to indicate no status change
+		status = ""
 	}
 	reason, ok := iso18626.ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
 	if !ok {
@@ -517,8 +524,15 @@ func updateLocatedSupplier(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illT
 			ctx.Logger().Error("failed to read located supplier with peer id: "+peer.ID, "error", err, "transactionId", illTrans.ID)
 			return err
 		}
-		locSup.PrevStatus = locSup.LastStatus
-		locSup.LastStatus = createPgText(string(status))
+		if iso18626.IsTransitionValid(iso18626.TypeStatus(locSup.LastStatus.String), status) {
+			// transition is valid but only update if it's not the same status to keep the history clean
+			if locSup.LastStatus.String != string(status) {
+				locSup.PrevStatus = locSup.LastStatus
+				locSup.LastStatus = createPgText(string(status))
+			}
+		} else {
+			ctx.Logger().Warn("status transition not valid, ignoring", "from", locSup.LastStatus.String, "to", status, "transactionId", illTrans.ID)
+		}
 		locSup.PrevReason = locSup.LastReason
 		locSup.LastReason = createPgText(string(reason))
 		if supReqId != "" {
