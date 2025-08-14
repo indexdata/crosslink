@@ -195,12 +195,16 @@ func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAg
 
 func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 	status := suppMsg.StatusInfo.Status
+	// Alma does not support the status "ExpectToSupply" so we change it to "WillSupply"
 	if status == iso18626.TypeStatusExpectToSupply {
 		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 		return
 	}
+	// ReShare sends status RequestReceived for all Notification messages, this is a hack as the status field should repeat the last status
+	// ISO18626 does not have an empty or "NoChange" status
 	if status == iso18626.TypeStatusRequestReceived {
 		if suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+			// this is problematic if the Notification was sent before accepting the request or after shipping the item was shipped
 			suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 			return
 		}
