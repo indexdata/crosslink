@@ -303,7 +303,7 @@ func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
 	var resmsg iso18626.ISO18626Message
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
-	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeStatusRequestReceived, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 }
 

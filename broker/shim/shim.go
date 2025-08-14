@@ -200,15 +200,8 @@ func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 		return
 	}
-	// ReShare sends status RequestReceived for all Notification messages, this is a hack as the status field should repeat the last status
-	// ISO18626 does not have an empty or "NoChange" status
-	if status == iso18626.TypeStatusRequestReceived {
-		if suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
-			// this is problematic if the Notification was sent before accepting the request or after shipping the item was shipped
-			suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
-			return
-		}
-	}
+	// note: Alma sets an empty status for its notifications so we may need to do the same here
+	// ReShare on the other hand always sets status of Notifications to RequestReceived, so we may need to fix that the ReShare shim
 }
 
 func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMessage) {
