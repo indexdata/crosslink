@@ -49,7 +49,7 @@ func (r *PgBaseRepo[T]) WithTxFunc(ctx extctx.ExtendedContext, repo PgDerivedRep
 			_ = tx.Rollback(ctx)
 			panic(r)
 		} else if err != nil {
-			ctx.Logger().Warn("DB transaction rollback due to error", "error", err)
+			ctx.Logger().Debug("DB transaction rollback due to error", "error", err)
 			_ = tx.Rollback(ctx)
 		} else {
 			err = tx.Commit(ctx)
