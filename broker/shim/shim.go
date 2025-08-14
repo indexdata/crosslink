@@ -71,6 +71,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			i.fixLoanCondition(suppMsg)
+			i.transferOfferedCostsToDeliveryCosts(suppMsg)
 			i.stripReShareSuppMsgSeqNote(suppMsg)
 			i.humanizeReShareSupplierConditionNote(suppMsg)
 			i.prependURLToSuppMsgNote(suppMsg)
@@ -151,6 +152,18 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	suppMsg.MessageInfo.Note = prependNote
 	if len(origNote) > 0 {
 		suppMsg.MessageInfo.Note = suppMsg.MessageInfo.Note + sep + origNote
+	}
+}
+
+func (i *Iso18626AlmaShim) transferOfferedCostsToDeliveryCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.MessageInfo.OfferedCosts == nil {
+		return
+	}
+	if suppMsg.DeliveryInfo == nil {
+		suppMsg.DeliveryInfo = &iso18626.DeliveryInfo{}
+	}
+	if suppMsg.DeliveryInfo.DeliveryCosts == nil {
+		suppMsg.DeliveryInfo.DeliveryCosts = suppMsg.MessageInfo.OfferedCosts
 	}
 }
 
@@ -447,6 +460,9 @@ func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message)
 	if message.RequestingAgencyMessage != nil {
 		i.fixRequesterConditionNote(message.RequestingAgencyMessage)
 	}
+	if message.SupplyingAgencyMessage != nil {
+		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
+	}
 	return xml.Marshal(message)
 }
 
@@ -458,5 +474,14 @@ func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage 
 		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
+	}
+}
+
+func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
+		return
+	}
+	if suppMsg.MessageInfo.OfferedCosts == nil {
+		suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
 	}
 }
