@@ -61,28 +61,7 @@ func (i *Iso18626DefaultShim) ApplyToIncoming(bytes []byte, message *iso18626.IS
 }
 
 type Iso18626AlmaShim struct {
-}
-
-func (i *Iso18626AlmaShim) ApplyToIncoming(bytes []byte, message *iso18626.ISO18626Message) error {
-	err := xml.Unmarshal(bytes, message)
-	if err != nil {
-		return err
-	}
-	if message != nil {
-		if message.SupplyingAgencyMessage != nil {
-			i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
-		}
-	}
-	return nil
-}
-
-func (i *Iso18626AlmaShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
-	if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
-		return
-	}
-	if suppMsg.MessageInfo.OfferedCosts == nil {
-		suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
-	}
+	Iso18626DefaultShim
 }
 
 func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
@@ -468,6 +447,9 @@ func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message)
 	if message.RequestingAgencyMessage != nil {
 		i.fixRequesterConditionNote(message.RequestingAgencyMessage)
 	}
+	if message.SupplyingAgencyMessage != nil {
+		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
+	}
 	return xml.Marshal(message)
 }
 
@@ -479,5 +461,14 @@ func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage 
 		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
+	}
+}
+
+func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
+		return
+	}
+	if suppMsg.MessageInfo.OfferedCosts == nil {
+		suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
 	}
 }
