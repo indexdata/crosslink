@@ -7,9 +7,22 @@ func TestIsTransitionValid(t *testing.T) {
 		from, to TypeStatus
 		expected bool
 	}{
-		{"", "", true}, // Empty from should always allow transition
-		{"", "whatever", true},
-		{"whatever", "", false}, // Empty to should not allow transition
+		{"whatever", "", false},                // Empty to should not allow transition
+		{"", "", false},                        // Empty to should not allow transition
+		{TypeStatusRequestReceived, "", false}, // Empty to should not allow transition
+		{"", "whatever", false},                // Empty from should allow transition to valid status only
+		{"", TypeStatusRequestReceived, true},  // Empty from should allow transition to valid status only
+		{"", TypeStatusRetryPossible, true},    // Empty from should allow transition to valid status only
+		{"", TypeStatusExpectToSupply, true},   // Empty from should allow transition to valid status only
+		{"", TypeStatusWillSupply, true},       // Empty from should allow transition to valid status only
+		{"", TypeStatusLoaned, true},           // Empty from should allow transition to valid status only
+		{"", TypeStatusOverdue, true},          // Empty from should allow transition to valid status only
+		{"", TypeStatusRecalled, true},         // Empty from should allow transition to valid status only
+		{"", TypeStatusRetryPossible, true},    // Empty from should allow transition to valid status only
+		{"", TypeStatusUnfilled, true},         // Empty from should allow transition to valid status only
+		{"", TypeStatusCopyCompleted, true},    // Empty from should allow transition to valid status only
+		{"", TypeStatusLoanCompleted, true},    // Empty from should allow transition to valid status only
+		{TypeStatusRequestReceived, TypeStatusRequestReceived, false},
 		{TypeStatusRequestReceived, "", false},
 		{TypeStatusRequestReceived, TypeStatusRequestReceived, false},
 		{TypeStatusRequestReceived, TypeStatusRetryPossible, true},
