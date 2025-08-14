@@ -524,10 +524,12 @@ func updateLocatedSupplier(ctx extctx.ExtendedContext, repo ill_db.IllRepo, illT
 			ctx.Logger().Error("failed to read located supplier with peer id: "+peer.ID, "error", err, "transactionId", illTrans.ID)
 			return err
 		}
-		if len(status) > 0 && string(status) != locSup.LastStatus.String {
-			// only update if the new status is different from the previous one
+		if iso18626.IsTransitionValid(iso18626.TypeStatus(locSup.LastStatus.String), status) {
+			// only update if the transition is possible
 			locSup.PrevStatus = locSup.LastStatus
 			locSup.LastStatus = createPgText(string(status))
+		} else {
+			ctx.Logger().Warn("status transition not valid, ignoring", "from", locSup.LastStatus.String, "to", status, "transactionId", illTrans.ID)
 		}
 		locSup.PrevReason = locSup.LastReason
 		locSup.LastReason = createPgText(string(reason))
