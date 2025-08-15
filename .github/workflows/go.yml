@@ -38,7 +38,7 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v1.64
+  GOLANGCI_LINT_VERSION: latest
 
 jobs:
   build:
