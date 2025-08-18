@@ -94,13 +94,13 @@ jobs:
         profile: ${{ matrix.modules }}/coverage.out
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
-      uses: golang/govulncheck-action@v1
-      continue-on-error: true
+      uses: golang/govulncheck-action@master
       with:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
+        cache-dependency-path: ${{ matrix.modules }}/go.sum
 
   build-all:
     if: ${{ always() }}
