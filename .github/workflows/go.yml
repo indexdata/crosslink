@@ -100,7 +100,9 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
-        cache-dependency-path: ${{ matrix.modules }}/go.sum
+        cache-dependency-path: |
+          go.work.sum
+          ${{ matrix.modules }}/go.sum
 
   build-all:
     if: ${{ always() }}
