@@ -94,7 +94,7 @@ jobs:
         profile: ${{ matrix.modules }}/coverage.out
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
-      uses: golang/govulncheck-action@v1
+      uses: golang/govulncheck-action@main
       with:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
