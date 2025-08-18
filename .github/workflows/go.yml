@@ -39,6 +39,7 @@ on:
 env:
   GO_VERSION: stable
   GOLANGCI_LINT_VERSION: latest
+  SQLC_VERSION: latest
 
 jobs:
   build:
@@ -66,7 +67,7 @@ jobs:
     - name : Ensure sqlc is installed
       uses: sqlc-dev/setup-sqlc@v4
       with:
-        sqlc-version: '1.25.0'
+        sqlc-version: ${{ env.SQLC_VERSION }}
 
     - name: Generate sources
       run: make generate
