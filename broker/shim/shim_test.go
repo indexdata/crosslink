@@ -591,6 +591,7 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 			},
 			MessageInfo: iso18626.MessageInfo{
 				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+				Note:             "see delivery costs",
 			},
 			DeliveryInfo: &iso18626.DeliveryInfo{
 				DeliveryCosts: &iso18626.TypeCosts{
@@ -613,6 +614,7 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Equal(t, 2, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
 	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
 	assert.Nil(t, msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should be nil")
+	assert.Equal(t, "see delivery costs", msg.SupplyingAgencyMessage.MessageInfo.Note)
 
 	shim := GetShim(string(common.VendorReShare))
 	bytes, err := shim.ApplyToOutgoing(&msg)
@@ -635,4 +637,5 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Equal(t, 2, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp, "OfferedCosts.Exp should be 2")
 	assert.Equal(t, "USD", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be USD")
 	assert.Equal(t, "other", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text, "LoanCondition should be 'other'")
+	assert.Equal(t, RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED+"see delivery costs", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }

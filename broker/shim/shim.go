@@ -489,6 +489,7 @@ func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18
 					Text: LOAN_CONDITION_OTHER,
 				}
 			}
+			suppMsg.MessageInfo.Note = RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED + suppMsg.MessageInfo.Note
 		}
 	}
 }
