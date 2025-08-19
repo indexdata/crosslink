@@ -11,6 +11,7 @@ import (
 )
 
 var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
+var OFFERED_COSTS, _ = utils.GetEnvBool("OFFERED_COSTS", false)
 
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
@@ -476,15 +477,17 @@ func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage 
 }
 
 func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
-	if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
-		return
-	}
-	if suppMsg.MessageInfo.OfferedCosts == nil {
-		suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
-		// also append a loan condition so reshare shows the cost as a condition
-		if suppMsg.DeliveryInfo.LoanCondition == nil {
-			suppMsg.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{
-				Text: LOAN_CONDITION_OTHER,
+	if OFFERED_COSTS {
+		if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
+			return
+		}
+		if suppMsg.MessageInfo.OfferedCosts == nil {
+			suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
+			// also append a loan condition so reshare shows the cost as a condition
+			if suppMsg.DeliveryInfo.LoanCondition == nil {
+				suppMsg.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{
+					Text: LOAN_CONDITION_OTHER,
+				}
 			}
 		}
 	}
