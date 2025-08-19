@@ -27,6 +27,7 @@ const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of co
 const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
+const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 
@@ -480,5 +481,11 @@ func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18
 	}
 	if suppMsg.MessageInfo.OfferedCosts == nil {
 		suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
+		// also append a loan condition so reshare shows the cost as a condition
+		if suppMsg.DeliveryInfo.LoanCondition == nil {
+			suppMsg.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{
+				Text: LOAN_CONDITION_OTHER,
+			}
+		}
 	}
 }
