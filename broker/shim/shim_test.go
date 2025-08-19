@@ -583,6 +583,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 }
 
 func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
+	OFFERED_COSTS = true // ensure that offered costs are enabled
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			StatusInfo: iso18626.StatusInfo{
