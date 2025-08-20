@@ -179,7 +179,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 }
 
 func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	suppliers, err := s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
 	})
@@ -198,7 +198,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 			}
 		}
 	}
-	suppliers, err = s.illRepo.GetLocatedSupplierByIllTransactionAndStatus(ctx, ill_db.GetLocatedSupplierByIllTransactionAndStatusParams{
+	suppliers, err = s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus: pgtype.Text{
 			String: "new",

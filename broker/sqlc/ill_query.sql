@@ -139,19 +139,19 @@ FROM located_supplier
 WHERE id = $1
 LIMIT 1;
 
--- name: GetLocatedSupplierByIllTransaction :many
+-- name: GetLocatedSuppliersByIllTransaction :many
 SELECT sqlc.embed(located_supplier), COUNT(*) OVER () as full_count
 FROM located_supplier
 WHERE ill_transaction_id = $1
 ORDER BY ordinal;
 
--- name: GetLocatedSupplierByIllTransactionAndStatus :many
+-- name: GetLocatedSuppliersByIllTransactionAndStatus :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_status = $2;
 
--- name: GetLocatedSupplierByIllTransactionAndStatusForUpdate :many
+-- name: GetLocatedSuppliersByIllTransactionAndStatusForUpdate :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
@@ -197,7 +197,7 @@ DELETE
 FROM located_supplier
 WHERE id = $1;
 
--- name: DeleteLocatedSupplierByIllTransaction :exec
+-- name: DeleteLocatedSuppliersByIllTransaction :exec
 DELETE
 FROM located_supplier
 WHERE ill_transaction_id = $1;
@@ -216,7 +216,7 @@ SELECT sqlc.embed(branch_symbol)
 FROM branch_symbol
 WHERE peer_id = $1;
 
--- name: DeleteBranchSymbolByPeerId :exec
+-- name: DeleteBranchSymbolsByPeerId :exec
 DELETE
 FROM branch_symbol
 WHERE peer_id = $1;

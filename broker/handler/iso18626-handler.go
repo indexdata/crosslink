@@ -437,9 +437,11 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+
 	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
+			// we should allow notification even if no supplier
 			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
 				eventBus, illTrans.ID)
 			return
