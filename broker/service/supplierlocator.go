@@ -181,17 +181,14 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
-		SupplierStatus:   ill_db.SupplierStatusSelectedPg,
+		SupplierStatus:   ill_db.SupplierStateSelectedPg,
 	})
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
 	}
 	if len(suppliers) > 0 {
 		for _, supplier := range suppliers {
-			supplier.SupplierStatus = pgtype.Text{
-				String: "skipped",
-				Valid:  true,
-			}
+			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
 			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "could not update previous selected supplier", err)
@@ -200,10 +197,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 	}
 	suppliers, err = s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
-		SupplierStatus: pgtype.Text{
-			String: "new",
-			Valid:  true,
-		},
+		SupplierStatus:   ill_db.SupplierStateNewPg,
 	})
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not find located suppliers", err)
@@ -212,7 +206,7 @@ func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event event
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
 	locSup := suppliers[0]
-	locSup.SupplierStatus = ill_db.SupplierStatusSelectedPg
+	locSup.SupplierStatus = ill_db.SupplierStateSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update located supplier status", err)

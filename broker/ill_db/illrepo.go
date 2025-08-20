@@ -216,7 +216,7 @@ func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx extctx.ExtendedConte
 func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {
 	selSup, err := r.GetLocatedSuppliersByIllTransactionAndStatus(ctx, GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: illTransId,
-		SupplierStatus:   SupplierStatusSelectedPg,
+		SupplierStatus:   SupplierStateSelectedPg,
 	})
 	if err != nil {
 		return LocatedSupplier{}, err
@@ -227,7 +227,7 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedCont
 func (r *PgIllRepo) GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {
 	selSup, err := r.GetLocatedSuppliersByIllTransactionAndStatusForUpdate(ctx, GetLocatedSuppliersByIllTransactionAndStatusForUpdateParams{
 		IllTransactionID: illTransId,
-		SupplierStatus:   SupplierStatusSelectedPg,
+		SupplierStatus:   SupplierStateSelectedPg,
 	})
 	if err != nil {
 		return LocatedSupplier{}, err
