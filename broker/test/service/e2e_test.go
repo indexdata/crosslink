@@ -168,6 +168,60 @@ func TestRequestUNFILLED(t *testing.T) {
 	assert.Equal(t, string(handler.RetryNotPossible), msg.RequestConfirmation.ErrorData.ErrorValue)
 }
 
+func TestMessageAfterUNFILLED(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-470545f6f342"
+	data, _ := os.ReadFile("../testdata/request-unfilled.xml")
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
+			"TASK, message-requester = SUCCESS\n",
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 7))
+	data, err = os.ReadFile("../testdata/supmsg-notification.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, err = http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client = &http.Client{}
+	res, err = client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+}
+
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f344"

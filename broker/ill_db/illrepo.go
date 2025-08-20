@@ -35,6 +35,7 @@ type IllRepo interface {
 	GetLocatedSuppliersByIllTransaction(ctx extctx.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
 	GetLocatedSuppliersByIllTransactionAndStatusForUpdate(ctx extctx.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusForUpdateParams) ([]LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.ExtendedContext, id, symbol string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransactionForUpdate(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
 	DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
@@ -197,6 +198,14 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveL
 
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx, r.GetConnOrTx(), params)
+	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.ExtendedContext, illTransId, symbol string) (LocatedSupplier, error) {
+	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSymbol(ctx, r.GetConnOrTx(), GetLocatedSupplierByIllTransactionAndSymbolParams{
+		IllTransactionID: illTransId,
+		SupplierSymbol:   symbol,
+	})
 	return row.LocatedSupplier, err
 }
 

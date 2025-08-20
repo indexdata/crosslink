@@ -83,10 +83,33 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	}
 	resData := events.EventResult{}
 	locSupplier, supplier, _ := c.getSelectedSupplierPeer(ctx, illTrans)
+	// TODO check if the located supplier matches the incoming message header, if any
+	// if not, look for skipped suppliers, if any
+	// if none, return an error
 	var status iso18626.TypeStatus
 	firstMessage := true
 	if locSupplier == nil {
-		status = iso18626.TypeStatusUnfilled
+		if event.EventData.IncomingMessage != nil &&
+			event.EventData.IncomingMessage.SupplyingAgencyMessage != nil &&
+			event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+			// forwarding notification on an unfilled transaction
+			symbol := event.EventData.IncomingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+				event.EventData.IncomingMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+			skipped, err := c.illRepo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTrans.ID, symbol)
+			if err != nil || skipped.SupplierStatus != ill_db.SupplierStateSkippedPg {
+				return events.LogErrorAndReturnResult(ctx, FailedToGetSupplier, err)
+			}
+			skippedPeer, err := c.illRepo.GetPeerById(ctx, skipped.SupplierID)
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, FailedToGetSupplier, err)
+			}
+			locSupplier = &skipped
+			supplier = &skippedPeer
+			status = iso18626.TypeStatus(skipped.LastStatus.String)
+		} else {
+			// no suppliers left or found
+			status = iso18626.TypeStatusUnfilled
+		}
 	} else {
 		lastReceivedStatus := locSupplier.LastStatus
 		if s, ok := iso18626.StatusMap[lastReceivedStatus.String]; ok {

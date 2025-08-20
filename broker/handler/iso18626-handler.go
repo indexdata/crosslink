@@ -439,14 +439,21 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 
 	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
-			// we should allow notification even if no supplier
-
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
+		// we allow notification from skipped suppliers
+		if illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+			supplier, err = repo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTrans.ID, symbol)
+			if errors.Is(err, pgx.ErrNoRows) || supplier.SupplierStatus != ill_db.SupplierStateSkippedPg {
+				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
+					eventBus, illTrans.ID)
+				return
+			}
+		} else {
 			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
 				eventBus, illTrans.ID)
 			return
 		}
+	} else if err != nil {
 		ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
