@@ -424,7 +424,6 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
 		return
 	}
-
 	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -437,15 +436,29 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-
+	requester, err := repo.GetPeerById(ctx, illTrans.RequesterID.String)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
+			return
+		}
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return
+	}
 	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
-		// we allow notification from skipped suppliers
+		// we allow notification from skipped suppliers when requester is in transparent mode
 		if illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
 			supplier, err = repo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTrans.ID, symbol)
-			if errors.Is(err, pgx.ErrNoRows) || supplier.SupplierStatus != ill_db.SupplierStateSkippedPg {
+			if errors.Is(err, pgx.ErrNoRows) || err == nil && supplier.SupplierStatus != ill_db.SupplierStateSkippedPg && requester.BrokerMode == string(extctx.BrokerModeTransparent) {
 				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
 					eventBus, illTrans.ID)
+				return
+			}
+			if err != nil {
+				ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
+				http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 				return
 			}
 		} else {
