@@ -476,7 +476,7 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx extctx.ExtendedContext, symbols
 				ctx.Logger().Error("failed to read peer", "symbol", sym, "error", err)
 			}
 		} else {
-			if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
+			if peer.RefreshPolicy == RefreshPolicyTransaction && time.Now().UTC().After(peer.RefreshTime.Time.Add(PeerRefreshInterval)) {
 				symbolsToFetch = append(symbolsToFetch, sym)
 			} else {
 				symbolToPeer[sym] = peer
@@ -501,7 +501,7 @@ func getSliceFromMapInOrder(symbolToPeer map[string]Peer, symbols []string) []Pe
 
 func GetPgNow() pgtype.Timestamp {
 	return pgtype.Timestamp{
-		Time:  time.Now(),
+		Time:  time.Now().UTC(),
 		Valid: true,
 	}
 }
