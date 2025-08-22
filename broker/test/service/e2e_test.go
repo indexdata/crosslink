@@ -29,6 +29,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	ill_db.PeerRefreshInterval = 0 //force refresh for every test
 	ctx := context.Background()
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
@@ -169,9 +170,10 @@ func TestRequestUNFILLED(t *testing.T) {
 }
 
 func TestMessageAfterUNFILLED(t *testing.T) {
+	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	reqId := "5636c993-c41c-48f4-a285-470545f6f342"
-	data, _ := os.ReadFile("../testdata/request-unfilled.xml")
+	reqId := "5636c993-c41c-48f4-a285-470545f6f352"
+	data, _ := os.ReadFile("../testdata/request-unfilled-2.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
@@ -198,11 +200,12 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 7))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 8))
 	data, err = os.ReadFile("../testdata/supmsg-notification.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -219,7 +222,71 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
+	// note that we check the confirmation status from the broker but since the broker doesn't wait for the confirmation from the requester
+	// unlike in the case of supplier confirmations, we will get an OK here but the error will be visible in the broker logs
+	// the proper solution is to wait suspend the connection like we do for requester actions
 	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
+}
+
+func TestMessageSkipped(t *testing.T) {
+	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
+	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
+	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock :%s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, string(iso18626.TypeStatusWillSupply), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t,
+		"NOTICE, request-received = SUCCESS\n"+
+			"TASK, locate-suppliers = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, select-supplier = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n"+
+			"TASK, message-supplier = SUCCESS\n"+
+			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS\n",
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 11))
+	data, err = os.ReadFile("../testdata/supmsg-notification-2.xml")
+	assert.Nil(t, err)
+	brokerUrl := os.Getenv("PEER_URL")
+	req, err = http.NewRequest("POST", brokerUrl, bytes.NewReader(data))
+	assert.Nil(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	client = &http.Client{}
+	res, err = client.Do(req)
+	assert.Nil(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.Nil(t, err)
+	var msg iso18626.Iso18626MessageNS
+	err = xml.Unmarshal(body, &msg)
+	assert.Nil(t, err)
+	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
 }
 
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
@@ -576,7 +643,7 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 			"TASK, confirm-requester-msg = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 21))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 18))
 }
 
 func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
@@ -621,7 +688,7 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 			"TASK, confirm-requester-msg = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 21))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 18))
 }
 
 func getPgText(value string) pgtype.Text {

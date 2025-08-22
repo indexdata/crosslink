@@ -1,12 +1,14 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5"
 )
 
 const WF_COMP = "workflow_manager"
@@ -129,6 +131,7 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	}
 }
 
+// TODO move this to the client, we're doing double work here
 func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event events.Event) bool {
 	requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
 	if err != nil {
@@ -137,6 +140,15 @@ func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event
 	}
 	if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
 		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
+			symbol := getSymbol(event.EventData.IncomingMessage)
+			sup, err = w.illRepo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, event.IllTransactionID, symbol)
+			if err != nil || sup.SupplierStatus != ill_db.SupplierStateSkippedPg {
+				ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
+				return false
+			}
+			return !sup.LocalSupplier
+		}
 		if err != nil {
 			ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
 			return false
@@ -144,4 +156,13 @@ func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event
 		return !sup.LocalSupplier
 	}
 	return true
+}
+
+func getSymbol(msg *iso18626.ISO18626Message) string {
+	symbol := ""
+	if msg != nil && msg.SupplyingAgencyMessage != nil {
+		symbol = msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+			msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	}
+	return symbol
 }
