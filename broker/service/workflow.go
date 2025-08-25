@@ -135,7 +135,7 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event events.Event) bool {
 	requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
 	if err != nil {
-		ctx.Logger().Error("failed to process ISO18626 message received event, no requester", "error", err)
+		ctx.Logger().Info("cannot detect local supply: no requester", "error", err)
 		return false
 	}
 	if requester.BrokerMode == string(extctx.BrokerModeTransparent) || requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
@@ -144,13 +144,13 @@ func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event
 			symbol := getSymbol(event.EventData.IncomingMessage)
 			sup, err = w.illRepo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, event.IllTransactionID, symbol)
 			if err != nil || sup.SupplierStatus != ill_db.SupplierStateSkippedPg {
-				ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
+				ctx.Logger().Info("cannot detect local supply: no skipped supplier", "error", err)
 				return false
 			}
 			return !sup.LocalSupplier
 		}
 		if err != nil {
-			ctx.Logger().Error("failed to process ISO18626 message received event, no supplier", "error", err)
+			ctx.Logger().Info("cannot detect local supply: no selected supplier", "error", err)
 			return false
 		}
 		return !sup.LocalSupplier

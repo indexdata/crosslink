@@ -588,12 +588,17 @@ func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, resp
 		if response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId != nil {
 			supplierSymbol = response.RequestingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue
 		}
+		var action iso18626.TypeAction
+		if response.RequestingAgencyMessageConfirmation.Action != nil {
+			action = *response.RequestingAgencyMessageConfirmation.Action
+		}
 		ctx.Logger().Warn(msg,
 			"errorType", errorType,
 			"errorValue", errorValue,
 			"requesterSymbol", requesterSymbol,
 			"supplierSymbol", supplierSymbol,
-			"requesterRequestId", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+			"requesterRequestId", response.RequestingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId,
+			"action", action)
 	} else if response.SupplyingAgencyMessageConfirmation != nil &&
 		response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
 		msg := "supplier message confirmation error"
@@ -615,12 +620,17 @@ func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, resp
 		if response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId != nil {
 			supplierSymbol = response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue
 		}
+		var reason iso18626.TypeReasonForMessage
+		if response.SupplyingAgencyMessageConfirmation.ReasonForMessage != nil {
+			reason = *response.SupplyingAgencyMessageConfirmation.ReasonForMessage
+		}
 		ctx.Logger().Warn(msg,
 			"errorType", errorType,
 			"errorValue", errorValue,
 			"requesterSymbol", requesterSymbol,
 			"supplierSymbol", supplierSymbol,
-			"requesterRequestId", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+			"requesterRequestId", response.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId,
+			"reason", reason)
 	}
 	return status
 }
