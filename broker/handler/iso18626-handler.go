@@ -424,7 +424,6 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
 		return
 	}
-
 	var illTrans, err = repo.GetIllTransactionByRequesterRequestId(ctx, createPgText(requestingRequestId))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -437,18 +436,48 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 	}
 	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
 		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+	if len(symbol) < 3 {
+		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier)
+		return
+	}
+	requester, err := repo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
-			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
-				eventBus, illTrans.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
 			return
 		}
+		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
+		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+		return
+	}
+	supplier, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, pgx.ErrTooManyRows) {
 		ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	if supplier.SupplierSymbol != symbol {
+	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) || supplier.SupplierSymbol != symbol {
+		// we allow notification from skipped suppliers when requester is in transparent mode
+		if requester.BrokerMode == string(extctx.BrokerModeTransparent) &&
+			illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+			supplier, err = repo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTrans.ID, symbol)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, pgx.ErrTooManyRows) {
+				ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
+				http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
+				return
+			}
+			if supplier.SupplierStatus != ill_db.SupplierStateSkippedPg {
+				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
+					eventBus, illTrans.ID)
+				return
+			}
+		} else {
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier,
+				eventBus, illTrans.ID)
+			return
+		}
+	}
+	if supplier.SupplierSymbol != symbol { //ensure we found the correct supplier
 		handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier,
 			eventBus, illTrans.ID)
 		return
