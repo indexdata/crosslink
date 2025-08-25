@@ -226,6 +226,16 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	// unlike in the case of supplier confirmations, we will get an OK here but the error will be visible in the broker logs
 	// the proper solution is to wait suspend the connection like we do for requester actions
 	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	//wait until the broker processes the notification
+	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.PrevSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
 	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
 }
 
@@ -286,6 +296,16 @@ func TestMessageSkipped(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	//wait until the broker processes the notification
+	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.PrevSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
 	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
 }
 
