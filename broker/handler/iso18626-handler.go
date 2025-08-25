@@ -457,7 +457,6 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) || supplier.SupplierSymbol != symbol {
-		ctx.Logger().Info("no selected supplier, will try skipped", "symbol", symbol, "reason", illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 		// we allow notification from skipped suppliers when requester is in transparent mode
 		if requester.BrokerMode == string(extctx.BrokerModeTransparent) &&
 			illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
@@ -468,7 +467,6 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 				return
 			}
 			if supplier.SupplierStatus != ill_db.SupplierStateSkippedPg {
-				ctx.Logger().Info("no skipped supplier or does not match", "symbol", symbol, "status", supplier.SupplierStatus, "requesterBrokerMode", requester.BrokerMode)
 				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
 					eventBus, illTrans.ID)
 				return
