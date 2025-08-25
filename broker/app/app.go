@@ -171,6 +171,10 @@ func Run(ctx context.Context) error {
 	return StartServer(context)
 }
 
+func Archive(ctx context.Context) error {
+	return nil
+}
+
 func StartServer(ctx Context) error {
 	ServeMux = http.NewServeMux()
 	ServeMux.HandleFunc("GET /healthz", HandleHealthz)
