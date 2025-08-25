@@ -173,7 +173,7 @@ func TestFilterAndSort(t *testing.T) {
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
 		{PeerId: "1", Ratio: 0.5, Symbol: "AU-NALB", CustomData: dirEntries.Items[0]},
-		{PeerId: "2", Ratio: 0.7, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
+		{PeerId: "2", Ratio: 0.8, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
 		{PeerId: "3", Ratio: 0.7, Symbol: "AU-VVWA", CustomData: dirEntries.Items[4]}}
 	serviceInfo := iso18626.ServiceInfo{
 		ServiceLevel: &iso18626.TypeSchemeValuePair{
@@ -222,13 +222,13 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[1], adapter.NetworkMatch{Name: "Victoria Govt & Arts", Priority: 2, Match: false})
 	assert.Equal(t, sup.Networks[2], adapter.NetworkMatch{Name: "Victoria Health", Priority: 3, Match: false})
 	assert.Equal(t, sup.Networks[3], adapter.NetworkMatch{Name: "National", Priority: 9, Match: false})
-	assert.Equal(t, "0.00", sup.Cost)
+	assert.Equal(t, "44.80", sup.Cost)
 	assert.Equal(t, 1, sup.Priority)
 	assert.Equal(t, float32(0.7), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
-	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "0.00", Match: true})
-	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
-	assert.Equal(t, sup.Tiers[2], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Core Copy", Level: "core", Type: "copy", Cost: "0.00", Match: false})
+	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
+	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Core Copy", Level: "core", Type: "copy", Cost: "0.00", Match: false})
+	assert.Equal(t, sup.Tiers[2], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "0.00", Match: false})
 	assert.Equal(t, sup.Tiers[3], adapter.TierMatch{Name: "Premium Pay for Peer - Core Copy", Level: "core", Type: "copy", Cost: "22.40", Match: false})
 
 	sup = rotaInfo.Suppliers[1]
@@ -243,7 +243,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[5], adapter.NetworkMatch{Name: "National", Priority: 9, Match: false})
 	assert.Equal(t, "44.80", sup.Cost)
 	assert.Equal(t, 1, sup.Priority)
-	assert.Equal(t, float32(0.7), sup.Ratio)
+	assert.Equal(t, float32(0.8), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
 	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
 	assert.Equal(t, sup.Tiers[1], adapter.TierMatch{Name: "Premium Pay for Peer - Core Copy", Level: "core", Type: "copy", Cost: "22.40", Match: false})
@@ -269,7 +269,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 1000,
+				Base: 3440,
 				Exp:  2,
 			},
 		},
@@ -354,7 +354,37 @@ func TestFilterAndSortByLevel(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 3500,
+				Base: 4500,
+				Exp:  2,
+			},
+		},
+	}
+	var rotaInfo adapter.RotaInfo
+	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+	assert.Len(t, entries, 2)
+	assert.Equal(t, "2", entries[0].PeerId)
+	assert.Equal(t, "3", entries[1].PeerId)
+	assert.Equal(t, "copy", rotaInfo.Request.Type)
+}
+
+func TestFilterAndSortReciprocal(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := createDirectoryAdapter("")
+	requesterData := dirEntries.Items[4]
+	entries := []adapter.Supplier{
+		{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]},
+		{PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[2]},
+		{PeerId: "3", Ratio: 0.7, CustomData: dirEntries.Items[4]}}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Rush",
+		},
+		ServiceType: iso18626.TypeServiceTypeCopy,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 0,
 				Exp:  2,
 			},
 		},
@@ -376,10 +406,9 @@ func TestFilterAndSortNoFilters(t *testing.T) {
 		{PeerId: "3", Ratio: 0.8, CustomData: dirEntries.Items[4]}}
 	var rotaInfo adapter.RotaInfo
 	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, nil, nil)
-	assert.Len(t, entries, 3)
+	assert.Len(t, entries, 2)
 	assert.Equal(t, "1", entries[0].PeerId)
 	assert.Equal(t, "3", entries[1].PeerId)
-	assert.Equal(t, "2", entries[2].PeerId)
 	assert.Equal(t, "", rotaInfo.Request.Type)
 }
 

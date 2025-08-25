@@ -38,7 +38,8 @@ on:
 
 env:
   GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: v1.64
+  GOLANGCI_LINT_VERSION: latest
+  SQLC_VERSION: '1.29.0'
 
 jobs:
   build:
@@ -66,7 +67,7 @@ jobs:
     - name : Ensure sqlc is installed
       uses: sqlc-dev/setup-sqlc@v4
       with:
-        sqlc-version: '1.25.0'
+        sqlc-version: ${{ env.SQLC_VERSION }}
 
     - name: Generate sources
       run: make generate
@@ -74,6 +75,7 @@ jobs:
     - name: Lint module '${{ matrix.modules }}'
       uses: golangci/golangci-lint-action@v6
       with:
+        install-mode: goinstall
         version: ${{ env.GOLANGCI_LINT_VERSION }}
         working-directory: ${{ matrix.modules }}
 
@@ -93,12 +95,13 @@ jobs:
         profile: ${{ matrix.modules }}/coverage.out
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
-      uses: golang/govulncheck-action@v1
+      uses: golang/govulncheck-action@master
       with:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
+        cache-dependency-path: ${{ matrix.modules }}/go.sum
 
   build-all:
     if: ${{ always() }}

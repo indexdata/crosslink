@@ -11,6 +11,7 @@ import (
 )
 
 var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
+var OFFERED_COSTS, _ = utils.GetEnvBool("OFFERED_COSTS", false)
 
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
@@ -27,6 +28,7 @@ const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of co
 const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
+const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 
@@ -71,6 +73,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
 			i.fixLoanCondition(suppMsg)
+			i.transferOfferedCostsToDeliveryCosts(suppMsg)
 			i.stripReShareSuppMsgSeqNote(suppMsg)
 			i.humanizeReShareSupplierConditionNote(suppMsg)
 			i.prependURLToSuppMsgNote(suppMsg)
@@ -86,6 +89,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 			i.fixBibRecIds(request)
 			i.fixPublicationType(request)
 			i.stripReShareReqSeqNote(request)
+			i.appendMaxCostToReqNote(request)
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
 		}
@@ -135,15 +139,7 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.LoanCondition != nil {
 		condition = suppMsg.DeliveryInfo.LoanCondition.Text
 	}
-	cost := ""
-	if suppMsg.MessageInfo.OfferedCosts != nil {
-		decimal := suppMsg.MessageInfo.OfferedCosts.MonetaryValue
-		cost = utils.FormatDecimal(decimal.Base, decimal.Exp)
-		currencyCode := suppMsg.MessageInfo.OfferedCosts.CurrencyCode.Text
-		if len(cost) > 0 && len(currencyCode) > 0 {
-			cost += " " + currencyCode
-		}
-	}
+	cost := i.MarshalCost(suppMsg.MessageInfo.OfferedCosts)
 	sep := ""
 	prependNote := ""
 	origNote := suppMsg.MessageInfo.Note
@@ -161,6 +157,31 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	}
 }
 
+func (i *Iso18626AlmaShim) transferOfferedCostsToDeliveryCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg.MessageInfo.OfferedCosts == nil {
+		return
+	}
+	if suppMsg.DeliveryInfo == nil {
+		suppMsg.DeliveryInfo = &iso18626.DeliveryInfo{}
+	}
+	if suppMsg.DeliveryInfo.DeliveryCosts == nil {
+		suppMsg.DeliveryInfo.DeliveryCosts = suppMsg.MessageInfo.OfferedCosts
+	}
+}
+
+func (*Iso18626AlmaShim) MarshalCost(tcost *iso18626.TypeCosts) string {
+	cost := ""
+	if tcost != nil {
+		decimal := tcost.MonetaryValue
+		cost = utils.FormatDecimal(decimal.Base, decimal.Exp)
+		currencyCode := tcost.CurrencyCode.Text
+		if len(cost) > 0 && len(currencyCode) > 0 {
+			cost += " " + currencyCode
+		}
+	}
+	return cost
+}
+
 func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAgencyMessage) {
 	if suppMsg.DeliveryInfo != nil && suppMsg.DeliveryInfo.SentVia != nil &&
 		suppMsg.DeliveryInfo.SentVia.Text == string(iso18626.SentViaUrl) &&
@@ -176,16 +197,13 @@ func (i *Iso18626AlmaShim) prependURLToSuppMsgNote(suppMsg *iso18626.SupplyingAg
 
 func (*Iso18626AlmaShim) fixStatus(suppMsg *iso18626.SupplyingAgencyMessage) {
 	status := suppMsg.StatusInfo.Status
+	// Alma does not support the status "ExpectToSupply" so we change it to "WillSupply"
 	if status == iso18626.TypeStatusExpectToSupply {
 		suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
 		return
 	}
-	if status == iso18626.TypeStatusRequestReceived {
-		if suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
-			suppMsg.StatusInfo.Status = iso18626.TypeStatusWillSupply
-			return
-		}
-	}
+	// note: Alma sets an empty status for its notifications so we may need to do the same here
+	// ReShare on the other hand always sets status of Notifications to RequestReceived, so we may need to fix that the ReShare shim
 }
 
 func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMessage) {
@@ -226,6 +244,27 @@ func (i *Iso18626AlmaShim) fixLoanCondition(request *iso18626.SupplyingAgencyMes
 	lc, ok := iso18626.LoanConditionFromStringCI(request.DeliveryInfo.LoanCondition.Text)
 	if ok {
 		request.DeliveryInfo.LoanCondition.Text = string(lc)
+	}
+}
+
+func (i *Iso18626AlmaShim) appendMaxCostToReqNote(request *iso18626.Request) {
+	if request.ServiceInfo != nil && strings.Contains(request.ServiceInfo.Note, COST_CONDITION_PRE) {
+		// already appended
+		return
+	}
+	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
+		tCost := request.BillingInfo.MaximumCosts
+		if tCost.MonetaryValue.Base > 0 {
+			cost := i.MarshalCost(tCost)
+
+			if request.ServiceInfo == nil {
+				request.ServiceInfo = new(iso18626.ServiceInfo)
+			}
+			if len(request.ServiceInfo.Note) > 0 {
+				request.ServiceInfo.Note = request.ServiceInfo.Note + "\n"
+			}
+			request.ServiceInfo.Note = request.ServiceInfo.Note + COST_CONDITION_PRE + cost
+		}
 	}
 }
 
@@ -420,6 +459,9 @@ func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message)
 	if message.RequestingAgencyMessage != nil {
 		i.fixRequesterConditionNote(message.RequestingAgencyMessage)
 	}
+	if message.SupplyingAgencyMessage != nil {
+		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
+	}
 	return xml.Marshal(message)
 }
 
@@ -430,6 +472,23 @@ func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage 
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE + requestingAgencyMessage.Note
 		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
+		}
+	}
+}
+
+func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if OFFERED_COSTS {
+		if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
+			return
+		}
+		if suppMsg.MessageInfo.OfferedCosts == nil {
+			suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
+			// also append a loan condition so reshare shows the cost as a condition
+			if suppMsg.DeliveryInfo.LoanCondition == nil {
+				suppMsg.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{
+					Text: LOAN_CONDITION_OTHER,
+				}
+			}
 		}
 	}
 }

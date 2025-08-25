@@ -306,7 +306,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
 	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
 
-	err = eventBus.BeginTask(eventId)
+	_, err = eventBus.BeginTask(eventId)
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
@@ -323,7 +323,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	}
 
 	result := events.EventResult{}
-	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
@@ -344,23 +344,23 @@ func TestBeginTaskNegative(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
-	err := eventBus.BeginTask(eventId)
+	_, err := eventBus.BeginTask(eventId)
 	if err == nil || err.Error() != "no rows in result set" {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	err = eventBus.BeginTask(eventId)
-	if err == nil || err.Error() != "event is not a TASK" {
-		t.Errorf("Should fail with: event is not a TASK")
+	_, err = eventBus.BeginTask(eventId)
+	if err == nil || err.Error() != "cannot begin task processing, event is not a TASK but NOTICE" {
+		t.Errorf("Should fail with: cannot begin task processing, event is not a TASK but NOTICE")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	err = eventBus.BeginTask(eventId)
-	if err == nil || err.Error() != "event is not in state NEW" {
-		t.Errorf("Should fail with: event is not in state NEW")
+	_, err = eventBus.BeginTask(eventId)
+	if err == nil || err.Error() != "cannot begin task processing, event is not in state NEW but SUCCESS" {
+		t.Errorf("Should fail with: event is not in state NEW but SUCCESS")
 	}
 }
 
@@ -369,23 +369,23 @@ func TestCompleteTaskNegative(t *testing.T) {
 	eventId := uuid.New().String()
 
 	result := events.EventResult{}
-	err := eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err := eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
 	if err == nil || err.Error() != "no rows in result set" {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
-	if err == nil || err.Error() != "event is not a TASK" {
-		t.Errorf("Should fail with: event is not a TASK")
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err == nil || err.Error() != "cannot complete task processing, event is not a TASK but NOTICE" {
+		t.Errorf("Should fail with: cannot complete task processing, event is not a TASK but NOTICE")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
-	if err == nil || err.Error() != "event is not in state PROCESSING" {
-		t.Errorf("Should fail with: event is not in state PROCESSING")
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	if err == nil || err.Error() != "cannot complete task processing, event is not in state PROCESSING but SUCCESS" {
+		t.Errorf("Should fail with: event is not in state PROCESSING but SUCCESS")
 	}
 }
 

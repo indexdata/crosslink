@@ -119,7 +119,8 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 	var rotaInfo RotaInfo
 
 	filtered := []Supplier{}
-	requesterNetworks := getPeerNetworks(requesterData)
+	reqNetworks := getPeerNetworks(requesterData)
+	reqTiers := getPeerTiers(requesterData)
 	var svcType string
 	var svcLevel string
 	maxCost := math.MaxFloat64 //TODO keeping original behavior, but should be set to 0.0 if no cost is specified
@@ -132,8 +133,8 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 	}
 	rotaInfo.Request.Type = svcType
 	rotaInfo.Request.Level = svcLevel
-	rotaInfo.Requester.Networks = make([]string, 0, len(requesterNetworks))
-	for name := range requesterNetworks {
+	rotaInfo.Requester.Networks = make([]string, 0, len(reqNetworks))
+	for name := range reqNetworks {
 		rotaInfo.Requester.Networks = append(rotaInfo.Requester.Networks, name)
 	}
 	if billingInfo != nil && billingInfo.MaximumCosts != nil {
@@ -157,7 +158,7 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 			})
 		}
 		priority := math.MaxInt
-		for name := range requesterNetworks {
+		for name := range reqNetworks {
 			if net, ok := supNetworks[name]; ok {
 				if priority > net.Priority {
 					priority = net.Priority
@@ -184,24 +185,38 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		})
 		if priority < math.MaxInt {
 			sup.Priority = priority
-			tiers := getPeerTiers(sup.CustomData)
-			supMatch.Tiers = make([]TierMatch, 0, len(tiers))
+			suppTiers := getPeerTiers(sup.CustomData)
+			supMatch.Tiers = make([]TierMatch, 0, len(suppTiers))
 			cost := math.MaxFloat64
-			for _, t := range tiers {
+			for _, suppTier := range suppTiers {
 				var tierMatch TierMatch
-				tierMatch.Name = t.Name
-				tierMatch.Level = strings.ToLower(t.Level)
-				tierMatch.Type = strings.ToLower(t.Type)
-				tierMatch.Cost = fmt.Sprintf("%.2f", t.Cost)
+				tierMatch.Name = suppTier.Name
+				tierMatch.Level = strings.ToLower(suppTier.Level)
+				tierMatch.Type = strings.ToLower(suppTier.Type)
+				tierMatch.Cost = fmt.Sprintf("%.2f", suppTier.Cost)
 
-				sTypeMatch := svcType == "" || svcType == strings.ToLower(t.Type)
-				sLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(t.Level)
-				costMatch := maxCost >= t.Cost
+				suppTypeMatch := svcType == "" || svcType == strings.ToLower(suppTier.Type)
+				suppLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(suppTier.Level)
+				suppCostMatch := costMatches(suppTier.Cost, maxCost)
 
-				if sTypeMatch && sLevelMatch && costMatch {
-					tierMatch.Match = true
-					if cost > t.Cost {
-						cost = t.Cost
+				if suppTypeMatch && suppLevelMatch && suppCostMatch {
+					reciprocal := true
+					//supplier tier matched the request, if the tier is free it must be reciprocal
+					if suppTier.Cost == 0 {
+						reciprocal = false
+						for _, reqTier := range reqTiers {
+							reqTypeMatch := reqTier.Type == "" || strings.EqualFold(reqTier.Type, suppTier.Type)
+							reqLevelMatch := reqTier.Level == "" || strings.EqualFold(reqTier.Level, suppTier.Level)
+							reqCostMatch := suppTier.Cost == reqTier.Cost
+							if reqTypeMatch && reqLevelMatch && reqCostMatch {
+								reciprocal = true
+								break
+							}
+						}
+					}
+					tierMatch.Match = reciprocal
+					if reciprocal && cost > suppTier.Cost {
+						cost = suppTier.Cost
 					}
 				}
 				supMatch.Tiers = append(supMatch.Tiers, tierMatch)
@@ -243,6 +258,16 @@ func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Suppl
 		return CompareSuppliers(a, b)
 	})
 	return filtered, rotaInfo
+}
+
+func costMatches(suppCost, maxCost float64) bool {
+	if maxCost > 0 && maxCost < math.MaxFloat64 {
+		// cost is specified, we are in pay for peer mode
+		return suppCost > 0 && suppCost <= maxCost
+	} else {
+		// no cost or zero, reciprocal mode
+		return suppCost == 0
+	}
 }
 
 func CompareSuppliers(a, b SupplierOrdering) int {

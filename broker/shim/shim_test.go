@@ -162,18 +162,44 @@ func TestIso18626AlmaShimIncoming(t *testing.T) {
 			MessageInfo: iso18626.MessageInfo{
 				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
 			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 1010,
+						Exp:  2,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "USD",
+					},
+				},
+			},
 		},
 	}
 	bytes, err := xml.Marshal(&msg)
 	if err != nil {
 		t.Errorf("failed to marshal xml")
 	}
+	assert.Equal(t, iso18626.TypeStatusLoaned, msg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.NotNil(t, msg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.NotNil(t, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
+	assert.Equal(t, 1010, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 1010")
+	assert.Equal(t, 2, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
+	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
+
 	var resmsg iso18626.ISO18626Message
 	shim := GetShim(string(common.VendorAlma))
 	err = shim.ApplyToIncoming(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to apply incoming")
 	}
+	assert.Equal(t, iso18626.TypeStatusLoaned, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
+	assert.Equal(t, 1010, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 1010")
+	assert.Equal(t, 2, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should not be nil")
 }
 
 func TestIso18626AlmaShimWillSupply(t *testing.T) {
@@ -208,6 +234,8 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, LOAN_CONDITION_PRE+string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should be nil")
 	//set cost
 	msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = nil
 	msg.SupplyingAgencyMessage.MessageInfo.Note = ""
@@ -226,6 +254,15 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, COST_CONDITION_PRE+"20 EUR", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should not be nil")
+	assert.Equal(t, 20, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Base, "OfferedCosts.Base should be 20")
+	assert.Equal(t, 0, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp, "OfferedCosts.Exp should be 0")
+	assert.Equal(t, "EUR", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be EUR")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
+	assert.Equal(t, 20, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 20")
+	assert.Equal(t, 0, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 0")
+	assert.Equal(t, "EUR", resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.CurrencyCode.Text, "DeliveryCosts.CurrencyCode should be EUR")
 }
 
 func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
@@ -266,7 +303,7 @@ func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
 	var resmsg iso18626.ISO18626Message
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
-	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeStatusRequestReceived, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 }
 
@@ -333,6 +370,17 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 					Text: "book",
 				},
 			},
+			BillingInfo: &iso18626.BillingInfo{
+				MaximumCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 1061,
+						Exp:  2,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "USD",
+					},
+				},
+			},
 		},
 	}
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
@@ -373,6 +421,7 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 		t.Errorf("failed to apply incoming")
 	}
 	assert.Equal(t, "original note\n"+
+		COST_CONDITION_PRE+"10.61 USD"+"\n"+
 		DELIVERY_ADDRESS_BEGIN+"\nUniversity of Chicago (ISIL:US-IL-UC)\n124 Main St\nChicago, IL, 60606\nUS\n"+DELIVERY_ADDRESS_END+"\n"+"\n"+
 		RETURN_ADDRESS_BEGIN+"\nsome address\n"+RETURN_ADDRESS_END+"\n",
 		resmsg.Request.ServiceInfo.Note)
@@ -531,4 +580,59 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 
 	assert.Equal(t, "ReJeCT", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+}
+
+func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
+	OFFERED_COSTS = true // ensure that offered costs are enabled
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			StatusInfo: iso18626.StatusInfo{
+				Status: iso18626.TypeStatusLoaned,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 1010,
+						Exp:  2,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "USD",
+					},
+				},
+			},
+		},
+	}
+	assert.Equal(t, iso18626.TypeStatusLoaned, msg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.NotNil(t, msg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.NotNil(t, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
+	assert.Equal(t, 1010, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 1010")
+	assert.Equal(t, 2, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
+	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
+	assert.Nil(t, msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should be nil")
+
+	shim := GetShim(string(common.VendorReShare))
+	bytes, err := shim.ApplyToOutgoing(&msg)
+	if err != nil {
+		t.Errorf("failed to apply outgoing")
+	}
+	var resmsg iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg)
+	if err != nil {
+		t.Errorf("failed to unmarshal outgoing")
+	}
+	assert.Equal(t, iso18626.TypeStatusLoaned, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
+	assert.Equal(t, 1010, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 1010")
+	assert.Equal(t, 2, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should not be nil")
+	assert.Equal(t, 1010, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Base, "OfferedCosts.Base should be 1010")
+	assert.Equal(t, 2, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp, "OfferedCosts.Exp should be 2")
+	assert.Equal(t, "USD", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be USD")
+	assert.Equal(t, "other", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text, "LoanCondition should be 'other'")
 }

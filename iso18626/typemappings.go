@@ -17,6 +17,59 @@ var StatusMap = map[string]TypeStatus{
 	string(TypeStatusCancelled):              TypeStatusCancelled,
 }
 
+const TypeStatusLoanedOrOverdue = TypeStatus("LoanedOrOverdue")
+const TypeStatusEmpty = TypeStatus("")
+
+var _StatusOrder = []TypeStatus{
+	TypeStatusEmpty,
+	TypeStatusRequestReceived,
+	TypeStatusRetryPossible,
+	TypeStatusExpectToSupply,
+	TypeStatusWillSupply,
+	TypeStatusUnfilled,
+	TypeStatusLoaned,
+	TypeStatusOverdue,
+	TypeStatusLoanedOrOverdue, // Special case for Loaned or Overdue
+	TypeStatusRecalled,
+	TypeStatusCancelled,
+	TypeStatusCompletedWithoutReturn,
+	TypeStatusCopyCompleted,
+	TypeStatusLoanCompleted,
+}
+
+var _Terminals = []TypeStatus{
+	TypeStatusUnfilled,
+	TypeStatusCancelled,
+	TypeStatusCompletedWithoutReturn,
+	TypeStatusCopyCompleted,
+	TypeStatusLoanCompleted,
+}
+
+func IsTransitionValid(from, to TypeStatus) bool {
+	if len(to) == 0 {
+		return false
+	}
+	for _, terminal := range _Terminals {
+		if from == terminal {
+			return false
+		}
+	}
+	//overdue and loaned are special case
+	if to == TypeStatusLoaned || to == TypeStatusOverdue {
+		to = TypeStatusLoanedOrOverdue
+	}
+	for i := 0; i < len(_StatusOrder); i++ {
+		if _StatusOrder[i] == from {
+			for j := i; j < len(_StatusOrder); j++ {
+				if _StatusOrder[j] == to {
+					return i <= j
+				}
+			}
+		}
+	}
+	return false
+}
+
 var ActionMap = map[string]TypeAction{
 	string(TypeActionStatusRequest):  TypeActionStatusRequest,
 	string(TypeActionReceived):       TypeActionReceived,

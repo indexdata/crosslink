@@ -542,6 +542,12 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		peer.Vendor = update.Vendor
 	}
 	peer.RefreshPolicy = toDbRefreshPolicy(update.RefreshPolicy)
+	if update.BorrowsCount != nil {
+		peer.BorrowsCount = *update.BorrowsCount
+	}
+	if update.LoansCount != nil {
+		peer.LoansCount = *update.LoansCount
+	}
 	var symbols = []ill_db.Symbol{}
 	var branchSymbols = []ill_db.BranchSymbol{}
 	err = a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
@@ -863,6 +869,12 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		},
 		CustomData:  customData,
 		HttpHeaders: httpHeaders,
+	}
+	if peer.LoansCount != nil {
+		db.LoansCount = *peer.LoansCount
+	}
+	if peer.BorrowsCount != nil {
+		db.BorrowsCount = *peer.BorrowsCount
 	}
 	if db.ID == "" {
 		db.ID = uuid.New().String()

@@ -5,9 +5,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 
-	"github.com/google/uuid"
+	"github.com/indexdata/go-utils/utils"
 )
+
+var pid = utils.Must(os.Hostname()) + "/" + strconv.Itoa(os.Getpid())
 
 type ExtendedContext interface {
 	context.Context
@@ -15,6 +18,8 @@ type ExtendedContext interface {
 	Logger() *slog.Logger
 	// create new instance backed by the same context and log handler but with new log args
 	WithArgs(args *LoggerArgs) ExtendedContext
+	// return logger args associated with this context
+	LoggerArgs() LoggerArgs
 }
 
 func Must[T any](ctx ExtendedContext, handler func() (ret T, err error), errMsg string) T {
@@ -47,13 +52,20 @@ type LoggerArgs struct {
 	RequestId     string
 	TransactionId string
 	EventId       string
+	Component     string
 	Other         map[string]string
+}
+
+func (args LoggerArgs) WithComponent(component string) *LoggerArgs {
+	args.Component = component
+	return &args
 }
 
 type _ExtCtxImpl struct {
 	context.Context
 	logger     *slog.Logger
 	logHandler slog.Handler
+	loggerArgs *LoggerArgs
 }
 
 func (ctx *_ExtCtxImpl) Logger() *slog.Logger {
@@ -64,6 +76,13 @@ func (ctx *_ExtCtxImpl) WithArgs(args *LoggerArgs) ExtendedContext {
 	return CreateExtCtxWithLogArgsAndHandler(ctx.Context, args, ctx.logHandler)
 }
 
+func (ctx *_ExtCtxImpl) LoggerArgs() LoggerArgs {
+	if ctx.loggerArgs == nil {
+		return LoggerArgs{}
+	}
+	return *ctx.loggerArgs
+}
+
 func CreateExtCtxWithArgs(ctx context.Context, args *LoggerArgs) ExtendedContext {
 	return CreateExtCtxWithLogArgsAndHandler(ctx, args, DefaultLogHandler)
 }
@@ -72,13 +91,17 @@ func CreateExtCtxWithLogArgsAndHandler(ctx context.Context, args *LoggerArgs, lo
 	var extctx _ExtCtxImpl
 	extctx.Context = ctx
 	extctx.logHandler = logHandler
+	extctx.loggerArgs = args
 	extctx.logger = createChildLoggerWithArgs(slog.New(logHandler), args)
 	return &extctx
 }
 
 func createChildLoggerWithArgs(logger *slog.Logger, args *LoggerArgs) *slog.Logger {
-	loggerWithArgs := logger.With("process", uuid.New().String())
+	loggerWithArgs := logger.With("pid", pid)
 	if args != nil {
+		if args.Component != "" {
+			loggerWithArgs = loggerWithArgs.With("component", args.Component)
+		}
 		if args.RequestId != "" {
 			loggerWithArgs = loggerWithArgs.With("requestId", args.RequestId)
 		}

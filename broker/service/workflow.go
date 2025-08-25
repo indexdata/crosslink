@@ -9,6 +9,8 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 )
 
+const WF_COMP = "workflow_manager"
+
 type WorkflowManager struct {
 	eventBus events.EventBus
 	illRepo  ill_db.IllRepo
@@ -27,12 +29,14 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, con
 }
 
 func (w *WorkflowManager) RequestReceived(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	extctx.Must(ctx, func() (string, error) {
 		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID)
 	}, "")
 }
 
 func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
@@ -43,6 +47,7 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	extctx.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
 			requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
@@ -72,6 +77,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.EventStatus != events.EventStatusSuccess {
 		return
 	}
@@ -94,6 +100,7 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.EventStatus == events.EventStatusSuccess {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
@@ -103,16 +110,19 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, e
 }
 
 func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, event events.Event) {
-	selSup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
-	if err != nil {
-		ctx.Logger().Error("failed to read selected supplier", "error", err)
-		return
-	}
-	if selSup.LastAction.String != ill_db.RequestAction {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
+	// there are three cases when we message supplier:
+	// 1. new supplier was selected and we send a request message
+	// 2. requester has sent a retry request and we forward it to the supplier
+	// 3. requester has sent an action message to the supplier
+	// only in case 3 we suspended the HTTP request in the handler and must resume it here
+	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
+		// action message was send by requester so we must relay the confirmation
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
 	} else if event.EventStatus != events.EventStatusSuccess {
+		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")

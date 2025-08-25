@@ -26,17 +26,17 @@ var eventRepo events.EventRepo
 
 func TestLocateSuppliersAndSelect(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "return-ISIL:SUP-TEST-1")
-	var completedTask []events.Event
+	illTrId := createIllTransaction(t, illRepo, "return-ISIL:SUP-TEST-1")
+	var completedLocateSuppliers []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
-			completedTask = append(completedTask, event)
+			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
-	var completedSelect []events.Event
+	var completedSelectSupplier []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
-			completedSelect = append(completedSelect, event)
+			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
 	})
 	yesterday := time.Now().Add(-24 * time.Hour)
@@ -68,24 +68,25 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedTask) == 1 {
-			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+		if len(completedLocateSuppliers) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
 			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {
-		t.Error("Expected to have request event received and successfully processed")
+		t.Error("Expected to have locate-suppliers event received and successfully processed")
 	}
 
 	var event events.Event
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelect) == 1 {
-			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
+		if len(completedSelectSupplier) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedSelectSupplier[0].ID)
+			t.Log("Event: ", event)
 			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {
-		t.Error("Expected to have request event received and successfully processed")
+		t.Error("Expected to have select-supplier event received and successfully processed")
 	}
 
 	supplierId, ok := event.ResultData.CustomData["supplierId"]
@@ -103,11 +104,11 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 
 func TestLocateSuppliersNoUpdate(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	var completedTask []events.Event
-	illTrId := getIllTransId(t, illRepo, "return-ISIL:NOCHANGE")
+	var completedLocateSuppliers []events.Event
+	illTrId := createIllTransaction(t, illRepo, "return-ISIL:NOCHANGE")
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
-			completedTask = append(completedTask, event)
+			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedSelect []events.Event
@@ -145,13 +146,13 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 	}
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedTask) == 1 {
-			event, _ := eventRepo.GetEvent(appCtx, completedTask[0].ID)
+		if len(completedLocateSuppliers) == 1 {
+			event, _ := eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
 			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {
-		t.Error("Expected to have request event received and successfully processed")
+		t.Error("Expected to have locate-suppliers event received and successfully processed")
 	}
 
 	var event events.Event
@@ -162,7 +163,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		}
 		return false
 	}) {
-		t.Error("Expected to have request event received and successfully processed")
+		t.Error("Expected to have select-supplier event received and successfully processed")
 	}
 
 	supplierId, ok := event.ResultData.CustomData["supplierId"]
@@ -180,7 +181,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 
 func TestLocateSuppliersOrder(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "LOANED;LOANED")
+	illTrId := createIllTransaction(t, illRepo, "LOANED;LOANED")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
@@ -230,7 +231,7 @@ func TestLocateSuppliersOrder(t *testing.T) {
 
 func TestLocateSupplierUnreachable(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "LOANED;LOANED")
+	illTrId := createIllTransaction(t, illRepo, "ERROR;LOANED")
 	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
 	if err != nil {
 		t.Error("failed to get ill transaction by id: " + err.Error())
@@ -243,22 +244,22 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 	if err != nil {
 		t.Error("failed to update ill transaction: " + err.Error())
 	}
-	var completedTask []events.Event
+	var completedLocateSuppliers []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
-			completedTask = append(completedTask, event)
+			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
-	var messageSupplier []events.Event
+	var completedMessageSupplier []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
-			messageSupplier = append(messageSupplier, event)
+			completedMessageSupplier = append(completedMessageSupplier, event)
 		}
 	})
-	var completedSelect []events.Event
+	var completedSelectSupplier []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
-			completedSelect = append(completedSelect, event)
+			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
 	})
 
@@ -269,37 +270,37 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 	}
 	var event events.Event
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedTask) == 1 {
-			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+		if len(completedLocateSuppliers) == 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedLocateSuppliers[0].ID)
 			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {
-		t.Error("Expected to have request event received and successfully processed")
+		t.Error("expected to have locate-suppliers event received and successfully processed")
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(completedSelect) >= 2 {
-			event, _ = eventRepo.GetEvent(appCtx, completedSelect[0].ID)
+		if len(completedSelectSupplier) >= 2 {
+			event, _ = eventRepo.GetEvent(appCtx, completedSelectSupplier[0].ID)
 			return event.EventStatus == events.EventStatusSuccess
 		}
 		return false
 	}) {
-		t.Error("expected to have select supplier event twice and successful")
+		t.Error("expected to have select-supplier supplier event twice and successful")
 	}
 	if !test.WaitForPredicateToBeTrue(func() bool {
-		if len(messageSupplier) > 0 {
-			event, _ = eventRepo.GetEvent(appCtx, messageSupplier[0].ID)
+		if len(completedMessageSupplier) > 0 {
+			event, _ = eventRepo.GetEvent(appCtx, completedMessageSupplier[0].ID)
 			return event.EventStatus == events.EventStatusProblem
 		}
 		return false
 	}) {
-		t.Error("expected to have failed request to supplier")
+		t.Error("expected to have message-supplier failed")
 	}
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrId := getIllTransId(t, illRepo, "sup-test-1")
+	illTrId := createIllTransaction(t, illRepo, "sup-test-1")
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
@@ -365,7 +366,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-			illTrId := getIllTransId(t, illRepo, tt.supReqId)
+			illTrId := createIllTransaction(t, illRepo, tt.supReqId)
 			var completedTask []events.Event
 			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
@@ -483,7 +484,7 @@ func TestSelectSupplierErrors(t *testing.T) {
 func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
-	illTrId := getIllTransId(t, illRepo, "return-"+supSymbol)
+	illTrId := createIllTransaction(t, illRepo, "return-"+supSymbol)
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
@@ -514,7 +515,7 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	}
 }
 
-func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
+func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
 	requester := getOrCreatePeer(t, illRepo, "ISIL:REQ", 4, 2)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
@@ -522,12 +523,17 @@ func getIllTransId(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string
 		},
 	}
 	illId := uuid.New().String()
+	reqReqId := uuid.New().String()
 	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
 		RequesterID: pgtype.Text{
 			String: requester.ID,
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: reqReqId,
 			Valid:  true,
 		},
 	})
