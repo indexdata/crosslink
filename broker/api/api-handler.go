@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/service"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -34,6 +35,7 @@ var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
+var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
 	limitDefault   int32
@@ -625,6 +627,21 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
 	writeJsonResponse(w, resp)
+}
+
+func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
+	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": params.ArchiveDelay, "ArchiveStatus": params.ArchiveStatus}
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
+		Other: logParams,
+	})
+	err := service.Archive(ctx, a.illRepo, params.ArchiveStatus, params.ArchiveDelay, true)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	writeJsonResponse(w, oapi.StatusMessage{
+		Status: ARCHIVE_PROCESS_STARTED,
+	})
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {

@@ -32,7 +32,7 @@ OAPI_GEN = $(OAPI_DIR)/openapi_gen.go
 
 .PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
 
-all: $(BINARY)
+all: $(BINARY) archive
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
@@ -57,6 +57,9 @@ $(COMMIT_ID):
 $(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
+archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(GOFILES)
+	$(GO) build -v -o archive ./cmd/archive
+
 check: generate
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
@@ -79,7 +82,9 @@ check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 clean:
-	rm -f $(BINARY)
+	$(GO) clean -testcache
+	$(GO) clean -cache
+	rm -f $(BINARY) archive
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
 	rm -f $(SQL_GEN_OUT)
