@@ -182,9 +182,6 @@ func Archive(ctx context.Context, statusList string, archiveDelay string) error 
 		return err
 	}
 	var fromTime = time.Now().Add(-delayInterval)
-	if err != nil {
-		return err
-	}
 	ectx := extctx.CreateExtCtxWithArgs(ctx, &extctx.LoggerArgs{
 		Other: logParams,
 	})

@@ -49,7 +49,7 @@ components:
     ArchiveDelay:
       name: archive_delay
       in: query
-      description: How old ILL Transaction to archive, for example "10d"
+      description: How old ILL Transaction to archive, for example "48h"
       required: true
       schema:
         type: string

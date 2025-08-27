@@ -33,6 +33,11 @@ RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
   GOOS=linux \
   go build -o /broker ./cmd/broker
 
+RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+  CGO_ENABLED=0 \
+  GOOS=linux \
+  go build -o /archive ./cmd/archive
+
 # create runtime user
 RUN adduser \
   --disabled-password \
@@ -52,8 +57,9 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
 
-# copy the binary
+# copy binaries
 COPY --from=build /broker .
+COPY --from=build /archive .
 # copy migrations
 COPY --from=build /app/broker/migrations /migrations
 
