@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -706,6 +709,72 @@ func TestGetLocatedSuppliersDbError(t *testing.T) {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
 	}
+}
+
+func TestPostArchiveIllTransactions(t *testing.T) {
+	// Loan Completed
+	minus5days := pgtype.Timestamp{
+		Time:  time.Now().Add(-(24 * 5 * time.Hour)),
+		Valid: true,
+	}
+	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illId := apptest.GetIllTransId(t, illRepo)
+	illTr, err := illRepo.GetIllTransactionById(ctx, illId)
+	assert.Nil(t, err)
+	illTr.LastSupplierStatus = apptest.CreatePgText(string(iso18626.TypeStatusLoanCompleted))
+	illTr.Timestamp = minus5days
+	_, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTr))
+	assert.Nil(t, err)
+	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_SUP", "")
+	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_SUP", string(iso18626.TypeStatusLoaned))
+	apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameSelectSupplier)
+
+	// Unfilled
+	illId2 := apptest.GetIllTransId(t, illRepo)
+	illTr, err = illRepo.GetIllTransactionById(ctx, illId2)
+	assert.Nil(t, err)
+	illTr.LastSupplierStatus = apptest.CreatePgText(string(iso18626.TypeStatusUnfilled))
+	illTr.Timestamp = minus5days
+	_, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTr))
+	assert.Nil(t, err)
+
+	// Loaned
+	illId3 := apptest.GetIllTransId(t, illRepo)
+	illTr, err = illRepo.GetIllTransactionById(ctx, illId3)
+	assert.Nil(t, err)
+	illTr.LastSupplierStatus = apptest.CreatePgText(string(iso18626.TypeStatusLoaned))
+	illTr.Timestamp = minus5days
+	_, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTr))
+	assert.Nil(t, err)
+
+	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=1d&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusOK)
+	var resp oapi.StatusMessage
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, "Archive process started", resp.Status)
+
+	test.WaitForPredicateToBeTrue(func() bool {
+		_, err = illRepo.GetIllTransactionById(ctx, illId)
+		return errors.Is(err, pgx.ErrNoRows)
+	})
+
+	_, err = illRepo.GetIllTransactionById(ctx, illId)
+	assert.True(t, errors.Is(err, pgx.ErrNoRows))
+
+	_, err = illRepo.GetIllTransactionById(ctx, illId2)
+	assert.True(t, errors.Is(err, pgx.ErrNoRows))
+
+	illTr, err = illRepo.GetIllTransactionById(ctx, illId3)
+	assert.Nil(t, err)
+	assert.Equal(t, illId3, illTr.ID)
+}
+
+func TestPostArchiveIllTransactionsBadRequest(t *testing.T) {
+	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=2x&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusBadRequest)
+	var resp oapi.Error
+	err := json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.Equal(t, "time: unknown unit \"x\" in duration \"2x\"", *resp.Error)
 }
 
 func getPeers(t *testing.T) oapi.Peers {

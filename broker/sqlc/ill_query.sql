@@ -226,3 +226,6 @@ WHERE peer_id = $1;
 DELETE
 FROM branch_symbol
 WHERE peer_id = $1;
+
+-- name: CallArchiveIllTransactionByDateAndStatus :one
+SELECT archive_ill_transaction_by_date_and_status($1, $2);
