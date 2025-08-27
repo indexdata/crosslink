@@ -59,12 +59,31 @@
           "permissionsRequired": [
             "broker.peers.get"
           ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/archive_ill_transactions",
+          "permissionsRequired": [
+            "broker.archive_ill_transactions.post"
+          ]
         }
       ]
     }
   ],
   "requires": [],
   "permissionSets": [
+    {
+      "description": "Broker all permissions",
+      "displayName": "ILL Broker - allow all",
+      "permissionName": "broker.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.all.read",
+        "broker.archive_ill_transactions.post"
+      ]
+    },
     {
       "description": "Read ILL transaction",
       "displayName": "ILL Broker - view all",
@@ -108,6 +127,11 @@
       "description": "Read peers",
       "displayName": "Broker - read peers",
       "permissionName": "broker.peers.get"
+    },
+    {
+      "description": "Archive transactions",
+      "displayName": "Broker - archive transactions",
+      "permissionName": "broker.archive_ill_transactions.post"
     }
   ]
 }
