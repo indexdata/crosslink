@@ -334,9 +334,8 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
 		return
 	}
-	symbol := illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
-		illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	if len(symbol) < 3 {
+	symbol := getSupplierSymbol(&illMessage.RequestingAgencyMessage.Header)
+	if len(symbol) == 0 {
 		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
 		return
 	}
@@ -401,6 +400,14 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 	wg.Wait()
 }
 
+func getSupplierSymbol(header *iso18626.Header) string {
+	if len(header.SupplyingAgencyId.AgencyIdType.Text) == 0 || len(header.SupplyingAgencyId.AgencyIdValue) == 0 {
+		return ""
+	}
+	return header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+		header.SupplyingAgencyId.AgencyIdValue
+}
+
 func validateAction(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeAction {
 	action, ok := iso18626.ActionMap[string(illMessage.RequestingAgencyMessage.Action)]
 	if !ok {
@@ -453,9 +460,8 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
-		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	if len(symbol) < 3 {
+	symbol := getSupplierSymbol(&illMessage.SupplyingAgencyMessage.Header)
+	if len(symbol) == 0 {
 		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
 		return
 	}
