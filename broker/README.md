@@ -80,11 +80,16 @@ Configuration is provided via environment variables:
 
 # Build
 
-Generate sources and compile the main program with:
+Generate sources and compile the main programs with:
 
 ```
 make
 ```
+
+This will build the following binaries:
+
+* `broker` — the main program for the ILL service
+* `archive` — a utility for archiving old ILL transactions
 
 You can also run included tests with:
 
@@ -100,7 +105,7 @@ go test -v -coverpkg=./.. -cover ./cmd/broker
 
 # Run locally
 
-You can run the program locally with:
+You can run the `broker` program locally with:
 
 ```
 make run
