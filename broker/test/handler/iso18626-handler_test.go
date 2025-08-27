@@ -230,7 +230,7 @@ func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	msgError := "<messageStatus>ERROR</messageStatus>"
 	assert.Contains(t, rr.Body.String(), msgError)
-	errorValue := "<errorValue>supplyingAgencyId: not a selected supplier for this request</errorValue>"
+	errorValue := "<errorValue>supplyingAgencyId: supplying agency not found or invalid</errorValue>"
 	assert.Contains(t, rr.Body.String(), errorValue)
 }
 
@@ -288,11 +288,13 @@ func TestIso18626PostSupplyingMessageReqNotFound(t *testing.T) {
 
 func TestIso18626PostRequestingMessage(t *testing.T) {
 	tests := []struct {
-		name      string
-		status    int
-		contains  string
-		urlEnding string
-		useMock   bool
+		name           string
+		status         int
+		contains       string
+		urlEnding      string
+		supplierSymbol string
+		skipped        bool
+		useMock        bool
 	}{
 		{
 			name:      "ResponseSuccessful",
@@ -322,35 +324,61 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 			urlEnding: "/notExists",
 			useMock:   false,
 		},
+		{
+			name:           "ResponseSupplierNotFoundOrInvalid-WrongSymbol",
+			status:         200,
+			contains:       "<errorValue>supplyingAgencyId: supplying agency not found or invalid</errorValue>",
+			urlEnding:      "",
+			supplierSymbol: "ISIL:SLNP_TWO_B",
+			useMock:        true,
+		},
+		{
+			name:           "ResponseSupplierNotFoundOrInvalid-Skipped",
+			status:         200,
+			contains:       "<errorValue>supplyingAgencyId: supplying agency not found or invalid</errorValue>",
+			urlEnding:      "",
+			supplierSymbol: "ISIL:SLNP_TWO_A",
+			skipped:        true,
+			useMock:        true,
+		},
 	}
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	data, _ := os.ReadFile("../testdata/reqmsg-ok.xml")
+	data, _ := os.ReadFile("../testdata/reqmsg-notification.xml")
 	illId := uuid.NewString()
-	requester := apptest.CreatePeer(t, illRepo, "isil:requester1", adapter.MOCK_CLIENT_URL)
+	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_CLIENT_URL)
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
 		RequesterRequestID: apptest.CreatePgText("reqid"),
-		RequesterSymbol:    apptest.CreatePgText("isil:requester1"),
+		RequesterSymbol:    apptest.CreatePgText("ISIL:SLNP_ONE"),
 		RequesterID:        apptest.CreatePgText(requester.ID),
 	})
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)
 	}
-	peer := apptest.CreatePeer(t, illRepo, "isil:reqTest", adapter.MOCK_CLIENT_URL)
-	apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "isil:reqTest", "selected")
-
+	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_TWO_A", adapter.MOCK_CLIENT_URL)
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SLNP_TWO_A", "selected")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.useMock {
-				peer.Url = adapter.MOCK_CLIENT_URL + tt.urlEnding
+				supplier.Url = adapter.MOCK_CLIENT_URL + tt.urlEnding
 			} else {
 				port, _ := test.GetFreePort()
-				peer.Url = "http:localhost:" + strconv.Itoa(port) + tt.urlEnding
+				supplier.Url = "http:localhost:" + strconv.Itoa(port) + tt.urlEnding
 			}
-			peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
+			supplier, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(supplier))
 			if err != nil {
-				t.Errorf("failed to update peer : %s", err)
+				t.Errorf("failed to update supplier peer : %s", err)
+			}
+			if tt.supplierSymbol != "" {
+				locSup.SupplierSymbol = tt.supplierSymbol
+			}
+			if tt.skipped {
+				locSup.SupplierStatus = ill_db.SupplierStateSkippedPg
+			}
+			_, err := illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
+			if err != nil {
+				t.Errorf("failed to update located supplier : %s", err)
 			}
 			url := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 			req, _ := http.NewRequest("POST", url, bytes.NewReader(data))

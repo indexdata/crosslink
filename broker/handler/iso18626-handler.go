@@ -25,23 +25,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
+
 const HANDLER_COMP = "iso18626_handler"
 
 type ErrorValue string
 
 const (
-	ReqIdAlreadyExists     ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
-	ReqIdIsEmpty           ErrorValue = "requestingAgencyRequestId: cannot be empty"
-	ReqIdNotFound          ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
-	RetryNotPossible       ErrorValue = "requestType: Retry not possible"
-	SupplierNotFound       ErrorValue = "supplyingAgencyId: located supplier cannot be found"
-	IncorrectSupplier      ErrorValue = "supplyingAgencyId: not a selected supplier for this request"
-	UnsupportedRequestType ErrorValue = "requestType: unsupported value"
-	ReqAgencyNotFound      ErrorValue = "requestingAgencyId: requesting agency not found"
-	CouldNotSendReqToPeer  ErrorValue = "Could not send request to peer"
-	InvalidAction          ErrorValue = "%v is not a valid action"
-	InvalidStatus          ErrorValue = "%v is not a valid status"
-	InvalidReason          ErrorValue = "%v is not a valid reason"
+	ReqIdAlreadyExists        ErrorValue = "requestingAgencyRequestId: request with a given ID already exists"
+	ReqIdIsEmpty              ErrorValue = "requestingAgencyRequestId: cannot be empty"
+	ReqIdNotFound             ErrorValue = "requestingAgencyRequestId: request with a given ID not found"
+	RetryNotPossible          ErrorValue = "requestType: Retry not possible"
+	SupplierNotFoundOrInvalid ErrorValue = "supplyingAgencyId: supplying agency not found or invalid"
+	UnsupportedRequestType    ErrorValue = "requestType: unsupported value"
+	ReqAgencyNotFound         ErrorValue = "requestingAgencyId: requesting agency not found"
+	CouldNotSendReqToPeer     ErrorValue = "Could not send request to peer"
+	InvalidAction             ErrorValue = "%v is not a valid action"
+	InvalidStatus             ErrorValue = "%v is not a valid status"
+	InvalidReason             ErrorValue = "%v is not a valid reason"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -333,24 +334,40 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
 		return
 	}
-
+	symbol := getSupplierSymbol(&illMessage.RequestingAgencyMessage.Header)
+	if len(symbol) == 0 {
+		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
+		return
+	}
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: illMessage,
 		},
 	}
-
 	var err error
 	var illTrans ill_db.IllTransaction
 	var action iso18626.TypeAction
+	errorValue := ReqIdNotFound
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err = repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(requestingRequestId))
 		if err != nil {
+			errorValue = ReqIdNotFound
 			return err
 		}
 		action = validateAction(ctx, illMessage, w, eventData, eventBus, illTrans)
 		if action == "" {
 			return nil
+		}
+		if symbol != brokerSymbol {
+			supp, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+			if err != nil {
+				errorValue = SupplierNotFoundOrInvalid
+				return err
+			}
+			if supp.SupplierSymbol != symbol {
+				errorValue = SupplierNotFoundOrInvalid
+				return pgx.ErrNoRows
+			}
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 		illTrans.LastRequesterAction = createPgText(string(action))
@@ -359,7 +376,7 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdNotFound)
+			handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, errorValue)
 			return
 		}
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
@@ -381,6 +398,14 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 		wg: &wg,
 	}
 	wg.Wait()
+}
+
+func getSupplierSymbol(header *iso18626.Header) string {
+	if len(header.SupplyingAgencyId.AgencyIdType.Text) == 0 || len(header.SupplyingAgencyId.AgencyIdValue) == 0 {
+		return ""
+	}
+	return header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+		header.SupplyingAgencyId.AgencyIdValue
 }
 
 func validateAction(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) iso18626.TypeAction {
@@ -435,10 +460,9 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	symbol := illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
-		illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-	if len(symbol) < 3 {
-		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier)
+	symbol := getSupplierSymbol(&illMessage.SupplyingAgencyMessage.Header)
+	if len(symbol) == 0 {
+		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
 		return
 	}
 	requester, err := repo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -468,18 +492,18 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 				return
 			}
 			if supplier.SupplierStatus != ill_db.SupplierStateSkippedPg {
-				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFound,
+				handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid,
 					eventBus, illTrans.ID)
 				return
 			}
 		} else {
-			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier,
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid,
 				eventBus, illTrans.ID)
 			return
 		}
 	}
 	if supplier.SupplierSymbol != symbol { //ensure we found the correct supplier
-		handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, IncorrectSupplier,
+		handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid,
 			eventBus, illTrans.ID)
 		return
 	}

@@ -31,8 +31,7 @@ const KindConfirmationError = "confirmation-error"
 
 const BrokerInfoStatus = iso18626.TypeStatusExpectToSupply
 
-// TODO this must be removed and saved from the initial request
-var BrokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
@@ -486,14 +485,14 @@ func (c *Iso18626Client) getSelectedSupplierAndPeer(ctx extctx.ExtendedContext, 
 }
 
 func (c *Iso18626Client) createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool, brokerMode string) iso18626.Header {
-	requesterSymbol := strings.SplitN(BrokerSymbol, ":", 2)
+	requesterSymbol := strings.SplitN(brokerSymbol, ":", 2)
 	if !isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent) {
 		requesterSymbol = strings.SplitN(transaction.RequesterSymbol.String, ":", 2)
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
-	supplierSymbol := strings.SplitN(BrokerSymbol, ":", 2)
+	supplierSymbol := strings.SplitN(brokerSymbol, ":", 2)
 	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent)) {
 		supplierSymbol = strings.SplitN(sup.SupplierSymbol, ":", 2)
 	}
