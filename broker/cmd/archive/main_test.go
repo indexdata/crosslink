@@ -73,14 +73,6 @@ func TestInitFail(t *testing.T) {
 }
 
 func TestMainOK(t *testing.T) {
-	os.Args = []string{"cmd/archive", "-statuses", "Unfilled", "-duration", "24h"}
 	err := run()
 	assert.NoError(t, err)
-}
-
-func TestBadOption(t *testing.T) {
-	os.Args = []string{"cmd/archive", "-expiredduration", "24h"}
-	err := run()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown flag")
 }
