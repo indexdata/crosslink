@@ -173,9 +173,6 @@ func Run(ctx context.Context) error {
 
 func Archive(ctx context.Context, statusList string, archiveDelay string) error {
 	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": archiveDelay, "ArchiveStatus": statusList}
-	ectx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
-		Other: logParams,
-	})
 	context, err := Init(ctx)
 	if err != nil {
 		return err
@@ -188,6 +185,9 @@ func Archive(ctx context.Context, statusList string, archiveDelay string) error 
 	if err != nil {
 		return err
 	}
+	ectx := extctx.CreateExtCtxWithArgs(ctx, &extctx.LoggerArgs{
+		Other: logParams,
+	})
 	return context.IllRepo.CallArchiveIllTransactionByDateAndStatus(ectx, fromTime, strings.Split(statusList, ","))
 }
 
