@@ -376,7 +376,10 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 			if tt.skipped {
 				locSup.SupplierStatus = ill_db.SupplierStateSkippedPg
 			}
-			illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
+			_, err := illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
+			if err != nil {
+				t.Errorf("failed to update located supplier : %s", err)
+			}
 			url := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 			req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
 			req.Header.Add("Content-Type", "application/xml")
