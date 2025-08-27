@@ -39,39 +39,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestCallArchive(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	err := app.Archive(ctx, "Unfilled", "24h")
-	assert.NoError(t, err)
-}
-
-func TestDelayUnitD(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	err := app.Archive(ctx, "Unfilled", "1d")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown unit \"d\"")
-}
-
-func TestDelayUnitW(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	err := app.Archive(ctx, "Unfilled", "1w")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown unit \"w\"")
-}
-
-func TestInitFail(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	app.MigrationsFolder = "file://not-such-file"
-	err := app.Archive(ctx, "Unfilled", "24h")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to open")
-	app.MigrationsFolder = "file://../../migrations"
-}
-
 func TestMainOK(t *testing.T) {
 	err := run()
 	assert.NoError(t, err)

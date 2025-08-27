@@ -82,6 +82,8 @@ check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
 
 clean:
+	$(GO) clean -testcache
+	$(GO) clean -cache
 	rm -f $(BINARY) archive
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)

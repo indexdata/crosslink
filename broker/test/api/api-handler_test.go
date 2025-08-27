@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -746,7 +747,7 @@ func TestPostArchiveIllTransactions(t *testing.T) {
 	_, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTr))
 	assert.Nil(t, err)
 
-	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=24h&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusOK)
+	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=1d&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusOK)
 	var resp oapi.StatusMessage
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
@@ -769,11 +770,11 @@ func TestPostArchiveIllTransactions(t *testing.T) {
 }
 
 func TestPostArchiveIllTransactionsBadRequest(t *testing.T) {
-	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=2d&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusBadRequest)
+	body := httpRequest(t, "POST", "/archive_ill_transactions?archive_delay=2x&archive_status=LoanCompleted,CopyCompleted,Unfilled", nil, "", http.StatusBadRequest)
 	var resp oapi.Error
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, "time: unknown unit \"d\" in duration \"2d\"", *resp.Error)
+	assert.Equal(t, "time: unknown unit \"x\" in duration \"2x\"", *resp.Error)
 }
 
 func getPeers(t *testing.T) oapi.Peers {

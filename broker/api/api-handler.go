@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/service"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -633,19 +634,11 @@ func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.R
 	ctx := extctx.CreateExtCtxWithArgs(context.Background(), &extctx.LoggerArgs{
 		Other: logParams,
 	})
-	var delayInterval, err = time.ParseDuration(params.ArchiveDelay)
+	err := service.Archive(ctx, a.illRepo, params.ArchiveStatus, params.ArchiveDelay, true)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	var fromTime = time.Now().Add(-delayInterval)
-	var statusList = strings.Split(params.ArchiveStatus, ",")
-	go func() {
-		err := a.illRepo.CallArchiveIllTransactionByDateAndStatus(ctx, fromTime, statusList)
-		if err != nil {
-			ctx.Logger().Error("failed to archive ill transactions", "error", err)
-		}
-	}()
 	writeJsonResponse(w, oapi.StatusMessage{
 		Status: ARCHIVE_PROCESS_STARTED,
 	})
