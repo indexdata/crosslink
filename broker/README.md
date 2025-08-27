@@ -2,11 +2,11 @@
 
 CrossLink broker manages inter-library loan (ILL) transactions, specifically:
 
-* accepts and handles ISO18626 requests
-* locates suppliers via _Search/Retrieval via URL_ (SRU) protocol
-* resolves suppliers address via the Directory API
+* accepts and handles ISO18626 lending requests
+* locates suppliers with available holdings with the _Search/Retrieval via URL_ (SRU) protocol
+* resolves supplier information via the Directory API
 * negotiates loans with suppliers via ISO18626
-* forwards the settled loan notification to requesters
+* forwards ISO18626 messages between requester and selected supplier
 
 # API
 
@@ -27,9 +27,9 @@ CrossLink broker can operate in three modes:
 
 1. `opaque` -- in this mode, the broker behaves like a regular ISO18626 peer and does not reveal any information about the located supplier. Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the header of outgoing messages.
 
-2. `translucent` -- in this mode the broker sends an ISO `ExpectToSupply` message to the requester to notify it each time a new or changed supplier is selected. Also in this mode, the broker supports the _local supply_ feature where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not proxied to the supplier.
+2. `translucent` -- in this mode the broker sends ISO18626 `ExpectToSupply` message to the requester each time a new supplier is selected. Also in this mode, the broker supports the _local supply_ feature, where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not forwarded to the supplier.
 
-3. `transparent` -- this mode is identical to the `translucent` mode but, additionally, the broker transmits the requester and supplier symbols in the proxied message header, thus fully revealing both parties to each other.
+3. `transparent` -- this mode does everything the `translucent` mode does but the broker transmits the requester and supplier symbols in the forwarded message header, thus fully revealing both parties to each other. Additionally, in this mode, suppliers can send notifications to the requester even after the request is rejected.
 
 The broker mode can be configured for each peer individually by setting the `BrokerMode` field on the `peer` entity (via the `/peers/:id` endpoint). Unless explicitly set, the broker will configure the `BrokerMode` based on the peer `Vendor` field as follows:
 

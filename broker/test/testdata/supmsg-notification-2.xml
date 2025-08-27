@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ISO18626Message
+    xmlns="http://illtransactions.org/2013/iso18626"
+    xmlns:ill="http://illtransactions.org/2013/iso18626"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ill:version="1.2"
+    xsi:schemaLocation="http://illtransactions.org/2013/iso18626 https://illtransactions.org/schemas/ISO-18626-v1_2.xsd">
+    <supplyingAgencyMessage>
+        <header>
+            <supplyingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>SUP1</agencyIdValue>
+            </supplyingAgencyId>
+            <requestingAgencyId>
+                <agencyIdType>ISIL</agencyIdType>
+                <agencyIdValue>BROKER</agencyIdValue>
+            </requestingAgencyId>
+            <multipleItemRequestId></multipleItemRequestId>
+            <timestamp>2024-12-12T20:12:00.62959771Z</timestamp>
+            <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f362</requestingAgencyRequestId>
+        </header>
+        <messageInfo>
+            <reasonForMessage>Notification</reasonForMessage>
+        </messageInfo>
+        <statusInfo>
+            <status>RequestReceived</status>
+            <lastChange>2024-12-12T20:12:00.629710681Z</lastChange>
+        </statusInfo>
+    </supplyingAgencyMessage>
+</ISO18626Message>

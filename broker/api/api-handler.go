@@ -616,7 +616,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	}
 	var supList []ill_db.LocatedSupplier
 	var count int64
-	supList, count, err = a.illRepo.GetLocatedSupplierByIllTransaction(ctx, tran.ID)
+	supList, count, err = a.illRepo.GetLocatedSuppliersByIllTransaction(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return

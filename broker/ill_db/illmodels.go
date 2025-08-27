@@ -1,10 +1,11 @@
 package ill_db
 
 import (
+	"time"
+
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
-	"time"
 )
 
 type IllTransactionData struct {
@@ -27,10 +28,26 @@ const (
 	RefreshPolicyTransaction RefreshPolicy = "transaction"
 )
 
-const SupplierStatusSelected = "selected"
+type SupplierState string
 
-var SupplierStatusSelectedPg = pgtype.Text{
-	String: SupplierStatusSelected,
+const (
+	SupplierStateNew      = "new"
+	SupplierStateSelected = "selected"
+	SupplierStateSkipped  = "skipped"
+)
+
+var SupplierStateNewPg = pgtype.Text{
+	String: SupplierStateNew,
+	Valid:  true,
+}
+
+var SupplierStateSkippedPg = pgtype.Text{
+	String: SupplierStateSkipped,
+	Valid:  true,
+}
+
+var SupplierStateSelectedPg = pgtype.Text{
+	String: SupplierStateSelected,
 	Valid:  true,
 }
 
