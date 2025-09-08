@@ -359,7 +359,6 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 	assert.NotNil(t, trCtx.requester)
 	assert.NotNil(t, trCtx.selectedSupplier)
 	assert.NotNil(t, trCtx.selectedPeer)
-	assert.NotNil(t, trCtx.transaction)
 	assert.Equal(t, event, trCtx.event)
 }
 
@@ -373,7 +372,6 @@ func TestReadTransactionContextError(t *testing.T) {
 	assert.Nil(t, trCtx.requester)
 	assert.Nil(t, trCtx.selectedSupplier)
 	assert.Nil(t, trCtx.selectedPeer)
-	assert.Nil(t, trCtx.transaction)
 	assert.Equal(t, event, trCtx.event)
 }
 
