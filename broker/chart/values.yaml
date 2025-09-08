@@ -34,8 +34,7 @@ envSecrets: {}
 #   key: config-map-key
 envConfigMaps: {}
 
-imagePullSecrets:
-  - name: ghcr-secret
+imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
