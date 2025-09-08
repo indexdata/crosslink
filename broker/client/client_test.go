@@ -355,11 +355,11 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 	event := events.Event{IllTransactionID: "1"}
 	trCtx, err := client.readTransactionContext(appCtx, event, true)
 	assert.Nil(t, err)
-	assert.True(t, trCtx.transaction != nil)
-	assert.True(t, trCtx.requester != nil)
-	assert.True(t, trCtx.selectedSupplier != nil)
-	assert.True(t, trCtx.selectedPeer != nil)
-	assert.True(t, trCtx.transaction != nil)
+	assert.NotNil(t, trCtx.transaction)
+	assert.NotNil(t, trCtx.requester)
+	assert.NotNil(t, trCtx.selectedSupplier)
+	assert.NotNil(t, trCtx.selectedPeer)
+	assert.NotNil(t, trCtx.transaction)
 	assert.Equal(t, event, trCtx.event)
 }
 
@@ -369,11 +369,11 @@ func TestReadTransactionContextError(t *testing.T) {
 	event := events.Event{IllTransactionID: "1"}
 	trCtx, err := client.readTransactionContext(appCtx, event, true)
 	assert.Equal(t, FailedToReadTransaction+": DB error", err.Error())
-	assert.True(t, trCtx.transaction == nil)
-	assert.True(t, trCtx.requester == nil)
-	assert.True(t, trCtx.selectedSupplier == nil)
-	assert.True(t, trCtx.selectedPeer == nil)
-	assert.True(t, trCtx.transaction == nil)
+	assert.Nil(t, trCtx.transaction)
+	assert.Nil(t, trCtx.requester)
+	assert.Nil(t, trCtx.selectedSupplier)
+	assert.Nil(t, trCtx.selectedPeer)
+	assert.Nil(t, trCtx.transaction)
 	assert.Equal(t, event, trCtx.event)
 }
 
