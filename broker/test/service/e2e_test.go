@@ -144,9 +144,10 @@ func TestRequestUNFILLED(t *testing.T) {
 			"TASK, select-supplier = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
 			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 7))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 8))
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
 	assert.Nil(t, err)
@@ -203,9 +204,10 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
 			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 8))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 9))
 	data, err = os.ReadFile("../testdata/supmsg-notification.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -273,12 +275,13 @@ func TestMessageSkipped(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
 			"TASK, select-supplier = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 11))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 12))
 	data, err = os.ReadFile("../testdata/supmsg-notification-2.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -430,6 +433,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
 			"TASK, select-supplier = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
@@ -444,7 +448,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 			"TASK, confirm-requester-msg = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 21))
+		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 22))
 }
 
 func TestRequestLOANED_OVERDUE(t *testing.T) {

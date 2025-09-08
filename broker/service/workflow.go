@@ -87,18 +87,10 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
 	}
-	status := event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status
-	switch status {
-	case iso18626.TypeStatusUnfilled:
-		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
-		}, "")
-	default:
-		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
-		}, "")
-	}
+	extctx.Must(ctx, func() (string, error) {
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+			events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
+	}, "")
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
@@ -125,6 +117,15 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 		}, "")
 	} else if event.EventStatus != events.EventStatusSuccess {
 		// if the last requester action was Request and messaging supplier failed, we try next supplier
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+		}, "")
+	}
+}
+
+func (w *WorkflowManager) OnMessageRequesterComplete(ctx extctx.ExtendedContext, event events.Event) {
+	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil &&
+		event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -513,6 +514,174 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	if err != nil {
 		t.Error("expected to have new peer created")
 	}
+}
+
+func TestUnfilledMessageWithReason(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTransparent))
+	data := ill_db.IllTransactionData{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + supSymbol,
+		},
+	}
+	illTrId := uuid.New().String()
+	reqReqId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID:                 illTrId,
+		Timestamp:          test.GetNow(),
+		IllTransactionData: data,
+		RequesterID: pgtype.Text{
+			String: requester.ID,
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: reqReqId,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		t.Errorf("Failed to create ILL transaction: %s", err)
+	}
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTransparent))
+	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			appCtx.Logger().Info("Added completed task")
+			completedTask = append(completedTask, event)
+		}
+	})
+	eventData := events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: &iso18626.ISO18626Message{
+				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+					Header: iso18626.Header{
+						SupplyingAgencyId: iso18626.TypeAgencyId{
+							AgencyIdType: iso18626.TypeSchemeValuePair{
+								Text: strings.Split(supSymbol, ":")[0],
+							},
+							AgencyIdValue: strings.Split(supSymbol, ":")[1],
+						},
+					},
+					StatusInfo: iso18626.StatusInfo{
+						Status: iso18626.TypeStatusUnfilled,
+					},
+					MessageInfo: iso18626.MessageInfo{
+						Note:             "All books reserved",
+						ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+						ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+							Text: "Currently no books available",
+						},
+					},
+				},
+			},
+		},
+	}
+	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("failed to notify with error " + err.Error())
+	}
+
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) > 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusProblem // Problem because mock does not know about request
+		}
+		return false
+	}) {
+		t.Error("expected to have request event received and processed")
+	}
+	assert.Equal(t, events.EventStatusProblem, event.EventStatus)
+	supMess := event.ResultData.OutgoingMessage.SupplyingAgencyMessage
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, supMess.MessageInfo.ReasonForMessage)
+	assert.Equal(t, "All books reserved", supMess.MessageInfo.Note)
+	assert.Equal(t, "Currently no books available", supMess.MessageInfo.ReasonUnfilled.Text)
+	assert.Equal(t, iso18626.TypeStatusUnfilled, supMess.StatusInfo.Status)
+}
+
+func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	data := ill_db.IllTransactionData{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + supSymbol,
+		},
+	}
+	illTrId := uuid.New().String()
+	reqReqId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID:                 illTrId,
+		Timestamp:          test.GetNow(),
+		IllTransactionData: data,
+		RequesterID: pgtype.Text{
+			String: requester.ID,
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: reqReqId,
+			Valid:  true,
+		},
+	})
+	if err != nil {
+		t.Errorf("Failed to create ILL transaction: %s", err)
+	}
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			appCtx.Logger().Info("Added completed task")
+			completedTask = append(completedTask, event)
+		}
+	})
+	eventData := events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: &iso18626.ISO18626Message{
+				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+					Header: iso18626.Header{
+						SupplyingAgencyId: iso18626.TypeAgencyId{
+							AgencyIdType: iso18626.TypeSchemeValuePair{
+								Text: strings.Split(supSymbol, ":")[0],
+							},
+							AgencyIdValue: strings.Split(supSymbol, ":")[1],
+						},
+					},
+					StatusInfo: iso18626.StatusInfo{
+						Status: iso18626.TypeStatusUnfilled,
+					},
+					MessageInfo: iso18626.MessageInfo{
+						Note:             "All books reserved",
+						ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+						ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+							Text: "Currently no books available",
+						},
+					},
+				},
+			},
+		},
+	}
+	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("failed to notify with error " + err.Error())
+	}
+
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) > 1 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("expected to have request event received and processed")
+	}
+	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
+	assert.True(t, event.ResultData.CustomData["doNotSend"].(bool))
 }
 
 func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {

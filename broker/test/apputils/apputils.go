@@ -54,8 +54,11 @@ func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
 	}
 	return illId
 }
-
 func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus, eventName events.EventName) string {
+	return GetEventIdWithData(t, eventRepo, illId, eventType, status, eventName, events.EventData{})
+}
+
+func GetEventIdWithData(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus, eventName events.EventName, data events.EventData) string {
 	eventId := uuid.New().String()
 	_, err := eventRepo.SaveEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
 		ID:               eventId,
@@ -64,7 +67,7 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 		EventType:        eventType,
 		EventName:        eventName,
 		EventStatus:      status,
-		EventData:        events.EventData{},
+		EventData:        data,
 		LastSignal:       string(events.SignalTaskCreated),
 	})
 
@@ -162,6 +165,9 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 		}
 		if e.EventStatus == events.EventStatusError {
 			value += ", error=" + e.ResultData.EventError.Message
+		}
+		if doNotSendValue, ok := e.ResultData.CustomData["doNotSend"].(bool); doNotSendValue && ok {
+			value += ", doNotSend=true"
 		}
 		value += "\n"
 	}
