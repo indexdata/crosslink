@@ -25,6 +25,7 @@ const FailedToReadTransaction = "failed to read ILL transaction"
 const FailedToSendMessage = "failed to send ISO18626 message"
 const FailedToGetSupplier = "failed to get supplier"
 const FailedToGetRequester = "failed to get requester"
+const FailedToGetTrCtx = "failed to get transaction context"
 const FailedToUpdateSupplierStatus = "failed to update supplier status"
 const FailedToResolveStatus = "failed to resolve status for value: %s"
 const BrokerDoesNotSendInThisMode = "broker does not send %s in mode %s"
@@ -503,46 +504,38 @@ type transactionContext struct {
 	selectedSupplier *ill_db.LocatedSupplier
 	selectedPeer     *ill_db.Peer
 	event            events.Event
-	err              error
-	errorComment     string
 }
 
-func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, event events.Event, supplierMandatory bool) transactionContext {
+func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, event events.Event, supplierMandatory bool) (transactionContext, error) {
 	transCtx := transactionContext{
 		event: event,
 	}
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
-		transCtx.err = err
-		transCtx.errorComment = FailedToReadTransaction
-		return transCtx
+		return transCtx, fmt.Errorf("%s: %w", FailedToReadTransaction, err)
 	} else {
 		transCtx.transaction = &illTrans
 	}
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
-		transCtx.err = err
-		transCtx.errorComment = FailedToGetRequester
-		return transCtx
+		return transCtx, fmt.Errorf("%s: %w", FailedToGetRequester, err)
 	} else {
 		transCtx.requester = &requester
 	}
 	selected, supplier, err := c.getSelectedSupplierAndPeer(ctx, illTrans)
 	if err != nil && supplierMandatory {
-		transCtx.err = err
-		transCtx.errorComment = FailedToGetSupplier
-		return transCtx
+		return transCtx, fmt.Errorf("%s: %w", FailedToGetSupplier, err)
 	} else {
 		transCtx.selectedSupplier = selected
 		transCtx.selectedPeer = supplier
 	}
-	return transCtx
+	return transCtx, nil
 }
 
 func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	trCtx := c.readTransactionContext(ctx, event, false)
-	if trCtx.err != nil {
-		return events.LogErrorAndReturnResult(ctx, trCtx.errorComment, trCtx.err)
+	trCtx, err := c.readTransactionContext(ctx, event, false)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
 	}
 
 	msgTarget, err := c.determineMessageTarget(ctx, trCtx)
@@ -697,9 +690,9 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 }
 
 func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	trCtx := c.readTransactionContext(ctx, event, true)
-	if trCtx.err != nil {
-		return events.LogErrorAndReturnResult(ctx, trCtx.errorComment, trCtx.err)
+	trCtx, err := c.readTransactionContext(ctx, event, true)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
 	}
 	// if requester sends a message (e.g notification) to supplier and then a new supplier is selected,
 	// the action on the transaction is not relevant and we need to look at the new supplier's last action

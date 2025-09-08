@@ -353,30 +353,28 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
 	event := events.Event{IllTransactionID: "1"}
-	trCtx := client.readTransactionContext(appCtx, event, true)
-	assert.Nil(t, trCtx.err)
+	trCtx, err := client.readTransactionContext(appCtx, event, true)
+	assert.Nil(t, err)
 	assert.True(t, trCtx.transaction != nil)
 	assert.True(t, trCtx.requester != nil)
 	assert.True(t, trCtx.selectedSupplier != nil)
 	assert.True(t, trCtx.selectedPeer != nil)
 	assert.True(t, trCtx.transaction != nil)
 	assert.Equal(t, event, trCtx.event)
-	assert.Equal(t, "", trCtx.errorComment)
 }
 
 func TestReadTransactionContextError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositoryError), 1, 0*time.Second)
 	event := events.Event{IllTransactionID: "1"}
-	trCtx := client.readTransactionContext(appCtx, event, true)
-	assert.Equal(t, "DB error", trCtx.err.Error())
+	trCtx, err := client.readTransactionContext(appCtx, event, true)
+	assert.Equal(t, FailedToReadTransaction+": DB error", err.Error())
 	assert.True(t, trCtx.transaction == nil)
 	assert.True(t, trCtx.requester == nil)
 	assert.True(t, trCtx.selectedSupplier == nil)
 	assert.True(t, trCtx.selectedPeer == nil)
 	assert.True(t, trCtx.transaction == nil)
 	assert.Equal(t, event, trCtx.event)
-	assert.Equal(t, FailedToReadTransaction, trCtx.errorComment)
 }
 
 func createSupplyingAgencyMessageEvent(notification bool) events.Event {
