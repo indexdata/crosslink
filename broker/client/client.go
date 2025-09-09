@@ -64,7 +64,7 @@ type messageTarget struct {
 	status         iso18626.TypeStatus
 	firstMessage   bool
 	note           string
-	problemDetails *struct{ message string }
+	problemDetails *string
 }
 
 func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, delay time.Duration) Iso18626Client {
@@ -549,7 +549,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	msgTarget, err := c.determineMessageTarget(ctx, trCtx)
 	if err != nil {
 		if msgTarget != nil && msgTarget.problemDetails != nil {
-			return events.LogProblemAndReturnResult(ctx, InvalidState, msgTarget.problemDetails.message, nil)
+			return events.LogProblemAndReturnResult(ctx, InvalidState, *msgTarget.problemDetails, nil)
 		}
 		return events.LogErrorAndReturnResult(ctx, FailedToDetermineTarget, err)
 	}
@@ -560,7 +560,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 		return events.EventStatusSuccess, &resData
 	}
 
-	message := buildSupplyingAgencyMessage(trCtx, msgTarget)
+	message := createSupplyingAgencyMessage(trCtx, msgTarget)
 
 	return c.sendAndUpdateStatus(ctx, trCtx, message)
 }
@@ -579,6 +579,7 @@ func (c *Iso18626Client) determineMessageTarget(ctx extctx.ExtendedContext, trCt
 	return handleSelectedSupplier(trCtx)
 }
 
+// There is no selected supplier. This is either skipped supplier message or message that Ill Transaction is unfilled
 func (c *Iso18626Client) handleNoSelectedSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string, isNotification bool) (*messageTarget, error) {
 	if isNotification && msgSupplierSymbol != "" {
 		return c.handleSkippedSupplierNotification(ctx, trCtx, msgSupplierSymbol)
@@ -587,6 +588,7 @@ func (c *Iso18626Client) handleNoSelectedSupplier(ctx extctx.ExtendedContext, tr
 	return &messageTarget{status: iso18626.TypeStatusUnfilled, firstMessage: false}, nil
 }
 
+// Handle message from skipped supplier
 func (c *Iso18626Client) handleSkippedSupplierNotification(ctx extctx.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string) (*messageTarget, error) {
 	skipped, skippedPeer, err := c.getSkippedSupplierAndPeer(ctx, trCtx.transaction.ID, msgSupplierSymbol)
 	if err != nil {
@@ -602,33 +604,37 @@ func (c *Iso18626Client) handleSkippedSupplierNotification(ctx extctx.ExtendedCo
 		}, nil
 	}
 
+	problem := fmt.Sprintf("ignored notification from skipped supplier %s due to requester mode %s", msgSupplierSymbol, trCtx.requester.BrokerMode)
 	return &messageTarget{
-		problemDetails: &struct{ message string }{
-			message: fmt.Sprintf("ignored notification from skipped supplier %s due to requester mode %s", msgSupplierSymbol, trCtx.requester.BrokerMode),
-		},
+		problemDetails: &problem,
 	}, nil
 }
 
+// Handle message from selected supplier
 func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 	lastReceivedStatus := trCtx.selectedSupplier.LastStatus
 	if s, ok := iso18626.StatusMap[lastReceivedStatus.String]; ok {
+		// Forward supplier message to requester
 		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedPeer, status: s, firstMessage: false}, nil
 	}
 
 	if !lastReceivedStatus.Valid {
 		if trCtx.event.EventData.IncomingMessage == nil {
 			if trCtx.requester.BrokerMode == string(extctx.BrokerModeTransparent) || trCtx.requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
+				// Send first ExpectToSupply message before supplier has confirmed
 				return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
 			}
+			// First message is not sent if broker mode is Opaque
 			return &messageTarget{note: fmt.Sprintf(BrokerDoesNotSendInThisMode, BrokerInfoStatus, trCtx.requester.BrokerMode)}, nil
 		}
+		// Send first ExpectToSupply message when supplier has confirmed
 		return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
 	}
 
 	return nil, fmt.Errorf(FailedToResolveStatus, lastReceivedStatus.String)
 }
 
-func buildSupplyingAgencyMessage(trCtx transactionContext, target *messageTarget) *iso18626.ISO18626Message {
+func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarget) *iso18626.ISO18626Message {
 	var message *iso18626.ISO18626Message
 	if trCtx.event.EventData.IncomingMessage != nil && trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
 		message = trCtx.event.EventData.IncomingMessage

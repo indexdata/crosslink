@@ -463,7 +463,7 @@ func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeOpaq
 	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Nil(t, err)
-	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", msgTarget.problemDetails.message)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
 }
 
 func TestDetermineMessageTarget_handleSkippedSupplierNotification_Error(t *testing.T) {
@@ -511,7 +511,7 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Br
 	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Nil(t, err)
-	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", msgTarget.problemDetails.message)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Error(t *testing.T) {
@@ -625,7 +625,7 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 		supplier:     sup,
 		peer:         supPeer,
 	}
-	message := buildSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
 	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
@@ -650,7 +650,7 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 		supplier:     sup,
 		peer:         supPeer,
 	}
-	message := buildSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Nil(t, message.DeliveryInfo)
 	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
