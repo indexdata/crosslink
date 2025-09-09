@@ -50,6 +50,23 @@ type Iso18626Client struct {
 	sendDelay  time.Duration
 }
 
+type transactionContext struct {
+	transaction      *ill_db.IllTransaction
+	requester        *ill_db.Peer
+	selectedSupplier *ill_db.LocatedSupplier
+	selectedPeer     *ill_db.Peer
+	event            events.Event
+}
+
+type messageTarget struct {
+	supplier       *ill_db.LocatedSupplier
+	peer           *ill_db.Peer
+	status         iso18626.TypeStatus
+	firstMessage   bool
+	note           string
+	problemDetails *struct{ message string }
+}
+
 func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, delay time.Duration) Iso18626Client {
 	return Iso18626Client{
 		eventBus:   eventBus,
@@ -498,14 +515,6 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 	return name, agencyId, address, email
 }
 
-type transactionContext struct {
-	transaction      *ill_db.IllTransaction
-	requester        *ill_db.Peer
-	selectedSupplier *ill_db.LocatedSupplier
-	selectedPeer     *ill_db.Peer
-	event            events.Event
-}
-
 func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, event events.Event, supplierMandatory bool) (transactionContext, error) {
 	transCtx := transactionContext{
 		event: event,
@@ -513,22 +522,21 @@ func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, even
 	illTrans, err := c.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return transCtx, fmt.Errorf("%s: %w", FailedToReadTransaction, err)
-	} else {
-		transCtx.transaction = &illTrans
 	}
+	transCtx.transaction = &illTrans
+
 	requester, err := c.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
 		return transCtx, fmt.Errorf("%s: %w", FailedToGetRequester, err)
-	} else {
-		transCtx.requester = &requester
 	}
+	transCtx.requester = &requester
+
 	selected, supplier, err := c.getSelectedSupplierAndPeer(ctx, illTrans)
 	if err != nil && supplierMandatory {
 		return transCtx, fmt.Errorf("%s: %w", FailedToGetSupplier, err)
-	} else {
-		transCtx.selectedSupplier = selected
-		transCtx.selectedPeer = supplier
 	}
+	transCtx.selectedSupplier = selected
+	transCtx.selectedPeer = supplier
 	return transCtx, nil
 }
 
@@ -555,15 +563,6 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	message := buildSupplyingAgencyMessage(trCtx, msgTarget)
 
 	return c.sendAndUpdateStatus(ctx, trCtx, message)
-}
-
-type messageTarget struct {
-	supplier       *ill_db.LocatedSupplier
-	peer           *ill_db.Peer
-	status         iso18626.TypeStatus
-	firstMessage   bool
-	note           string
-	problemDetails *struct{ message string }
 }
 
 func (c *Iso18626Client) determineMessageTarget(ctx extctx.ExtendedContext, trCtx transactionContext) (*messageTarget, error) {

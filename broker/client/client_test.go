@@ -354,7 +354,7 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
 	event := events.Event{IllTransactionID: "1"}
 	trCtx, err := client.readTransactionContext(appCtx, event, true)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NotNil(t, trCtx.transaction)
 	assert.NotNil(t, trCtx.requester)
 	assert.NotNil(t, trCtx.selectedSupplier)
