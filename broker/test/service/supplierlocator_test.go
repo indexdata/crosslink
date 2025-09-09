@@ -531,14 +531,9 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 		ID:                 illTrId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
-		RequesterID: pgtype.Text{
-			String: requester.ID,
-			Valid:  true,
-		},
-		RequesterRequestID: pgtype.Text{
-			String: reqReqId,
-			Valid:  true,
-		},
+		RequesterID:        getPgText(requester.ID),
+		RequesterRequestID: getPgText(reqReqId),
+		LastSupplierStatus: getPgText(string(iso18626.TypeStatusUnfilled)),
 	})
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
@@ -617,14 +612,9 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 		ID:                 illTrId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
-		RequesterID: pgtype.Text{
-			String: requester.ID,
-			Valid:  true,
-		},
-		RequesterRequestID: pgtype.Text{
-			String: reqReqId,
-			Valid:  true,
-		},
+		RequesterID:        getPgText(requester.ID),
+		RequesterRequestID: getPgText(reqReqId),
+		LastSupplierStatus: getPgText(string(iso18626.TypeStatusUnfilled)),
 	})
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)

@@ -316,12 +316,12 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 }
 
 // suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
-func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, status iso18626.TypeStatus) iso18626.TypeReasonForMessage {
+func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string) iso18626.TypeReasonForMessage {
 	// notification is a special case where we don't try to guess the reason
 	if reason == iso18626.TypeReasonForMessageNotification {
 		return reason
 	}
-	if status == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
+	if prevStatus == string(iso18626.TypeStatusUnfilled) { // For unfilled we want to send notification
 		return iso18626.TypeReasonForMessageNotification
 	}
 	var expectedReason iso18626.TypeReasonForMessage
@@ -650,7 +650,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	sam := message.SupplyingAgencyMessage
 	sam.Header = createMessageHeader(*trCtx.transaction, target.supplier, false, trCtx.requester.BrokerMode)
 	reason := sam.MessageInfo.ReasonForMessage
-	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String, target.status)
+	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String)
 	sam.StatusInfo.Status = target.status
 	sam.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
@@ -669,7 +669,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
-	if isDoNotSend(trCtx.event) || isDontForwardUnfilled(trCtx, message) {
+	if isDoNotSend(trCtx.event) || isDontForwardUnfilled(trCtx) {
 		resData.CustomData = map[string]any{"doNotSend": true}
 		resData.OutgoingMessage = nil
 	} else {
@@ -796,10 +796,12 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 	return eventStatus, &resData
 }
 
-func isDontForwardUnfilled(trCtx transactionContext, message *iso18626.ISO18626Message) bool {
-	messageInfo := message.SupplyingAgencyMessage.MessageInfo
+func isDontForwardUnfilled(trCtx transactionContext) bool {
+	if trCtx.event.EventData.IncomingMessage == nil || trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
+		return false
+	}
+	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
 	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
-	return trCtx.event.EventData.IncomingMessage != nil && trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage != nil &&
-		trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled && (!noteOrReasonExists ||
-		trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque))
+	return trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled &&
+		(!noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque))
 }

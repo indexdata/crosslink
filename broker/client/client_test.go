@@ -292,47 +292,47 @@ func TestPopulateSupplierInfo(t *testing.T) {
 
 func TestValidateReason(t *testing.T) {
 	// Valid reason
-	reason := guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), "", iso18626.TypeStatusExpectToSupply)
+	reason := guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), "", iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), "", iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason("", string(ill_db.RequestAction), "", iso18626.TypeStatusExpectToSupply)
+	reason = guessReason("", string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason("", string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason("", string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason("", string(iso18626.TypeActionNotification), "", iso18626.TypeStatusExpectToSupply)
+	reason = guessReason("", string(iso18626.TypeActionNotification), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusUnfilled))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 }
 
@@ -751,4 +751,43 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
 	assert.True(t, resData.CustomData["doNotSend"].(bool))
+}
+
+func TestIsDontForwardUnfilled(t *testing.T) {
+	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
+	trCtx := transactionContext{event: events.Event{
+		EventData: events.EventData{},
+	}, requester: &requester}
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage = &iso18626.ISO18626Message{}
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	messageInfo := iso18626.MessageInfo{
+		Note: "Will not deliver",
+		ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+			Text: "Not available",
+		},
+	}
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = messageInfo
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo = iso18626.StatusInfo{
+		Status: iso18626.TypeStatusUnfilled,
+	}
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusUnfilled
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = iso18626.MessageInfo{}
+	assert.True(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Will not deliver"
+	assert.False(t, isDontForwardUnfilled(trCtx))
+
+	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
+	assert.True(t, isDontForwardUnfilled(trCtx))
 }
