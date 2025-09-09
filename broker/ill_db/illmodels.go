@@ -51,7 +51,7 @@ var SupplierStateSelectedPg = pgtype.Text{
 	Valid:  true,
 }
 
-const RequestAction = "Request"
+const RequestAction = iso18626.TypeAction("Request")
 
 var PEER_REFRESH_INTERVAL = utils.GetEnv("PEER_REFRESH_INTERVAL", "5m")
 var PeerRefreshInterval = utils.Must(time.ParseDuration(PEER_REFRESH_INTERVAL))

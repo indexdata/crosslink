@@ -1,8 +1,11 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/xml"
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/test/mocks"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,43 +23,40 @@ import (
 )
 
 func TestCreateMessageHeaderTransparent(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
-	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTransparent))
+	reqHeader := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTransparent))
 	assert.Equal(t, "REQ", reqHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
 
-	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTransparent))
+	supHeader := createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTransparent))
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestCreateMessageHeaderOpaque(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
-	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeOpaque))
+	reqHeader := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeOpaque))
 	assert.Equal(t, "BROKER", reqHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
 
-	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeOpaque))
+	supHeader := createMessageHeader(illTrans, &sup, false, string(common.BrokerModeOpaque))
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestCreateMessageHeaderTranslucent(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
 	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
 
-	reqHeader := client.createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTranslucent))
+	reqHeader := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTranslucent))
 	assert.Equal(t, "BROKER", reqHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
 
-	supHeader := client.createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTranslucent))
+	supHeader := createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTranslucent))
 	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
@@ -291,47 +291,46 @@ func TestPopulateSupplierInfo(t *testing.T) {
 }
 
 func TestValidateReason(t *testing.T) {
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 1, 0*time.Second)
 	// Valid reason
-	reason := client.guessReason(iso18626.TypeReasonForMessageRequestResponse, ill_db.RequestAction, "")
+	reason := guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageRequestResponse, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageStatusChange, ill_db.RequestAction, "")
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageStatusChange, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, "")
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason("", ill_db.RequestAction, "")
+	reason = guessReason("", string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = client.guessReason("", ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason("", string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = client.guessReason("", string(iso18626.TypeActionNotification), "")
+	reason = guessReason("", string(iso18626.TypeActionNotification), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = client.guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
-	reason = client.guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
 }
 
@@ -348,4 +347,406 @@ func TestPopulateVendorInNote(t *testing.T) {
 	message.SupplyingAgencyMessage.MessageInfo.Note = "#special note#"
 	populateVendor(message.SupplyingAgencyMessage, "ReShare")
 	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "Vendor: ReShare#special note#")
+}
+
+func TestReadTransactionContextSuccess(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	event := events.Event{IllTransactionID: "1"}
+	trCtx, err := client.readTransactionContext(appCtx, event, true)
+	assert.NoError(t, err)
+	assert.NotNil(t, trCtx.transaction)
+	assert.NotNil(t, trCtx.requester)
+	assert.NotNil(t, trCtx.selectedSupplier)
+	assert.NotNil(t, trCtx.selectedPeer)
+	assert.Equal(t, event, trCtx.event)
+}
+
+func TestReadTransactionContextError(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositoryError), 1, 0*time.Second)
+	event := events.Event{IllTransactionID: "1"}
+	trCtx, err := client.readTransactionContext(appCtx, event, true)
+	assert.Equal(t, FailedToReadTransaction+": DB error", err.Error())
+	assert.Nil(t, trCtx.transaction)
+	assert.Nil(t, trCtx.requester)
+	assert.Nil(t, trCtx.selectedSupplier)
+	assert.Nil(t, trCtx.selectedPeer)
+	assert.Equal(t, event, trCtx.event)
+}
+
+func createSupplyingAgencyMessageEvent(notification bool) events.Event {
+	reason := iso18626.TypeReasonForMessageStatusChange
+	if notification {
+		reason = iso18626.TypeReasonForMessageNotification
+	}
+	return events.Event{
+		EventData: events.EventData{
+			CommonEventData: events.CommonEventData{
+				IncomingMessage: &iso18626.ISO18626Message{
+					SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+						Header: iso18626.Header{
+							SupplyingAgencyId: iso18626.TypeAgencyId{
+								AgencyIdType: iso18626.TypeSchemeValuePair{
+									Text: "isil",
+								},
+								AgencyIdValue: "sup1",
+							},
+						},
+						MessageInfo: iso18626.MessageInfo{
+							ReasonForMessage: reason,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func createTransactionContext(event events.Event, selectedSupplier *ill_db.LocatedSupplier, selectedPeer *ill_db.Peer, brokerMode common.BrokerMode) transactionContext {
+	if selectedPeer != nil {
+		selectedPeer.BrokerMode = string(brokerMode)
+	}
+	return transactionContext{
+		transaction: &ill_db.IllTransaction{
+			RequesterSymbol: getPgText("ISIL:REQ"),
+		},
+		requester: &ill_db.Peer{
+			Name:       "Requester",
+			BrokerMode: string(brokerMode),
+		},
+		selectedSupplier: selectedSupplier,
+		selectedPeer:     selectedPeer,
+		event:            event,
+	}
+}
+
+func getPgText(text string) pgtype.Text {
+	return pgtype.Text{
+		String: text,
+		Valid:  true,
+	}
+}
+
+type MockIllRepositorySkippedSup struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *MockIllRepositorySkippedSup) GetLocatedSupplierByIllTransactionAndSymbol(_ common.ExtendedContext, illTransactionId string, symbol string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		ID:               uuid.NewString(),
+		IllTransactionID: illTransactionId,
+		SupplierSymbol:   symbol,
+		SupplierID:       "skipped",
+		SupplierStatus:   ill_db.SupplierStateSkippedPg,
+	}, nil
+}
+
+func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "skipped", msgTarget.supplier.SupplierID)
+}
+
+func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeOpaque(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
+}
+
+func TestDetermineMessageTarget_handleSkippedSupplierNotification_Error(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
+
+	_, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Equal(t, "supplier isil:sup1 is not in skipped state", err.Error())
+}
+
+func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(false)
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, iso18626.TypeStatusUnfilled, msgTarget.status)
+	assert.False(t, msgTarget.firstMessage)
+}
+
+func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeTransparent)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "skipped", msgTarget.supplier.SupplierID)
+}
+
+func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeOpaque(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
+}
+
+func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Error(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeOpaque)
+
+	_, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Equal(t, "supplier isil:sup1 is not in skipped state", err.Error())
+}
+
+func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LastStatus: getPgText(string(iso18626.TypeStatusLoaned))}
+	supPeer := &ill_db.Peer{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, sup, msgTarget.supplier)
+	assert.Equal(t, supPeer, msgTarget.peer)
+	assert.Equal(t, iso18626.TypeStatusLoaned, msgTarget.status)
+	assert.False(t, msgTarget.firstMessage)
+}
+
+func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LastStatus: getPgText("invalid")}
+	supPeer := &ill_db.Peer{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+
+	_, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Equal(t, "failed to resolve status for value: invalid", err.Error())
+}
+
+func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, sup, msgTarget.supplier)
+	assert.Nil(t, msgTarget.peer)
+	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
+	assert.True(t, msgTarget.firstMessage)
+}
+
+func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeOpaque(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage = nil
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, "broker does not send ExpectToSupply in mode opaque", msgTarget.note)
+	assert.Nil(t, msgTarget.peer)
+	assert.Nil(t, msgTarget.supplier)
+	assert.False(t, msgTarget.firstMessage)
+}
+func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage = nil
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+
+	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
+
+	assert.Nil(t, err)
+	assert.Equal(t, sup, msgTarget.supplier)
+	assert.Nil(t, msgTarget.peer)
+	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
+	assert.True(t, msgTarget.firstMessage)
+}
+
+func TestBuildSupplyingAgencyMessage(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{
+		ItemId: "testId1",
+	}
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+	msgTarget := messageTarget{
+		status:       iso18626.TypeStatusLoaned,
+		firstMessage: true,
+		supplier:     sup,
+		peer:         supPeer,
+	}
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
+	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, message.MessageInfo.ReasonForMessage)
+	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
+	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
+	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
+}
+
+func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage = nil
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+	msgTarget := messageTarget{
+		status:       iso18626.TypeStatusLoaned,
+		firstMessage: true,
+		supplier:     sup,
+		peer:         supPeer,
+	}
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	assert.Nil(t, message.DeliveryInfo)
+	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, message.MessageInfo.ReasonForMessage)
+	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
+	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
+	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
+}
+func TestSendAndUpdateStatus_DontSend(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.CustomData = map[string]any{"doNotSend": true}
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+
+	status, resData := client.sendAndUpdateStatus(appCtx, trCtx, event.EventData.IncomingMessage)
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, resData.OutgoingMessage)
+	assert.True(t, resData.CustomData["doNotSend"].(bool))
+}
+
+func TestCreateRequestMessage(t *testing.T) {
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	trCtx := createTransactionContext(events.Event{}, sup, supPeer, common.BrokerModeTransparent)
+
+	message, action := createRequestMessage(trCtx)
+
+	assert.Equal(t, iso18626.TypeAction(ill_db.RequestAction), action)
+	assert.Equal(t, "sup1", message.Request.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ", message.Request.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "id1", message.Request.BibliographicInfo.SupplierUniqueRecordId)
+	assert.Equal(t, "#RETURN_TO#\nisil:sup1 (isil:sup1)\n#RT_END#\n", message.Request.SupplierInfo[0].SupplierDescription)
+	assert.Equal(t, "Requester (ISIL:REQ)", message.Request.RequestingAgencyInfo.Name)
+}
+
+func TestCreateRequestingAgencyMessage(t *testing.T) {
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	event := events.Event{
+		EventData: events.EventData{
+			CommonEventData: events.CommonEventData{
+				IncomingMessage: &iso18626.ISO18626Message{
+					RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+						Note: "This is note",
+					},
+				},
+			},
+		},
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+	trCtx.transaction.LastRequesterAction = getPgText("Received")
+
+	message, action, errorMessage := createRequestingAgencyMessage(trCtx)
+
+	assert.Equal(t, iso18626.TypeActionReceived, action)
+	assert.NoError(t, errorMessage)
+	assert.Equal(t, "sup1", message.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, "REQ", message.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, iso18626.TypeActionReceived, message.RequestingAgencyMessage.Action)
+	assert.Equal(t, "This is note", message.RequestingAgencyMessage.Note)
+}
+
+func TestCreateRequestingAgencyMessage_error(t *testing.T) {
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	event := events.Event{}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+	trCtx.transaction.LastRequesterAction = getPgText("NotFound")
+
+	_, action, errorMessage := createRequestingAgencyMessage(trCtx)
+
+	assert.Equal(t, iso18626.TypeAction(""), action)
+	assert.Equal(t, "failed to resolve action for value: NotFound", errorMessage.Error())
+}
+
+func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.CustomData = map[string]any{"doNotSend": true}
+	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+
+	status, resData := client.sendAndUpdateSupplier(appCtx, trCtx, event.EventData.IncomingMessage, "Received")
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, resData.OutgoingMessage)
+	assert.True(t, resData.CustomData["doNotSend"].(bool))
 }
