@@ -116,7 +116,7 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 			Valid:  status != "",
 		},
 		LastAction: pgtype.Text{
-			String: ill_db.RequestAction,
+			String: string(ill_db.RequestAction),
 			Valid:  true,
 		},
 	})

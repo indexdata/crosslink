@@ -702,16 +702,15 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	// if requester sends a message (e.g notification) to supplier and then a new supplier is selected,
 	// the action on the transaction is not relevant and we need to look at the new supplier's last action
 	// however, if requester sends a retry request it is captured on the transaction
-	var isRequest = trCtx.selectedSupplier.LastAction.String == "" || trCtx.transaction.LastRequesterAction.String == ill_db.RequestAction
+	var isRequest = trCtx.selectedSupplier.LastAction.String == "" || trCtx.transaction.LastRequesterAction.String == string(ill_db.RequestAction)
 	var message *iso18626.ISO18626Message
 	var action iso18626.TypeAction
 	if isRequest {
 		message, action = createRequestMessage(trCtx)
 	} else {
-		errorMessage := ""
-		message, action, errorMessage = createRequestingAgencyMessage(trCtx)
-		if errorMessage != "" {
-			return events.LogErrorAndReturnResult(ctx, errorMessage, nil)
+		message, action, err = createRequestingAgencyMessage(trCtx)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "", err)
 		}
 	}
 	return c.sendAndUpdateSupplier(ctx, trCtx, message, action)
@@ -743,11 +742,11 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	return message, ill_db.RequestAction
 }
 
-func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction, string) {
+func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction, error) {
 	var message = &iso18626.ISO18626Message{}
 	found, ok := iso18626.ActionMap[trCtx.transaction.LastRequesterAction.String]
 	if !ok {
-		return message, "", "failed to resolve action for value: " + trCtx.transaction.LastRequesterAction.String
+		return message, "", fmt.Errorf("failed to resolve action for value: %s", trCtx.transaction.LastRequesterAction.String)
 	}
 	var note = ""
 	if trCtx.event.EventData.IncomingMessage != nil && trCtx.event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
@@ -758,7 +757,7 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 		Action: found,
 		Note:   note,
 	}
-	return message, found, ""
+	return message, found, nil
 }
 
 func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {

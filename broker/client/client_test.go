@@ -292,23 +292,23 @@ func TestPopulateSupplierInfo(t *testing.T) {
 
 func TestValidateReason(t *testing.T) {
 	// Valid reason
-	reason := guessReason(iso18626.TypeReasonForMessageRequestResponse, ill_db.RequestAction, "")
+	reason := guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, ill_db.RequestAction, "")
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, "")
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason(iso18626.TypeReasonForMessageNotification, ill_db.RequestAction, string(iso18626.TypeStatusWillSupply))
+	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(ill_db.RequestAction), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
-	reason = guessReason("", ill_db.RequestAction, "")
+	reason = guessReason("", string(ill_db.RequestAction), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
-	reason = guessReason("", ill_db.RequestAction, string(iso18626.TypeStatusExpectToSupply))
+	reason = guessReason("", string(ill_db.RequestAction), string(iso18626.TypeStatusExpectToSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason("", string(iso18626.TypeActionNotification), "")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
@@ -714,7 +714,7 @@ func TestCreateRequestingAgencyMessage(t *testing.T) {
 	message, action, errorMessage := createRequestingAgencyMessage(trCtx)
 
 	assert.Equal(t, iso18626.TypeActionReceived, action)
-	assert.Equal(t, "", errorMessage)
+	assert.NoError(t, errorMessage)
 	assert.Equal(t, "sup1", message.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, iso18626.TypeActionReceived, message.RequestingAgencyMessage.Action)
@@ -734,7 +734,7 @@ func TestCreateRequestingAgencyMessage_error(t *testing.T) {
 	_, action, errorMessage := createRequestingAgencyMessage(trCtx)
 
 	assert.Equal(t, iso18626.TypeAction(""), action)
-	assert.Equal(t, "failed to resolve action for value: NotFound", errorMessage)
+	assert.Equal(t, "failed to resolve action for value: NotFound", errorMessage.Error())
 }
 
 func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
