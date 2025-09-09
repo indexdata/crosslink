@@ -683,7 +683,7 @@ func TestCreateRequestMessage(t *testing.T) {
 
 	message, action := createRequestMessage(trCtx)
 
-	assert.Equal(t, ill_db.RequestAction, action)
+	assert.Equal(t, iso18626.TypeAction(ill_db.RequestAction), action)
 	assert.Equal(t, "sup1", message.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Request.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, "id1", message.Request.BibliographicInfo.SupplierUniqueRecordId)
@@ -713,7 +713,7 @@ func TestCreateRequestingAgencyMessage(t *testing.T) {
 
 	message, action, errorMessage := createRequestingAgencyMessage(trCtx)
 
-	assert.Equal(t, string(iso18626.TypeActionReceived), action)
+	assert.Equal(t, iso18626.TypeActionReceived, action)
 	assert.Equal(t, "", errorMessage)
 	assert.Equal(t, "sup1", message.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue)
@@ -733,7 +733,7 @@ func TestCreateRequestingAgencyMessage_error(t *testing.T) {
 
 	_, action, errorMessage := createRequestingAgencyMessage(trCtx)
 
-	assert.Equal(t, "", action)
+	assert.Equal(t, iso18626.TypeAction(""), action)
 	assert.Equal(t, "failed to resolve action for value: NotFound", errorMessage)
 }
 

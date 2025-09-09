@@ -704,7 +704,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	// however, if requester sends a retry request it is captured on the transaction
 	var isRequest = trCtx.selectedSupplier.LastAction.String == "" || trCtx.transaction.LastRequesterAction.String == ill_db.RequestAction
 	var message *iso18626.ISO18626Message
-	var action string
+	var action iso18626.TypeAction
 	if isRequest {
 		message, action = createRequestMessage(trCtx)
 	} else {
@@ -717,7 +717,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extct
 	return c.sendAndUpdateSupplier(ctx, trCtx, message, action)
 }
 
-func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, string) {
+func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = &iso18626.ISO18626Message{}
 	message.Request = &iso18626.Request{
 		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedPeer.BrokerMode),
@@ -743,7 +743,7 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	return message, ill_db.RequestAction
 }
 
-func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626Message, string, string) {
+func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction, string) {
 	var message = &iso18626.ISO18626Message{}
 	found, ok := iso18626.ActionMap[trCtx.transaction.LastRequesterAction.String]
 	if !ok {
@@ -758,10 +758,10 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 		Action: found,
 		Note:   note,
 	}
-	return message, string(found), ""
+	return message, found, ""
 }
 
-func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action string) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
 	eventStatus := events.EventStatusSuccess
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
@@ -787,7 +787,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??
-	err := c.updateSelectedSupplierAction(ctx, trCtx.transaction.ID, action)
+	err := c.updateSelectedSupplierAction(ctx, trCtx.transaction.ID, string(action))
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}
