@@ -607,14 +607,11 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS doNotSend=true\n",
+			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
-			}
-			if (e.EventName == "message-supplier" || e.EventName == "message-requester") && e.ResultData.CustomData != nil {
-				return fmt.Sprintf(apptest.EventRecordFormat+" doNotSend=%v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["doNotSend"])
 			}
 			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 		}))
@@ -685,14 +682,11 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS doNotSend=true\n",
+			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
+			"TASK, message-requester = SUCCESS, doNotSend=true\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
-			}
-			if (e.EventName == "message-supplier" || e.EventName == "message-requester") && e.ResultData.CustomData != nil {
-				return fmt.Sprintf(apptest.EventRecordFormat+" doNotSend=%v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["doNotSend"])
 			}
 			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 		}))

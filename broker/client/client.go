@@ -321,6 +321,9 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 	if reason == iso18626.TypeReasonForMessageNotification {
 		return reason
 	}
+	if prevStatus == string(iso18626.TypeStatusUnfilled) { // For unfilled we want to send notification
+		return iso18626.TypeReasonForMessageNotification
+	}
 	var expectedReason iso18626.TypeReasonForMessage
 	switch requesterAction {
 	case string(iso18626.TypeActionStatusRequest):
@@ -666,7 +669,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
-	if isDoNotSend(trCtx.event) {
+	if isDoNotSend(trCtx.event) || blockUnfilled(trCtx) {
 		resData.CustomData = map[string]any{"doNotSend": true}
 		resData.OutgoingMessage = nil
 	} else {
@@ -791,4 +794,14 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}
 	return eventStatus, &resData
+}
+
+func blockUnfilled(trCtx transactionContext) bool {
+	if trCtx.event.EventData.IncomingMessage == nil || trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage == nil ||
+		trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status != iso18626.TypeStatusUnfilled {
+		return false
+	}
+	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
+	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
+	return !noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque)
 }

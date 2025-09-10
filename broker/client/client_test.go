@@ -332,6 +332,8 @@ func TestValidateReason(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply))
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
+	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusUnfilled))
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 }
 
 func TestPopulateVendorInNote(t *testing.T) {
@@ -749,4 +751,43 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
 	assert.True(t, resData.CustomData["doNotSend"].(bool))
+}
+
+func TestBlockUnfilled(t *testing.T) {
+	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
+	trCtx := transactionContext{event: events.Event{
+		EventData: events.EventData{},
+	}, requester: &requester}
+	assert.False(t, blockUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage = &iso18626.ISO18626Message{}
+	assert.False(t, blockUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
+	assert.False(t, blockUnfilled(trCtx))
+
+	messageInfo := iso18626.MessageInfo{
+		Note: "Will not deliver",
+		ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+			Text: "Not available",
+		},
+	}
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = messageInfo
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo = iso18626.StatusInfo{
+		Status: iso18626.TypeStatusUnfilled,
+	}
+	assert.False(t, blockUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
+	assert.False(t, blockUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusUnfilled
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = iso18626.MessageInfo{}
+	assert.True(t, blockUnfilled(trCtx))
+
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Will not deliver"
+	assert.False(t, blockUnfilled(trCtx))
+
+	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
+	assert.True(t, blockUnfilled(trCtx))
 }
