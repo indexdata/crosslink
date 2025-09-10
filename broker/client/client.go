@@ -669,7 +669,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
-	if isDoNotSend(trCtx.event) || isDontForwardUnfilled(trCtx) {
+	if isDoNotSend(trCtx.event) || blockUnfilled(trCtx) {
 		resData.CustomData = map[string]any{"doNotSend": true}
 		resData.OutgoingMessage = nil
 	} else {
@@ -796,12 +796,12 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 	return eventStatus, &resData
 }
 
-func isDontForwardUnfilled(trCtx transactionContext) bool {
-	if trCtx.event.EventData.IncomingMessage == nil || trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage == nil {
+func blockUnfilled(trCtx transactionContext) bool {
+	if trCtx.event.EventData.IncomingMessage == nil || trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage == nil ||
+		trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status != iso18626.TypeStatusUnfilled {
 		return false
 	}
 	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
 	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
-	return trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled &&
-		(!noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque))
+	return !noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque)
 }

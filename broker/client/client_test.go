@@ -753,18 +753,18 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	assert.True(t, resData.CustomData["doNotSend"].(bool))
 }
 
-func TestIsDontForwardUnfilled(t *testing.T) {
+func TestBlockUnfilled(t *testing.T) {
 	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
 	trCtx := transactionContext{event: events.Event{
 		EventData: events.EventData{},
 	}, requester: &requester}
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage = &iso18626.ISO18626Message{}
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	messageInfo := iso18626.MessageInfo{
 		Note: "Will not deliver",
@@ -776,18 +776,18 @@ func TestIsDontForwardUnfilled(t *testing.T) {
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo = iso18626.StatusInfo{
 		Status: iso18626.TypeStatusUnfilled,
 	}
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusUnfilled
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = iso18626.MessageInfo{}
-	assert.True(t, isDontForwardUnfilled(trCtx))
+	assert.True(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Will not deliver"
-	assert.False(t, isDontForwardUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
-	assert.True(t, isDontForwardUnfilled(trCtx))
+	assert.True(t, blockUnfilled(trCtx))
 }
