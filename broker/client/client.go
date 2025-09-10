@@ -316,12 +316,12 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 }
 
 // suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
-func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string) iso18626.TypeReasonForMessage {
+func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, targetStatus iso18626.TypeStatus) iso18626.TypeReasonForMessage {
 	// notification is a special case where we don't try to guess the reason
 	if reason == iso18626.TypeReasonForMessageNotification {
 		return reason
 	}
-	if prevStatus == string(iso18626.TypeStatusUnfilled) { // For unfilled we want to send notification
+	if reason != "" && targetStatus == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
 		return iso18626.TypeReasonForMessageNotification
 	}
 	var expectedReason iso18626.TypeReasonForMessage
@@ -650,7 +650,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	sam := message.SupplyingAgencyMessage
 	sam.Header = createMessageHeader(*trCtx.transaction, target.supplier, false, trCtx.requester.BrokerMode)
 	reason := sam.MessageInfo.ReasonForMessage
-	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String)
+	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String, target.status)
 	sam.StatusInfo.Status = target.status
 	sam.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 
