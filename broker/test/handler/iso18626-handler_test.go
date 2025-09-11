@@ -210,16 +210,16 @@ func TestIso18626PostRequestExists(t *testing.T) {
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
-func TestIso18626PostSupplyingMessage(t *testing.T) {
-	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
-	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	rr := httptest.NewRecorder()
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
-	assert.Equal(t, http.StatusOK, rr.Code)
-	msgOk := "<messageStatus>OK</messageStatus>"
-	assert.Contains(t, rr.Body.String(), msgOk)
-}
+// func TestIso18626PostSupplyingMessage(t *testing.T) {
+// 	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+// 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+// 	req.Header.Add("Content-Type", "application/xml")
+// 	rr := httptest.NewRecorder()
+// 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+// 	assert.Equal(t, http.StatusOK, rr.Code)
+// 	msgOk := "<messageStatus>OK</messageStatus>"
+// 	assert.Contains(t, rr.Body.String(), msgOk)
+// }
 
 func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")

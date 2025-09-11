@@ -608,7 +608,8 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n",
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
+			"TASK, confirm-supplier-msg = NEW\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
@@ -683,7 +684,8 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n",
+			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
+			"TASK, confirm-supplier-msg = NEW\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
