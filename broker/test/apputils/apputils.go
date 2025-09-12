@@ -160,7 +160,7 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 	value := ""
 	for _, e := range eventList {
 		value = value + eventFmt(e)
-		if e.EventStatus == events.EventStatusProblem {
+		if e.EventStatus == events.EventStatusProblem && e.ResultData.Problem != nil {
 			value += ", problem=" + e.ResultData.Problem.Kind
 		}
 		if e.EventStatus == events.EventStatusError {
