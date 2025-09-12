@@ -3,6 +3,8 @@ package service
 import (
 	"errors"
 	"fmt"
+	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -12,6 +14,8 @@ import (
 )
 
 const WF_COMP = "workflow_manager"
+
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 type WorkflowManager struct {
 	eventBus events.EventBus
@@ -112,12 +116,32 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	// only in case 3 we suspended the HTTP request in the handler and must resume it here
 	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
 		// action message was send by requester so we must relay the confirmation
+		ram := event.EventData.IncomingMessage.RequestingAgencyMessage
+		if ram.Action == iso18626.TypeActionCancel {
+			w.handleCancelAction(ctx, event, ram)
+		}
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
 	} else if event.EventStatus != events.EventStatusSuccess {
 		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+		}, "")
+	}
+}
+
+func (w *WorkflowManager) handleCancelAction(ctx extctx.ExtendedContext, event events.Event, ram *iso18626.RequestingAgencyMessage) {
+	requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
+	if err != nil {
+		ctx.Logger().Error("failed to process requester message received event, no requester", "error", err)
+	} else {
+		if requester.BrokerMode == string(extctx.BrokerModeOpaque) || getSupplierSymbol(*ram) == brokerSymbol {
+			// Requester does not know supplier or broker symbol was used, fully terminate transaction
+			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
+			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
+		}
+		extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
 	}
@@ -159,6 +183,27 @@ func (w *WorkflowManager) shouldForwardMessage(ctx extctx.ExtendedContext, event
 	return true
 }
 
+func (w *WorkflowManager) skipAllSuppliersByStatus(ctx extctx.ExtendedContext, illTransId string, supplierStatus pgtype.Text) {
+	suppliers, err := w.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+		IllTransactionID: illTransId,
+		SupplierStatus:   supplierStatus,
+	})
+	if err != nil {
+		ctx.Logger().Error("could not read supplier", "error", err)
+		return
+	}
+	if len(suppliers) > 0 {
+		for _, supplier := range suppliers {
+			supplier.SupplierStatus = ill_db.SupplierStateSkippedPg
+			_, err = w.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(supplier))
+			if err != nil {
+				ctx.Logger().Error("could not update selected supplier status", "error", err)
+				return
+			}
+		}
+	}
+}
+
 func getSymbol(msg *iso18626.ISO18626Message) string {
 	symbol := ""
 	if msg != nil && msg.SupplyingAgencyMessage != nil {
@@ -166,4 +211,8 @@ func getSymbol(msg *iso18626.ISO18626Message) string {
 			msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
 	}
 	return symbol
+}
+
+func getSupplierSymbol(ram iso18626.RequestingAgencyMessage) string {
+	return ram.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + ram.Header.SupplyingAgencyId.AgencyIdValue
 }
