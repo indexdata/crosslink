@@ -159,10 +159,6 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 
 	value := ""
 	for _, e := range eventList {
-		this := eventFmt(e)
-		if this == "TASK, confirm-supplier-msg = SUCCESS" {
-			continue
-		}
 		value = value + eventFmt(e)
 		if e.EventStatus == events.EventStatusProblem {
 			value += ", problem=" + e.ResultData.Problem.Kind
