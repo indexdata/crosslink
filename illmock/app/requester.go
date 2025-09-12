@@ -292,6 +292,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			header.RequestingAgencyRequestId = newId
 			requester.store(&header, state)
 		}
+		time.Sleep(app.messageDelay / 10)
 		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo, prevId, newId)
 	}
 }
