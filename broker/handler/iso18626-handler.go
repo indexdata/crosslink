@@ -51,6 +51,7 @@ const InternalFailedToSaveTx = "failed to save ILL transaction"
 const InternalFailedToLookupSupplier = "failed to lookup supplier"
 const InternalFailedToCreateNotice = "failed to create notice event"
 const InternalFailedToConfirmRequesterMessage = "failed to confirm requester message"
+const InternalFailedToConfirmSupplierMessage = "failed to confirm supplier message"
 
 var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
 
@@ -526,10 +527,18 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	if createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess) == "" {
+
+	eventId := createNoticeAndCheckDBError(ctx, w, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusSuccess)
+	if eventId == "" {
 		return
 	}
-	writeResponse(ctx, resmsg, w)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	waitingReqs[eventId] = RequestWait{
+		w:  &w,
+		wg: &wg,
+	}
+	wg.Wait()
 }
 
 func validateStatusAndReasonForMessage(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage) {
@@ -729,6 +738,63 @@ func handleConfirmReqMsgMissingAncestor(ctx extctx.ExtendedContext, event events
 	return status, &resData
 }
 
+func (h *Iso18626Handler) ConfirmSupplierMsg(ctx extctx.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(HANDLER_COMP))
+
+	reqResponseEvent := h.eventBus.FindAncestor(&event, events.EventNameMessageRequester)
+	if reqResponseEvent == nil {
+		// all instances will try to process the event on lookup failure
+		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+			return handleConfirmSuppMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameMessageRequester))
+		})
+		return
+	}
+	supRequestEvent := h.eventBus.FindAncestor(reqResponseEvent, events.EventNameSupplierMsgReceived)
+	if supRequestEvent == nil {
+		// all instances will try to process the event on lookup failure
+		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+			return handleConfirmSuppMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameSupplierMsgReceived))
+		})
+		return
+	}
+	if _, ok := waitingReqs[supRequestEvent.ID]; !ok {
+		return // instance doesn't have the paused request
+	}
+	// instance has the event, process it
+	_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		return h.handleConfirmSupplierMsgTask(ec, e, supRequestEvent.ID, supRequestEvent.EventData.IncomingMessage, reqResponseEvent.ResultData)
+	})
+}
+
+func handleConfirmSuppMsgMissingAncestor(ctx extctx.ExtendedContext, event events.Event, cause error) (events.EventStatus, *events.EventResult) {
+	ctx.Logger().Warn(InternalFailedToConfirmSupplierMessage, "error", cause, "eventId", event.ID, "transactionId", event.IllTransactionID)
+
+	status := events.EventStatusError
+	resData := events.EventResult{}
+	resData.EventError = &events.EventError{
+		Message: InternalFailedToConfirmSupplierMessage,
+		Cause:   cause.Error(),
+	}
+	return status, &resData
+}
+
+func (h *Iso18626Handler) handleConfirmSupplierMsgTask(ctx extctx.ExtendedContext, event events.Event,
+	waitRequestId string, supplierIllMsg *iso18626.ISO18626Message, supplierResult events.EventResult) (events.EventStatus, *events.EventResult) {
+	status := events.EventStatusSuccess
+	resData := events.EventResult{}
+	cResp, err := h.confirmRequesterResponse(ctx, event.IllTransactionID, waitRequestId, supplierIllMsg, supplierResult)
+	resData.IncomingMessage = cResp
+	if err != nil {
+		ctx.Logger().Error(InternalFailedToConfirmSupplierMessage, "error", err, "eventId", event.ID, "transactionId", event.IllTransactionID)
+		status = events.EventStatusError
+		resData.EventError = &events.EventError{
+			Message: InternalFailedToConfirmSupplierMessage,
+			Cause:   err.Error(),
+		}
+	}
+	return status, &resData
+}
+
 func (h *Iso18626Handler) handleConfirmRequesterMsgTask(ctx extctx.ExtendedContext, event events.Event,
 	waitRequestId string, requesterIllMsg *iso18626.ISO18626Message, supplierResult events.EventResult) (events.EventStatus, *events.EventResult) {
 	status := events.EventStatusSuccess
@@ -802,6 +868,64 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, il
 			"errorType", eType, "errorValue", errorMessage)
 	}
 	var resmsg = createRequestingAgencyResponse(requesterIllMsg, messageStatus, errorType, ErrorValue(errorMessage))
+	writeResponse(ctx, resmsg, *wait.w)
+	wait.wg.Done()
+	return resmsg, nil
+}
+
+func (c *Iso18626Handler) confirmRequesterResponse(ctx extctx.ExtendedContext, illTransId string, waitRequestId string, supplierIllMsg *iso18626.ISO18626Message,
+	requesterResult events.EventResult) (*iso18626.ISO18626Message, error) {
+	wait, ok := waitingReqs[waitRequestId]
+	if !ok {
+		return nil, fmt.Errorf("waiting request '%s' not found", waitRequestId)
+	}
+	delete(waitingReqs, waitRequestId)
+	var errorMessage = ""
+	var errorType *iso18626.TypeErrorType
+	var messageStatus iso18626.TypeMessageStatus
+	if requesterResult.IncomingMessage != nil && requesterResult.IncomingMessage.SupplyingAgencyMessageConfirmation != nil {
+		confirmMsg := requesterResult.IncomingMessage.SupplyingAgencyMessageConfirmation
+		messageStatus = confirmMsg.ConfirmationHeader.MessageStatus
+		if messageStatus != iso18626.TypeMessageStatusOK {
+			if confirmMsg.ErrorData != nil {
+				errorMessage = confirmMsg.ErrorData.ErrorValue
+				errorType = &confirmMsg.ErrorData.ErrorType
+			}
+			var eType string
+			if errorType != nil {
+				eType = string(*errorType)
+			}
+			var requesterSymbol string
+			if confirmMsg.ConfirmationHeader.RequestingAgencyId != nil {
+				requesterSymbol = string(confirmMsg.ConfirmationHeader.RequestingAgencyId.AgencyIdValue)
+			}
+			var supplierSymbol string
+			if confirmMsg.ConfirmationHeader.SupplyingAgencyId != nil {
+				supplierSymbol = string(confirmMsg.ConfirmationHeader.SupplyingAgencyId.AgencyIdValue)
+			}
+			ctx.Logger().Warn("forwarding supplying message confirmation error", "errorType", eType, "errorValue", errorMessage, "transactionId", illTransId,
+				"requesterSymbol", requesterSymbol,
+				"supplierSymbol", supplierSymbol,
+				"requesterRequestId", confirmMsg.ConfirmationHeader.RequestingAgencyRequestId)
+		}
+	} else if requesterResult.HttpFailure != nil {
+		// We don't have response, so it was http error or connection error
+		(*wait.w).WriteHeader(requesterResult.HttpFailure.StatusCode)
+		if len(requesterResult.HttpFailure.Body) > 0 {
+			(*wait.w).Write(requesterResult.HttpFailure.Body)
+		}
+		wait.wg.Done()
+		ctx.Logger().Warn("forwarding HTTP error response from requester to supplier", "transactionId", illTransId, "error", requesterResult.HttpFailure)
+		return nil, requesterResult.HttpFailure
+	} else {
+		eType := iso18626.TypeErrorTypeBadlyFormedMessage
+		errorMessage = string(CouldNotSendReqToPeer)
+		errorType = &eType
+		messageStatus = iso18626.TypeMessageStatusERROR
+		ctx.Logger().Warn("supplier message confirmation error, error while sending message to requester", "transactionId", illTransId,
+			"errorType", eType, "errorValue", errorMessage)
+	}
+	var resmsg = createSupplyingAgencyResponse(supplierIllMsg, messageStatus, errorType, ErrorValue(errorMessage))
 	writeResponse(ctx, resmsg, *wait.w)
 	wait.wg.Done()
 	return resmsg, nil

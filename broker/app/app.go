@@ -262,6 +262,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
+	eventBus.HandleEventCreated(events.EventNameConfirmSupplierMsg, iso18626Handler.ConfirmSupplierMsg)
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)

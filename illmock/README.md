@@ -171,7 +171,8 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 | `REQUESTING_AGENCY_ID`       | Fallback requester agency ID (symbol)                                | `REQ`                                        |
 | `CLEAN_TIMEOUT`              | Specifies how long a flow is kept in memory before being removed     | `10m`                                        |
 | `MESSAGE_DELAY`              | Supplier: delay between each SupplyingAgencyMessage.                 | `100ms`                                      |
-|                              | Requester: delay before sending ShippedReturn.                       |                                              |
+|                              | Requester: delay before sending ShippedReturn and delay divided by   |                                              |
+|                              | 10 before sending other requesting agency messages.                  |                                              |
 | `HTTP_HEADERS`               | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
 | `MOCK_DIRECTORY_ENTRIES`     | JSON format list of directory entries                                | [directories.json](dirmock/directories.json) |
 | `MOCK_DIRECTORY_ENTRIES_PATH`| Path (filename) with JSON entries, can be gzipped (.gz/.gzip/.zip)   |                                              |

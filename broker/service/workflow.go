@@ -124,11 +124,17 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 }
 
 func (w *WorkflowManager) OnMessageRequesterComplete(ctx extctx.ExtendedContext, event events.Event) {
-	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil &&
-		event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
+	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
+		// action message was send by supplier so we must relay the confirmation
 		extctx.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, &event.ID)
 		}, "")
+		if event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+			extctx.Must(ctx, func() (string, error) {
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			}, "")
+		}
 	}
 }
 

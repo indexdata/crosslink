@@ -34,6 +34,7 @@ const (
 	EventNameRequesterMsgReceived EventName = "requester-msg-received"
 	EventNameMessageSupplier      EventName = "message-supplier"
 	EventNameConfirmRequesterMsg  EventName = "confirm-requester-msg"
+	EventNameConfirmSupplierMsg   EventName = "confirm-supplier-msg"
 )
 
 type Signal string
