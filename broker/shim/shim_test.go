@@ -259,6 +259,22 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 	assert.Equal(t, 0, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp, "OfferedCosts.Exp should be 0")
 	assert.Equal(t, "EUR", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be EUR")
 	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should be nil")
+	//change to loaned and verify that offered costs are moved to delivery costs
+	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
+	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	bytes, err = shim.ApplyToOutgoing(&msg)
+	assert.Nil(t, err, "failed to apply outgoing")
+	err = xml.Unmarshal(bytes, &resmsg)
+	assert.Nil(t, err, "failed to parse xml")
+	assert.Equal(t, iso18626.TypeStatusLoaned, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.Equal(t, COST_CONDITION_PRE+"20 EUR", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should not be nil")
+	assert.Equal(t, 20, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Base, "OfferedCosts.Base should be 20")
+	assert.Equal(t, 0, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp, "OfferedCosts.Exp should be 0")
+	assert.Equal(t, "EUR", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be EUR")
+	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
 	assert.NotNil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts, "DeliveryCosts should not be nil")
 	assert.Equal(t, 20, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Base, "DeliveryCosts.Base should be 20")
 	assert.Equal(t, 0, resmsg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 0")

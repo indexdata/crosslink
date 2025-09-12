@@ -158,6 +158,10 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 }
 
 func (i *Iso18626AlmaShim) transferOfferedCostsToDeliveryCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
+	//alma doesn't care about the delivery costs unless the status is Loaned or CopyCompleted
+	if suppMsg.StatusInfo.Status != iso18626.TypeStatusLoaned && suppMsg.StatusInfo.Status != iso18626.TypeStatusCopyCompleted {
+		return
+	}
 	if suppMsg.MessageInfo.OfferedCosts == nil {
 		return
 	}
