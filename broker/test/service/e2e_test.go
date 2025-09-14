@@ -94,24 +94,23 @@ func TestRequestLOANED(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 16))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestUNFILLED(t *testing.T) {
@@ -140,17 +139,16 @@ func TestRequestUNFILLED(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
-			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 9))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
+		"TASK, message-requester = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
 	assert.Nil(t, err)
@@ -200,18 +198,17 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n"+
-			"TASK, message-requester = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 10))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
+		"TASK, message-requester = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 	data, err = os.ReadFile("../testdata/supmsg-notification.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -273,22 +270,21 @@ func TestMessageSkipped(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusWillSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 14))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 	data, err = os.ReadFile("../testdata/supmsg-notification-2.xml")
 	assert.Nil(t, err)
 	brokerUrl := os.Getenv("PEER_URL")
@@ -345,27 +341,26 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 19))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
@@ -394,21 +389,20 @@ func TestRequestWILLSUPPLY_LOANED_Cancel(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusCancelled), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionCancel), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 13))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
@@ -437,35 +431,34 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 26))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestLOANED_OVERDUE(t *testing.T) {
@@ -494,27 +487,26 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 19))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
@@ -543,33 +535,32 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 25))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_NON_EXISTING(t *testing.T) {
@@ -637,17 +628,16 @@ func TestRequestRETRY_COST(t *testing.T) {
 	})
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 9))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_COST_LOANED(t *testing.T) {
@@ -673,29 +663,28 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 	})
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 21))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
@@ -721,29 +710,28 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 	})
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS\n"+
-			"TASK, confirm-requester-msg = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareString(appCtx, eventRepo, t, illTrans.ID, 21))
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
 func getPgText(value string) pgtype.Text {

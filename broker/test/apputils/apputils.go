@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 )
 
 const EventRecordFormat = "%v, %v = %v"
@@ -129,7 +131,15 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 	return supplier
 }
 
-func EventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
+func EventsCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, expected string) {
+	actual := eventsToCompareString(appCtx, eventRepo, t, illId, strings.Count(expected, "\n"))
+	actual = strings.ReplaceAll(actual,
+		"NOTICE, requester-msg-received = SUCCESS\nTASK, confirm-supplier-msg = SUCCESS\n",
+		"TASK, confirm-supplier-msg = SUCCESS\nNOTICE, requester-msg-received = SUCCESS\n")
+	assert.Equal(t, expected, actual)
+}
+
+func eventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
 	return EventsToCompareStringFunc(appCtx, eventRepo, t, illId, messageCount, func(e events.Event) string {
 		return fmt.Sprintf(EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 	})
