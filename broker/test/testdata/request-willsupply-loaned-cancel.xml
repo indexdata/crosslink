@@ -12,14 +12,14 @@
             </supplyingAgencyId>
             <requestingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>REQ</agencyIdValue>
+                <agencyIdValue>REQ-CANCEL-{index}</agencyIdValue>
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-11-28T10:25:11.136Z</timestamp>
-            <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f345</requestingAgencyRequestId>
+            <requestingAgencyRequestId>5636c993-c41c-48f4-a285-470545f6f345-{index}</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>WILLSUPPLY_LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>WILLSUPPLY_LOANED;LOANED</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>
