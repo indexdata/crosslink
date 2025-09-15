@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	extctx "github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -210,16 +212,54 @@ func TestIso18626PostRequestExists(t *testing.T) {
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
-// func TestIso18626PostSupplyingMessage(t *testing.T) {
-// 	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
-// 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
-// 	req.Header.Add("Content-Type", "application/xml")
-// 	rr := httptest.NewRecorder()
-// 	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
-// 	assert.Equal(t, http.StatusOK, rr.Code)
-// 	msgOk := "<messageStatus>OK</messageStatus>"
-// 	assert.Contains(t, rr.Body.String(), msgOk)
-// }
+func TestIso18626PostSupplyingMessageOK(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		println("Handling ISO 18626 request\n")
+		w.WriteHeader(http.StatusOK)
+		output, _ := xml.Marshal(iso18626.NewIso18626MessageNS())
+		_, err := w.Write(output)
+		assert.Nil(t, err)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	illId := uuid.NewString()
+	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_CLIENT_URL)
+	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
+		ID:                 illId,
+		Timestamp:          test.GetNow(),
+		RequesterRequestID: apptest.CreatePgText("reqid"),
+		RequesterSymbol:    apptest.CreatePgText("ISIL:SLNP_ONE"),
+		RequesterID:        apptest.CreatePgText(requester.ID),
+	})
+	if err != nil {
+		t.Errorf("failed to create ill transaction: %s", err)
+	}
+	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_TWO_A", adapter.MOCK_CLIENT_URL)
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SLNP_TWO_A", "WillSupply")
+	supplier.Url = adapter.MOCK_CLIENT_URL
+	supplier, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(supplier))
+	assert.NoError(t, err)
+
+	_, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
+	assert.NoError(t, err)
+
+	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	url := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
+	msgOk := "<messageStatus>OK</messageStatus>"
+	assert.Contains(t, string(body), msgOk)
+}
 
 func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")

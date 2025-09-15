@@ -9,11 +9,11 @@
         <header>
             <supplyingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>SUP</agencyIdValue>
+                <agencyIdValue>SLNP_TWO_A</agencyIdValue>
             </supplyingAgencyId>
             <requestingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>BROKER</agencyIdValue>
+                <agencyIdValue>SLNP_ONE</agencyIdValue>
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-12-12T20:12:00.62959771Z</timestamp>
