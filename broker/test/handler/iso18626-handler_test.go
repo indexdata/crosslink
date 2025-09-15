@@ -256,12 +256,18 @@ func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAge
 	return resmsg
 }
 
-func TestIso18626PostSupplyingMessageOK(t *testing.T) {
+func TestIso18626PostSupplyingMessageConfirm(t *testing.T) {
+	var httpStatus *int
+	var messageStatus *iso18626.TypeMessageStatus
 	// setup a fake requester server to respond to the supplying message
 	// could use the mock instead if we could inject a fake requester ID ("reqid")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/xml")
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(*httpStatus)
+		if *httpStatus != http.StatusOK {
+			http.Error(w, http.StatusText(*httpStatus), *httpStatus)
+			return
+		}
 		byteReq, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -271,9 +277,9 @@ func TestIso18626PostSupplyingMessageOK(t *testing.T) {
 		err = xml.Unmarshal(byteReq, &illMessage)
 		assert.NoError(t, err)
 		supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
-		assert.NoError(t, err)
+		assert.NotNil(t, supplyingAgencyMessage)
 
-		resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
+		resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, *messageStatus, nil, nil)
 
 		output, err := xml.Marshal(resmsg)
 		assert.NoError(t, err)
@@ -299,23 +305,53 @@ func TestIso18626PostSupplyingMessageOK(t *testing.T) {
 	supplier.Url = adapter.MOCK_CLIENT_URL
 	supplier, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(supplier))
 	assert.NoError(t, err)
-
 	_, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
 	assert.NoError(t, err)
 
-	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
+	data, err := os.ReadFile("../testdata/supmsg-ok.xml")
+	assert.NoError(t, err)
 	url := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
-	req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-	body, err := io.ReadAll(res.Body)
-	assert.NoError(t, err)
-	assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
-	msgOk := "<messageStatus>OK</messageStatus>"
-	assert.Contains(t, string(body), msgOk)
+	for _, tt := range []struct {
+		name          string
+		httpStatus    int
+		messageStatus iso18626.TypeMessageStatus
+		contains      string
+	}{
+		{
+			name:          "ResponseSuccessful",
+			httpStatus:    200,
+			messageStatus: iso18626.TypeMessageStatusOK,
+			contains:      "<messageStatus>OK</messageStatus>",
+		},
+		{
+			name:          "Response500",
+			httpStatus:    500,
+			messageStatus: iso18626.TypeMessageStatusOK,
+			contains:      "Internal Server Error",
+		},
+		{
+			name:          "Response500WithErrorStatus",
+			httpStatus:    200,
+			messageStatus: iso18626.TypeMessageStatusERROR,
+			contains:      "<messageStatus>ERROR</messageStatus>",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			httpStatus = &tt.httpStatus
+			messageStatus = &tt.messageStatus
+
+			req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
+			req.Header.Add("Content-Type", "application/xml")
+			client := &http.Client{}
+			res, err := client.Do(req)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.httpStatus, res.StatusCode)
+			body, err := io.ReadAll(res.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
+			assert.Contains(t, string(body), tt.contains)
+		})
+	}
 }
 
 func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
