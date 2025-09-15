@@ -226,11 +226,10 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
-	// getting an error now!
-	// note that we check the confirmation status from the broker but since the broker doesn't wait for the confirmation from the requester
-	// unlike in the case of supplier confirmations, we will get an OK here but the error will be visible in the broker logs
-	// the proper solution is to wait suspend the connection like we do for requester actions
+	// getting an error as peer is not reachable
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeBadlyFormedMessage, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, "Could not send request to peer", msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	//wait until the broker processes the notification
 	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
 	test.WaitForPredicateToBeTrue(func() bool {
