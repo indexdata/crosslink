@@ -9,15 +9,15 @@
         <header>
             <supplyingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>SLNP_TWO_A</agencyIdValue>
+                <agencyIdValue>SUP_B</agencyIdValue>
             </supplyingAgencyId>
             <requestingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>SLNP_ONE</agencyIdValue>
+                <agencyIdValue>SUP_A</agencyIdValue>
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-12-12T20:12:00.62959771Z</timestamp>
-            <requestingAgencyRequestId>reqid</requestingAgencyRequestId>
+            <requestingAgencyRequestId>6ad1ff2e-bab2-4978-b064-656c0e67ebd6</requestingAgencyRequestId>
             <supplyingAgencyRequestId>c488bef0-5735-4c33-ba13-a9f343447574</supplyingAgencyRequestId>
         </header>
         <messageInfo>

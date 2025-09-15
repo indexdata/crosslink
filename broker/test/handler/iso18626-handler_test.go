@@ -212,33 +212,90 @@ func TestIso18626PostRequestExists(t *testing.T) {
 	assert.Contains(t, norm(rr.Body.String()), norm(errData))
 }
 
+// largely copied from illmock/app/requester.go
+func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus) *iso18626.ConfirmationHeader {
+	var header = &iso18626.ConfirmationHeader{}
+	header.RequestingAgencyId = &iso18626.TypeAgencyId{}
+	header.RequestingAgencyId.AgencyIdType = inHeader.RequestingAgencyId.AgencyIdType
+	header.RequestingAgencyId.AgencyIdValue = inHeader.RequestingAgencyId.AgencyIdValue
+	header.TimestampReceived = inHeader.Timestamp
+	header.RequestingAgencyRequestId = inHeader.RequestingAgencyRequestId
+
+	if len(inHeader.SupplyingAgencyId.AgencyIdValue) != 0 {
+		header.SupplyingAgencyId = &iso18626.TypeAgencyId{}
+		header.SupplyingAgencyId.AgencyIdType = inHeader.SupplyingAgencyId.AgencyIdType
+		header.SupplyingAgencyId.AgencyIdValue = inHeader.SupplyingAgencyId.AgencyIdValue
+	}
+
+	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
+	header.MessageStatus = messageStatus
+	return header
+}
+
+// largely copied from illmock/app/requester.go
+func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ErrorData {
+	if errorMessage != nil {
+		var errorData = iso18626.ErrorData{
+			ErrorType:  *errorType,
+			ErrorValue: *errorMessage,
+		}
+		return &errorData
+	}
+	return nil
+}
+
+// largely copied from illmock/app/requester.go
+func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
+	var resmsg = iso18626.NewIso18626MessageNS()
+	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
+	errorData := createErrorData(errorMessage, errorType)
+	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+		ConfirmationHeader: *header,
+		ErrorData:          errorData,
+	}
+	return resmsg
+}
+
 func TestIso18626PostSupplyingMessageOK(t *testing.T) {
+	// setup a fake requester server to respond to the supplying message
+	// could use the mock instead if we could inject a fake requester ID ("reqid")
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/xml")
-		println("Handling ISO 18626 request\n")
 		w.WriteHeader(http.StatusOK)
-		output, _ := xml.Marshal(iso18626.NewIso18626MessageNS())
-		_, err := w.Write(output)
-		assert.Nil(t, err)
+		byteReq, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var illMessage iso18626.Iso18626MessageNS
+		err = xml.Unmarshal(byteReq, &illMessage)
+		assert.NoError(t, err)
+		supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
+		assert.NoError(t, err)
+
+		resmsg := createSupplyingAgencyResponse(supplyingAgencyMessage, iso18626.TypeMessageStatusOK, nil, nil)
+
+		output, err := xml.Marshal(resmsg)
+		assert.NoError(t, err)
+		_, err = w.Write(output)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	illId := uuid.NewString()
-	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_CLIENT_URL)
+	requester := apptest.CreatePeer(t, illRepo, "ISIL:SUP_A", server.URL)
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
-		RequesterRequestID: apptest.CreatePgText("reqid"),
-		RequesterSymbol:    apptest.CreatePgText("ISIL:SLNP_ONE"),
+		RequesterRequestID: apptest.CreatePgText("6ad1ff2e-bab2-4978-b064-656c0e67ebd6"),
+		RequesterSymbol:    apptest.CreatePgText("ISIL:SUP_A"),
 		RequesterID:        apptest.CreatePgText(requester.ID),
 	})
-	if err != nil {
-		t.Errorf("failed to create ill transaction: %s", err)
-	}
-	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_TWO_A", adapter.MOCK_CLIENT_URL)
-	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SLNP_TWO_A", "WillSupply")
+	assert.NoError(t, err)
+	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SUP_B", adapter.MOCK_CLIENT_URL)
+	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SUP_B", "WillSupply")
 	supplier.Url = adapter.MOCK_CLIENT_URL
 	supplier, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(supplier))
 	assert.NoError(t, err)
