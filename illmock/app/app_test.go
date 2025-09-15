@@ -1230,7 +1230,14 @@ func TestService(t *testing.T) {
 		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/xml")
 			w.WriteHeader(http.StatusOK)
-			output, _ := xml.Marshal(iso18626.NewIso18626MessageNS())
+			// create supplyingagency response
+			response := iso18626.NewIso18626MessageNS()
+			response.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+				ConfirmationHeader: iso18626.ConfirmationHeader{
+					MessageStatus: iso18626.TypeMessageStatusOK,
+				},
+			}
+			output, _ := xml.Marshal(response)
 			_, err := w.Write(output)
 			assert.Nil(t, err)
 		})
