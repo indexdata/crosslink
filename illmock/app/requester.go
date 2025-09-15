@@ -140,6 +140,11 @@ func (app *MockApp) sendRequestingAgencyMessageDelay(header *iso18626.Header, ac
 	app.sendRequestingAgencyMessage(header, action)
 }
 
+func (app *MockApp) sendRequestingAgencyMessageMinorDelay(header *iso18626.Header, action iso18626.TypeAction) {
+	time.Sleep(app.messageDelay / 10)
+	app.sendRequestingAgencyMessage(header, action)
+}
+
 func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action iso18626.TypeAction) {
 	requester := &app.requester
 	state := requester.load(header)
@@ -219,6 +224,7 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 		msg.Request.BillingInfo = &iso18626.BillingInfo{}
 		msg.Request.BillingInfo.MaximumCosts = &offered
 	}
+	time.Sleep(app.messageDelay / 10)
 	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &msg.Request.Header)
 	if err != nil {
 		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())
@@ -246,19 +252,19 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
 	if state.cancel {
 		state.cancel = false
-		go app.sendRequestingAgencyMessage(header, iso18626.TypeActionCancel)
+		go app.sendRequestingAgencyMessageMinorDelay(header, iso18626.TypeActionCancel)
 		return
 	}
 	switch supplyingAgencyMessage.StatusInfo.Status {
 	case iso18626.TypeStatusLoaned:
 		if !state.received {
 			state.received = true
-			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionReceived)
+			go app.sendRequestingAgencyMessageMinorDelay(header, iso18626.TypeActionReceived)
 		}
 	case iso18626.TypeStatusOverdue:
 		if state.renew {
 			state.renew = false
-			go app.sendRequestingAgencyMessage(header, iso18626.TypeActionRenew)
+			go app.sendRequestingAgencyMessageMinorDelay(header, iso18626.TypeActionRenew)
 		}
 	case iso18626.TypeStatusRecalled:
 		state.recall = false
