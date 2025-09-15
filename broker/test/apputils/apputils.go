@@ -133,9 +133,6 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 
 func EventsCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, expected string) {
 	actual := eventsToCompareString(appCtx, eventRepo, t, illId, strings.Count(expected, "\n"))
-	actual = strings.ReplaceAll(actual,
-		"NOTICE, requester-msg-received = SUCCESS\nTASK, confirm-supplier-msg = SUCCESS\n",
-		"TASK, confirm-supplier-msg = SUCCESS\nNOTICE, requester-msg-received = SUCCESS\n")
 	assert.Equal(t, expected, actual)
 }
 

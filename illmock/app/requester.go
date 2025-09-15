@@ -224,6 +224,7 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 		msg.Request.BillingInfo = &iso18626.BillingInfo{}
 		msg.Request.BillingInfo.MaximumCosts = &offered
 	}
+	time.Sleep(app.messageDelay / 10)
 	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &msg.Request.Header)
 	if err != nil {
 		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())
