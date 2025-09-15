@@ -1,16 +1,21 @@
 linters:
-  # additional linter, see https://golangci-lint.run/usage/linters/
+  default: all
   enable:
-    - gofmt
     - whitespace
     - gosec
+
 linters-settings:
   gosec:
     excludes:
       - G114
   errcheck:
+    check-type-assertions: true # Recommended setting to enable type assertion checks
     exclude-functions:
       - (net.Listener).Close
       - (net/http.ResponseWriter).Write
+
 run:
   timeout: "5m"
+
+formatters:
+  - gofmt

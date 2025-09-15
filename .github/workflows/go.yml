@@ -73,7 +73,7 @@ jobs:
       run: make generate
 
     - name: Lint module '${{ matrix.modules }}'
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
         install-mode: goinstall
         version: ${{ env.GOLANGCI_LINT_VERSION }}

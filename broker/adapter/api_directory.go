@@ -81,8 +81,12 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 		}
 		if apiUrl != "" && len(symbols) > 0 {
 			vendor := GetVendorFromUrl(apiUrl)
+			name, ok := d["name"].(string)
+			if !ok {
+				name = ""
+			}
 			entry := DirectoryEntry{
-				Name:       d["name"].(string),
+				Name:       name,
 				Symbols:    symbols,
 				Vendor:     vendor,
 				BrokerMode: GetBrokerMode(vendor),
@@ -94,8 +98,10 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	}
 	for i := range dirEntries {
 		de := &dirEntries[i]
-		if childSyms, ok := childSymbolsById[de.CustomData["id"].(string)]; ok {
-			de.BranchSymbols = childSyms
+		if id, idOk := de.CustomData["id"].(string); idOk {
+			if childSyms, ok := childSymbolsById[id]; ok {
+				de.BranchSymbols = childSyms
+			}
 		}
 	}
 	return dirEntries, nil, query

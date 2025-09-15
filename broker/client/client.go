@@ -452,9 +452,17 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	err := httpClient.RequestResponse(c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
 		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
-			return iso18626Shim.ApplyToOutgoing(v.(*iso18626.ISO18626Message))
+			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
+				return iso18626Shim.ApplyToOutgoing(isoM)
+			} else {
+				return []byte{}, fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
+			}
 		}, func(b []byte, v any) error {
-			return iso18626Shim.ApplyToIncoming(b, v.(*iso18626.ISO18626Message))
+			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
+				return iso18626Shim.ApplyToIncoming(b, isoM)
+			} else {
+				return fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
+			}
 		})
 	if err != nil {
 		return nil, err
