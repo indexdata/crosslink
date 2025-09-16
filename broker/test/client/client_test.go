@@ -567,9 +567,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
-		if err != nil {
-			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
-		}
+		assert.NoError(t, err, "failed to find ill transaction by requester request id %v", reqId)
 		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
@@ -634,9 +632,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
-		if err != nil {
-			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
-		}
+		assert.NoError(t, err, "failed to find ill transaction by requester request id %v", reqId)
 		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
