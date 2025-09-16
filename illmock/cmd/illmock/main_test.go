@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/magiconair/properties/assert"
 )
 
@@ -19,7 +20,7 @@ func TestMainExit(t *testing.T) {
 			return
 		}
 	}()
-	time.Sleep(10 * time.Millisecond)
+	testutil.WaitForPort(t, "localhost:8081", time.Second)
 
 	// Save the original exit function from main
 	oldExit := exit
