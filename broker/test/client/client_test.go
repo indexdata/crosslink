@@ -555,18 +555,15 @@ func TestSendHttpPost(t *testing.T) {
 func TestRequestLocallyAvailable(t *testing.T) {
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
-	data, _ := os.ReadFile("../testdata/request-locally-available.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	data, err := os.ReadFile("../testdata/request-locally-available.xml")
+	assert.NoError(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.NoError(t, err)
 	req.Header.Add("Content-Type", "application/xml")
 	httpClient := &http.Client{}
 	res, err := httpClient.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
@@ -579,15 +576,15 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	selSup, err := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	selSup.LastStatus = pgtype.Text{
 		String: string(iso18626.TypeStatusLoanCompleted),
 		Valid:  true,
 	}
 	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: &iso18626.ISO18626Message{
@@ -599,7 +596,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			},
 		},
 	}, events.EventStatusSuccess)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
@@ -617,33 +614,24 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 		}))
 	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
-}
 
-func TestRequestLocallyAvailableT(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ") // Peer created by previous test
-	assert.Nil(t, err)
+	// now change the broker mode to translucent and repeat the request with a new id
+	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
+	assert.NoError(t, err)
 	peer.BrokerMode = string(extctx.BrokerModeTranslucent)
 	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
-	assert.Nil(t, err)
-	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
-	data, _ := os.ReadFile("../testdata/request-locally-available.xml")
+	assert.NoError(t, err)
 	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)
 	reqId = reqId + "1"
-	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
+	req, err = http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
+	assert.NoError(t, err)
 	req.Header.Add("Content-Type", "application/xml")
-	httpClient := &http.Client{}
-	res, err := httpClient.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock :%s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			res.StatusCode, http.StatusOK)
-	}
-	var illTrans ill_db.IllTransaction
+	httpClient = &http.Client{}
+	res, err = httpClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
 		if err != nil {
@@ -654,16 +642,16 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	selSup, err := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-	assert.Nil(t, err)
+	selSup, err = illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
+	assert.NoError(t, err)
 	selSup.LastStatus = pgtype.Text{
 		String: string(iso18626.TypeStatusLoanCompleted),
 		Valid:  true,
 	}
 	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: &iso18626.ISO18626Message{
@@ -675,7 +663,7 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 			},
 		},
 	}, events.EventStatusSuccess)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
@@ -693,7 +681,7 @@ func TestRequestLocallyAvailableT(t *testing.T) {
 			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 		}))
 	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 }
 
