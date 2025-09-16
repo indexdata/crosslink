@@ -1,8 +1,28 @@
 version: 2
 updates:
-  # Go modules
+  # broker module
   - package-ecosystem: gomod
-    directory: "/"
+    directory: "/broker"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "go"
+    groups:
+      go-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # illmock module
+  - package-ecosystem: gomod
+    directory: "/illmock"
     schedule:
       interval: daily
     open-pull-requests-limit: 10
@@ -32,9 +52,22 @@ updates:
       - "dependencies"
       - "ci"
 
-  # Docker (if a Dockerfile exists at repo root)
+  # Docker broker
   - package-ecosystem: docker
-    directory: "/"
+    directory: "/broker"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "container"
+
+  # Docker illmock
+  - package-ecosystem: docker
+    directory: "/illmock"
     schedule:
       interval: weekly
       day: monday
