@@ -1,5 +1,4 @@
 //go:build !testutil
-// +build !testutil
 
 package testutil
 
@@ -7,7 +6,6 @@ import (
 	"net"
 	"strconv"
 	"testing"
-	"time"
 )
 
 func GetFreeListener(t *testing.T) *net.TCPListener {
@@ -30,17 +28,4 @@ func GetFreePort(t *testing.T) int {
 
 func GetFreePortTest(t *testing.T) string {
 	return strconv.Itoa(GetFreePort(t))
-}
-
-func WaitForPort(t *testing.T, address string, timeout time.Duration) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		conn, err := net.Dial("tcp", address)
-		if err == nil {
-			conn.Close()
-			return // Port is ready
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timeout waiting for port %s", address)
 }
