@@ -3,6 +3,7 @@
 package testutil
 
 import (
+	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
 	"time"
@@ -17,7 +18,8 @@ func WaitForPort(t *testing.T, address string, timeout time.Duration) {
 	for time.Now().Before(deadline) {
 		conn, err := net.Dial("tcp", address)
 		if err == nil {
-			conn.Close()
+			err = conn.Close()
+			assert.NoError(t, err, "failed to close connection")
 			return // Port is ready
 		}
 		time.Sleep(delay)
