@@ -44,7 +44,7 @@ func TestLookup400(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "400")
 }
 
@@ -53,7 +53,7 @@ func TestLookupInvalidUrl(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
@@ -69,7 +69,7 @@ func TestLookupInvalidJson(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 

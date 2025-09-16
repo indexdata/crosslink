@@ -1,21 +1,33 @@
+version: "2"
 linters:
-  default: all
   enable:
-    - whitespace
     - gosec
-
-linters-settings:
-  gosec:
-    excludes:
-      - G114
-  errcheck:
-    check-type-assertions: true # Recommended setting to enable type assertion checks
-    exclude-functions:
-      - (net.Listener).Close
-      - (net/http.ResponseWriter).Write
-
-run:
-  timeout: "5m"
-
+    - whitespace
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net.Listener).Close
+        - (net/http.ResponseWriter).Write
+    gosec:
+      excludes:
+        - G114
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 formatters:
-  - gofmt
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

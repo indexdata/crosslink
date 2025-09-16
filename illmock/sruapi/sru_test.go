@@ -166,7 +166,7 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "42", marc.Id)
 		matched := false
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				matched = true
 				assert.Len(t, f.Subfield, 2)
@@ -195,15 +195,16 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "42;43", marc.Id)
 		matched := 0
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				assert.Len(t, f.Subfield, 2)
-				if matched == 0 {
+				switch matched {
+				case 0:
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "42", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
 					assert.Equal(t, "ISIL:SUP1", string(f.Subfield[1].Text))
-				} else if matched == 1 {
+				case 1:
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "43", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
@@ -231,7 +232,7 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "not-found", marc.Id)
 		matched := 0
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				matched++
 			}
@@ -255,7 +256,7 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, "", marc.Id)
 		matched := 0
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				matched++
 			}
@@ -289,7 +290,7 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 
 		matched := false
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				matched = true
 				assert.Len(t, f.Subfield, 2)
@@ -329,7 +330,7 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 
 		matched := false
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
 				matched = true
 				assert.Len(t, f.Subfield, 2)
@@ -357,14 +358,15 @@ func TestSruService(t *testing.T) {
 		assert.Nil(t, err)
 
 		matched := 0
-		for _, f := range marc.RecordType.Datafield {
+		for _, f := range marc.Datafield {
 			if f.Tag == "999" && f.Ind1 == "1" && f.Ind2 == "1" {
-				if matched == 0 {
+				switch matched {
+				case 0:
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "b", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)
 					assert.Equal(t, "a", string(f.Subfield[1].Text))
-				} else if matched == 1 {
+				case 1:
 					assert.Equal(t, "l", f.Subfield[0].Code)
 					assert.Equal(t, "d", string(f.Subfield[0].Text))
 					assert.Equal(t, "s", f.Subfield[1].Code)

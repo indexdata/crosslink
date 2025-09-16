@@ -3,6 +3,7 @@
 package testutil
 
 import (
+	"github.com/stretchr/testify/assert"
 	"net"
 	"strconv"
 	"testing"
@@ -22,7 +23,10 @@ func GetFreeListener(t *testing.T) *net.TCPListener {
 
 func GetFreePort(t *testing.T) int {
 	l := GetFreeListener(t)
-	defer l.Close()
+	defer func() {
+		dErr := l.Close()
+		assert.NoError(t, dErr)
+	}()
 	return l.Addr().(*net.TCPAddr).Port
 }
 

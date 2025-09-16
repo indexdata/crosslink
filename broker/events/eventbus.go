@@ -353,10 +353,7 @@ func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, 
 func (p *PostgresEventBus) FindAncestor(descendant *Event, ancestorName EventName) *Event {
 	var event *Event
 	parentId := getParentId(descendant)
-	for {
-		if parentId == nil {
-			break
-		}
+	for parentId != nil {
 		found, err := p.repo.GetEvent(p.ctx, *parentId)
 		if err != nil {
 			p.getEventContext(descendant).Logger().Warn("failed to get parent event", "eventName", ancestorName, "parentId", parentId, "error", err)

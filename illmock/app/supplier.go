@@ -324,7 +324,7 @@ func (app *MockApp) sendSupplyingAgencyRenew(header *iso18626.Header, state *sup
 	time.Sleep(app.messageDelay / 3)
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
-	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
+	answer := iso18626.TypeYesNoY
 	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
 	msg.SupplyingAgencyMessage.MessageInfo.AnswerYesNo = &answer
 	app.sendSupplyingAgencyMessage(header, state, msg)
@@ -335,8 +335,8 @@ func (app *MockApp) sendSupplyingAgencyCancel(header *iso18626.Header, state *su
 	msg := createSupplyingAgencyMessage()
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageCancelResponse
 	// cancel by default
-	var answer iso18626.TypeYesNo = iso18626.TypeYesNoY
-	var status iso18626.TypeStatus = iso18626.TypeStatusCancelled
+	answer := iso18626.TypeYesNoY
+	status := iso18626.TypeStatusCancelled
 	// check if already loaned
 	if state.loaned {
 		answer = iso18626.TypeYesNoN

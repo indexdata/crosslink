@@ -62,7 +62,7 @@ func (rf *ReqForm) HandleForm(w http.ResponseWriter, r *http.Request) {
 	resBody := res.buf.Bytes()
 	requestId := res.Header().Get("X-Request-ID")
 	if statusCode != http.StatusOK {
-		log.Println("[req-form] ERROR failure handling message:", statusCode, resBody)
+		log.Println("[req-form] ERROR failure handling message:", statusCode, string(resBody))
 		rf.writeHTML(w, message, fmt.Sprintf("%d\n%s", statusCode, resBody), requestId)
 		return
 	}

@@ -26,7 +26,7 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryEntry, error, string) {
+func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryEntry, string, error) {
 	cql := "symbol any"
 	for _, s := range symbols {
 		cql += " " + s
@@ -36,19 +36,19 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	fullUrl := durl + query
 	response, err := a.client.Get(fullUrl)
 	if err != nil {
-		return []DirectoryEntry{}, err, query
+		return []DirectoryEntry{}, query, err
 	}
 	defer response.Body.Close()
 
 	body := utils.Must(io.ReadAll(response.Body))
 	if response.StatusCode != http.StatusOK {
-		return []DirectoryEntry{}, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body), query
+		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
 	var responseList EntriesResponse
 	err = json.Unmarshal(body, &responseList)
 	if err != nil {
-		return []DirectoryEntry{}, err, query
+		return []DirectoryEntry{}, query, err
 	}
 	childSymbolsById := make(map[string][]string, len(responseList.Items))
 	for _, d := range responseList.Items {
@@ -104,21 +104,21 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 			}
 		}
 	}
-	return dirEntries, nil, query
+	return dirEntries, query, nil
 }
 
-func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string) {
+func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, err, queryVal := a.GetDirectory(params.Symbols, durl)
+		d, queryVal, err := a.GetDirectory(params.Symbols, durl)
 		query = queryVal
 		if err != nil {
-			return []DirectoryEntry{}, err, query
+			return []DirectoryEntry{}, query, err
 		}
 		directoryList = append(directoryList, d...)
 	}
-	return directoryList, nil, query
+	return directoryList, query, nil
 }
 
 func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {

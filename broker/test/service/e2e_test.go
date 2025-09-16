@@ -225,11 +225,11 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	var msg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
-	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
+	assert.NotNil(t, msg.SupplyingAgencyMessageConfirmation)
 	// getting an error as peer is not reachable
-	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, iso18626.TypeErrorTypeBadlyFormedMessage, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "Could not send request to peer", msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeErrorTypeBadlyFormedMessage, msg.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
+	assert.Equal(t, "Could not send request to peer", msg.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	//wait until the broker processes the notification
 	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -300,8 +300,8 @@ func TestMessageSkipped(t *testing.T) {
 	var msg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
-	assert.NotNil(t, msg.ISO18626Message.SupplyingAgencyMessageConfirmation)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.ISO18626Message.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.NotNil(t, msg.SupplyingAgencyMessageConfirmation)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	//wait until the broker processes the notification
 	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
 	test.WaitForPredicateToBeTrue(func() bool {

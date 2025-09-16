@@ -10,7 +10,7 @@ import (
 var DEFAULT_BROKER_MODE extctx.BrokerMode
 
 type DirectoryLookupAdapter interface {
-	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string)
+	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error)
 	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
 }
 

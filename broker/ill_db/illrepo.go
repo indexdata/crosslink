@@ -326,7 +326,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, lookupSy
 	if len(symbolsToFetch) == 0 {
 		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), "<cached>", nil
 	}
-	dirEntries, err, query := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
+	dirEntries, query, err := directoryAdapter.Lookup(adapter.DirectoryLookupParams{
 		Symbols: symbolsToFetch,
 	})
 	if err != nil {

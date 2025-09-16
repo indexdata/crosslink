@@ -157,7 +157,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 
 	cql := params.Cql
 
-	var limit int32 = a.limitDefault
+	limit := a.limitDefault
 	if params.Limit != nil {
 		limit = *params.Limit
 	}

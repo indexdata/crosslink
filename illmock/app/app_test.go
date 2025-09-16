@@ -51,18 +51,24 @@ func addElectronicAddress(msg *iso18626.Iso18626MessageNS, addrType iso18626.Ele
 	emailAddr.ElectronicAddressData = addrValue
 	electronicDelivery.Address.ElectronicAddress = &emailAddr
 	electronicDelivery.SortOrder = sortOrder
-	msg.ISO18626Message.Request.RequestedDeliveryInfo = append(msg.ISO18626Message.Request.RequestedDeliveryInfo, electronicDelivery)
+	msg.Request.RequestedDeliveryInfo = append(msg.Request.RequestedDeliveryInfo, electronicDelivery)
 }
 
 func TestParseEnv(t *testing.T) {
-	os.Setenv("HTTP_PORT", "8082")
-	os.Setenv("PEER_URL", "https://localhost:8082")
-	os.Setenv("AGENCY_TYPE", "ABC")
-	os.Setenv("SUPPLYING_AGENCY_ID", "S1")
-	os.Setenv("REQUESTING_AGENCY_ID", "R1")
-	os.Setenv("MESSAGE_DELAY", "1ms")
+	err := os.Setenv("HTTP_PORT", "8082")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("PEER_URL", "https://localhost:8082")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("AGENCY_TYPE", "ABC")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("SUPPLYING_AGENCY_ID", "S1")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("REQUESTING_AGENCY_ID", "R1")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("MESSAGE_DELAY", "1ms")
+	assert.NoError(t, err, "failed to set env")
 	var app MockApp
-	err := app.parseEnv()
+	err = app.parseEnv()
 	assert.Nil(t, err)
 	assert.Equal(t, "8082", app.httpPort)
 	assert.Equal(t, "ABC", app.agencyType)
@@ -70,28 +76,38 @@ func TestParseEnv(t *testing.T) {
 	assert.Equal(t, "R1", app.requester.requestingAgencyId)
 	assert.Equal(t, "https://localhost:8082", app.peerUrl)
 	assert.Equal(t, 1*time.Millisecond, app.messageDelay)
-	os.Unsetenv("HTTP_PORT")
-	os.Unsetenv("PEER_URL")
-	os.Unsetenv("AGENCY_TYPE")
-	os.Unsetenv("SUPPLYING_AGENCY_ID")
-	os.Unsetenv("REQUESTING_AGENCY_ID")
-	os.Unsetenv("MESSAGE_DELAY")
+	err = os.Unsetenv("HTTP_PORT")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Unsetenv("PEER_URL")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Unsetenv("AGENCY_TYPE")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Unsetenv("SUPPLYING_AGENCY_ID")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Unsetenv("REQUESTING_AGENCY_ID")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Unsetenv("MESSAGE_DELAY")
+	assert.NoError(t, err, "failed to set env")
 }
 
 func TestAppBadMessageDelay(t *testing.T) {
-	os.Setenv("MESSAGE_DELAY", "x")
+	err := os.Setenv("MESSAGE_DELAY", "x")
+	assert.NoError(t, err, "failed to set env")
 	var app MockApp
-	err := app.Run()
-	os.Unsetenv("MESSAGE_DELAY")
+	err = app.Run()
 	assert.ErrorContains(t, err, "invalid MESSAGE_DELAY: time: ")
+	err = os.Unsetenv("MESSAGE_DELAY")
+	assert.NoError(t, err, "failed to set env")
 }
 
 func TestAppBadMOCK_DIRECTORY_ENTRIES(t *testing.T) {
-	os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
+	err := os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
+	assert.NoError(t, err, "failed to set env")
 	var app MockApp
-	err := app.Run()
-	os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	err = app.Run()
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
+	err = os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	assert.NoError(t, err, "failed to set env")
 }
 
 func TestGetMessageDelay(t *testing.T) {
@@ -185,18 +201,23 @@ func TestWriteResponseNil(t *testing.T) {
 	resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
 	assert.Nil(t, err)
 	assert.Equal(t, 500, resp.StatusCode)
-	defer resp.Body.Close()
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
 	buf, err = io.ReadAll(resp.Body)
 	assert.Nil(t, err)
 	assert.Contains(t, string(buf), "marshal failed")
 }
 
 func TestFlowsApiParseEnvFailed(t *testing.T) {
-	os.Setenv("CLEAN_TIMEOUT", "0")
+	err := os.Setenv("CLEAN_TIMEOUT", "0")
+	assert.NoError(t, err, "failed to set env")
 	var app MockApp
-	err := app.Run()
-	os.Unsetenv("CLEAN_TIMEOUT")
+	err = app.Run()
 	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")
+	err = os.Unsetenv("CLEAN_TIMEOUT")
+	assert.NoError(t, err, "failed to set env")
 }
 
 func runScenario(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso18626MessageNS,
@@ -219,7 +240,10 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso1
 	resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 	assert.Nil(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
-	defer resp.Body.Close()
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
 	buf, err = io.ReadAll(resp.Body)
 	assert.Nil(t, err)
 	var response iso18626.ISO18626Message
@@ -236,7 +260,10 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.Iso1
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var flowR flows.Flows
@@ -300,7 +327,8 @@ func TestService(t *testing.T) {
 	healthUrl := url + "/healthz"
 	sruUrl := url + "/sru"
 	app.agencyType = "ABC"
-	os.Setenv("HTTP_HEADERS", "X-Okapi-Tenant:T1")
+	err := os.Setenv("HTTP_HEADERS", "X-Okapi-Tenant:T1")
+	assert.NoError(t, err, "failed to set env")
 	go func() {
 		err := app.Run()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -380,7 +408,10 @@ func TestService(t *testing.T) {
 	t.Run("iso18626 handler: Read fail", func(t *testing.T) {
 		conn, err := net.Dial("tcp", "localhost:"+dynPort)
 		assert.Nil(t, err)
-		defer conn.Close()
+		defer func() {
+			dErr := conn.Close()
+			assert.NoError(t, dErr)
+		}()
 		// Bad chunked stream
 		n, err := conn.Write([]byte("POST /iso18626 HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Type: text/xml\r\n\r\n2\r\n"))
 		assert.Nil(t, err)
@@ -410,7 +441,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -429,7 +463,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -456,7 +493,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -475,7 +515,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -491,7 +534,10 @@ func TestService(t *testing.T) {
 		resp2, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp2.StatusCode)
-		defer resp2.Body.Close()
+		defer func() {
+			dErr := resp2.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp2.Body)
 		assert.Nil(t, err)
 		err = xml.Unmarshal(buf, &response)
@@ -506,7 +552,10 @@ func TestService(t *testing.T) {
 		resp3, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp3.StatusCode)
-		defer resp3.Body.Close()
+		defer func() {
+			dErr := resp3.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp3.Body)
 		assert.Nil(t, err)
 		err = xml.Unmarshal(buf, &response)
@@ -526,7 +575,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -543,7 +595,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -563,7 +618,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -583,7 +641,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -601,7 +662,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -621,7 +685,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -641,7 +708,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -664,7 +734,10 @@ func TestService(t *testing.T) {
 			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 			assert.Nil(t, err)
 			assert.Equal(t, 200, resp.StatusCode)
-			defer resp.Body.Close()
+			defer func() {
+				dErr := resp.Body.Close()
+				assert.NoError(t, dErr)
+			}()
 			buf, err = io.ReadAll(resp.Body)
 			assert.Nil(t, err)
 			var response iso18626.ISO18626Message
@@ -749,7 +822,7 @@ func TestService(t *testing.T) {
 
 	t.Run("Patron request loaned copy", func(t *testing.T) {
 		msg := createPatronRequest()
-		msg.ISO18626Message.Request.ServiceInfo.ServiceType = iso18626.TypeServiceTypeCopy
+		msg.Request.ServiceInfo.ServiceType = iso18626.TypeServiceTypeCopy
 		addPhysicalAddress(msg, 0)
 		addElectronicAddress(msg, iso18626.ElectronicAddressTypeFtp, "ftp://ftp.example.com", 1)
 		ret := runScenario(t, isoUrl, apiUrl, msg, "LOANED", 12)
@@ -1190,7 +1263,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -1217,7 +1293,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -1255,7 +1334,10 @@ func TestService(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
 		assert.Nil(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		buf, err = io.ReadAll(resp.Body)
 		assert.Nil(t, err)
 		var response iso18626.ISO18626Message
@@ -1299,7 +1381,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
@@ -1315,7 +1400,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
@@ -1332,7 +1420,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
@@ -1351,7 +1442,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		assert.Contains(t, string(buf), "peerUrl must start with http:// or https://")
 	})
 
@@ -1362,7 +1456,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
@@ -1377,7 +1474,10 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		assert.Contains(t, string(buf), "unsupported index cql.serverChoice")
 	})
 
@@ -1388,12 +1488,16 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
 		assert.Nil(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			dErr := resp.Body.Close()
+			assert.NoError(t, dErr)
+		}()
 		assert.Contains(t, string(buf), "search term expected at position")
 	})
 
-	os.Unsetenv("HTTP_HEADERS")
-	err := app.Shutdown()
+	err = os.Unsetenv("HTTP_HEADERS")
+	assert.NoError(t, err, "failed to set env")
+	err = app.Shutdown()
 	assert.Nil(t, err)
 }
 

@@ -14,7 +14,7 @@ view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
 
 lint: generate
-	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
+	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
 
 check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml

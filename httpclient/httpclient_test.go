@@ -36,7 +36,8 @@ func TestBadConnectionRefused(t *testing.T) {
 	l, err := net.ListenTCP("tcp", addr)
 	assert.Nil(t, err)
 	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
-	l.Close()
+	err = l.Close()
+	assert.NoError(t, err, "failed to close listener")
 	var request, response myType
 	err = NewClient().PostXml(http.DefaultClient, "http://localhost:"+port, request, &response)
 	assert.ErrorContains(t, err, "connection refused")
@@ -150,7 +151,10 @@ func TestServerBrokenPipe(t *testing.T) {
 		conn, err := l.Accept()
 		assert.Nil(t, err)
 		conn = conn.(*net.TCPConn)
-		defer conn.Close()
+		defer func() {
+			dErr := conn.Close()
+			assert.NoError(t, dErr)
+		}()
 		var buf [100]byte
 		n, err := conn.Read(buf[:])
 		assert.Nil(t, err)
