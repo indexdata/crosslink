@@ -1,5 +1,4 @@
 //go:build !testutil
-// +build !testutil
 
 package testutil
 

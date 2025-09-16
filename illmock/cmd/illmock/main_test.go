@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/magiconair/properties/assert"
+	"github.com/indexdata/crosslink/illmock/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMainExit(t *testing.T) {
@@ -19,7 +20,7 @@ func TestMainExit(t *testing.T) {
 			return
 		}
 	}()
-	time.Sleep(10 * time.Millisecond)
+	testutil.WaitForPort(t, "localhost:8081", time.Second)
 
 	// Save the original exit function from main
 	oldExit := exit
@@ -30,8 +31,8 @@ func TestMainExit(t *testing.T) {
 		exitCode = code
 	}
 	main()
-	assert.Equal(t, exitCode, 1)
+	assert.Equal(t, 1, exitCode)
 
 	err := server.Shutdown(context.Background())
-	assert.Equal(t, err, nil)
+	assert.NoError(t, err)
 }

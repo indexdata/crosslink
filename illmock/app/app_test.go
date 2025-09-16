@@ -307,7 +307,8 @@ func TestService(t *testing.T) {
 			t.Logf("app.Run error %s", err.Error())
 		}
 	}()
-	time.Sleep(5 * time.Millisecond) // wait for app to serve
+
+	testutil.WaitForPort(t, "localhost:"+dynPort, time.Second)
 
 	t.Run("notfound", func(t *testing.T) {
 		resp, err := http.Get(url + "/foo")
