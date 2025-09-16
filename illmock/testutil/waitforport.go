@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// WaitForPort tries to connect to the specified address until timeout.
+// If the port is not open before the timeout, the test fails.
 func WaitForPort(t *testing.T, address string, timeout time.Duration) {
 	maxDelay := 500 * time.Millisecond
 	delay := 20 * time.Millisecond
