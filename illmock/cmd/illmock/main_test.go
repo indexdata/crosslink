@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/illmock/testutil"
-	"github.com/magiconair/properties/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMainExit(t *testing.T) {
@@ -31,8 +31,8 @@ func TestMainExit(t *testing.T) {
 		exitCode = code
 	}
 	main()
-	assert.Equal(t, exitCode, 1)
+	assert.Equal(t, 1, exitCode)
 
 	err := server.Shutdown(context.Background())
-	assert.Equal(t, err, nil)
+	assert.NoError(t, err)
 }
