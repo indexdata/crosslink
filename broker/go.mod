@@ -3,45 +3,39 @@ module github.com/indexdata/crosslink/broker
 go 1.25
 
 require (
-       github.com/indexdata/crosslink/httpclient v0.0.0
-       github.com/indexdata/crosslink/illmock v0.0.0
-       github.com/indexdata/crosslink/iso18626 v0.0.0
-       github.com/indexdata/crosslink/marcxml v0.0.0
-       github.com/indexdata/crosslink/sru v0.0.0
+	github.com/indexdata/crosslink/httpclient v0.0.0
+	github.com/indexdata/crosslink/illmock v0.0.0
+	github.com/indexdata/crosslink/iso18626 v0.0.0
 )
 
 replace (
-       github.com/indexdata/crosslink/httpclient => ../httpclient
-       github.com/indexdata/crosslink/illmock => ../illmock
-       github.com/indexdata/crosslink/iso18626 => ../iso18626
-       github.com/indexdata/crosslink/marcxml => ../marcxml
-       github.com/indexdata/crosslink/sru => ../sru
+	github.com/indexdata/crosslink/httpclient => ../httpclient
+	github.com/indexdata/crosslink/illmock => ../illmock
+	github.com/indexdata/crosslink/iso18626 => ../iso18626
+	github.com/indexdata/crosslink/marcxml => ../marcxml
+	github.com/indexdata/crosslink/sru => ../sru
 )
-
 
 require (
 	github.com/dustin/go-humanize v1.0.1
-	github.com/golang-migrate/migrate/v4 v4.18.3
+	github.com/golang-migrate/migrate/v4 v4.19.0
 	github.com/google/uuid v1.6.0
 	github.com/indexdata/cql-go v1.0.1-0.20250722084932-84f3837d6030
 	github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72
 	github.com/indexdata/xsd2goxsl v1.3.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
-	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jackc/pgx/v5 v5.7.6
 	github.com/lib/pq v1.10.9
-	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1
-	github.com/oapi-codegen/runtime v1.1.2
-	github.com/stretchr/testify v1.10.0
+	github.com/oapi-codegen/oapi-codegen/v2 v2.5.0
+	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 )
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -105,9 +99,7 @@ require (
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.32.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.37.0 // indirect
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
