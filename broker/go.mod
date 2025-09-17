@@ -3,6 +3,23 @@ module github.com/indexdata/crosslink/broker
 go 1.25
 
 require (
+       github.com/indexdata/crosslink/httpclient v0.0.0
+       github.com/indexdata/crosslink/illmock v0.0.0
+       github.com/indexdata/crosslink/iso18626 v0.0.0
+       github.com/indexdata/crosslink/marcxml v0.0.0
+       github.com/indexdata/crosslink/sru v0.0.0
+)
+
+replace (
+       github.com/indexdata/crosslink/httpclient => ../httpclient
+       github.com/indexdata/crosslink/illmock => ../illmock
+       github.com/indexdata/crosslink/iso18626 => ../iso18626
+       github.com/indexdata/crosslink/marcxml => ../marcxml
+       github.com/indexdata/crosslink/sru => ../sru
+)
+
+
+require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.18.3
 	github.com/google/uuid v1.6.0
