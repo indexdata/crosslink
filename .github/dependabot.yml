@@ -10,8 +10,7 @@ updates:
       prefix: "chore"
       include: "scope"
     labels:
-      - "dependencies"
-      - "go"
+      - "deps"
     groups:
       go-minor-patch:
         patterns:
@@ -30,8 +29,7 @@ updates:
       prefix: "chore"
       include: "scope"
     labels:
-      - "dependencies"
-      - "go"
+      - "deps"
     groups:
       go-minor-patch:
         patterns:
@@ -49,8 +47,7 @@ updates:
       prefix: "chore"
       include: "scope"
     labels:
-      - "dependencies"
-      - "ci"
+      - "deps"
 
   # Docker broker
   - package-ecosystem: docker
@@ -62,8 +59,7 @@ updates:
       prefix: "chore"
       include: "scope"
     labels:
-      - "dependencies"
-      - "container"
+      - "deps"
 
   # Docker illmock
   - package-ecosystem: docker
@@ -75,5 +71,4 @@ updates:
       prefix: "chore"
       include: "scope"
     labels:
-      - "dependencies"
-      - "container"
+      - "deps"
