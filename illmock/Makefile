@@ -50,7 +50,7 @@ fmt-check:
 	$(GOFMT) -d $(GOFILES)
 
 lint: generate
-	$(GO) run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run
+	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
 
 doc: README.html
 

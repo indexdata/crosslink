@@ -34,6 +34,6 @@ func NewIso18626MessageNS() *Iso18626MessageNS {
 	msg.NsIllPx = utils.NewPrefixAttrNS("xmlns", "ill", IllNs)
 	msg.NsXsiPx = utils.NewPrefixAttrNS("xmlns", "xsi", XsiNs)
 	msg.XsiSchemaLoc = utils.NewPrefixAttrNS(XsiNs, "schemaLocation", fmt.Sprintf("%s %s", IllNs, IllSl))
-	msg.ISO18626Message.Version = *utils.NewPrefixAttrNS(IllNs, "version", IllV1_2)
+	msg.Version = *utils.NewPrefixAttrNS(IllNs, "version", IllV1_2)
 	return &msg
 }

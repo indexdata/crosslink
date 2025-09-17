@@ -40,12 +40,23 @@ func NewEnv() (*DirectoryMock, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer file.Close()
+		defer func() {
+			dErr := file.Close()
+			if dErr != nil {
+				fmt.Printf("error closing file: %v", dErr)
+			}
+		}()
 		gr, err := gzip.NewReader(file)
 		if err != nil {
 			return nil, err
 		}
-		defer gr.Close()
+
+		defer func() {
+			dErr := gr.Close()
+			if dErr != nil {
+				fmt.Printf("error closing reader: %v", dErr)
+			}
+		}()
 		bytes, err = io.ReadAll(gr)
 		if err != nil {
 			return nil, err

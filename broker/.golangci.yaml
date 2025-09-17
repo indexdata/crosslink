@@ -1,16 +1,33 @@
+version: "2"
 linters:
-  # additional linter, see https://golangci-lint.run/usage/linters/
+  enable:
+    - gosec
+    - whitespace
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net.Listener).Close
+        - (net/http.ResponseWriter).Write
+    gosec:
+      excludes:
+        - G114
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
   enable:
     - gofmt
-    - whitespace
-    - gosec
-linters-settings:
-  gosec:
-    excludes:
-      - G114
-  errcheck:
-    exclude-functions:
-      - (net.Listener).Close
-      - (net/http.ResponseWriter).Write
-run:
-  timeout: "5m"
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

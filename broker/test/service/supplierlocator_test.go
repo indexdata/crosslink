@@ -90,11 +90,11 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Expected to have select-supplier event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.CustomData["supplierId"]
-	if !ok || supplierId.(string) == "" {
+	supplierId, ok := event.ResultData.CustomData["supplierId"].(string)
+	if !ok || supplierId == "" {
 		t.Fatal("Expected to have supplierId")
 	}
-	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
+	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId)
 	if err != nil {
 		t.Error("Failed to get selected peer " + err.Error())
 	}
@@ -167,11 +167,11 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		t.Error("Expected to have select-supplier event received and successfully processed")
 	}
 
-	supplierId, ok := event.ResultData.CustomData["supplierId"]
-	if !ok || supplierId.(string) == "" {
+	supplierId, ok := event.ResultData.CustomData["supplierId"].(string)
+	if !ok || supplierId == "" {
 		t.Error("Expected to have supplierId")
 	}
-	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId.(string))
+	selectedPeer, err := illRepo.GetPeerById(appCtx, supplierId)
 	if err != nil {
 		t.Error("Failed to get selected peer " + err.Error())
 	}
@@ -671,7 +671,9 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 		t.Error("expected to have request event received and processed")
 	}
 	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
-	assert.True(t, event.ResultData.CustomData["doNotSend"].(bool))
+	doNotSend, ok := event.ResultData.CustomData["doNotSend"].(bool)
+	assert.True(t, doNotSend)
+	assert.True(t, ok)
 }
 
 func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
@@ -742,12 +744,14 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 }
 
 func getSupplierId(i int, result map[string]interface{}) string {
-	suppliers, ok := result["suppliers"]
+	suppliers, ok := result["suppliers"].([]interface{})
 	if ok {
-		record := suppliers.([]interface{})[i]
-		supId, ok := record.(map[string]interface{})["SupplierID"]
+		record, ok := suppliers[i].(map[string]interface{})
 		if ok {
-			return supId.(string)
+			supId, ok := record["SupplierID"].(string)
+			if ok {
+				return supId
+			}
 		}
 	}
 	return ""

@@ -44,7 +44,7 @@ func TestLookup400(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "400")
 }
 
@@ -53,7 +53,7 @@ func TestLookupInvalidUrl(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
@@ -69,7 +69,7 @@ func TestLookupInvalidJson(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, err, _ := ad.Lookup(p)
+	_, _, err := ad.Lookup(p)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 
@@ -87,7 +87,7 @@ func TestLookupEmptyList(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, err, _ := ad.Lookup(p)
+	entries, _, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 }
@@ -107,7 +107,7 @@ func TestLookupMissingUrl(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, err, _ := ad.Lookup(p)
+	entries, _, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 }
@@ -127,7 +127,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, err, cql := ad.Lookup(p)
+	entries, cql, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+ISIL%3APEER", cql)
@@ -146,7 +146,7 @@ func TestLookup(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, err, _ := ad.Lookup(p)
+	entries, _, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
@@ -160,7 +160,7 @@ func TestLookup(t *testing.T) {
 	p = adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, err, _ = ad.Lookup(p)
+	entries, _, err = ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")

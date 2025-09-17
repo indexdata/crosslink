@@ -91,7 +91,10 @@ func runRequest(t *testing.T, server *httptest.Server, params string) Flows {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 	buf, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr, "failed to close read")
+	}()
 	assert.Nil(t, err)
 	var flows Flows
 	err = xml.Unmarshal(buf, &flows)
@@ -230,18 +233,21 @@ func TestCleanerKeep(t *testing.T) {
 }
 
 func TestFlowsParseEnv(t *testing.T) {
-	os.Setenv("CLEAN_TIMEOUT", "8m")
+	err := os.Setenv("CLEAN_TIMEOUT", "8m")
+	assert.NoError(t, err, "failed to set env")
 	api := CreateFlowsApi()
-	err := api.ParseEnv()
+	err = api.ParseEnv()
 	assert.Nil(t, err)
 	assert.Equal(t, "8m0s", api.cleanTimeout.String())
 	assert.Equal(t, "48s", api.cleanInterval.String())
 
-	os.Setenv("CLEAN_TIMEOUT", "x")
+	err = os.Setenv("CLEAN_TIMEOUT", "x")
+	assert.NoError(t, err, "failed to set env")
 	err = api.ParseEnv()
 	assert.NotNil(t, err)
 
-	os.Setenv("CLEAN_TIMEOUT", "0")
+	err = os.Setenv("CLEAN_TIMEOUT", "0")
+	assert.NoError(t, err, "failed to set env")
 	err = api.ParseEnv()
 	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "CLEAN_TIMEOUT must be greater than 0")

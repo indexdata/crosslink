@@ -93,25 +93,38 @@ func TestNewJson(t *testing.T) {
 }
 
 func TestNewEnv(t *testing.T) {
-	defer os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
-	defer os.Unsetenv("MOCK_DIRECTORY_ENTRIES_PATH")
-	os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
-	_, err := NewEnv()
+	defer func() {
+		dErr := os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+		assert.NoError(t, dErr, "failed unset env")
+	}()
+	defer func() {
+		dErr := os.Unsetenv("MOCK_DIRECTORY_ENTRIES_PATH")
+		assert.NoError(t, dErr, "failed unset env")
+	}()
+	err := os.Setenv("MOCK_DIRECTORY_ENTRIES", "{")
+	assert.NoError(t, err, "failed to set env")
+	_, err = NewEnv()
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 
-	os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
-	os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", "does-not-exist.json")
+	err = os.Unsetenv("MOCK_DIRECTORY_ENTRIES")
+	assert.NoError(t, err, "failed to set env")
+	err = os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", "does-not-exist.json")
+	assert.NoError(t, err, "failed to set env")
 	_, err = NewEnv()
 	assert.ErrorContains(t, err, "no such file or directory")
 
 	file, err := os.CreateTemp("", "test.json")
 	assert.Nil(t, err)
-	defer os.Remove(file.Name())
+	defer func() {
+		dErr := os.Remove(file.Name())
+		assert.NoError(t, dErr, "failed to remove file")
+	}()
 	_, err = file.WriteString("[]")
 	assert.Nil(t, err)
 	err = file.Close()
 	assert.Nil(t, err)
-	os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file.Name())
+	err = os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file.Name())
+	assert.NoError(t, err, "failed to set env")
 	_, err = NewEnv()
 	assert.Nil(t, err)
 }

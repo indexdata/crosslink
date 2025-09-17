@@ -16,12 +16,12 @@ var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/is
 type MockDirectoryLookupAdapter struct {
 }
 
-func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, error, string) {
+func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
 	if strings.Contains(params.Symbols[0], "error") {
-		return []DirectoryEntry{}, errors.New("there is an error"), ""
+		return []DirectoryEntry{}, "", errors.New("there is an error")
 	}
 	if strings.Contains(params.Symbols[0], "d-not-found") {
-		return []DirectoryEntry{}, nil, strings.Join(params.Symbols, ",")
+		return []DirectoryEntry{}, strings.Join(params.Symbols, ","), nil
 	}
 	if strings.Contains(params.Symbols[0], "ISIL:NOCHANGE") {
 		return []DirectoryEntry{{
@@ -29,7 +29,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 			URL:        MOCK_CLIENT_URL,
 			Vendor:     extctx.VendorUnknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
-		}}, nil, strings.Join(params.Symbols, ",")
+		}}, strings.Join(params.Symbols, ","), nil
 	}
 
 	var dirs []DirectoryEntry
@@ -41,7 +41,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 			BrokerMode: DEFAULT_BROKER_MODE,
 		})
 	}
-	return dirs, nil, strings.Join(params.Symbols, ",")
+	return dirs, strings.Join(params.Symbols, ","), nil
 }
 
 func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {

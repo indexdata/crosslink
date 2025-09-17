@@ -674,7 +674,9 @@ func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
-	assert.True(t, resData.CustomData["doNotSend"].(bool))
+	doNotSend, ok := resData.CustomData["doNotSend"].(bool)
+	assert.True(t, doNotSend)
+	assert.True(t, ok)
 }
 
 func TestCreateRequestMessage(t *testing.T) {
@@ -752,7 +754,9 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
-	assert.True(t, resData.CustomData["doNotSend"].(bool))
+	doNotSend, ok := resData.CustomData["doNotSend"].(bool)
+	assert.True(t, doNotSend)
+	assert.True(t, ok)
 }
 
 func TestBlockUnfilled(t *testing.T) {

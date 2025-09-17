@@ -60,7 +60,12 @@ func GetFreePort() (int, error) {
 	// release for now so it can be bound by the actual server
 	// a more robust solution would be to bind the server to the port and close it here
 	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+
+	if addr, ok := l.Addr().(*net.TCPAddr); !ok {
+		return 0, fmt.Errorf("address is not a *net.TCPAddr: %v", l.Addr())
+	} else {
+		return addr.Port, nil
+	}
 }
 
 func WaitForServiceUp(port int) {

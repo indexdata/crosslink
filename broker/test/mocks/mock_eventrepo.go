@@ -28,7 +28,8 @@ func (r *MockEventRepositorySuccess) UpdateEventStatus(ctx extctx.ExtendedContex
 }
 
 func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id string) (events.Event, error) {
-	if id == "t-1-n" {
+	switch id {
+	case "t-1-n":
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
@@ -37,7 +38,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusNew,
 		}, nil
-	} else if id == "t-1-p" {
+	case "t-1-p":
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),
@@ -46,7 +47,7 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 			EventName:        events.EventNameRequestReceived,
 			EventStatus:      events.EventStatusProcessing,
 		}, nil
-	} else {
+	default:
 		return events.Event{
 			ID:               id,
 			IllTransactionID: uuid.New().String(),

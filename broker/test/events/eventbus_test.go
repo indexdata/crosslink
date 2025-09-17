@@ -70,7 +70,7 @@ func TestMain(m *testing.M) {
 func TestMultipleEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
-	var receivedAr [][]events.Event = make([][]events.Event, noPools)
+	receivedAr := make([][]events.Event, noPools)
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
@@ -127,7 +127,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 func TestBroadcastEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
-	var receivedAr [][]events.Event = make([][]events.Event, noPools)
+	receivedAr := make([][]events.Event, noPools)
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)

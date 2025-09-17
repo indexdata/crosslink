@@ -288,7 +288,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 			header.RequestingAgencyRequestId = prevId
 			requester.delete(header)
 
-			var header iso18626.Header = supplyingAgencyMessage.Header
+			header := supplyingAgencyMessage.Header
 			newId = uuid.NewString()
 			header.RequestingAgencyRequestId = newId
 			requester.store(&header, state)

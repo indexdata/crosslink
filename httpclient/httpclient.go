@@ -67,7 +67,12 @@ func (c *HttpClient) httpInvoke(client *http.Client, method string, contentTypes
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		dErr := resp.Body.Close()
+		if dErr != nil {
+			fmt.Printf("failed to close body: %v", dErr)
+		}
+	}()
 	buf, err := c.readResponse(resp.Body)
 	if err != nil {
 		return nil, err

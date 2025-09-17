@@ -55,7 +55,7 @@ func (api *SruApi) getIdFromQuery(query string) (string, *diag.Diagnostic) {
 	if err != nil {
 		return "", getSruDiag("10", "Query syntax error", err.Error())
 	}
-	sc := res.Clause.SearchClause
+	sc := res.SearchClause
 	if sc == nil {
 		return "", nil
 	}
@@ -134,7 +134,7 @@ func (api *SruApi) getMarcXmlBuf(id string) ([]byte, error) {
 func (api *SruApi) getSurrogateDiagnostic(pos uint64, errorId string, message string, details string) *sru.RecordDefinition {
 	diagnostic := getSruDiag(errorId, message, details)
 	buf := utils.Must(xml.MarshalIndent(diagnostic, "  ", "  "))
-	var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
+	v := sru.RecordXMLEscapingDefinitionXml
 	return &sru.RecordDefinition{
 		RecordSchema:      "info:srw/schema/1/diagnostics-v1.1",
 		RecordXMLEscaping: &v,
@@ -151,7 +151,7 @@ func (api *SruApi) getMockRecords(id string, pos uint64, maximumRecords uint64) 
 	buf, err := api.getMarcXmlBuf(id)
 	var record *sru.RecordDefinition
 	if err == nil {
-		var v sru.RecordXMLEscapingDefinition = sru.RecordXMLEscapingDefinitionXml
+		v := sru.RecordXMLEscapingDefinitionXml
 		record = &sru.RecordDefinition{
 			RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
 			RecordXMLEscaping: &v,
