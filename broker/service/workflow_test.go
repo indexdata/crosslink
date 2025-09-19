@@ -18,7 +18,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_EmptyMessageInfo(t *
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
 	sam := iso18626.SupplyingAgencyMessage{}
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, sam, "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotCancelReason(t *testing.T) {
@@ -30,7 +30,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotCancelReason(t *t
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 	}
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, sam, "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotAccepted(t *testing.T) {
@@ -42,7 +42,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotAccepted(t *testi
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 		},
 	}
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, sam, "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingTransaction(t *testing.T) {
@@ -57,21 +57,21 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingTransact
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, sam, "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingEvent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositoryError), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, getCorrectSam(), "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, getCorrectSam(), "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_IncorrectEvent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryIncorrect), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, getCorrectSam(), "1", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, getCorrectSam(), "1"))
 }
 
 func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToBroker(t *testing.T) {
@@ -80,7 +80,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToBroker(t *testing.
 	mockIllRepo := new(MockIllRepositoryRequester)
 	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", appCtx, mock.Anything).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, getCorrectSam(), "2", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, getCorrectSam(), "2"))
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 1)
 }
 
@@ -90,7 +90,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplier(t *testin
 	mockIllRepo := new(MockIllRepositoryRequester)
 	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", appCtx, mock.Anything).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
-	assert.False(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, getCorrectSam(), "3", "2"))
+	assert.False(t, manager.handleAndCheckCancelResponse(appCtx, getCorrectSam(), "3"))
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
@@ -103,7 +103,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerNoSt
 	no := iso18626.TypeYesNoN
 	sam := getCorrectSam()
 	sam.MessageInfo.AnswerYesNo = &no
-	assert.False(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "3", "2"))
+	assert.False(t, manager.handleAndCheckCancelResponse(appCtx, sam, "3"))
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
@@ -115,7 +115,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerYesS
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 	sam := getCorrectSam()
 	sam.StatusInfo.Status = iso18626.TypeStatusUnfilled
-	assert.False(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "3", "2"))
+	assert.False(t, manager.handleAndCheckCancelResponse(appCtx, sam, "3"))
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
@@ -129,7 +129,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerNoSt
 	sam := getCorrectSam()
 	sam.MessageInfo.AnswerYesNo = &no
 	sam.StatusInfo.Status = iso18626.TypeStatusUnfilled
-	assert.True(t, manager.handleCancelStatusAndCheckIfMessageRequesterNeeded(appCtx, sam, "3", "2"))
+	assert.True(t, manager.handleAndCheckCancelResponse(appCtx, sam, "3"))
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 

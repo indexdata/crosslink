@@ -398,14 +398,14 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, WillSupply\n"+
-		"TASK, message-requester = SUCCESS, WillSupply\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, WillSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, WillSupply\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
 		"TASK, message-supplier = SUCCESS, Cancel\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
-		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 13, false, formatEvent))
 }
@@ -442,13 +442,13 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Broker(t *testing
 	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
 		"TASK, message-supplier = SUCCESS, Cancel\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
-		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 11, false, formatEvent))
 }
@@ -485,17 +485,17 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
 		"TASK, message-supplier = SUCCESS, Cancel\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, Loaned\n"+
-		"TASK, message-requester = SUCCESS, Loaned\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, Loaned\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, Loaned\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Received\n"+
 		"TASK, message-supplier = SUCCESS, Received\n"+
@@ -503,8 +503,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, requester-msg-received = SUCCESS, ShippedReturn\n"+
 		"TASK, message-supplier = SUCCESS, ShippedReturn\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, LoanCompleted\n"+
-		"TASK, message-requester = SUCCESS, LoanCompleted\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
+		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 24, false, formatEvent))
 }
@@ -542,13 +542,13 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testi
 	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
 		"TASK, message-supplier = SUCCESS, Cancel\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
-		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
-		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
 		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 11, false, formatEvent))
 }
@@ -898,10 +898,10 @@ func formatEvent(e events.Event) string {
 		}
 	}
 	if e.EventName == "message-requester" {
-		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+		return fmt.Sprintf(apptest.EventRecordFormat+", reason=%v, %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 	}
 	if e.EventName == "supplier-msg-received" {
-		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+		return fmt.Sprintf(apptest.EventRecordFormat+", reason=%v, %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage, e.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 	}
 	if e.EventName == "requester-msg-received" {
 		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.RequestingAgencyMessage.Action)

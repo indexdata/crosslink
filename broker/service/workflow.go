@@ -92,10 +92,14 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
 	}
-	if w.handleCancelStatusAndCheckIfMessageRequesterNeeded(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID, event.ID) {
+	if w.handleAndCheckCancelResponse(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID) {
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
+		}, "")
+	} else {
+		extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
 	}
 }
@@ -130,7 +134,7 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	}
 }
 
-func (w *WorkflowManager) handleCancelStatusAndCheckIfMessageRequesterNeeded(ctx extctx.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string, eventId string) bool {
+func (w *WorkflowManager) handleAndCheckCancelResponse(ctx extctx.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {
 	if !cancelSuccessful(sam) {
 		return true
 	}
@@ -148,9 +152,6 @@ func (w *WorkflowManager) handleCancelStatusAndCheckIfMessageRequesterNeeded(ctx
 		w.skipAllSuppliersByStatus(ctx, illTransId, ill_db.SupplierStateNewPg)
 		return true
 	}
-	extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
-		return w.eventBus.CreateTask(illTransId, events.EventNameSelectSupplier, events.EventData{}, &eventId)
-	}, "")
 	return false
 }
 
