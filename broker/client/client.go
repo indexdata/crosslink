@@ -317,8 +317,8 @@ func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedS
 
 // suppliers like Alma often send a wrong reason so we try to guess the correct reason based on the requester action and previous status
 func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, prevStatus string, targetStatus iso18626.TypeStatus) iso18626.TypeReasonForMessage {
-	// notification is a special case where we don't try to guess the reason
-	if reason == iso18626.TypeReasonForMessageNotification {
+	// Notification and CancelResponse are a special cases where we don't try to guess the reason
+	if reason == iso18626.TypeReasonForMessageNotification || reason == iso18626.TypeReasonForMessageCancelResponse {
 		return reason
 	}
 	if reason != "" && targetStatus == iso18626.TypeStatusUnfilled { // For unfilled we want to send notification
@@ -331,10 +331,6 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 	case string(iso18626.TypeActionRenew):
 		expectedReason = iso18626.TypeReasonForMessageRenewResponse
 	default: //for everything else we guess we check if there is a previous status
-		if requesterAction == string(iso18626.TypeActionCancel) && targetStatus == iso18626.TypeStatusCancelled {
-			expectedReason = iso18626.TypeReasonForMessageCancelResponse
-			break
-		}
 		if len(prevStatus) > 0 {
 			expectedReason = iso18626.TypeReasonForMessageStatusChange
 		} else {
