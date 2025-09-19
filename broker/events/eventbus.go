@@ -32,6 +32,7 @@ type EventBus interface {
 	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
 	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
+	GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error)
 }
 
 type PostgresEventBus struct {
@@ -365,6 +366,10 @@ func (p *PostgresEventBus) FindAncestor(descendant *Event, ancestorName EventNam
 		}
 	}
 	return event
+}
+
+func (p *PostgresEventBus) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error) {
+	return p.repo.GetLatestRequestEventByAction(ctx, illTransId, action)
 }
 
 func (p *PostgresEventBus) getEventContext(event *Event) extctx.ExtendedContext {

@@ -92,10 +92,12 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 		ctx.Logger().Error("failed to process event because missing SupplyingAgencyMessage")
 		return
 	}
-	extctx.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-			events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
-	}, "")
+	if w.handleCancelStatusAndCheckIfMessageRequesterNeeded(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID, event.ID) {
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
+		}, "")
+	}
 }
 
 func (w *WorkflowManager) RequesterMessageReceived(ctx extctx.ExtendedContext, event events.Event) {
@@ -117,10 +119,6 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	// only in case 3 we suspended the HTTP request in the handler and must resume it here
 	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
 		// action message was send by requester so we must relay the confirmation
-		ram := event.EventData.IncomingMessage.RequestingAgencyMessage
-		if ram.Action == iso18626.TypeActionCancel {
-			w.handleCancelAction(ctx, event, ram)
-		}
 		extctx.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
 		}, "")
@@ -132,20 +130,35 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx extctx.ExtendedContext, 
 	}
 }
 
-func (w *WorkflowManager) handleCancelAction(ctx extctx.ExtendedContext, event events.Event, ram *iso18626.RequestingAgencyMessage) {
-	requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
-	if err != nil {
-		ctx.Logger().Error("failed to process requester message received event, no requester", "error", err)
-	} else {
-		if requester.BrokerMode == string(extctx.BrokerModeOpaque) || getSupplierSymbol(*ram) == brokerSymbol {
-			// Requester does not know supplier or broker symbol was used, fully terminate transaction
-			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
-			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
-		}
-		extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
-		}, "")
+func (w *WorkflowManager) handleCancelStatusAndCheckIfMessageRequesterNeeded(ctx extctx.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string, eventId string) bool {
+	if !cancelSuccessful(sam) {
+		return true
 	}
+	lastEvent, err := w.eventBus.GetLatestRequestEventByAction(ctx, illTransId, string(iso18626.TypeActionCancel))
+	if err != nil {
+		ctx.Logger().Error("failed to to find last event with action cancel", "error", err)
+		return true
+	}
+	if lastEvent.EventData.IncomingMessage == nil || lastEvent.EventData.IncomingMessage.RequestingAgencyMessage == nil {
+		ctx.Logger().Error("last cancel event is missing requesting agency message", "error", err)
+		return true
+	}
+	if getSupplierSymbol(*lastEvent.EventData.IncomingMessage.RequestingAgencyMessage) == brokerSymbol {
+		// Requester does not know supplier or broker symbol was used, fully terminate transaction
+		w.skipAllSuppliersByStatus(ctx, illTransId, ill_db.SupplierStateNewPg)
+		return true
+	}
+	extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
+		return w.eventBus.CreateTask(illTransId, events.EventNameSelectSupplier, events.EventData{}, &eventId)
+	}, "")
+	return false
+}
+
+func cancelSuccessful(sam iso18626.SupplyingAgencyMessage) bool {
+	if sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageCancelResponse {
+		return false
+	}
+	return sam.StatusInfo.Status == iso18626.TypeStatusCancelled || (sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY)
 }
 
 func (w *WorkflowManager) OnMessageRequesterComplete(ctx extctx.ExtendedContext, event events.Event) {
@@ -159,6 +172,10 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx extctx.ExtendedContext,
 			extctx.Must(ctx, func() (string, error) {
 				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 			}, "")
+		}
+		if cancelSuccessful(*event.EventData.IncomingMessage.SupplyingAgencyMessage) {
+			// If successful cancel is forwarded to requester then skip currently selected supplier
+			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 		}
 	}
 }

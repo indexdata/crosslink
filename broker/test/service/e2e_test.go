@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"fmt"
+	"github.com/indexdata/crosslink/broker/events"
 	"io"
 	"net/http"
 	"os"
@@ -386,26 +388,26 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
 			illTrans.LastRequesterAction.String == string(iso18626.TypeActionCancel)
 	})
-	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, string(iso18626.TypeStatusWillSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionCancel), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, confirm-supplier-msg = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = PROBLEM\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
+		"TASK, locate-suppliers = SUCCESS\n"+
+		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, message-supplier = SUCCESS, Request\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, WillSupply\n"+
+		"TASK, message-requester = SUCCESS, WillSupply\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n"+
+		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
+		"TASK, message-supplier = SUCCESS, Cancel\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 13, false, formatEvent))
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Broker(t *testing.T) {
@@ -431,24 +433,24 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Broker(t *testing
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusCancelled) &&
 			illTrans.LastRequesterAction.String == string(iso18626.TypeActionCancel)
 	})
-	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, string(iso18626.TypeStatusCancelled), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionCancel), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = PROBLEM\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
+		"TASK, locate-suppliers = SUCCESS\n"+
+		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-supplier = SUCCESS, Request\n"+
+		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
+		"TASK, message-supplier = SUCCESS, Cancel\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 11, false, formatEvent))
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
@@ -480,31 +482,31 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = PROBLEM\n" +
-		"NOTICE, supplier-msg-received = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, confirm-supplier-msg = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, confirm-supplier-msg = SUCCESS\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
+		"TASK, locate-suppliers = SUCCESS\n"+
+		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-supplier = SUCCESS, Request\n"+
+		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
+		"TASK, message-supplier = SUCCESS, Cancel\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
+		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-supplier = SUCCESS, Request\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, Loaned\n"+
+		"TASK, message-requester = SUCCESS, Loaned\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n"+
+		"NOTICE, requester-msg-received = SUCCESS, Received\n"+
+		"TASK, message-supplier = SUCCESS, Received\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, requester-msg-received = SUCCESS, ShippedReturn\n"+
+		"TASK, message-supplier = SUCCESS, ShippedReturn\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, LoanCompleted\n"+
+		"TASK, message-requester = SUCCESS, LoanCompleted\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 24, false, formatEvent))
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testing.T) {
@@ -530,25 +532,25 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testi
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusCancelled) &&
 			illTrans.LastRequesterAction.String == string(iso18626.TypeActionCancel)
 	})
 
-	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, string(iso18626.TypeStatusCancelled), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, string(iso18626.TypeActionCancel), illTrans.LastRequesterAction.String)
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
-	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"NOTICE, requester-msg-received = SUCCESS\n" +
-		"TASK, message-supplier = SUCCESS\n" +
-		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
-		"TASK, confirm-requester-msg = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
-		"NOTICE, supplier-msg-received = PROBLEM\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
+		"TASK, locate-suppliers = SUCCESS\n"+
+		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, message-requester = SUCCESS, ExpectToSupply\n"+
+		"TASK, message-supplier = SUCCESS, Request\n"+
+		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
+		"TASK, message-supplier = SUCCESS, Cancel\n"+
+		"TASK, confirm-requester-msg = SUCCESS\n"+
+		"NOTICE, supplier-msg-received = SUCCESS, Cancelled\n"+
+		"TASK, message-requester = SUCCESS, Cancelled\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 11, false, formatEvent))
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
@@ -885,4 +887,24 @@ func getPgText(value string) pgtype.Text {
 		String: value,
 		Valid:  true,
 	}
+}
+
+func formatEvent(e events.Event) string {
+	if e.EventName == "message-supplier" {
+		if e.ResultData.OutgoingMessage.RequestingAgencyMessage != nil {
+			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.RequestingAgencyMessage.Action)
+		} else {
+			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, "Request")
+		}
+	}
+	if e.EventName == "message-requester" {
+		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+	}
+	if e.EventName == "supplier-msg-received" {
+		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status)
+	}
+	if e.EventName == "requester-msg-received" {
+		return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.EventData.IncomingMessage.RequestingAgencyMessage.Action)
+	}
+	return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 }

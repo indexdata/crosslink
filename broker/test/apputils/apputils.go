@@ -137,12 +137,12 @@ func EventsCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRe
 }
 
 func eventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
-	return EventsToCompareStringFunc(appCtx, eventRepo, t, illId, messageCount, func(e events.Event) string {
+	return EventsToCompareStringFunc(appCtx, eventRepo, t, illId, messageCount, false, func(e events.Event) string {
 		return fmt.Sprintf(EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 	})
 }
 
-func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, eventFmt func(events.Event) string) string {
+func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, ignoreState bool, eventFmt func(events.Event) string) string {
 	var eventList []events.Event
 	var err error
 
@@ -155,10 +155,12 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 			appCtx.Logger().Info("Check events count " + strconv.Itoa(len(eventList)))
 			return false
 		}
-		for _, e := range eventList {
-			if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
-				appCtx.Logger().Info("Check events processing state")
-				return false
+		if !ignoreState {
+			for _, e := range eventList {
+				if e.EventStatus == events.EventStatusProcessing || e.EventStatus == events.EventStatusNew {
+					appCtx.Logger().Info("Check events processing state")
+					return false
+				}
 			}
 		}
 		return true
