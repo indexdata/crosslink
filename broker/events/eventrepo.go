@@ -18,6 +18,7 @@ type EventRepo interface {
 	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
 	GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
+	GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error)
 }
 
 type PgEventRepo struct {
@@ -92,4 +93,12 @@ func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, id str
 
 func (r *PgEventRepo) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
 	return r.queries.DeleteEventsByIllTransaction(ctx, r.GetConnOrTx(), illTransId)
+}
+
+func (r *PgEventRepo) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error) {
+	row, err := r.queries.GetLatestRequestEventByAction(ctx, r.GetConnOrTx(), GetLatestRequestEventByActionParams{
+		Illtransactionid: illTransId,
+		Action:           action,
+	})
+	return row.Event, err
 }

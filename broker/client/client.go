@@ -330,9 +330,11 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 		expectedReason = iso18626.TypeReasonForMessageStatusRequestResponse
 	case string(iso18626.TypeActionRenew):
 		expectedReason = iso18626.TypeReasonForMessageRenewResponse
-	case string(iso18626.TypeActionCancel):
-		expectedReason = iso18626.TypeReasonForMessageCancelResponse
 	default: //for everything else we guess we check if there is a previous status
+		if requesterAction == string(iso18626.TypeActionCancel) && targetStatus == iso18626.TypeStatusCancelled {
+			expectedReason = iso18626.TypeReasonForMessageCancelResponse
+			break
+		}
 		if len(prevStatus) > 0 {
 			expectedReason = iso18626.TypeReasonForMessageStatusChange
 		} else {

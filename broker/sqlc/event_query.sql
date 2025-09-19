@@ -71,3 +71,10 @@ WHERE ill_transaction_id = $1;
 UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1
 RETURNING sqlc.embed(event);
+
+-- name: GetLatestRequestEventByAction :one
+SELECT sqlc.embed(event) FROM event
+WHERE ill_transaction_id = sqlc.arg(IllTransactionID) AND event_name = 'requester-msg-received' AND
+    (event_data -> 'incomingMessage' -> 'requestingAgencyMessage' ->> 'action')::text = sqlc.arg(Action)::text
+ORDER BY timestamp DESC LIMIT 1;
+
