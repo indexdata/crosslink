@@ -740,16 +740,14 @@ func handleConfirmReqMsgMissingAncestor(ctx extctx.ExtendedContext, event events
 
 func (h *Iso18626Handler) ConfirmSupplierMsg(ctx extctx.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(HANDLER_COMP))
-
-	reqResponseEvent := h.eventBus.FindAncestor(&event, events.EventNameMessageRequester)
-	if reqResponseEvent == nil {
-		// all instances will try to process the event on lookup failure
-		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
-			return handleConfirmSuppMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameMessageRequester))
-		})
-		return
+	parent := h.eventBus.FindAncestor(&event, events.EventNameMessageRequester)
+	if parent == nil {
+		// message was not forwarded
+		parent = &event
+		parent.ResultData = events.EventResult{}
+		parent.ResultData.IncomingMessage = suppMsgOkConfirmation()
 	}
-	supRequestEvent := h.eventBus.FindAncestor(reqResponseEvent, events.EventNameSupplierMsgReceived)
+	supRequestEvent := h.eventBus.FindAncestor(parent, events.EventNameSupplierMsgReceived)
 	if supRequestEvent == nil {
 		// all instances will try to process the event on lookup failure
 		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
@@ -762,8 +760,18 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx extctx.ExtendedContext, event e
 	}
 	// instance has the event, process it
 	_, _ = h.eventBus.ProcessTask(ctx, event, func(ec extctx.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
-		return h.handleConfirmSupplierMsgTask(ec, e, supRequestEvent.ID, supRequestEvent.EventData.IncomingMessage, reqResponseEvent.ResultData)
+		return h.handleConfirmSupplierMsgTask(ec, e, supRequestEvent.ID, supRequestEvent.EventData.IncomingMessage, parent.ResultData)
 	})
+}
+
+func suppMsgOkConfirmation() *iso18626.ISO18626Message {
+	return &iso18626.ISO18626Message{
+		SupplyingAgencyMessageConfirmation: &iso18626.SupplyingAgencyMessageConfirmation{
+			ConfirmationHeader: iso18626.ConfirmationHeader{
+				MessageStatus: iso18626.TypeMessageStatusOK,
+			},
+		},
+	}
 }
 
 func handleConfirmSuppMsgMissingAncestor(ctx extctx.ExtendedContext, event events.Event, cause error) (events.EventStatus, *events.EventResult) {

@@ -492,6 +492,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"TASK, message-supplier = SUCCESS, Cancel\n"+
 		"TASK, confirm-requester-msg = SUCCESS\n"+
 		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
+		"TASK, confirm-supplier-msg = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
@@ -507,7 +508,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 24, false, formatEvent))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 25, false, formatEvent))
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testing.T) {
