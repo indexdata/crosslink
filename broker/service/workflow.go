@@ -98,6 +98,9 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx extctx.ExtendedContext, ev
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{"doNotSend": !w.shouldForwardMessage(ctx, event)}}, &event.ID)
 		}, "")
 	} else {
+		extctx.Must(ctx, func() (string, error) {
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, &event.ID)
+		}, "")
 		extctx.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
 		}, "")
