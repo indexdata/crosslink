@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/events"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/events"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -492,10 +493,10 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"TASK, confirm-requester-msg = SUCCESS\n"+
 		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, select-supplier = SUCCESS\n"+
-		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
+		"TASK, message-requester = SUCCESS, reason=StatusChange, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, Loaned\n"+
-		"TASK, message-requester = SUCCESS, reason=RequestResponse, Loaned\n"+
+		"TASK, message-requester = SUCCESS, reason=StatusChange, Loaned\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Received\n"+
 		"TASK, message-supplier = SUCCESS, Received\n"+

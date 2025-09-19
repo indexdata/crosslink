@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
-	"github.com/google/uuid"
-	"github.com/indexdata/crosslink/broker/test/mocks"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/test/mocks"
 
 	"github.com/indexdata/crosslink/broker/common"
 
@@ -314,6 +315,12 @@ func TestValidateReason(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
 	reason = guessReason("", string(iso18626.TypeActionNotification), string(iso18626.TypeStatusExpectToSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
+	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), "", iso18626.TypeStatusExpectToSupply)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	reason = guessReason(iso18626.TypeReasonForMessageCancelResponse, string(iso18626.TypeActionCancel), "", iso18626.TypeStatusExpectToSupply)
+	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	reason = guessReason(iso18626.TypeReasonForMessageCancelResponse, string(iso18626.TypeActionCancel), "", iso18626.TypeStatusCancelled)
+	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
@@ -321,17 +328,17 @@ func TestValidateReason(t *testing.T) {
 	reason = guessReason(iso18626.TypeReasonForMessageNotification, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageNotification, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusCancelled)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
 	reason = guessReason("", string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusUnfilled)
-	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageStatusChange, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionCancel), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
-	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, reason)
+	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionRenew), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
 	assert.Equal(t, iso18626.TypeReasonForMessageRenewResponse, reason)
 	reason = guessReason(iso18626.TypeReasonForMessageRequestResponse, string(iso18626.TypeActionStatusRequest), string(iso18626.TypeStatusWillSupply), iso18626.TypeStatusExpectToSupply)
