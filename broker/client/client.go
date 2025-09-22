@@ -258,18 +258,18 @@ func isDoNotSend(event events.Event) bool {
 	return false
 }
 
-func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, id string, action string) error {
+func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, illTransId string, supplierSymbol string, action string) error {
 	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locsup, err := repo.GetSelectedSupplierForIllTransactionForUpdate(ctx, id)
+		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx, illTransId, supplierSymbol)
 		if err != nil {
 			return err // transaction gone meanwhile
 		}
-		locsup.PrevAction = locsup.LastAction
-		locsup.LastAction = pgtype.Text{
+		locSup.PrevAction = locSup.LastAction
+		locSup.LastAction = pgtype.Text{
 			String: action,
 			Valid:  true,
 		}
-		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locsup))
+		_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 		return err
 	})
 }
@@ -795,7 +795,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??
-	err := c.updateSelectedSupplierAction(ctx, trCtx.transaction.ID, string(action))
+	err := c.updateSelectedSupplierAction(ctx, trCtx.transaction.ID, trCtx.selectedSupplier.SupplierSymbol, string(action))
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}

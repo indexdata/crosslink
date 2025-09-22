@@ -200,6 +200,13 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSymbol(c
 		SupplierSymbol:   symbol,
 	}, nil
 }
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx extctx.ExtendedContext, illTransactionId string, symbol string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		ID:               uuid.NewString(),
+		IllTransactionID: illTransactionId,
+		SupplierSymbol:   symbol,
+	}, nil
+}
 
 type MockIllRepositoryError struct {
 	mock.Mock
@@ -326,6 +333,10 @@ func (r *MockIllRepositoryError) GetLocatedSupplierByPeerId(ctx extctx.ExtendedC
 }
 
 func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.ExtendedContext, illTransactionId string, symbol string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx extctx.ExtendedContext, illTransactionId string, symbol string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }
 

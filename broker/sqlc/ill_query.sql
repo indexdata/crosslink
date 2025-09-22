@@ -176,6 +176,13 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_symbol = $2;
 
+-- name: GetLocatedSupplierByIllTransactionAndSymbolForUpdate :one
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+WHERE ill_transaction_id = $1
+  and supplier_symbol = $2
+    FOR UPDATE;
+
 -- name: SaveLocatedSupplier :one
 INSERT INTO located_supplier (id, ill_transaction_id, supplier_id, supplier_symbol, ordinal, supplier_status,
                               prev_action, prev_status,
