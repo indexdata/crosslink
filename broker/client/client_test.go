@@ -756,7 +756,12 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.CustomData = map[string]any{"doNotSend": true}
-	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(common.VendorAlma),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
 
 	status, resData := client.sendAndUpdateSupplier(appCtx, trCtx, event.EventData.IncomingMessage, "Received")
