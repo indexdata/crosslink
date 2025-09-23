@@ -321,14 +321,16 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 
 func TestMessageRequesterFailToBegin(t *testing.T) {
 	var receivedTasks []events.Event
-	eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		receivedTasks = append(receivedTasks, event)
-	})
 
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
+	eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		if event.ID == eventId {
+			receivedTasks = append(receivedTasks, event)
+		}
+	})
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())

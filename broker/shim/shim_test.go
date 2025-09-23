@@ -570,12 +570,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 			Note:   "Accept",
 		},
 	}
-	msgBytes, err := GetShim(string(common.VendorReShare)).ApplyToOutgoingRequest(&msg)
-	assert.Nil(t, err)
-
-	var resmsg iso18626.ISO18626Message
-	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
-	assert.Nil(t, err)
+	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg)
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"Accept", resmsg.RequestingAgencyMessage.Note)
 }
@@ -587,12 +582,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 			Note:   "ReJeCT",
 		},
 	}
-	msgBytes, err := GetShim(string(common.VendorReShare)).ApplyToOutgoingRequest(&msg)
-	assert.Nil(t, err)
-
-	var resmsg iso18626.ISO18626Message
-	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
-	assert.Nil(t, err)
+	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg)
 
 	assert.Equal(t, "ReJeCT", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
