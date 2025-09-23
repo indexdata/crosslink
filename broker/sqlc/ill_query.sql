@@ -151,13 +151,6 @@ FROM located_supplier
 WHERE ill_transaction_id = $1
   and supplier_status = $2;
 
--- name: GetLocatedSuppliersByIllTransactionAndStatusForUpdate :many
-SELECT sqlc.embed(located_supplier)
-FROM located_supplier
-WHERE ill_transaction_id = $1
-  and supplier_status = $2
-    FOR UPDATE;
-
 -- name: GetLocatedSupplierByPeerId :many
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
