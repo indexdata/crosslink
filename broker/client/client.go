@@ -679,7 +679,9 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 		resData.CustomData = map[string]any{"doNotSend": true}
 		resData.OutgoingMessage = nil
 	} else {
+		ctx.Logger().Info("start sending supplying message", "eventId", trCtx.event.ID)
 		response, err := c.SendHttpPost(trCtx.requester, message)
+		ctx.Logger().Info("got response for supplying message", "eventId", trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -774,7 +776,9 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
+		ctx.Logger().Info("start sending requesting message", "eventId", trCtx.event.ID)
 		response, err := c.SendHttpPost(trCtx.selectedPeer, message)
+		ctx.Logger().Info("got response for requesting message", "eventId", trCtx.event.ID)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
