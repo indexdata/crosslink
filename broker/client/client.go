@@ -451,13 +451,13 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
 		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
 			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
-				return iso18626Shim.ApplyToOutgoing(isoM)
+				return iso18626Shim.ApplyToOutgoingRequest(isoM)
 			} else {
 				return []byte{}, fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
 			}
 		}, func(b []byte, v any) error {
 			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
-				return iso18626Shim.ApplyToIncoming(b, isoM)
+				return iso18626Shim.ApplyToIncomingResponse(b, isoM)
 			} else {
 				return fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
 			}
