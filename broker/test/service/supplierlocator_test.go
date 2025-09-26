@@ -676,6 +676,62 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestLocalSupplyToAlmaPeer(t *testing.T) {
+	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	reqSymbol := "ISIL:REQ" + uuid.NewString()
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque), extctx.VendorAlma)
+	data := ill_db.IllTransactionData{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + reqSymbol,
+		},
+	}
+	illTrId := uuid.New().String()
+	reqReqId := uuid.New().String()
+	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		ID:                 illTrId,
+		Timestamp:          test.GetNow(),
+		IllTransactionData: data,
+		RequesterID:        getPgText(requester.ID),
+		RequesterRequestID: getPgText(reqReqId),
+		LastSupplierStatus: getPgText(string(iso18626.TypeStatusUnfilled)),
+		RequesterSymbol:    getPgText(reqSymbol),
+	})
+
+	if err != nil {
+		t.Errorf("Failed to create ILL transaction: %s", err)
+	}
+	var completedTask []events.Event
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+		if illTrId == event.IllTransactionID {
+			appCtx.Logger().Info("Added completed task")
+			completedTask = append(completedTask, event)
+		}
+	})
+	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers, events.EventData{})
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	if err != nil {
+		t.Error("failed to notify with error " + err.Error())
+	}
+
+	var event events.Event
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		if len(completedTask) > 0 {
+			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
+			return event.EventStatus == events.EventStatusSuccess
+		}
+		return false
+	}) {
+		t.Error("expected to have request event received and processed")
+	}
+	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
+	suppliers, ok := event.ResultData.CustomData["suppliers"].([]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(suppliers))
+	supMap, ok := suppliers[0].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, ill_db.SupplierStateSkipped, supMap["SupplierStatus"])
+}
+
 func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
 	requester := getOrCreatePeer(t, illRepo, "ISIL:REQ", 4, 2)
 	data := ill_db.IllTransactionData{

@@ -84,6 +84,10 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, extctx.VendorReShare)
+}
+
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor extctx.Vendor) ill_db.Peer {
 	peer, err := illRepo.SavePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          symbol,
@@ -94,6 +98,7 @@ func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url
 			Valid: true,
 		},
 		BrokerMode: brokerMode,
+		Vendor:     string(vendor),
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)

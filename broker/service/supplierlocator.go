@@ -115,9 +115,13 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 			for _, sym := range symbols {
 				if localId, ok := symbolToLocalId[sym]; ok {
 					local := false
+					supplierStatus := ill_db.SupplierStateNewPg
 					if s.localSupply &&
 						illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
 						local = true
+					}
+					if peer.Vendor == string(extctx.VendorAlma) && illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
+						supplierStatus = ill_db.SupplierStateSkippedPg // Skip supplier if record
 					}
 					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
 						PeerId:          peer.ID,
@@ -126,6 +130,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 						Ratio:           getPeerRatio(peer),
 						Symbol:          sym,
 						Local:           local,
+						SupplierStatus:  supplierStatus,
 					})
 				}
 			}
@@ -165,10 +170,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 		SupplierID:       supplier.PeerId,
 		SupplierSymbol:   supplier.Symbol,
 		Ordinal:          ordinal,
-		SupplierStatus: pgtype.Text{
-			String: "new",
-			Valid:  true,
-		},
+		SupplierStatus:   supplier.SupplierStatus,
 		LocalID: pgtype.Text{
 			String: supplier.LocalIdentifier,
 			Valid:  true,
