@@ -146,9 +146,7 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
-	var brokerMode = getBrokerMode(BROKER_MODE)
-	var locallySupply = brokerMode == extctx.BrokerModeTransparent || brokerMode == extctx.BrokerModeTranslucent
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, locallySupply)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
 	err = StartEventBus(ctx, eventBus)

@@ -21,16 +21,14 @@ type SupplierLocator struct {
 	illRepo         ill_db.IllRepo
 	dirAdapter      adapter.DirectoryLookupAdapter
 	holdingsAdapter adapter.HoldingsLookupAdapter
-	localSupply     bool
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter, localSupply bool) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter) SupplierLocator {
 	return SupplierLocator{
 		eventBus:        eventBus,
 		illRepo:         illRepo,
 		dirAdapter:      dirAdapter,
 		holdingsAdapter: holdingsAdapter,
-		localSupply:     localSupply,
 	}
 }
 
@@ -116,12 +114,12 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 				if localId, ok := symbolToLocalId[sym]; ok {
 					local := false
 					supplierStatus := ill_db.SupplierStateNewPg
-					if s.localSupply &&
-						illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
-						local = true
-					}
-					if peer.Vendor == string(extctx.VendorAlma) && illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
-						supplierStatus = ill_db.SupplierStateSkippedPg // Skip supplier if record
+					if illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
+						if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
+							supplierStatus = ill_db.SupplierStateSkippedPg // Skip local supplier
+						} else {
+							local = true
+						}
 					}
 					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
 						PeerId:          peer.ID,
