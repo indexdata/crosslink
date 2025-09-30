@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -472,6 +473,23 @@ func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
 	assert.Equal(t, "original note", resmsg.RequestingAgencyMessage.Note)
 }
 
+func TestIso18626AlmaShimHumanizeReShareRequesterNote(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Action: iso18626.TypeActionNotification,
+			Note:   RESHARE_LOAN_CONDITION_AGREE + "Accept",
+		},
+	}
+	msgBytes, err := GetShim(string(common.VendorAlma)).ApplyToOutgoingRequest(&msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "Accept", resmsg.RequestingAgencyMessage.Note)
+}
+
 func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
@@ -570,7 +588,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 			Note:   "Accept",
 		},
 	}
-	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg)
+	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, nil)
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"Accept", resmsg.RequestingAgencyMessage.Note)
 }
@@ -578,14 +596,26 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType: iso18626.TypeSchemeValuePair{
+						Text: "ISL",
+					},
+					AgencyIdValue: "BROKER",
+				},
+			},
 			Action: iso18626.TypeActionNotification,
 			Note:   "ReJeCT",
 		},
 	}
-	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg)
+	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, "ReJeCT", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "SUP1", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+
+	assert.Equal(t, iso18626.TypeActionNotification, msg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "BROKER", msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {

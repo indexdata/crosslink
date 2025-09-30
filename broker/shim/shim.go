@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"regexp"
 	"strings"
 
@@ -35,7 +36,7 @@ var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 type Iso18626Shim interface {
 	ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error)
 	ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error
-	ApplyToIncomingRequest(message *iso18626.ISO18626Message) *iso18626.ISO18626Message
+	ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message
 }
 
 // factory method
@@ -63,7 +64,7 @@ func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso
 	return xml.Unmarshal(bytes, message)
 }
 
-func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message) *iso18626.ISO18626Message {
+func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
 	return message
 }
 
@@ -71,13 +72,22 @@ type Iso18626AlmaShim struct {
 	Iso18626DefaultShim
 }
 
-func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message) *iso18626.ISO18626Message {
-	if message != nil {
-		if message.RequestingAgencyMessage != nil {
-			i.fixRequesterConditionNote(message.RequestingAgencyMessage)
+func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	if message == nil {
+		return message
+	}
+	copyMessage := *message
+	if message.RequestingAgencyMessage != nil {
+		copyRam := *message.RequestingAgencyMessage
+		copyMessage.RequestingAgencyMessage = &copyRam
+		i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
+		if supplier != nil {
+			symbol := strings.SplitN(supplier.SupplierSymbol, ":", 2)
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbol[0]
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]
 		}
 	}
-	return message
+	return &copyMessage
 }
 
 func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
@@ -110,6 +120,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Mess
 		if message.RequestingAgencyMessage != nil {
 			reqMsg := message.RequestingAgencyMessage
 			i.stripReShareReqMsgSeqNote(reqMsg)
+			i.humanizeReShareRequesterNote(reqMsg)
 		}
 	}
 	return xml.Marshal(message)
@@ -449,6 +460,14 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	if addr.Country != nil && len(addr.Country.Text) > 0 {
 		sb.WriteString(addr.Country.Text)
 		sb.WriteString("\n")
+	}
+}
+
+func (i *Iso18626AlmaShim) humanizeReShareRequesterNote(ram *iso18626.RequestingAgencyMessage) {
+	if strings.Contains(ram.Note, RESHARE_LOAN_CONDITION_AGREE) {
+		note := strings.ReplaceAll(ram.Note, RESHARE_LOAN_CONDITION_AGREE, "")
+		note = strings.TrimSpace(note)
+		ram.Note = note
 	}
 }
 

@@ -248,7 +248,7 @@ func handleRequest(ctx extctx.ExtendedContext, illMessage *iso18626.ISO18626Mess
 		}
 		return
 	}
-	afterShim := shim.GetShim(peers[0].Vendor).ApplyToIncomingRequest(illMessage)
+	afterShim := shim.GetShim(peers[0].Vendor).ApplyToIncomingRequest(illMessage, &peers[0], nil)
 	var resmsg = createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -361,8 +361,19 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 			errorValue = ReqIdNotFound
 			return err
 		}
+		supp, supErr := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
+		if symbol != brokerSymbol {
+			if supErr != nil {
+				errorValue = SupplierNotFoundOrInvalid
+				return supErr
+			}
+			if supp.SupplierSymbol != symbol {
+				errorValue = SupplierNotFoundOrInvalid
+				return pgx.ErrNoRows
+			}
+		}
 		if illTrans.RequesterID.Valid {
-			eValue, errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData)
+			eValue, errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData, &supp)
 			if errShim != nil {
 				errorValue = eValue
 				return errShim
@@ -371,17 +382,6 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 		action = validateAction(ctx, w, eventData, eventBus, illTrans)
 		if action == "" {
 			return nil
-		}
-		if symbol != brokerSymbol {
-			supp, err := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
-			if err != nil {
-				errorValue = SupplierNotFoundOrInvalid
-				return err
-			}
-			if supp.SupplierSymbol != symbol {
-				errorValue = SupplierNotFoundOrInvalid
-				return pgx.ErrNoRows
-			}
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 		illTrans.LastRequesterAction = createPgText(string(action))
@@ -414,12 +414,12 @@ func handleRequestingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso18
 	wg.Wait()
 }
 
-func applyRequesterShim(ctx extctx.ExtendedContext, repo ill_db.IllRepo, reqId string, illMessage *iso18626.ISO18626Message, eventData *events.EventData) (ErrorValue, error) {
+func applyRequesterShim(ctx extctx.ExtendedContext, repo ill_db.IllRepo, reqId string, illMessage *iso18626.ISO18626Message, eventData *events.EventData, supplier *ill_db.LocatedSupplier) (ErrorValue, error) {
 	requester, err := repo.GetPeerById(ctx, reqId)
 	if err != nil {
 		return ReqAgencyNotFound, err
 	}
-	afterShim := shim.GetShim(requester.Vendor).ApplyToIncomingRequest(illMessage)
+	afterShim := shim.GetShim(requester.Vendor).ApplyToIncomingRequest(illMessage, &requester, supplier)
 	eventData.IncomingMessage = afterShim
 	eventData.CustomData = map[string]any{
 		ORIGINAL_INCOMING_MESSAGE: illMessage,
@@ -540,7 +540,7 @@ func handleSupplyingAgencyMessage(ctx extctx.ExtendedContext, illMessage *iso186
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
 	}
-	afterShim := shim.GetShim(supplierPeer.Vendor).ApplyToIncomingRequest(illMessage)
+	afterShim := shim.GetShim(supplierPeer.Vendor).ApplyToIncomingRequest(illMessage, &requester, &supplier)
 	var resmsg = createSupplyingAgencyResponse(afterShim, iso18626.TypeMessageStatusOK, nil, "")
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{

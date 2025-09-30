@@ -593,11 +593,24 @@ func TestIso18626PostHandlerInvalidAction(t *testing.T) {
 	req.Header.Add("Content-Type", "application/xml")
 	rr := httptest.NewRecorder()
 
-	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+	handler.Iso18626PostHandler(new(MockRepositoryCurrentSupplier), eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedActionType</errorType>")
 	assert.Contains(t, rr.Body.String(), "<errorValue>WeCancelThisMessage is not a valid action</errorValue>")
+}
+
+func TestIso18626PostHandlerSupplierNotFound(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/reqmsg-invalid-action.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+
+	handler.Iso18626PostHandler(mockIllRepoSuccess, eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
+	assert.Contains(t, rr.Body.String(), "<errorType>UnrecognisedDataValue</errorType>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>supplyingAgencyId: supplying agency not found or invalid</errorValue>")
 }
 
 func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
@@ -669,6 +682,20 @@ func (r *MockRepositoryOtherSupplier) GetSelectedSupplierForIllTransaction(ctx e
 	return ill_db.LocatedSupplier{
 		SupplierSymbol: "ISIL:OTHER",
 	}, nil
+}
+
+type MockRepositoryCurrentSupplier struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *MockRepositoryCurrentSupplier) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		SupplierSymbol: "ISIL:SLNP_TWO_A",
+	}, nil
+}
+
+func (r *MockRepositoryCurrentSupplier) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+	return fn(r)
 }
 
 type MockRepositorySupplierError struct {
