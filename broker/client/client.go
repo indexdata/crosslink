@@ -809,5 +809,5 @@ func blockUnfilled(trCtx transactionContext) bool {
 	}
 	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
 	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
-	return !noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque)
+	return !noteOrReasonExists
 }

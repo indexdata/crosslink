@@ -664,16 +664,16 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) > 1 {
 			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			return event.EventStatus == events.EventStatusProblem
 		}
 		return false
 	}) {
 		t.Error("expected to have request event received and processed")
 	}
-	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
+	assert.Equal(t, events.EventStatusProblem, event.EventStatus)
 	doNotSend, ok := event.ResultData.CustomData["doNotSend"].(bool)
-	assert.True(t, doNotSend)
-	assert.True(t, ok)
+	assert.False(t, doNotSend)
+	assert.False(t, ok)
 }
 
 func TestLocalSupplyToAlmaPeer(t *testing.T) {

@@ -809,5 +809,5 @@ func TestBlockUnfilled(t *testing.T) {
 	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
-	assert.True(t, blockUnfilled(trCtx))
+	assert.False(t, blockUnfilled(trCtx))
 }
