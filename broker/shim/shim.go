@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"regexp"
 	"strings"
 
@@ -33,8 +34,9 @@ const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 
 type Iso18626Shim interface {
-	ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error)
-	ApplyToIncoming(bytes []byte, message *iso18626.ISO18626Message) error
+	ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error)
+	ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error
+	ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message
 }
 
 // factory method
@@ -54,19 +56,41 @@ func GetShim(vendor string) Iso18626Shim {
 type Iso18626DefaultShim struct {
 }
 
-func (i *Iso18626DefaultShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
+func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
 	return xml.Marshal(message)
 }
 
-func (i *Iso18626DefaultShim) ApplyToIncoming(bytes []byte, message *iso18626.ISO18626Message) error {
+func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error {
 	return xml.Unmarshal(bytes, message)
+}
+
+func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	return message
 }
 
 type Iso18626AlmaShim struct {
 	Iso18626DefaultShim
 }
 
-func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
+func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	if message == nil {
+		return message
+	}
+	copyMessage := *message
+	if message.RequestingAgencyMessage != nil {
+		copyRam := *message.RequestingAgencyMessage
+		copyMessage.RequestingAgencyMessage = &copyRam
+		i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
+		if copyMessage.RequestingAgencyMessage.Action == iso18626.TypeActionCancel && supplier != nil {
+			symbol := strings.SplitN(supplier.SupplierSymbol, ":", 2)
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbol[0]
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]
+		}
+	}
+	return &copyMessage
+}
+
+func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
 	if message != nil {
 		if message.SupplyingAgencyMessage != nil {
 			suppMsg := message.SupplyingAgencyMessage
@@ -96,6 +120,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([
 		if message.RequestingAgencyMessage != nil {
 			reqMsg := message.RequestingAgencyMessage
 			i.stripReShareReqMsgSeqNote(reqMsg)
+			i.humanizeReShareRequesterNote(reqMsg)
 		}
 	}
 	return xml.Marshal(message)
@@ -438,6 +463,14 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	}
 }
 
+func (i *Iso18626AlmaShim) humanizeReShareRequesterNote(ram *iso18626.RequestingAgencyMessage) {
+	if strings.Contains(ram.Note, RESHARE_LOAN_CONDITION_AGREE) {
+		note := strings.ReplaceAll(ram.Note, RESHARE_LOAN_CONDITION_AGREE, "")
+		note = strings.TrimSpace(note)
+		ram.Note = note
+	}
+}
+
 func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
 	if strings.TrimSpace(supplyingAgencyMessage.MessageInfo.Note) == RESHARE_SUPPLIER_AWAITING_CONDITION {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_AWAITING_CONDITION
@@ -455,21 +488,7 @@ func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyM
 	}
 }
 
-type Iso18626ReShareShim struct {
-	Iso18626DefaultShim
-}
-
-func (i *Iso18626ReShareShim) ApplyToOutgoing(message *iso18626.ISO18626Message) ([]byte, error) {
-	if message.RequestingAgencyMessage != nil {
-		i.fixRequesterConditionNote(message.RequestingAgencyMessage)
-	}
-	if message.SupplyingAgencyMessage != nil {
-		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
-	}
-	return xml.Marshal(message)
-}
-
-func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
+func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
 		note := rsNoteRegexp.ReplaceAllString(requestingAgencyMessage.Note, "") //this is only needed to test human-notes from ReShare
 		if strings.EqualFold(note, ACCEPT) {
@@ -478,6 +497,17 @@ func (i *Iso18626ReShareShim) fixRequesterConditionNote(requestingAgencyMessage 
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 		}
 	}
+}
+
+type Iso18626ReShareShim struct {
+	Iso18626DefaultShim
+}
+
+func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+	if message.SupplyingAgencyMessage != nil {
+		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
+	}
+	return xml.Marshal(message)
 }
 
 func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
