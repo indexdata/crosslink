@@ -65,6 +65,8 @@ func TestApplyRequesterShimAlma(t *testing.T) {
 					AgencyIdValue: "BROKER",
 				},
 			},
+			Action: iso18626.TypeActionNotification,
+			Note:   "ReJeCT",
 		},
 	}
 	_, err := applyRequesterShim(appCtx, mockRepo, "1", &message, &eventData, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})

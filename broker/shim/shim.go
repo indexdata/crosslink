@@ -81,7 +81,7 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 		copyRam := *message.RequestingAgencyMessage
 		copyMessage.RequestingAgencyMessage = &copyRam
 		i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
-		if supplier != nil {
+		if copyMessage.RequestingAgencyMessage.Action == iso18626.TypeActionCancel && supplier != nil {
 			symbol := strings.SplitN(supplier.SupplierSymbol, ":", 2)
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbol[0]
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]

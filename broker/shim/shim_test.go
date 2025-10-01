@@ -584,13 +584,22 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.
 func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 	msg := iso18626.ISO18626Message{
 		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType: iso18626.TypeSchemeValuePair{
+						Text: "ISL",
+					},
+					AgencyIdValue: "BROKER",
+				},
+			},
 			Action: iso18626.TypeActionNotification,
 			Note:   "Accept",
 		},
 	}
-	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, nil)
+	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"Accept", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
