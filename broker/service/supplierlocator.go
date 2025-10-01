@@ -21,16 +21,14 @@ type SupplierLocator struct {
 	illRepo         ill_db.IllRepo
 	dirAdapter      adapter.DirectoryLookupAdapter
 	holdingsAdapter adapter.HoldingsLookupAdapter
-	localSupply     bool
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter, localSupply bool) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter) SupplierLocator {
 	return SupplierLocator{
 		eventBus:        eventBus,
 		illRepo:         illRepo,
 		dirAdapter:      dirAdapter,
 		holdingsAdapter: holdingsAdapter,
-		localSupply:     localSupply,
 	}
 }
 
@@ -115,9 +113,13 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 			for _, sym := range symbols {
 				if localId, ok := symbolToLocalId[sym]; ok {
 					local := false
-					if s.localSupply &&
-						illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
-						local = true
+					supplierStatus := ill_db.SupplierStateNewPg
+					if illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
+						if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
+							supplierStatus = ill_db.SupplierStateSkippedPg // Skip local supplier
+						} else {
+							local = true
+						}
 					}
 					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
 						PeerId:          peer.ID,
@@ -126,6 +128,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 						Ratio:           getPeerRatio(peer),
 						Symbol:          sym,
 						Local:           local,
+						SupplierStatus:  supplierStatus,
 					})
 				}
 			}
@@ -165,10 +168,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 		SupplierID:       supplier.PeerId,
 		SupplierSymbol:   supplier.Symbol,
 		Ordinal:          ordinal,
-		SupplierStatus: pgtype.Text{
-			String: "new",
-			Valid:  true,
-		},
+		SupplierStatus:   supplier.SupplierStatus,
 		LocalID: pgtype.Text{
 			String: supplier.LocalIdentifier,
 			Valid:  true,

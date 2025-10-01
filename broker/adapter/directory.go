@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"strconv"
 
 	extctx "github.com/indexdata/crosslink/broker/common"
@@ -45,6 +46,7 @@ type Supplier struct {
 	Cost            float64
 	Local           bool
 	Ratio           float32
+	SupplierStatus  pgtype.Text
 }
 
 func (s Supplier) GetSymbol() string { return s.Symbol }
