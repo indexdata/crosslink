@@ -349,13 +349,14 @@ func TestMessageRequesterFailToBegin(t *testing.T) {
 
 func TestMessageRequesterCompleteWithError(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
-	})
-
 	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+		if event.IllTransactionID == illId {
+			completedTask = append(completedTask, event)
+		}
+	})
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {

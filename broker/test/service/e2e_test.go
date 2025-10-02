@@ -229,10 +229,8 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.SupplyingAgencyMessageConfirmation)
-	// getting an error as peer is not reachable
-	assert.Equal(t, iso18626.TypeMessageStatusERROR, msg.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, iso18626.TypeErrorTypeBadlyFormedMessage, msg.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
-	assert.Equal(t, "Could not send request to peer", msg.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	// Notification was not forwarded -> status OK
+	assert.Equal(t, iso18626.TypeMessageStatusOK, msg.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	//wait until the broker processes the notification
 	//this relies on the fact that the broker will update the previous transaction status AFTER sending out the notification
 	test.WaitForPredicateToBeTrue(func() bool {
