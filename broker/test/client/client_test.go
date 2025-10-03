@@ -22,7 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/client"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	app.BROKER_MODE = string(extctx.BrokerModeTransparent)
+	app.BROKER_MODE = string(common.BrokerModeTransparent)
 	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
@@ -84,11 +84,11 @@ func TestMain(m *testing.M) {
 
 func TestMessageRequester(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	//we use the mock as the destination for the request to get a valid ISO18626 response
 	reqPeer := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL)
 	supPeer := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL)
@@ -118,14 +118,14 @@ func TestMessageRequester(t *testing.T) {
 
 func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
-	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
+	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1", string(iso18626.TypeActionReceived), "ISIL:RESP1")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
@@ -154,11 +154,11 @@ func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 }
 func TestMessageRequesterNoLastStatus(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", adapter.MOCK_CLIENT_URL)
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1_1", string(iso18626.TypeActionReceived), "ISIL:RESP1_1")
@@ -190,11 +190,11 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 
 func TestMessageSupplier(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", adapter.MOCK_CLIENT_URL)
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", adapter.MOCK_CLIENT_URL)
@@ -224,11 +224,11 @@ func TestMessageSupplier(t *testing.T) {
 
 func TestMessageRequesterInvalidAddress(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ3", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ3", string(iso18626.TypeActionReceived), "ISIL:RESP3")
@@ -257,11 +257,11 @@ func TestMessageRequesterInvalidAddress(t *testing.T) {
 
 func TestMessageSupplierInvalidAddress(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ4", "invalid")
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
@@ -290,11 +290,11 @@ func TestMessageSupplierInvalidAddress(t *testing.T) {
 
 func TestMessageSupplierMissingSupplier(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ7", "whatever")
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ7", string(iso18626.TypeActionReceived), "ISIL:RESP7")
@@ -322,11 +322,11 @@ func TestMessageSupplierMissingSupplier(t *testing.T) {
 func TestMessageRequesterFailToBegin(t *testing.T) {
 	var receivedTasks []events.Event
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusProblem, events.EventNameMessageRequester)
-	eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		if event.ID == eventId {
 			receivedTasks = append(receivedTasks, event)
 		}
@@ -349,13 +349,14 @@ func TestMessageRequesterFailToBegin(t *testing.T) {
 
 func TestMessageRequesterCompleteWithError(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
-		completedTask = append(completedTask, event)
-	})
-
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	illId := createIllTrans(t, illRepo, "", "ISIL:REQ4", string(iso18626.TypeActionReceived), "ISIL:RESP4")
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
+		if event.IllTransactionID == illId {
+			completedTask = append(completedTask, event)
+		}
+	})
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
 	if err != nil {
@@ -375,11 +376,11 @@ func TestMessageRequesterCompleteWithError(t *testing.T) {
 
 func TestMessageRequesterInvalidStatus(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ5", "whatever")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP5", "whatever")
@@ -404,11 +405,11 @@ func TestMessageRequesterInvalidStatus(t *testing.T) {
 
 func TestMessageSupplierInvalidAction(t *testing.T) {
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		completedTask = append(completedTask, event)
 	})
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ6", "whatever")
 	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP6", "whatever")
@@ -555,7 +556,7 @@ func TestSendHttpPost(t *testing.T) {
 }
 
 func TestRequestLocallyAvailable(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
 	data, err := os.ReadFile("../testdata/request-locally-available.xml")
 	assert.NoError(t, err)
@@ -620,7 +621,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	// now change the broker mode to translucent and repeat the request with a new id
 	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
 	assert.NoError(t, err)
-	peer.BrokerMode = string(extctx.BrokerModeTranslucent)
+	peer.BrokerMode = string(common.BrokerModeTranslucent)
 	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
 	assert.NoError(t, err)
 	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)
@@ -692,7 +693,7 @@ func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requesterId string, re
 		}
 	}
 	illId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:          illId,
 		Timestamp:   test.GetNow(),
 		RequesterID: reqId,

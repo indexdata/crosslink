@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/service"
@@ -26,16 +26,16 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 
 func TestLocateSuppliersAndSelect(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "return-ISIL:SUP-TEST-1")
 	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
@@ -104,16 +104,16 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 }
 
 func TestLocateSuppliersNoUpdate(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	var completedLocateSuppliers []events.Event
 	illTrId := createIllTransaction(t, illRepo, "return-ISIL:NOCHANGE")
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedSelect []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
 			completedSelect = append(completedSelect, event)
 		}
@@ -181,10 +181,10 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 }
 
 func TestLocateSuppliersOrder(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "LOANED;LOANED")
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
@@ -231,7 +231,7 @@ func TestLocateSuppliersOrder(t *testing.T) {
 }
 
 func TestLocateSupplierUnreachable(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "ERROR;LOANED")
 	illTr, err := illRepo.GetIllTransactionById(appCtx, illTrId)
 	if err != nil {
@@ -246,19 +246,19 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 		t.Error("failed to update ill transaction: " + err.Error())
 	}
 	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedMessageSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedMessageSupplier = append(completedMessageSupplier, event)
 		}
 	})
 	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
@@ -300,10 +300,10 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 }
 
 func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "sup-test-1")
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
@@ -366,16 +366,16 @@ func TestLocateSuppliersErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			illTrId := createIllTransaction(t, illRepo, tt.supReqId)
 			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					completedTask = append(completedTask, event)
 				}
 			})
 			var messageRequester []events.Event
-			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					messageRequester = append(messageRequester, event)
 				}
@@ -437,16 +437,16 @@ func TestSelectSupplierErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			illTrId := apptest.GetIllTransId(t, illRepo)
 			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx extctx.ExtendedContext, event events.Event) {
+			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					completedTask = append(completedTask, event)
 				}
 			})
 			var messageRequester []events.Event
-			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					messageRequester = append(messageRequester, event)
 				}
@@ -483,11 +483,11 @@ func TestSelectSupplierErrors(t *testing.T) {
 }
 
 func TestCreatePeerFromDirectoryResponse(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
 	illTrId := createIllTransaction(t, illRepo, "return-"+supSymbol)
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
@@ -517,9 +517,9 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 }
 
 func TestUnfilledMessageWithReason(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTransparent))
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supSymbol,
@@ -527,7 +527,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 	}
 	illTrId := uuid.New().String()
 	reqReqId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:                 illTrId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
@@ -538,10 +538,10 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
-	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTransparent))
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
@@ -598,9 +598,9 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 }
 
 func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supSymbol,
@@ -608,7 +608,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	}
 	illTrId := uuid.New().String()
 	reqReqId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:                 illTrId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
@@ -619,10 +619,10 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
-	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
@@ -664,22 +664,22 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	if !test.WaitForPredicateToBeTrue(func() bool {
 		if len(completedTask) > 1 {
 			event, _ = eventRepo.GetEvent(appCtx, completedTask[0].ID)
-			return event.EventStatus == events.EventStatusSuccess
+			return event.EventStatus == events.EventStatusProblem // Transaction created in db and ill mock does not know about it
 		}
 		return false
 	}) {
 		t.Error("expected to have request event received and processed")
 	}
-	assert.Equal(t, events.EventStatusSuccess, event.EventStatus)
-	doNotSend, ok := event.ResultData.CustomData["doNotSend"].(bool)
-	assert.True(t, doNotSend)
-	assert.True(t, ok)
+	assert.Equal(t, events.EventStatusProblem, event.EventStatus)
+	doNotSend, ok := event.ResultData.CustomData[common.DO_NOT_SEND].(bool)
+	assert.False(t, doNotSend)
+	assert.False(t, ok)
 }
 
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque), extctx.VendorAlma)
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), common.VendorAlma)
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
@@ -687,7 +687,7 @@ func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	}
 	illTrId := uuid.New().String()
 	reqReqId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:                 illTrId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
@@ -701,7 +701,7 @@ func TestLocalSupplyToAlmaPeer(t *testing.T) {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
@@ -741,7 +741,7 @@ func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId
 	}
 	illId := uuid.New().String()
 	reqReqId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
 		IllTransactionData: data,
@@ -761,7 +761,7 @@ func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId
 }
 
 func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans int, borrows int) ill_db.Peer {
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer, err := illRepo.GetPeerBySymbol(ctx, symbol)
 	if err != nil {
 		peer, err := illRepo.SavePeer(ctx, ill_db.SavePeerParams{

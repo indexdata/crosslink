@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -141,7 +141,7 @@ func TestLookup(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
+	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
 	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
@@ -151,7 +151,7 @@ func TestLookup(t *testing.T) {
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
 	assert.Len(t, entries[0].Symbols, 1)
-	assert.Equal(t, extctx.BrokerModeTransparent, entries[0].BrokerMode)
+	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
 	assert.Len(t, entries[3].Symbols, 1)
 	assert.Len(t, entries[3].BranchSymbols, 2)
@@ -168,7 +168,7 @@ func TestLookup(t *testing.T) {
 }
 
 func TestFilterAndSort(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -256,7 +256,7 @@ func TestFilterAndSort(t *testing.T) {
 }
 
 func TestFilterAndSortFilterByCost(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
@@ -282,7 +282,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 }
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
@@ -308,7 +308,7 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 }
 
 func TestFilterAndSortByType(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -338,7 +338,7 @@ func TestFilterAndSortByType(t *testing.T) {
 }
 
 func TestFilterAndSortByLevel(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -368,7 +368,7 @@ func TestFilterAndSortByLevel(t *testing.T) {
 }
 
 func TestFilterAndSortReciprocal(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[4]
 	entries := []adapter.Supplier{
@@ -397,7 +397,7 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{

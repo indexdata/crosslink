@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/utils"
@@ -47,7 +47,7 @@ func GetNow() pgtype.Timestamp {
 
 func GetIllTransId(t *testing.T, illRepo ill_db.IllRepo) string {
 	illId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID:        illId,
 		Timestamp: GetNow(),
 	})
@@ -62,7 +62,7 @@ func GetEventId(t *testing.T, eventRepo events.EventRepo, illId string, eventTyp
 
 func GetEventIdWithData(t *testing.T, eventRepo events.EventRepo, illId string, eventType events.EventType, status events.EventStatus, eventName events.EventName, data events.EventData) string {
 	eventId := uuid.New().String()
-	_, err := eventRepo.SaveEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
+	_, err := eventRepo.SaveEvent(common.CreateExtCtxWithArgs(context.Background(), nil), events.SaveEventParams{
 		ID:               eventId,
 		IllTransactionID: illId,
 		Timestamp:        GetNow(),
@@ -84,11 +84,11 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
-	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, extctx.VendorReShare)
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, common.VendorReShare)
 }
 
-func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor extctx.Vendor) ill_db.Peer {
-	peer, err := illRepo.SavePeer(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor common.Vendor) ill_db.Peer {
+	peer, err := illRepo.SavePeer(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          symbol,
 		Url:           url,
@@ -103,7 +103,7 @@ func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol st
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)
 	}
-	_, err = illRepo.SaveSymbol(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveSymbolParams{
+	_, err = illRepo.SaveSymbol(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveSymbolParams{
 		SymbolValue: symbol,
 		PeerID:      peer.ID,
 	})
@@ -114,7 +114,7 @@ func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol st
 }
 
 func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId string, supplierId string, supplierSymbol string, status string) ill_db.LocatedSupplier {
-	supplier, err := illRepo.SaveLocatedSupplier(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
+	supplier, err := illRepo.SaveLocatedSupplier(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: illTransId,
 		SupplierID:       supplierId,
@@ -136,18 +136,18 @@ func CreateLocatedSupplier(t *testing.T, illRepo ill_db.IllRepo, illTransId stri
 	return supplier
 }
 
-func EventsCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, expected string) {
+func EventsCompareString(appCtx common.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, expected string) {
 	actual := eventsToCompareString(appCtx, eventRepo, t, illId, strings.Count(expected, "\n"))
 	assert.Equal(t, expected, actual)
 }
 
-func eventsToCompareString(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
+func eventsToCompareString(appCtx common.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int) string {
 	return EventsToCompareStringFunc(appCtx, eventRepo, t, illId, messageCount, false, func(e events.Event) string {
 		return fmt.Sprintf(EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
 	})
 }
 
-func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, ignoreState bool, eventFmt func(events.Event) string) string {
+func EventsToCompareStringFunc(appCtx common.ExtendedContext, eventRepo events.EventRepo, t *testing.T, illId string, messageCount int, ignoreState bool, eventFmt func(events.Event) string) string {
 	var eventList []events.Event
 	var err error
 
@@ -180,7 +180,7 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 		if e.EventStatus == events.EventStatusError {
 			value += ", error=" + e.ResultData.EventError.Message
 		}
-		if doNotSendValue, ok := e.ResultData.CustomData["doNotSend"].(bool); doNotSendValue && ok {
+		if doNotSendValue, ok := e.ResultData.CustomData[common.DO_NOT_SEND].(bool); doNotSendValue && ok {
 			value += ", doNotSend=true"
 		}
 		value += "\n"

@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/stretchr/testify/mock"
@@ -14,20 +14,20 @@ type MockEventRepositorySuccess struct {
 	mock.Mock
 }
 
-func (r *MockEventRepositorySuccess) WithTxFunc(ctx extctx.ExtendedContext, fn func(events.EventRepo) error) error {
+func (r *MockEventRepositorySuccess) WithTxFunc(ctx common.ExtendedContext, fn func(events.EventRepo) error) error {
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) SaveEvent(ctx extctx.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
+func (r *MockEventRepositorySuccess) SaveEvent(ctx common.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
 	var event = (events.Event)(params)
 	return event, nil
 }
 
-func (r *MockEventRepositorySuccess) UpdateEventStatus(ctx extctx.ExtendedContext, params events.UpdateEventStatusParams) (events.Event, error) {
+func (r *MockEventRepositorySuccess) UpdateEventStatus(ctx common.ExtendedContext, params events.UpdateEventStatusParams) (events.Event, error) {
 	return events.Event{}, nil
 }
 
-func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id string) (events.Event, error) {
+func (r *MockEventRepositorySuccess) GetEvent(ctx common.ExtendedContext, id string) (events.Event, error) {
 	switch id {
 	case "t-1-n":
 		return events.Event{
@@ -59,29 +59,29 @@ func (r *MockEventRepositorySuccess) GetEvent(ctx extctx.ExtendedContext, id str
 	}
 }
 
-func (r *MockEventRepositorySuccess) GetEventForUpdate(ctx extctx.ExtendedContext, id string) (events.Event, error) {
+func (r *MockEventRepositorySuccess) GetEventForUpdate(ctx common.ExtendedContext, id string) (events.Event, error) {
 	return r.GetEvent(ctx, id)
 }
 
-func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
+func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
 	return r.GetEvent(ctx, id)
 }
 
-func (r *MockEventRepositorySuccess) Notify(ctx extctx.ExtendedContext, eventId string, signal events.Signal) error {
+func (r *MockEventRepositorySuccess) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]events.Event, int64, error) {
+func (r *MockEventRepositorySuccess) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]events.Event, int64, error) {
 	return []events.Event{{
 		ID: uuid.New().String(),
 	}}, 0, nil
 }
 
-func (r *MockEventRepositorySuccess) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
+func (r *MockEventRepositorySuccess) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
 	return nil
 }
 
-func (r *MockEventRepositorySuccess) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (events.Event, error) {
+func (r *MockEventRepositorySuccess) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
 	return events.Event{
 		ID:               uuid.New().String(),
 		IllTransactionID: illTransId,
@@ -92,42 +92,42 @@ type MockEventRepositoryError struct {
 	mock.Mock
 }
 
-func (r *MockEventRepositoryError) WithTxFunc(ctx extctx.ExtendedContext, fn func(events.EventRepo) error) error {
+func (r *MockEventRepositoryError) WithTxFunc(ctx common.ExtendedContext, fn func(events.EventRepo) error) error {
 	return nil
 }
 
-func (r *MockEventRepositoryError) SaveEvent(ctx extctx.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
+func (r *MockEventRepositoryError) SaveEvent(ctx common.ExtendedContext, params events.SaveEventParams) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetEvent(ctx extctx.ExtendedContext, id string) (events.Event, error) {
+func (r *MockEventRepositoryError) GetEvent(ctx common.ExtendedContext, id string) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetEventForUpdate(ctx extctx.ExtendedContext, id string) (events.Event, error) {
+func (r *MockEventRepositoryError) GetEventForUpdate(ctx common.ExtendedContext, id string) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
+func (r *MockEventRepositoryError) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) UpdateEventStatus(ctx extctx.ExtendedContext, params events.UpdateEventStatusParams) (events.Event, error) {
+func (r *MockEventRepositoryError) UpdateEventStatus(ctx common.ExtendedContext, params events.UpdateEventStatusParams) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) Notify(ctx extctx.ExtendedContext, eventId string, signal events.Signal) error {
+func (r *MockEventRepositoryError) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
 	return errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]events.Event, int64, error) {
+func (r *MockEventRepositoryError) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]events.Event, int64, error) {
 	return []events.Event{}, 0, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
+func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
 	return errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (events.Event, error) {
+func (r *MockEventRepositoryError) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }

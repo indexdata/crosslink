@@ -25,7 +25,7 @@ import (
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -69,7 +69,7 @@ var SHUTDOWN_DELAY, _ = utils.GetEnvAny("SHUTDOWN_DELAY", time.Duration(15*float
 })
 
 var ServeMux *http.ServeMux
-var appCtx = extctx.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
+var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
 	EventBus   events.EventBus
@@ -97,11 +97,11 @@ func configLog() slog.Handler {
 	}
 	if strings.EqualFold(ENABLE_JSON_LOG, "true") {
 		jsonHandler := slog.NewJSONHandler(os.Stdout, opts)
-		extctx.DefaultLogHandler = jsonHandler
+		common.DefaultLogHandler = jsonHandler
 		return jsonHandler
 	} else {
 		textHandler := slog.NewTextHandler(os.Stdout, opts)
-		extctx.DefaultLogHandler = textHandler
+		common.DefaultLogHandler = textHandler
 		return textHandler
 	}
 }
@@ -274,7 +274,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
-	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
+	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
 	if err != nil {
 		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
@@ -291,12 +291,12 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func getBrokerMode(mode string) extctx.BrokerMode {
-	if strings.EqualFold(mode, string(extctx.BrokerModeTransparent)) {
-		return extctx.BrokerModeTransparent
-	} else if strings.EqualFold(mode, string(extctx.BrokerModeTranslucent)) {
-		return extctx.BrokerModeTranslucent
+func getBrokerMode(mode string) common.BrokerMode {
+	if strings.EqualFold(mode, string(common.BrokerModeTransparent)) {
+		return common.BrokerModeTransparent
+	} else if strings.EqualFold(mode, string(common.BrokerModeTranslucent)) {
+		return common.BrokerModeTranslucent
 	} else {
-		return extctx.BrokerModeOpaque
+		return common.BrokerModeOpaque
 	}
 }

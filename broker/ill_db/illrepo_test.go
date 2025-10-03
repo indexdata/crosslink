@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -53,7 +53,7 @@ func TestGetCachedPeersBySymbol(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// create a local peer which will be subsequently updated during directory refresh
 	peer0, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "123", Name: "Old ISIL:AU-VUMC peer", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
@@ -107,7 +107,7 @@ func TestUpdateCachedPeersNoRefresh(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: GetPgNow()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})
@@ -158,7 +158,7 @@ func TestUpdateCachedPeersWithRefresh(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	da := createDirectoryAdapter(server.URL)
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer, err := illRepo.SavePeer(ctx, SavePeerParams{ID: "1234", Name: "Old ISIL:NU peer", Vendor: "Alma", BrokerMode: "opaque", RefreshPolicy: "transaction", RefreshTime: Get10MinsAgo()})
 	assert.Equal(t, err, nil)
 	_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{SymbolValue: "ISIL:AU-NU", PeerID: peer.ID})

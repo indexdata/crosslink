@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -121,7 +121,7 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, s
 	return directoryList, query, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 
 	filtered := []Supplier{}
@@ -339,22 +339,22 @@ func getPeerTiers(peerData map[string]any) []Tier {
 	return tiers
 }
 
-func GetVendorFromUrl(url string) extctx.Vendor {
+func GetVendorFromUrl(url string) common.Vendor {
 	if strings.Contains(url, "alma.exlibrisgroup.com") {
-		return extctx.VendorAlma
+		return common.VendorAlma
 	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
-		return extctx.VendorReShare
+		return common.VendorReShare
 	} else {
-		return extctx.VendorUnknown
+		return common.VendorUnknown
 	}
 }
 
-func GetBrokerMode(vendor extctx.Vendor) extctx.BrokerMode {
+func GetBrokerMode(vendor common.Vendor) common.BrokerMode {
 	switch vendor {
-	case extctx.VendorAlma:
-		return extctx.BrokerModeOpaque
-	case extctx.VendorReShare:
-		return extctx.BrokerModeTransparent
+	case common.VendorAlma:
+		return common.BrokerModeOpaque
+	case common.VendorReShare:
+		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE
 	}

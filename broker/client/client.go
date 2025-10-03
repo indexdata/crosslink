@@ -10,7 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/httpclient"
@@ -83,17 +83,17 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 	}
 }
 
-func (c *Iso18626Client) MessageRequester(ctx extctx.ExtendedContext, event events.Event) {
+func (c *Iso18626Client) MessageRequester(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
 	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
 }
 
-func (c *Iso18626Client) MessageSupplier(ctx extctx.ExtendedContext, event events.Event) {
+func (c *Iso18626Client) MessageSupplier(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
 	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
-func (c *Iso18626Client) getSkippedSupplierAndPeer(ctx extctx.ExtendedContext, illTransId, symbol string) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
+func (c *Iso18626Client) getSkippedSupplierAndPeer(ctx common.ExtendedContext, illTransId, symbol string) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
 	skipped, err := c.illRepo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTransId, symbol)
 	if err != nil {
 		return nil, nil, err
@@ -149,7 +149,7 @@ func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
 	}
 }
 
-func (c *Iso18626Client) updateSupplierStatus(ctx extctx.ExtendedContext, id string, status string) error {
+func (c *Iso18626Client) updateSupplierStatus(ctx common.ExtendedContext, id string, status string) error {
 	err := c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByIdForUpdate(ctx, id)
 		if err != nil {
@@ -251,14 +251,14 @@ func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agency
 
 func isDoNotSend(event events.Event) bool {
 	if event.EventData.CustomData != nil {
-		if forward, ok := event.EventData.CustomData["doNotSend"].(bool); ok && forward {
+		if forward, ok := event.EventData.CustomData[common.DO_NOT_SEND].(bool); ok && forward {
 			return true
 		}
 	}
 	return false
 }
 
-func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext, illTransId string, supplierSymbol string, action string) error {
+func (c *Iso18626Client) updateSelectedSupplierAction(ctx common.ExtendedContext, illTransId string, supplierSymbol string, action string) error {
 	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx, illTransId, supplierSymbol)
 		if err != nil {
@@ -274,7 +274,7 @@ func (c *Iso18626Client) updateSelectedSupplierAction(ctx extctx.ExtendedContext
 	})
 }
 
-func (c *Iso18626Client) getSelectedSupplierAndPeer(ctx extctx.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
+func (c *Iso18626Client) getSelectedSupplierAndPeer(ctx common.ExtendedContext, transaction ill_db.IllTransaction) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {
 	selectedSupplier, err := c.illRepo.GetSelectedSupplierForIllTransaction(ctx, transaction.ID)
 	if err != nil {
 		return nil, nil, err
@@ -288,14 +288,14 @@ func (c *Iso18626Client) getSelectedSupplierAndPeer(ctx extctx.ExtendedContext, 
 
 func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool, brokerMode string) iso18626.Header {
 	requesterSymbol := strings.SplitN(brokerSymbol, ":", 2)
-	if !isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent) {
+	if !isRequestingMessage || brokerMode == string(common.BrokerModeTransparent) {
 		requesterSymbol = strings.SplitN(transaction.RequesterSymbol.String, ":", 2)
 	}
 	if len(requesterSymbol) < 2 {
 		requesterSymbol = append(requesterSymbol, "")
 	}
 	supplierSymbol := strings.SplitN(brokerSymbol, ":", 2)
-	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(extctx.BrokerModeTransparent)) {
+	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(common.BrokerModeTransparent)) {
 		supplierSymbol = strings.SplitN(sup.SupplierSymbol, ":", 2)
 	}
 	return iso18626.Header{
@@ -340,7 +340,7 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 	return expectedReason
 }
 
-func (c *Iso18626Client) checkConfirmationError(ctx extctx.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
+func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
 	status := defaultStatus
 	if response.RequestConfirmation != nil &&
 		response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
@@ -524,7 +524,7 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 	return name, agencyId, address, email
 }
 
-func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, event events.Event, supplierMandatory bool) (transactionContext, error) {
+func (c *Iso18626Client) readTransactionContext(ctx common.ExtendedContext, event events.Event, supplierMandatory bool) (transactionContext, error) {
 	transCtx := transactionContext{
 		event: event,
 	}
@@ -549,7 +549,7 @@ func (c *Iso18626Client) readTransactionContext(ctx extctx.ExtendedContext, even
 	return transCtx, nil
 }
 
-func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	trCtx, err := c.readTransactionContext(ctx, event, false)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
@@ -574,7 +574,7 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx extctx.Extended
 	return c.sendAndUpdateStatus(ctx, trCtx, message)
 }
 
-func (c *Iso18626Client) determineMessageTarget(ctx extctx.ExtendedContext, trCtx transactionContext) (*messageTarget, error) {
+func (c *Iso18626Client) determineMessageTarget(ctx common.ExtendedContext, trCtx transactionContext) (*messageTarget, error) {
 	msgSupplierSymbol := getSymbol(trCtx.event.EventData.IncomingMessage)
 	isNotification := isNotification(trCtx.event.EventData.IncomingMessage)
 	if trCtx.selectedSupplier == nil {
@@ -589,7 +589,7 @@ func (c *Iso18626Client) determineMessageTarget(ctx extctx.ExtendedContext, trCt
 }
 
 // There is no selected supplier. This is either skipped supplier message or message that Ill Transaction is unfilled
-func (c *Iso18626Client) handleNoSelectedSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string, isNotification bool) (*messageTarget, error) {
+func (c *Iso18626Client) handleNoSelectedSupplier(ctx common.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string, isNotification bool) (*messageTarget, error) {
 	if isNotification && msgSupplierSymbol != "" {
 		return c.handleSkippedSupplierNotification(ctx, trCtx, msgSupplierSymbol)
 	}
@@ -598,13 +598,13 @@ func (c *Iso18626Client) handleNoSelectedSupplier(ctx extctx.ExtendedContext, tr
 }
 
 // Handle message from skipped supplier
-func (c *Iso18626Client) handleSkippedSupplierNotification(ctx extctx.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string) (*messageTarget, error) {
+func (c *Iso18626Client) handleSkippedSupplierNotification(ctx common.ExtendedContext, trCtx transactionContext, msgSupplierSymbol string) (*messageTarget, error) {
 	skipped, skippedPeer, err := c.getSkippedSupplierAndPeer(ctx, trCtx.transaction.ID, msgSupplierSymbol)
 	if err != nil {
 		return nil, err
 	}
 
-	if trCtx.requester.BrokerMode == string(extctx.BrokerModeTransparent) {
+	if trCtx.requester.BrokerMode == string(common.BrokerModeTransparent) {
 		return &messageTarget{
 			supplier:     skipped,
 			peer:         skippedPeer,
@@ -629,7 +629,7 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 
 	if !lastReceivedStatus.Valid {
 		if trCtx.event.EventData.IncomingMessage == nil {
-			if trCtx.requester.BrokerMode == string(extctx.BrokerModeTransparent) || trCtx.requester.BrokerMode == string(extctx.BrokerModeTranslucent) {
+			if trCtx.requester.BrokerMode == string(common.BrokerModeTransparent) || trCtx.requester.BrokerMode == string(common.BrokerModeTranslucent) {
 				// Send first ExpectToSupply message before supplier has confirmed
 				return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
 			}
@@ -671,12 +671,12 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	return message
 }
 
-func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message) (events.EventStatus, *events.EventResult) {
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
 	if isDoNotSend(trCtx.event) || blockUnfilled(trCtx) {
-		resData.CustomData = map[string]any{"doNotSend": true}
+		resData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
 		response, err := c.SendHttpPost(trCtx.requester, message)
@@ -703,7 +703,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 	return events.EventStatusSuccess, resData
 }
 
-func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	trCtx, err := c.readTransactionContext(ctx, event, true)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, FailedToGetTrCtx, err)
@@ -769,7 +769,7 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 	return message, found, nil
 }
 
-func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
 	eventStatus := events.EventStatusSuccess
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
@@ -791,7 +791,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 		if resData.CustomData == nil {
 			resData.CustomData = map[string]any{}
 		}
-		resData.CustomData["doNotSend"] = true
+		resData.CustomData[common.DO_NOT_SEND] = true
 		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??
@@ -809,5 +809,5 @@ func blockUnfilled(trCtx transactionContext) bool {
 	}
 	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
 	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
-	return !noteOrReasonExists || trCtx.requester.BrokerMode == string(extctx.BrokerModeOpaque)
+	return !noteOrReasonExists
 }

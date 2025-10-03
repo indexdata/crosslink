@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,38 +16,38 @@ import (
 
 type IllRepo interface {
 	repo.Transactional[IllRepo]
-	SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
-	GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
-	GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
-	GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error)
-	ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error)
-	GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error)
-	DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error
-	SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error)
-	GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error)
-	GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error)
-	GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error)
-	ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error)
-	DeletePeer(ctx extctx.ExtendedContext, id string) error
-	SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
-	GetLocatedSuppliersByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
-	GetLocatedSuppliersByIllTransaction(ctx extctx.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
-	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
-	GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.ExtendedContext, id, symbol string) (LocatedSupplier, error)
-	GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx extctx.ExtendedContext, id, symbol string) (LocatedSupplier, error)
-	GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error)
-	DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
-	GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]LocatedSupplier, error)
-	GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
-	GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error)
-	SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error)
-	DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
-	GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error)
-	SaveBranchSymbol(ctx extctx.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error)
-	GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]BranchSymbol, error)
-	DeleteBranchSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error
-	CallArchiveIllTransactionByDateAndStatus(ctx extctx.ExtendedContext, toDate time.Time, statuses []string) error
+	SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error)
+	GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
+	GetIllTransactionByRequesterRequestIdForUpdate(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error)
+	GetIllTransactionById(ctx common.ExtendedContext, id string) (IllTransaction, error)
+	GetIllTransactionByIdForUpdate(ctx common.ExtendedContext, id string) (IllTransaction, error)
+	ListIllTransactions(ctx common.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error)
+	GetIllTransactionsByRequesterSymbol(ctx common.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error)
+	DeleteIllTransaction(ctx common.ExtendedContext, id string) error
+	SavePeer(ctx common.ExtendedContext, params SavePeerParams) (Peer, error)
+	GetPeerById(ctx common.ExtendedContext, id string) (Peer, error)
+	GetRequesterByIllTransactionId(ctx common.ExtendedContext, illTransactionId string) (Peer, error)
+	GetPeerBySymbol(ctx common.ExtendedContext, symbol string) (Peer, error)
+	ListPeers(ctx common.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error)
+	DeletePeer(ctx common.ExtendedContext, id string) error
+	SaveLocatedSupplier(ctx common.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error)
+	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
+	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
+	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
+	GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
+	GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error)
+	DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error
+	GetLocatedSupplierByPeerId(ctx common.ExtendedContext, peerId string) ([]LocatedSupplier, error)
+	GetIllTransactionByRequesterId(ctx common.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error)
+	GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error)
+	SaveSymbol(ctx common.ExtendedContext, params SaveSymbolParams) (Symbol, error)
+	DeleteSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
+	GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]Symbol, error)
+	SaveBranchSymbol(ctx common.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error)
+	GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
+	DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
+	CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error
 }
 
 type PgIllRepo struct {
@@ -56,7 +56,7 @@ type PgIllRepo struct {
 }
 
 // delegate transaction handling to Base
-func (r *PgIllRepo) WithTxFunc(ctx extctx.ExtendedContext, fn func(IllRepo) error) error {
+func (r *PgIllRepo) WithTxFunc(ctx common.ExtendedContext, fn func(IllRepo) error) error {
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 
@@ -67,32 +67,32 @@ func (r *PgIllRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[IllRepo]) IllRepo
 	return eventRepo
 }
 
-func (r *PgIllRepo) SaveIllTransaction(ctx extctx.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
+func (r *PgIllRepo) SaveIllTransaction(ctx common.ExtendedContext, params SaveIllTransactionParams) (IllTransaction, error) {
 	row, err := r.queries.SaveIllTransaction(ctx, r.GetConnOrTx(), params)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
+func (r *PgIllRepo) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
 	row, err := r.queries.GetIllTransactionByRequesterRequestId(ctx, r.GetConnOrTx(), requesterRequestID)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) GetIllTransactionByRequesterRequestIdForUpdate(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
+func (r *PgIllRepo) GetIllTransactionByRequesterRequestIdForUpdate(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (IllTransaction, error) {
 	row, err := r.queries.GetIllTransactionByRequesterRequestIdForUpdate(ctx, r.GetConnOrTx(), requesterRequestID)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) GetIllTransactionById(ctx extctx.ExtendedContext, id string) (IllTransaction, error) {
+func (r *PgIllRepo) GetIllTransactionById(ctx common.ExtendedContext, id string) (IllTransaction, error) {
 	row, err := r.queries.GetIllTransactionById(ctx, r.GetConnOrTx(), id)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx extctx.ExtendedContext, id string) (IllTransaction, error) {
+func (r *PgIllRepo) GetIllTransactionByIdForUpdate(ctx common.ExtendedContext, id string) (IllTransaction, error) {
 	row, err := r.queries.GetIllTransactionByIdForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.IllTransaction, err
 }
 
-func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error) {
+func (r *PgIllRepo) ListIllTransactions(ctx common.ExtendedContext, params ListIllTransactionsParams, cql *string) ([]IllTransaction, int64, error) {
 	rows, err := r.queries.ListIllTransactionsCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
@@ -115,7 +115,7 @@ func (r *PgIllRepo) ListIllTransactions(ctx extctx.ExtendedContext, params ListI
 	return transactions, fullCount, err
 }
 
-func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error) {
+func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx common.ExtendedContext, params GetIllTransactionsByRequesterSymbolParams, cql *string) ([]IllTransaction, int64, error) {
 	rows, err := r.queries.GetIllTransactionsByRequesterSymbolCql(ctx, r.GetConnOrTx(), params, cql)
 	var transactions []IllTransaction
 	var fullCount int64
@@ -128,26 +128,26 @@ func (r *PgIllRepo) GetIllTransactionsByRequesterSymbol(ctx extctx.ExtendedConte
 	return transactions, fullCount, err
 }
 
-func (r *PgIllRepo) DeleteIllTransaction(ctx extctx.ExtendedContext, id string) error {
+func (r *PgIllRepo) DeleteIllTransaction(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeleteIllTransaction(ctx, r.GetConnOrTx(), id)
 }
 
-func (r *PgIllRepo) GetPeerById(ctx extctx.ExtendedContext, id string) (Peer, error) {
+func (r *PgIllRepo) GetPeerById(ctx common.ExtendedContext, id string) (Peer, error) {
 	row, err := r.queries.GetPeerById(ctx, r.GetConnOrTx(), id)
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) GetRequesterByIllTransactionId(ctx extctx.ExtendedContext, illTransactionId string) (Peer, error) {
+func (r *PgIllRepo) GetRequesterByIllTransactionId(ctx common.ExtendedContext, illTransactionId string) (Peer, error) {
 	row, err := r.queries.GetRequesterByIllTransactionId(ctx, r.GetConnOrTx(), illTransactionId)
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) GetPeerBySymbol(ctx extctx.ExtendedContext, symbol string) (Peer, error) {
+func (r *PgIllRepo) GetPeerBySymbol(ctx common.ExtendedContext, symbol string) (Peer, error) {
 	row, err := r.queries.GetPeerBySymbol(ctx, r.GetConnOrTx(), symbol)
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error) {
+func (r *PgIllRepo) ListPeers(ctx common.ExtendedContext, params ListPeersParams, cql *string) ([]Peer, int64, error) {
 	rows, err := r.queries.ListPeersCql(ctx, r.GetConnOrTx(), params, cql)
 	var peers []Peer
 	var fullCount int64
@@ -160,7 +160,7 @@ func (r *PgIllRepo) ListPeers(ctx extctx.ExtendedContext, params ListPeersParams
 	return peers, fullCount, err
 }
 
-func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionAndStatus(ctx extctx.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error) {
+func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error) {
 	rows, err := r.queries.GetLocatedSuppliersByIllTransactionAndStatus(ctx, r.GetConnOrTx(), params)
 	var suppliers []LocatedSupplier
 	if err == nil {
@@ -171,26 +171,26 @@ func (r *PgIllRepo) GetLocatedSuppliersByIllTransactionAndStatus(ctx extctx.Exte
 	return suppliers, err
 }
 
-func (r *PgIllRepo) SavePeer(ctx extctx.ExtendedContext, params SavePeerParams) (Peer, error) {
+func (r *PgIllRepo) SavePeer(ctx common.ExtendedContext, params SavePeerParams) (Peer, error) {
 	row, err := r.queries.SavePeer(ctx, r.GetConnOrTx(), params)
 	return row.Peer, err
 }
 
-func (r *PgIllRepo) DeletePeer(ctx extctx.ExtendedContext, id string) error {
+func (r *PgIllRepo) DeletePeer(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeletePeer(ctx, r.GetConnOrTx(), id)
 }
 
-func (r *PgIllRepo) SaveLocatedSupplier(ctx extctx.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error) {
+func (r *PgIllRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params SaveLocatedSupplierParams) (LocatedSupplier, error) {
 	row, err := r.queries.SaveLocatedSupplier(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx extctx.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx, r.GetConnOrTx(), params)
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.ExtendedContext, illTransId, symbol string) (LocatedSupplier, error) {
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, illTransId, symbol string) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSymbol(ctx, r.GetConnOrTx(), GetLocatedSupplierByIllTransactionAndSymbolParams{
 		IllTransactionID: illTransId,
 		SupplierSymbol:   symbol,
@@ -198,7 +198,7 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbol(ctx extctx.Exten
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx extctx.ExtendedContext, illTransId, symbol string) (LocatedSupplier, error) {
+func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx common.ExtendedContext, illTransId, symbol string) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx, r.GetConnOrTx(), GetLocatedSupplierByIllTransactionAndSymbolForUpdateParams{
 		IllTransactionID: illTransId,
 		SupplierSymbol:   symbol,
@@ -206,7 +206,7 @@ func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx ext
 	return row.LocatedSupplier, err
 }
 
-func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx extctx.ExtendedContext, id string) ([]LocatedSupplier, int64, error) {
+func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error) {
 	rows, err := r.queries.GetLocatedSuppliersByIllTransaction(ctx, r.GetConnOrTx(), id)
 	var suppliers []LocatedSupplier
 	var fullCount int64
@@ -219,7 +219,7 @@ func (r *PgIllRepo) GetLocatedSuppliersByIllTransaction(ctx extctx.ExtendedConte
 	return suppliers, fullCount, err
 }
 
-func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (LocatedSupplier, error) {
+func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error) {
 	selSup, err := r.GetLocatedSuppliersByIllTransactionAndStatus(ctx, GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: illTransId,
 		SupplierStatus:   SupplierStateSelectedPg,
@@ -230,21 +230,21 @@ func (r *PgIllRepo) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedCont
 	return getSelectedSupplierForIllTransactionForCommon(selSup, illTransId)
 }
 
-func (r *PgIllRepo) DeleteLocatedSupplierByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
+func (r *PgIllRepo) DeleteLocatedSupplierByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
 	return r.queries.DeleteLocatedSuppliersByIllTransaction(ctx, r.GetConnOrTx(), illTransId)
 }
 
-func (r *PgIllRepo) SaveSymbol(ctx extctx.ExtendedContext, params SaveSymbolParams) (Symbol, error) {
+func (r *PgIllRepo) SaveSymbol(ctx common.ExtendedContext, params SaveSymbolParams) (Symbol, error) {
 	sym, err := r.queries.SaveSymbol(ctx, r.GetConnOrTx(), params)
 	return sym.Symbol, err
 }
 
-func (r *PgIllRepo) SaveBranchSymbol(ctx extctx.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error) {
+func (r *PgIllRepo) SaveBranchSymbol(ctx common.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error) {
 	sym, err := r.queries.SaveBranchSymbol(ctx, r.GetConnOrTx(), params)
 	return sym.BranchSymbol, err
 }
 
-func (r *PgIllRepo) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]Symbol, error) {
+func (r *PgIllRepo) GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]Symbol, error) {
 	rows, err := r.queries.GetSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
 	var symbols []Symbol
 	if err == nil {
@@ -255,7 +255,7 @@ func (r *PgIllRepo) GetSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string
 	return symbols, err
 }
 
-func (r *PgIllRepo) GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId string) ([]BranchSymbol, error) {
+func (r *PgIllRepo) GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {
 	rows, err := r.queries.GetBranchSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
 	var symbols []BranchSymbol
 	if err == nil {
@@ -266,15 +266,15 @@ func (r *PgIllRepo) GetBranchSymbolsByPeerId(ctx extctx.ExtendedContext, peerId 
 	return symbols, err
 }
 
-func (r *PgIllRepo) DeleteSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
+func (r *PgIllRepo) DeleteSymbolByPeerId(ctx common.ExtendedContext, peerId string) error {
 	return r.queries.DeleteSymbolByPeerId(ctx, r.GetConnOrTx(), peerId)
 }
 
-func (r *PgIllRepo) DeleteBranchSymbolByPeerId(ctx extctx.ExtendedContext, peerId string) error {
+func (r *PgIllRepo) DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error {
 	return r.queries.DeleteBranchSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
 }
 
-func (r *PgIllRepo) GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error) {
+func (r *PgIllRepo) GetIllTransactionByRequesterId(ctx common.ExtendedContext, peerId pgtype.Text) ([]IllTransaction, error) {
 	rows, err := r.queries.GetIllTransactionByRequesterId(ctx, r.GetConnOrTx(), peerId)
 	var trans []IllTransaction
 	if err == nil {
@@ -285,7 +285,7 @@ func (r *PgIllRepo) GetIllTransactionByRequesterId(ctx extctx.ExtendedContext, p
 	return trans, err
 }
 
-func (r *PgIllRepo) GetLocatedSupplierByPeerId(ctx extctx.ExtendedContext, peerId string) ([]LocatedSupplier, error) {
+func (r *PgIllRepo) GetLocatedSupplierByPeerId(ctx common.ExtendedContext, peerId string) ([]LocatedSupplier, error) {
 	rows, err := r.queries.GetLocatedSupplierByPeerId(ctx, r.GetConnOrTx(), peerId)
 	var suppliers []LocatedSupplier
 	if err == nil {
@@ -306,7 +306,7 @@ func getSelectedSupplierForIllTransactionForCommon(selSup []LocatedSupplier, ill
 	}
 }
 
-func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, lookupSymbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
+func (r *PgIllRepo) GetCachedPeersBySymbols(ctx common.ExtendedContext, lookupSymbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]Peer, string, error) {
 	symbolToPeer, symbolsToFetch := r.mapSymbolsAndFilterStale(ctx, lookupSymbols)
 	if len(symbolsToFetch) == 0 {
 		return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), "<cached>", nil
@@ -362,7 +362,7 @@ func (r *PgIllRepo) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, lookupSy
 	return getSliceFromMapInOrder(symbolToPeer, lookupSymbols), query, nil
 }
 
-func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dirEntry adapter.DirectoryEntry) (Peer, error) {
+func (r *PgIllRepo) createNewPeer(ctx common.ExtendedContext, dirEntry adapter.DirectoryEntry) (Peer, error) {
 	var peer Peer
 	var err error
 	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
@@ -405,7 +405,7 @@ func (r *PgIllRepo) createNewPeer(ctx extctx.ExtendedContext, dirEntry adapter.D
 	return peer, err
 }
 
-func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, dirEntry adapter.DirectoryEntry) (Peer, error) {
+func (r *PgIllRepo) updateExistingPeer(ctx common.ExtendedContext, peer Peer, dirEntry adapter.DirectoryEntry) (Peer, error) {
 	peer.Url = dirEntry.URL
 	peer.CustomData = dirEntry.CustomData
 	peer.Name = dirEntry.Name
@@ -450,7 +450,7 @@ func (r *PgIllRepo) updateExistingPeer(ctx extctx.ExtendedContext, peer Peer, di
 	return peer, nil
 }
 
-func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx extctx.ExtendedContext, symbols []string) (map[string]Peer, []string) {
+func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols []string) (map[string]Peer, []string) {
 	var symbolsToFetch []string
 	symbolToPeer := make(map[string]Peer)
 	for _, sym := range symbols {
@@ -472,7 +472,7 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx extctx.ExtendedContext, symbols
 	return symbolToPeer, symbolsToFetch
 }
 
-func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx extctx.ExtendedContext, toDate time.Time, statuses []string) error {
+func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
 	_, err := r.queries.CallArchiveIllTransactionByDateAndStatus(ctx, r.GetConnOrTx(), CallArchiveIllTransactionByDateAndStatusParams{toDate, statuses})
 	return err
 }
