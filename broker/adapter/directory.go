@@ -4,15 +4,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"strconv"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
-var DEFAULT_BROKER_MODE extctx.BrokerMode
+var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error)
-	FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
+	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
@@ -24,8 +24,8 @@ type DirectoryEntry struct {
 	BranchSymbols []string
 	Name          string
 	URL           string
-	Vendor        extctx.Vendor
-	BrokerMode    extctx.BrokerMode
+	Vendor        common.Vendor
+	BrokerMode    common.BrokerMode
 	CustomData    map[string]any
 }
 

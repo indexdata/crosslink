@@ -17,7 +17,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -73,7 +73,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestRequestLOANED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f343"
 	data, _ := os.ReadFile("../testdata/request-loaned.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -118,7 +118,7 @@ func TestRequestLOANED(t *testing.T) {
 }
 
 func TestRequestUNFILLED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f342"
 	data, _ := os.ReadFile("../testdata/request-unfilled.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -176,8 +176,8 @@ func TestRequestUNFILLED(t *testing.T) {
 }
 
 func TestMessageAfterUNFILLED(t *testing.T) {
-	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f352"
 	data, _ := os.ReadFile("../testdata/request-unfilled-2.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -241,12 +241,12 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 		return illTrans.PrevSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
-	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
+	adapter.DEFAULT_BROKER_MODE = common.BrokerModeOpaque
 }
 
 func TestMessageSkipped(t *testing.T) {
-	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeTransparent
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -313,11 +313,11 @@ func TestMessageSkipped(t *testing.T) {
 		return illTrans.PrevSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
-	adapter.DEFAULT_BROKER_MODE = extctx.BrokerModeOpaque
+	adapter.DEFAULT_BROKER_MODE = common.BrokerModeOpaque
 }
 
 func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f344"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -365,8 +365,8 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeOpaque))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(string(data), "{index}", "0")
@@ -410,8 +410,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Broker(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-2", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTranslucent))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-2", adapter.MOCK_CLIENT_URL, string(common.BrokerModeTranslucent))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-2"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(string(data), "{index}", "2")
@@ -453,8 +453,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Broker(t *testing
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTransparent))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-3"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "3"), "BROKER", "SUP1")
@@ -510,8 +510,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 }
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-4", adapter.MOCK_CLIENT_URL, string(extctx.BrokerModeTranslucent))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-4", adapter.MOCK_CLIENT_URL, string(common.BrokerModeTranslucent))
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-4"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "4"), "BROKER", "SUP1")
@@ -554,7 +554,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTranslucent_Supplier(t *testi
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f341"
 	data, _ := os.ReadFile("../testdata/request-willsupply-unfilled-willsupply-loaned.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -610,7 +610,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 }
 
 func TestRequestLOANED_OVERDUE(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "20e99395-4c3b-4229-ab91-49d5f7073188"
 	data, _ := os.ReadFile("../testdata/request-loaned-overdue.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -658,7 +658,7 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 }
 
 func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "20e99395-4c3b-4229-ab91-49d5f7073189"
 	data, _ := os.ReadFile("../testdata/request-loaned-overdue-renew.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
@@ -754,7 +754,7 @@ func TestRequestREMINDER(t *testing.T) {
 }
 
 func TestRequestRETRY_COST(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "fc60b4fa-5f98-49a8-a2a0-f17b76fa16a8"
 	data, err := os.ReadFile("../testdata/request-retry-1.xml")
 	assert.Nil(t, err)
@@ -789,7 +789,7 @@ func TestRequestRETRY_COST(t *testing.T) {
 }
 
 func TestRequestRETRY_COST_LOANED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "5636c993-c41c-48f4-a285-470545f6f346"
 	data, err := os.ReadFile("../testdata/request-retry-cost-loaned.xml")
 	assert.Nil(t, err)
@@ -836,7 +836,7 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 }
 
 func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "f8ef7750-982d-41bc-a123-0e18169a0018"
 	data, err := os.ReadFile("../testdata/request-retry-onloan-loaned.xml")
 	assert.Nil(t, err)

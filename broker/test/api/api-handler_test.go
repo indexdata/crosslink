@@ -17,7 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -115,7 +115,7 @@ func TestGetEvents(t *testing.T) {
 
 func TestGetIllTransactions(t *testing.T) {
 	id := apptest.GetIllTransId(t, illRepo)
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	trans, err := illRepo.GetIllTransactionById(ctx, id)
 	assert.NoError(t, err)
 	reqReqId := uuid.NewString()
@@ -150,7 +150,7 @@ func TestGetIllTransactions(t *testing.T) {
 		}
 		illId := uuid.NewString()
 		reqReqId := uuid.NewString()
-		_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+		_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 			ID: illId,
 			RequesterSymbol: pgtype.Text{
 				String: requester,
@@ -285,7 +285,7 @@ func TestBrokerCRUD(t *testing.T) {
 	// app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	illId := uuid.New().String()
 	reqReqId := uuid.New().String()
-	_, err := illRepo.SaveIllTransaction(extctx.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
+	_, err := illRepo.SaveIllTransaction(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SaveIllTransactionParams{
 		ID: illId,
 		RequesterSymbol: pgtype.Text{
 			String: "ISIL:DK-DIKU",
@@ -717,7 +717,7 @@ func TestPostArchiveIllTransactions(t *testing.T) {
 		Time:  time.Now().Add(-(24 * 5 * time.Hour)),
 		Valid: true,
 	}
-	ctx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illId := apptest.GetIllTransId(t, illRepo)
 	illTr, err := illRepo.GetIllTransactionById(ctx, illId)
 	assert.Nil(t, err)

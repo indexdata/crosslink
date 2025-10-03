@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -27,7 +27,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:NOCHANGE"},
 			URL:        MOCK_CLIENT_URL,
-			Vendor:     extctx.VendorUnknown,
+			Vendor:     common.VendorUnknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, strings.Join(params.Symbols, ","), nil
 	}
@@ -37,14 +37,14 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		dirs = append(dirs, DirectoryEntry{
 			Symbols:    []string{value},
 			URL:        MOCK_CLIENT_URL,
-			Vendor:     extctx.VendorUnknown,
+			Vendor:     common.VendorUnknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		})
 	}
 	return dirs, strings.Join(params.Symbols, ","), nil
 }
 
-func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx extctx.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 	rotaInfo.Request.Type = "mock"
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))

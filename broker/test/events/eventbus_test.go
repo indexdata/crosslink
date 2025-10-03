@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -80,7 +80,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		err = app.StartEventBus(ctx, eventBus)
@@ -88,7 +88,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}
 
 	var requestReceived1 []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
 	})
 
@@ -137,7 +137,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx extctx.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
 		err = app.StartEventBus(ctx, eventBus)
@@ -145,7 +145,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}
 
 	var requestReceived1 []events.Event
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
 	})
 
@@ -183,7 +183,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	var requestReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
 	illId := apptest.GetIllTransId(t, illRepo)
@@ -204,7 +204,7 @@ func TestCreateTask(t *testing.T) {
 	}
 }
 func TestTransactionRollback(t *testing.T) {
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventId := uuid.New().String()
 	illId := apptest.GetIllTransId(t, illRepo)
 	err := eventRepo.WithTxFunc(appCtx, func(eventRepo events.EventRepo) error {
@@ -242,7 +242,7 @@ func TestTransactionRollback(t *testing.T) {
 
 func TestCreateNotice(t *testing.T) {
 	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx common.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
@@ -272,13 +272,13 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	var eventsReceived []events.Event
 	var eventsStarted []events.Event
 	var eventsCompleted []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 		eventsReceived = append(eventsReceived, event)
 	})
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 		eventsStarted = append(eventsStarted, event)
 	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
@@ -301,7 +301,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 
 	eventId := eventsReceived[0].ID
 
-	event, err := eventRepo.GetEvent(extctx.CreateExtCtxWithArgs(context.Background(), nil), eventId)
+	event, err := eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventId)
 	assert.NoError(t, err, "Should not be error getting event")
 	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
 	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
@@ -393,7 +393,7 @@ func TestFailedToConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventBus := events.NewPostgresEventBus(nil, "postgres://crosslink:crosslink@localhost:111/crosslink?sslmode=disable")
-	err := eventBus.Start(extctx.CreateExtCtxWithArgs(ctx, nil))
+	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
 	if err == nil || strings.Index(err.Error(), "failed to connect to") > 0 {
 		t.Errorf("Should fail with: ailed to connect to ... but had %s", err.Error())
 	}
@@ -420,7 +420,7 @@ func TestReconnectListener(t *testing.T) {
 	time.Sleep(2000 * time.Millisecond)
 
 	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx extctx.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx common.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
