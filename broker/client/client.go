@@ -251,7 +251,7 @@ func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agency
 
 func isDoNotSend(event events.Event) bool {
 	if event.EventData.CustomData != nil {
-		if forward, ok := event.EventData.CustomData["doNotSend"].(bool); ok && forward {
+		if forward, ok := event.EventData.CustomData[extctx.DO_NOT_SEND].(bool); ok && forward {
 			return true
 		}
 	}
@@ -676,7 +676,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx extctx.ExtendedContext, trCtx t
 	resData.OutgoingMessage = message
 
 	if isDoNotSend(trCtx.event) || blockUnfilled(trCtx) {
-		resData.CustomData = map[string]any{"doNotSend": true}
+		resData.CustomData = map[string]any{extctx.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
 		response, err := c.SendHttpPost(trCtx.requester, message)
@@ -791,7 +791,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx extctx.ExtendedContext, trCtx
 		if resData.CustomData == nil {
 			resData.CustomData = map[string]any{}
 		}
-		resData.CustomData["doNotSend"] = true
+		resData.CustomData[extctx.DO_NOT_SEND] = true
 		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??

@@ -180,7 +180,7 @@ func EventsToCompareStringFunc(appCtx extctx.ExtendedContext, eventRepo events.E
 		if e.EventStatus == events.EventStatusError {
 			value += ", error=" + e.ResultData.EventError.Message
 		}
-		if doNotSendValue, ok := e.ResultData.CustomData["doNotSend"].(bool); doNotSendValue && ok {
+		if doNotSendValue, ok := e.ResultData.CustomData[extctx.DO_NOT_SEND].(bool); doNotSendValue && ok {
 			value += ", doNotSend=true"
 		}
 		value += "\n"

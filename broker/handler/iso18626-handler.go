@@ -893,7 +893,7 @@ func (c *Iso18626Handler) confirmSupplierResponse(ctx extctx.ExtendedContext, il
 					"requesterRequestId", confirmMsg.ConfirmationHeader.RequestingAgencyRequestId)
 			}
 		}
-	} else if doNotSend, foundOk := supplierResult.CustomData["doNotSend"].(bool); foundOk && doNotSend {
+	} else if doNotSend, foundOk := supplierResult.CustomData[extctx.DO_NOT_SEND].(bool); foundOk && doNotSend {
 		// message was not forwarded so reply with ok
 		messageStatus = iso18626.TypeMessageStatusOK
 	} else {
@@ -964,7 +964,7 @@ func (c *Iso18626Handler) confirmRequesterResponse(ctx extctx.ExtendedContext, i
 		wait.wg.Done()
 		ctx.Logger().Warn("forwarding HTTP error response from requester to supplier", "transactionId", illTransId, "error", requesterResult.HttpFailure)
 		return nil, requesterResult.HttpFailure
-	} else if doNotSend, foundOk := requesterResult.CustomData["doNotSend"].(bool); foundOk && doNotSend {
+	} else if doNotSend, foundOk := requesterResult.CustomData[extctx.DO_NOT_SEND].(bool); foundOk && doNotSend {
 		// message was not forwarded so reply with ok
 		messageStatus = iso18626.TypeMessageStatusOK
 	} else {

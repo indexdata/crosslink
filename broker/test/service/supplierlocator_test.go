@@ -671,7 +671,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 		t.Error("expected to have request event received and processed")
 	}
 	assert.Equal(t, events.EventStatusProblem, event.EventStatus)
-	doNotSend, ok := event.ResultData.CustomData["doNotSend"].(bool)
+	doNotSend, ok := event.ResultData.CustomData[extctx.DO_NOT_SEND].(bool)
 	assert.False(t, doNotSend)
 	assert.False(t, ok)
 }

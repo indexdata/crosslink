@@ -15,3 +15,5 @@ const (
 	VendorReShare Vendor = "ReShare"
 	VendorUnknown Vendor = "Unknown"
 )
+
+const DO_NOT_SEND = "doNotSend"

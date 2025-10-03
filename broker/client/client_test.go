@@ -675,7 +675,7 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	event := createSupplyingAgencyMessageEvent(true)
-	event.EventData.CustomData = map[string]any{"doNotSend": true}
+	event.EventData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
 
@@ -683,7 +683,7 @@ func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
-	doNotSend, ok := resData.CustomData["doNotSend"].(bool)
+	doNotSend, ok := resData.CustomData[common.DO_NOT_SEND].(bool)
 	assert.True(t, doNotSend)
 	assert.True(t, ok)
 }
@@ -755,7 +755,7 @@ func TestCreateRequestingAgencyMessage_error(t *testing.T) {
 func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	event := createSupplyingAgencyMessageEvent(true)
-	event.EventData.CustomData = map[string]any{"doNotSend": true}
+	event.EventData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
@@ -768,7 +768,7 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resData.OutgoingMessage)
-	doNotSend, ok := resData.CustomData["doNotSend"].(bool)
+	doNotSend, ok := resData.CustomData[common.DO_NOT_SEND].(bool)
 	assert.True(t, doNotSend)
 	assert.True(t, ok)
 }
