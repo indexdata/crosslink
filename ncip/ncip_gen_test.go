@@ -2,6 +2,7 @@ package ncip
 
 import (
 	"encoding/xml"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,14 +11,15 @@ import (
 func TestMarshal(t *testing.T) {
 	// Just a stub to make sure the generated code compiles
 	req := &NCIPMessage{
+		Version: "2.0",
 		LookupUser: &LookupUser{
 			InitiationHeader: &InitiationHeader{},
 		},
 	}
-	bytes, err := xml.Marshal(req)
+	var err error
+	exp, err := os.ReadFile("testdata/lookup_user_request.xml")
 	assert.NoError(t, err)
-	assert.Equal(t, `<NCIPMessage version=""><LookupUser><InitiationHeader><FromAgencyId><AgencyId></AgencyId>`+
-		`</FromAgencyId><ToAgencyId><AgencyId></AgencyId></ToAgencyId></InitiationHeader></LookupUser></NCIPMessage>`,
-		string(bytes))
-	t.Logf("XML: %s", bytes)
+	got, err := xml.MarshalIndent(req, "", "  ")
+	assert.NoError(t, err)
+	assert.Equal(t, string(exp), string(got))
 }

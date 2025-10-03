@@ -1,0 +1,12 @@
+<NCIPMessage xmlns="http://www.niso.org/2008/ncip" xmlns:ncip="http://www.niso.org/2008/ncip" ncip:version="2.0">
+  <LookupUser xmlns="http://www.niso.org/2008/ncip">
+    <InitiationHeader xmlns="http://www.niso.org/2008/ncip">
+      <FromAgencyId xmlns="http://www.niso.org/2008/ncip">
+        <AgencyId></AgencyId>
+      </FromAgencyId>
+      <ToAgencyId xmlns="http://www.niso.org/2008/ncip">
+        <AgencyId></AgencyId>
+      </ToAgencyId>
+    </InitiationHeader>
+  </LookupUser>
+</NCIPMessage>
