@@ -7,5 +7,6 @@ use (
 	./illmock
 	./iso18626
 	./marcxml
+	./ncip
 	./sru
 )
