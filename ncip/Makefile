@@ -11,7 +11,7 @@ COVERAGE=coverage.out
 
 all: generate
 
-generate: generate-schema 
+generate: generate-schema
 
 generate-schema: $(GEN_SCHEMA_OUT)
 

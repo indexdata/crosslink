@@ -13,6 +13,7 @@ COPY httpclient/ httpclient
 COPY marcxml/ marcxml
 COPY sru/ sru
 COPY iso18626/ iso18626
+COPY ncip/ ncip
 
 # Set destination for COPY
 WORKDIR /app/broker
