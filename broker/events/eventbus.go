@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,28 +20,28 @@ const EVENT_BUS_CHANNEL = "crosslink_channel"
 const EB_COMP = "event_bus"
 
 type EventBus interface {
-	Start(ctx extctx.ExtendedContext) error
+	Start(ctx common.ExtendedContext) error
 	CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
 	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
 	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
 	BeginTask(eventId string) (Event, error)
 	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
-	HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
-	HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
-	HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event))
-	ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
+	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	HandleTaskStarted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	HandleTaskCompleted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	ProcessTask(ctx common.ExtendedContext, event Event, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
-	GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error)
+	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 }
 
 type PostgresEventBus struct {
 	repo                  EventRepo
-	ctx                   extctx.ExtendedContext
+	ctx                   common.ExtendedContext
 	ConnectionString      string
-	EventCreatedHandlers  map[EventName][]func(ctx extctx.ExtendedContext, event Event)
-	TaskStartedHandlers   map[EventName][]func(ctx extctx.ExtendedContext, event Event)
-	TaskCompletedHandlers map[EventName][]func(ctx extctx.ExtendedContext, event Event)
+	EventCreatedHandlers  map[EventName][]func(ctx common.ExtendedContext, event Event)
+	TaskStartedHandlers   map[EventName][]func(ctx common.ExtendedContext, event Event)
+	TaskCompletedHandlers map[EventName][]func(ctx common.ExtendedContext, event Event)
 	randGen               *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
@@ -54,7 +54,7 @@ func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
 	}
 }
 
-func (p *PostgresEventBus) Start(ctx extctx.ExtendedContext) error {
+func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 	p.ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(EB_COMP))
 	var conn *pgx.Conn
 	var err error
@@ -164,16 +164,16 @@ func (p *PostgresEventBus) handleNotify(data NotifyData) {
 	}
 }
 
-func triggerHandlers(eventCtx extctx.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx extctx.ExtendedContext, event Event), signal Signal) {
+func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx common.ExtendedContext, event Event), signal Signal) {
 	var wg sync.WaitGroup
 	handlers, ok := handlersMap[event.EventName]
 	if ok {
 		eventCtx.Logger().Debug("found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
 		for _, handler := range handlers {
 			wg.Add(1)
-			go func(h func(extctx.ExtendedContext, Event), e Event) {
+			go func(h func(common.ExtendedContext, Event), e Event) {
 				defer wg.Done()
-				h(eventCtx.WithArgs(&extctx.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
+				h(eventCtx.WithArgs(&common.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
 			}(handler, event)
 		}
 	} else {
@@ -303,37 +303,37 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 	return event, err
 }
 
-func (p *PostgresEventBus) HandleEventCreated(eventName EventName, f func(ctx extctx.ExtendedContext, event Event)) {
+func (p *PostgresEventBus) HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
 	if p.EventCreatedHandlers == nil {
-		p.EventCreatedHandlers = make(map[EventName][]func(ctx extctx.ExtendedContext, event Event))
+		p.EventCreatedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
 	}
 	if p.EventCreatedHandlers[eventName] == nil {
-		p.EventCreatedHandlers[eventName] = []func(ctx extctx.ExtendedContext, event Event){}
+		p.EventCreatedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
 	}
 	p.EventCreatedHandlers[eventName] = append(p.EventCreatedHandlers[eventName], f)
 }
 
-func (p *PostgresEventBus) HandleTaskStarted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event)) {
+func (p *PostgresEventBus) HandleTaskStarted(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
 	if p.TaskStartedHandlers == nil {
-		p.TaskStartedHandlers = make(map[EventName][]func(ctx extctx.ExtendedContext, event Event))
+		p.TaskStartedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
 	}
 	if p.TaskStartedHandlers[eventName] == nil {
-		p.TaskStartedHandlers[eventName] = []func(ctx extctx.ExtendedContext, event Event){}
+		p.TaskStartedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
 	}
 	p.TaskStartedHandlers[eventName] = append(p.TaskStartedHandlers[eventName], f)
 }
 
-func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx extctx.ExtendedContext, event Event)) {
+func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
 	if p.TaskCompletedHandlers == nil {
-		p.TaskCompletedHandlers = make(map[EventName][]func(ctx extctx.ExtendedContext, event Event))
+		p.TaskCompletedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
 	}
 	if p.TaskCompletedHandlers[eventName] == nil {
-		p.TaskCompletedHandlers[eventName] = []func(ctx extctx.ExtendedContext, event Event){}
+		p.TaskCompletedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
 	}
 	p.TaskCompletedHandlers[eventName] = append(p.TaskCompletedHandlers[eventName], f)
 }
 
-func (p *PostgresEventBus) ProcessTask(ctx extctx.ExtendedContext, event Event, h func(extctx.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
+func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
 	inEvent := &event
 	event, err := p.BeginTask(event.ID)
 	if err != nil {
@@ -368,13 +368,13 @@ func (p *PostgresEventBus) FindAncestor(descendant *Event, ancestorName EventNam
 	return event
 }
 
-func (p *PostgresEventBus) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error) {
+func (p *PostgresEventBus) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error) {
 	return p.repo.GetLatestRequestEventByAction(ctx, illTransId, action)
 }
 
-func (p *PostgresEventBus) getEventContext(event *Event) extctx.ExtendedContext {
+func (p *PostgresEventBus) getEventContext(event *Event) common.ExtendedContext {
 	//TODO extend context with event name and status
-	return p.ctx.WithArgs(&extctx.LoggerArgs{
+	return p.ctx.WithArgs(&common.LoggerArgs{
 		TransactionId: event.IllTransactionID,
 		EventId:       event.ID,
 		Component:     EB_COMP,

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 )
 
@@ -20,7 +20,7 @@ func ParseDurationWithDays(archiveDelay string) (time.Duration, error) {
 	return time.Duration(days) * 24 * time.Hour, nil
 }
 
-func Archive(ctx extctx.ExtendedContext, illRepo ill_db.IllRepo, statusList string, archiveDelay string, background bool) error {
+func Archive(ctx common.ExtendedContext, illRepo ill_db.IllRepo, statusList string, archiveDelay string, background bool) error {
 	delayInterval, err := ParseDurationWithDays(archiveDelay)
 	if err != nil {
 		return err

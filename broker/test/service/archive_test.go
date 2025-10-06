@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +47,7 @@ func TestArchiveDbError(t *testing.T) {
 	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": "5h", "ArchiveStatus": "LoanCompleted"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ectx := extctx.CreateExtCtxWithArgs(ctx, &extctx.LoggerArgs{
+	ectx := common.CreateExtCtxWithArgs(ctx, &common.LoggerArgs{
 		Other: logParams,
 	})
 	err := service.Archive(ectx, illrepo, "LoanCompleted", "5h", false)
@@ -62,7 +62,7 @@ func TestArchiveBackground(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ectx := extctx.CreateExtCtxWithArgs(ctx, &extctx.LoggerArgs{
+	ectx := common.CreateExtCtxWithArgs(ctx, &common.LoggerArgs{
 		Other: logParams,
 	})
 	err := service.Archive(ectx, illrepo, "LoanCompleted", "5h", true)

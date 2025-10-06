@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/service"
 )
 
@@ -33,7 +33,7 @@ func run() error {
 		return err
 	}
 	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": duration, "ArchiveStatus": statusList}
-	ectx := extctx.CreateExtCtxWithArgs(ctx, &extctx.LoggerArgs{
+	ectx := common.CreateExtCtxWithArgs(ctx, &common.LoggerArgs{
 		Other: logParams,
 	})
 	return service.Archive(ectx, context.IllRepo, statusList, duration, false)

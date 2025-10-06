@@ -17,7 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
 	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
@@ -289,7 +289,7 @@ func TestIso18626PostSupplyingMessageConfirm(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illId := uuid.NewString()
 	requester := apptest.CreatePeer(t, illRepo, "ISIL:SUP_A", server.URL)
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
@@ -475,7 +475,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 			useMock:        true,
 		},
 	}
-	appCtx := extctx.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	data, _ := os.ReadFile("../testdata/reqmsg-notification.xml")
 	illId := uuid.NewString()
 	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_CLIENT_URL)
@@ -643,7 +643,7 @@ type MockRepositoryOnlyPeersOK struct {
 	mocks.MockIllRepositoryError
 }
 
-func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx extctx.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+func (r *MockRepositoryOnlyPeersOK) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
 	return []ill_db.Peer{{
 		ID:   "peer1",
 		Name: symbols[0],
@@ -654,11 +654,11 @@ type MockRepositoryReqNotFound struct {
 	mocks.MockIllRepositoryError
 }
 
-func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx extctx.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, pgx.ErrNoRows
 }
 
-func (r *MockRepositoryReqNotFound) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+func (r *MockRepositoryReqNotFound) WithTxFunc(ctx common.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
 	return pgx.ErrNoRows
 }
 
@@ -666,11 +666,11 @@ type MockRepositoryReqExists struct {
 	mocks.MockIllRepositorySuccess
 }
 
-func (r *MockRepositoryReqExists) SaveIllTransaction(ctx extctx.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
+func (r *MockRepositoryReqExists) SaveIllTransaction(ctx common.ExtendedContext, params ill_db.SaveIllTransactionParams) (ill_db.IllTransaction, error) {
 	return ill_db.IllTransaction{}, &pgconn.PgError{Code: "23505"}
 }
 
-func (r *MockRepositoryReqExists) WithTxFunc(ctx extctx.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
+func (r *MockRepositoryReqExists) WithTxFunc(ctx common.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
 	return &pgconn.PgError{Code: "23505"}
 }
 
@@ -678,7 +678,7 @@ type MockRepositoryOtherSupplier struct {
 	mocks.MockIllRepositorySuccess
 }
 
-func (r *MockRepositoryOtherSupplier) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+func (r *MockRepositoryOtherSupplier) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{
 		SupplierSymbol: "ISIL:OTHER",
 	}, nil
@@ -688,13 +688,13 @@ type MockRepositoryCurrentSupplier struct {
 	mocks.MockIllRepositorySuccess
 }
 
-func (r *MockRepositoryCurrentSupplier) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+func (r *MockRepositoryCurrentSupplier) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{
 		SupplierSymbol: "ISIL:SLNP_TWO_A",
 	}, nil
 }
 
-func (r *MockRepositoryCurrentSupplier) WithTxFunc(ctx extctx.ExtendedContext, fn func(ill_db.IllRepo) error) error {
+func (r *MockRepositoryCurrentSupplier) WithTxFunc(ctx common.ExtendedContext, fn func(ill_db.IllRepo) error) error {
 	return fn(r)
 }
 
@@ -702,6 +702,6 @@ type MockRepositorySupplierError struct {
 	mocks.MockIllRepositorySuccess
 }
 
-func (r *MockRepositorySupplierError) GetSelectedSupplierForIllTransaction(ctx extctx.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+func (r *MockRepositorySupplierError) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
 	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }

@@ -4,21 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 )
 
 type EventRepo interface {
 	repo.Transactional[EventRepo]
-	SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error)
-	UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) (Event, error)
-	GetEvent(ctx extctx.ExtendedContext, id string) (Event, error)
-	GetEventForUpdate(ctx extctx.ExtendedContext, id string) (Event, error)
-	ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error)
-	Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error
-	GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error)
-	DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error
-	GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error)
+	SaveEvent(ctx common.ExtendedContext, params SaveEventParams) (Event, error)
+	UpdateEventStatus(ctx common.ExtendedContext, params UpdateEventStatusParams) (Event, error)
+	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
+	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
+	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
+	Notify(ctx common.ExtendedContext, eventId string, signal Signal) error
+	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
+	DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error
+	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 }
 
 type PgEventRepo struct {
@@ -27,7 +27,7 @@ type PgEventRepo struct {
 }
 
 // delegate transaction handling to Base
-func (r *PgEventRepo) WithTxFunc(ctx extctx.ExtendedContext, fn func(EventRepo) error) error {
+func (r *PgEventRepo) WithTxFunc(ctx common.ExtendedContext, fn func(EventRepo) error) error {
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 
@@ -38,22 +38,22 @@ func (r *PgEventRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[EventRepo]) Eve
 	return eventRepo
 }
 
-func (r *PgEventRepo) SaveEvent(ctx extctx.ExtendedContext, params SaveEventParams) (Event, error) {
+func (r *PgEventRepo) SaveEvent(ctx common.ExtendedContext, params SaveEventParams) (Event, error) {
 	row, err := r.queries.SaveEvent(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) GetEvent(ctx extctx.ExtendedContext, id string) (Event, error) {
+func (r *PgEventRepo) GetEvent(ctx common.ExtendedContext, id string) (Event, error) {
 	row, err := r.queries.GetEvent(ctx, r.GetConnOrTx(), id)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) GetEventForUpdate(ctx extctx.ExtendedContext, id string) (Event, error) {
+func (r *PgEventRepo) GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error) {
 	row, err := r.queries.GetEventForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string, signal Signal) (Event, error) {
+func (r *PgEventRepo) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error) {
 	params := ClaimEventForSignalParams{
 		ID:         id,
 		LastSignal: string(signal),
@@ -62,12 +62,12 @@ func (r *PgEventRepo) ClaimEventForSignal(ctx extctx.ExtendedContext, id string,
 	return row.Event, err
 }
 
-func (r *PgEventRepo) UpdateEventStatus(ctx extctx.ExtendedContext, params UpdateEventStatusParams) (Event, error) {
+func (r *PgEventRepo) UpdateEventStatus(ctx common.ExtendedContext, params UpdateEventStatusParams) (Event, error) {
 	row, err := r.queries.UpdateEventStatus(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
 }
 
-func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal Signal) error {
+func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal) error {
 	data := NotifyData{
 		Event:  eventId,
 		Signal: signal,
@@ -78,7 +78,7 @@ func (r *PgEventRepo) Notify(ctx extctx.ExtendedContext, eventId string, signal 
 	return err
 }
 
-func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, id string) ([]Event, int64, error) {
+func (r *PgEventRepo) GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error) {
 	rows, err := r.queries.GetIllTransactionEvents(ctx, r.GetConnOrTx(), id)
 	var events []Event
 	var fullCount int64
@@ -91,11 +91,11 @@ func (r *PgEventRepo) GetIllTransactionEvents(ctx extctx.ExtendedContext, id str
 	return events, fullCount, err
 }
 
-func (r *PgEventRepo) DeleteEventsByIllTransaction(ctx extctx.ExtendedContext, illTransId string) error {
+func (r *PgEventRepo) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {
 	return r.queries.DeleteEventsByIllTransaction(ctx, r.GetConnOrTx(), illTransId)
 }
 
-func (r *PgEventRepo) GetLatestRequestEventByAction(ctx extctx.ExtendedContext, illTransId string, action string) (Event, error) {
+func (r *PgEventRepo) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error) {
 	row, err := r.queries.GetLatestRequestEventByAction(ctx, r.GetConnOrTx(), GetLatestRequestEventByActionParams{
 		Illtransactionid: illTransId,
 		Action:           action,

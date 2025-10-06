@@ -3,7 +3,7 @@ package repo
 import (
 	"context"
 
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,7 +18,7 @@ type ConnOrTx interface {
 
 type Transactional[T any] interface {
 	//execute operations on the receiver repo within a transaction
-	WithTxFunc(ctx extctx.ExtendedContext, fn func(T) error) error
+	WithTxFunc(ctx common.ExtendedContext, fn func(T) error) error
 }
 
 type PgDerivedRepo[T any] interface {
@@ -38,7 +38,7 @@ func (r *PgBaseRepo[T]) createWithPoolAndTx(pool *pgxpool.Pool, tx pgx.Tx) *PgBa
 	}
 }
 
-func (r *PgBaseRepo[T]) WithTxFunc(ctx extctx.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) error {
+func (r *PgBaseRepo[T]) WithTxFunc(ctx common.ExtendedContext, repo PgDerivedRepo[T], fn func(T) error) error {
 	tx, err := r.Pool.Begin(ctx)
 	if err != nil {
 		return err

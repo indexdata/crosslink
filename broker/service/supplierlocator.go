@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	extctx "github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -32,17 +32,17 @@ func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dir
 	}
 }
 
-func (s *SupplierLocator) LocateSuppliers(ctx extctx.ExtendedContext, event events.Event) {
+func (s *SupplierLocator) LocateSuppliers(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	_, _ = s.eventBus.ProcessTask(ctx, event, s.locateSuppliers)
 }
 
-func (s *SupplierLocator) SelectSupplier(ctx extctx.ExtendedContext, event events.Event) {
+func (s *SupplierLocator) SelectSupplier(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	_, _ = s.eventBus.ProcessTask(ctx, event, s.selectSupplier)
 }
 
-func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
@@ -115,7 +115,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 					local := false
 					supplierStatus := ill_db.SupplierStateNewPg
 					if illTrans.RequesterSymbol.Valid && sym == illTrans.RequesterSymbol.String {
-						if requester.BrokerMode == string(extctx.BrokerModeOpaque) {
+						if requester.BrokerMode == string(common.BrokerModeOpaque) {
 							supplierStatus = ill_db.SupplierStateSkippedPg // Skip local supplier
 						} else {
 							local = true
@@ -161,7 +161,7 @@ func (s *SupplierLocator) locateSuppliers(ctx extctx.ExtendedContext, event even
 	}
 }
 
-func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId string, ordinal int32, supplier *adapter.Supplier) (*ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId string, ordinal int32, supplier *adapter.Supplier) (*ill_db.LocatedSupplier, error) {
 	sup, err := s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams{
 		ID:               uuid.New().String(),
 		IllTransactionID: transId,
@@ -178,7 +178,7 @@ func (s *SupplierLocator) addLocatedSupplier(ctx extctx.ExtendedContext, transId
 	return &sup, err
 }
 
-func (s *SupplierLocator) selectSupplier(ctx extctx.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
 		SupplierStatus:   ill_db.SupplierStateSelectedPg,
