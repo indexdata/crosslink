@@ -7,6 +7,7 @@ The `illmock` is a service offering:
  * ILL flows service
  * Mock SRU/OASIS searchRetrieve service
  * Mock Directory entries service
+ * Mock NCIP server
 
 # ILL service
 
@@ -159,6 +160,10 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
 
 See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
 The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`.
+
+# NCIP server
+
+The mock NCIP server accepts message from `/ncip` endpoint.
 
 # Environment variables
 
