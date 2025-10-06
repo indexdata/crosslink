@@ -17,7 +17,10 @@ generate: generate-schema
 generate-schema: $(GEN_SCHEMA_OUT)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(XSD2GO) $< $@ namespaced=yes
+	$(XSD2GO) $< $@ \
+	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
+	dateTimeType=utils.XSDDateTime \
+	namespaced=yes
 	$(GO) fmt $@
 
 clean:

@@ -1,0 +1,17 @@
+<NCIPMessage xmlns="http://www.niso.org/2008/ncip" xmlns:ncip="http://www.niso.org/2008/ncip" ncip:version="http://www.niso.org/ncip/v2_02/imp1/xsd/ncip_v2_02.xsd">
+  <AcceptItem xmlns="http://www.niso.org/2008/ncip">
+    <InitiationHeader xmlns="http://www.niso.org/2008/ncip">
+      <FromAgencyId xmlns="http://www.niso.org/2008/ncip">
+        <AgencyId></AgencyId>
+      </FromAgencyId>
+      <ToAgencyId xmlns="http://www.niso.org/2008/ncip">
+        <AgencyId></AgencyId>
+      </ToAgencyId>
+    </InitiationHeader>
+    <RequestId xmlns="http://www.niso.org/2008/ncip">
+      <RequestIdentifierValue></RequestIdentifierValue>
+    </RequestId>
+    <RequestedActionType></RequestedActionType>
+    <DateForReturn>2025-10-06T11:14:00.592Z</DateForReturn>
+  </AcceptItem>
+</NCIPMessage>
