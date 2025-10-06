@@ -362,6 +362,7 @@ func (app *MockApp) Run() error {
 	mux.HandleFunc("/healthz", healthHandler())
 	mux.HandleFunc("/api/flows", app.flowsApi.HttpHandler())
 	mux.HandleFunc("/sru", app.sruApi.HttpHandler())
+	mux.HandleFunc("/ncip", getNcipMockHandler())
 
 	dir, err := dirmock.NewEnv()
 	if err != nil {
