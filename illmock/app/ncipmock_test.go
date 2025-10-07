@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/indexdata/crosslink/ncip"
@@ -16,8 +17,9 @@ var server *httptest.Server
 
 func TestMain(m *testing.M) {
 	server = httptest.NewServer(http.HandlerFunc(ncipMockHandler))
-	defer server.Close()
-	m.Run()
+	exitCode := m.Run()
+	server.Close()
+	os.Exit(exitCode)
 }
 
 func TestGet(t *testing.T) {
@@ -112,7 +114,34 @@ func TestPostMissingMessageType(t *testing.T) {
 	assert.Equal(t, string(ncip.UnsupportedService), ncipResponse.Problem[0].ProblemType.Text)
 }
 
-func TestPostLookupUserMissingId(t *testing.T) {
+func TestPostLookupUserMissingVersion(t *testing.T) {
+	req := ncip.NCIPMessage{
+		LookupUser: &ncip.LookupUser{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.Problem)
+	assert.Len(t, ncipResponse.Problem, 1)
+	assert.Equal(t, string(ncip.MissingVersion), ncipResponse.Problem[0].ProblemType.Text)
+}
+
+func TestPostLookupUserMissingUserId(t *testing.T) {
 	req := ncip.NCIPMessage{
 		Version:    ncip.NCIP_V2_02_XSD,
 		LookupUser: &ncip.LookupUser{},

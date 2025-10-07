@@ -163,7 +163,7 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 
 # NCIP server
 
-The mock NCIP server accepts message from `/ncip` endpoint.
+The mock NCIP server accepts messages from `/ncip` endpoint.
 
 # Environment variables
 

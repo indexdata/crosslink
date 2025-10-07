@@ -10,11 +10,7 @@ import (
 	"github.com/indexdata/crosslink/ncip"
 )
 
-func setProblem(problem []ncip.Problem, msg ncip.ProblemTypeMessage, detail string) []ncip.Problem {
-	// only first problem reported
-	if problem != nil {
-		return problem
-	}
+func setProblem(msg ncip.ProblemTypeMessage, detail string) []ncip.Problem {
 	return []ncip.Problem{
 		{
 			ProblemType:   ncip.SchemeValuePair{Text: string(msg)},
@@ -23,14 +19,14 @@ func setProblem(problem []ncip.Problem, msg ncip.ProblemTypeMessage, detail stri
 	}
 }
 
-func handleLookupUser(problems []ncip.Problem, req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
-	res.Version = req.Version
+func handleLookupUser(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
 	if req.LookupUser.UserId == nil && len(req.LookupUser.AuthenticationInput) == 0 {
-		problems = setProblem(problems, ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
+		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
 	}
 	res.LookupUserResponse = &ncip.LookupUserResponse{}
 	res.LookupUserResponse.UserId = req.LookupUser.UserId
-	res.LookupUserResponse.Problem = problems
+	res.LookupUserResponse.Problem = problem
 }
 
 func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
@@ -57,10 +53,10 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 	var problem []ncip.Problem
 	err = xml.Unmarshal(byteReq, &ncipRequest)
 	if err != nil {
-		problem = setProblem(problem, ncip.InvalidMessageSyntaxError, err.Error())
+		problem = setProblem(ncip.InvalidMessageSyntaxError, err.Error())
 	}
-	if ncipRequest.Version == "" {
-		problem = setProblem(problem, ncip.MissingVersion, "")
+	if problem == nil && ncipRequest.Version == "" {
+		problem = setProblem(ncip.MissingVersion, "")
 	}
 	var ncipResponse = ncip.NCIPMessage{
 		Version: ncipRequest.Version,
@@ -75,11 +71,12 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 	// CreateUserFiscalTransaction (fees and fines)
 
 	switch {
-	case ncipRequest.LookupUser != nil:
-		handleLookupUser(problem, &ncipRequest, &ncipResponse)
-	default:
-		problem = setProblem(problem, ncip.UnsupportedService, "")
+	case problem != nil:
 		ncipResponse.Problem = problem
+	case ncipRequest.LookupUser != nil:
+		handleLookupUser(&ncipRequest, &ncipResponse)
+	default:
+		ncipResponse.Problem = setProblem(ncip.UnsupportedService, "")
 	}
 	bytesResponse, err := xml.MarshalIndent(ncipResponse, "", "  ")
 	if err != nil {
