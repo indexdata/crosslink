@@ -37,7 +37,7 @@ func TestPostNoMediaType(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err := io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Contains(t, string(buf), "mime: no media type")
 }
 
@@ -50,7 +50,7 @@ func TestPostTextPlain(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err := io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Contains(t, string(buf), "unsupported media type")
 }
 
@@ -63,7 +63,7 @@ func TestPostXml(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err := io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var ncipResponse ncip.NCIPMessage
 	err = xml.Unmarshal(buf, &ncipResponse)
 	assert.NoError(t, err)
@@ -84,7 +84,7 @@ func TestPostMissingVersion(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var ncipResponse ncip.NCIPMessage
 	err = xml.Unmarshal(buf, &ncipResponse)
 	assert.NoError(t, err)
@@ -132,7 +132,7 @@ func TestPostLookupUserMissingVersion(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var ncipResponse ncip.NCIPMessage
 	err = xml.Unmarshal(buf, &ncipResponse)
 	assert.NoError(t, err)
@@ -156,7 +156,7 @@ func TestPostLookupUserMissingUserId(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var ncipResponse ncip.NCIPMessage
 	err = xml.Unmarshal(buf, &ncipResponse)
 	assert.NoError(t, err)
