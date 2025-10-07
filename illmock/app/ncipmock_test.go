@@ -105,7 +105,7 @@ func TestPostMissingMessageType(t *testing.T) {
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var ncipResponse ncip.NCIPMessage
 	err = xml.Unmarshal(buf, &ncipResponse)
 	assert.NoError(t, err)
