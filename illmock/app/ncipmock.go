@@ -115,6 +115,57 @@ func handleCancelRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	res.CancelRequestItemResponse.Problem = problem
 }
 
+func handleCheckInItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.CheckInItemResponse = &ncip.CheckInItemResponse{}
+	if req.CheckInItem.ItemId.ItemIdentifierValue == "" {
+		problem = setProblem(ncip.NeededDataMissing, "ItemId is required")
+	}
+	if problem == nil && strings.HasPrefix(req.CheckInItem.ItemId.ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.CheckInItem.ItemId.ItemIdentifierValue)
+	}
+	res.CheckInItemResponse.ItemId = &req.CheckInItem.ItemId
+	res.CheckInItemResponse.Problem = problem
+}
+
+func handleCheckOutItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.CheckOutItemResponse = &ncip.CheckOutItemResponse{}
+	if req.CheckOutItem.UserId == nil && len(req.CheckOutItem.AuthenticationInput) == 0 {
+		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
+	}
+	if req.CheckOutItem.ItemId.ItemIdentifierValue == "" {
+		problem = setProblem(ncip.NeededDataMissing, "ItemId is required")
+	}
+	if problem == nil && req.CheckOutItem.UserId != nil && strings.HasPrefix(req.CheckOutItem.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.CheckOutItem.UserId.UserIdentifierValue)
+	}
+	if problem == nil && strings.HasPrefix(req.CheckOutItem.ItemId.ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.CheckOutItem.ItemId.ItemIdentifierValue)
+	}
+	res.CheckOutItemResponse.ItemId = &req.CheckOutItem.ItemId
+	res.CheckOutItemResponse.UserId = req.CheckOutItem.UserId
+	res.CheckOutItemResponse.Problem = problem
+}
+
+func handleCreateUserFiscalTransaction(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.CreateUserFiscalTransactionResponse = &ncip.CreateUserFiscalTransactionResponse{}
+	if req.CreateUserFiscalTransaction.UserId == nil && len(req.CreateUserFiscalTransaction.AuthenticationInput) == 0 {
+		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
+	}
+	if req.CreateUserFiscalTransaction.FiscalTransactionInformation.FiscalActionType.Text == "" {
+		problem = setProblem(ncip.NeededDataMissing, "FiscalTransactionInformation is required")
+	}
+	if problem == nil && req.CreateUserFiscalTransaction.UserId != nil && strings.HasPrefix(req.CreateUserFiscalTransaction.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.CreateUserFiscalTransaction.UserId.UserIdentifierValue)
+	}
+	res.CreateUserFiscalTransactionResponse.UserId = req.CreateUserFiscalTransaction.UserId
+	res.CreateUserFiscalTransactionResponse.FiscalTransactionReferenceId =
+		req.CreateUserFiscalTransaction.FiscalTransactionInformation.FiscalTransactionReferenceId
+	res.CreateUserFiscalTransactionResponse.Problem = problem
+}
+
 func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -147,15 +198,6 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 	var ncipResponse = ncip.NCIPMessage{
 		Version: ncipRequest.Version,
 	}
-	// LookupUser
-	// AcceptItem
-	// DeleteItem
-	// RequestItem
-	// CancelRequestItem
-	// CheckInItem
-	// CheckOutItem
-	// CreateUserFiscalTransaction (fees and fines)
-
 	switch {
 	case problem != nil:
 		ncipResponse.Problem = problem
@@ -169,6 +211,12 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 		handleRequestItem(&ncipRequest, &ncipResponse)
 	case ncipRequest.CancelRequestItem != nil:
 		handleCancelRequestItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.CheckInItem != nil:
+		handleCheckInItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.CheckOutItem != nil:
+		handleCheckOutItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.CreateUserFiscalTransaction != nil:
+		handleCreateUserFiscalTransaction(&ncipRequest, &ncipResponse)
 	default:
 		ncipResponse.Problem = setProblem(ncip.UnsupportedService, "")
 	}

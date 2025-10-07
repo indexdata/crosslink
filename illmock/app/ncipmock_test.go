@@ -556,3 +556,209 @@ func TestPostCancelRequestItemFailItemId(t *testing.T) {
 	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.CancelRequestItemResponse.Problem[0].ProblemType.Text)
 	assert.Equal(t, "fitem-001", ncipResponse.CancelRequestItemResponse.Problem[0].ProblemDetail)
 }
+
+func TestPostCheckInItemOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckInItem: &ncip.CheckInItem{
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckInItemResponse)
+	assert.Len(t, ncipResponse.CheckInItemResponse.Problem, 0)
+}
+
+func TestPostCheckInItemMissingItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version:     ncip.NCIP_V2_02_XSD,
+		CheckInItem: &ncip.CheckInItem{},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckInItemResponse)
+	assert.Len(t, ncipResponse.CheckInItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.CheckInItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "ItemId is required", ncipResponse.CheckInItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCheckInItemFailItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckInItem: &ncip.CheckInItem{
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "fitem-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckInItemResponse)
+	assert.Len(t, ncipResponse.CheckInItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.CheckInItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "fitem-001", ncipResponse.CheckInItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCheckOutItemOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 0)
+}
+
+func TestPostCheckOutItemMissingUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.CheckOutItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "UserId or AuthenticationInput is required", ncipResponse.CheckOutItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCheckOutItemMissingItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.CheckOutItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "ItemId is required", ncipResponse.CheckOutItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCheckOutFailUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "f12345",
+			},
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownUser), ncipResponse.CheckOutItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "f12345", ncipResponse.CheckOutItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCheckOutFailItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "fitem-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.CheckOutItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "fitem-001", ncipResponse.CheckOutItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCreateUserFiscalTransactionOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CreateUserFiscalTransaction: &ncip.CreateUserFiscalTransaction{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			FiscalTransactionInformation: ncip.FiscalTransactionInformation{
+				FiscalActionType: ncip.SchemeValuePair{Text: "Charge"},
+				FiscalTransactionReferenceId: &ncip.FiscalTransactionReferenceId{
+					FiscalTransactionIdentifierValue: "ft-001",
+				},
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CreateUserFiscalTransactionResponse)
+	assert.Len(t, ncipResponse.CreateUserFiscalTransactionResponse.Problem, 0)
+}
+
+func TestPostCreateUserFiscalTransactionMissingUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CreateUserFiscalTransaction: &ncip.CreateUserFiscalTransaction{
+			FiscalTransactionInformation: ncip.FiscalTransactionInformation{
+				FiscalActionType: ncip.SchemeValuePair{Text: "Charge"},
+				FiscalTransactionReferenceId: &ncip.FiscalTransactionReferenceId{
+					FiscalTransactionIdentifierValue: "ft-001",
+				},
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CreateUserFiscalTransactionResponse)
+	assert.Len(t, ncipResponse.CreateUserFiscalTransactionResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "UserId or AuthenticationInput is required", ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCreateUserFiscalTransactionMissingTransactionInformation(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CreateUserFiscalTransaction: &ncip.CreateUserFiscalTransaction{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CreateUserFiscalTransactionResponse)
+	assert.Len(t, ncipResponse.CreateUserFiscalTransactionResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "FiscalTransactionInformation is required", ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostCreateUserFiscalTransactionFailUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CreateUserFiscalTransaction: &ncip.CreateUserFiscalTransaction{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "f12345",
+			},
+			FiscalTransactionInformation: ncip.FiscalTransactionInformation{
+				FiscalActionType: ncip.SchemeValuePair{Text: "Charge"},
+				FiscalTransactionReferenceId: &ncip.FiscalTransactionReferenceId{
+					FiscalTransactionIdentifierValue: "ft-001",
+				},
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CreateUserFiscalTransactionResponse)
+	assert.Len(t, ncipResponse.CreateUserFiscalTransactionResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownUser), ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "f12345", ncipResponse.CreateUserFiscalTransactionResponse.Problem[0].ProblemDetail)
+}
