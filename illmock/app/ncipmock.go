@@ -63,7 +63,13 @@ func handleDeleteItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 func handleRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	var problem []ncip.Problem
 	res.RequestItemResponse = &ncip.RequestItemResponse{}
-	if req.RequestItem.RequestType.Text == "" {
+	if req.RequestItem.UserId == nil && len(req.RequestItem.AuthenticationInput) == 0 {
+		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
+	}
+	if len(req.RequestItem.BibliographicId) == 0 && len(req.RequestItem.ItemId) == 0 {
+		problem = setProblem(ncip.NeededDataMissing, "BibliographicId or ItemId is required")
+	}
+	if problem == nil && req.RequestItem.RequestType.Text == "" {
 		problem = setProblem(ncip.NeededDataMissing, "RequestType is required")
 	}
 	if problem == nil && req.RequestItem.RequestScopeType.Text == "" {
@@ -83,6 +89,30 @@ func handleRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	res.RequestItemResponse.RequestId = req.RequestItem.RequestId
 	res.RequestItemResponse.UserId = req.RequestItem.UserId
 	res.RequestItemResponse.Problem = problem
+}
+
+func handleCancelRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.CancelRequestItemResponse = &ncip.CancelRequestItemResponse{}
+	if req.CancelRequestItem.UserId == nil && len(req.CancelRequestItem.AuthenticationInput) == 0 {
+		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
+	}
+	if req.CancelRequestItem.RequestId == nil && req.CancelRequestItem.ItemId == nil {
+		problem = setProblem(ncip.NeededDataMissing, "RequestId or ItemId is required")
+	}
+	if req.CancelRequestItem.RequestType.Text == "" {
+		problem = setProblem(ncip.NeededDataMissing, "RequestType is required")
+	}
+	if problem == nil && req.CancelRequestItem.UserId != nil && strings.HasPrefix(req.CancelRequestItem.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.CancelRequestItem.UserId.UserIdentifierValue)
+	}
+	if problem == nil && req.CancelRequestItem.ItemId != nil && strings.HasPrefix(req.CancelRequestItem.ItemId.ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.CancelRequestItem.ItemId.ItemIdentifierValue)
+	}
+	res.CancelRequestItemResponse.ItemId = req.CancelRequestItem.ItemId
+	res.CancelRequestItemResponse.RequestId = req.CancelRequestItem.RequestId
+	res.CancelRequestItemResponse.UserId = req.CancelRequestItem.UserId
+	res.CancelRequestItemResponse.Problem = problem
 }
 
 func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +167,8 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 		handleDeleteItem(&ncipRequest, &ncipResponse)
 	case ncipRequest.RequestItem != nil:
 		handleRequestItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.CancelRequestItem != nil:
+		handleCancelRequestItem(&ncipRequest, &ncipResponse)
 	default:
 		ncipResponse.Problem = setProblem(ncip.UnsupportedService, "")
 	}
