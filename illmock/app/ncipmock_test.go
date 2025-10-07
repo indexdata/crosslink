@@ -356,3 +356,226 @@ func TestPostAcceptItemFailItemId(t *testing.T) {
 	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.AcceptItemResponse.Problem[0].ProblemType.Text)
 	assert.Equal(t, "fitem-001", ncipResponse.AcceptItemResponse.Problem[0].ProblemDetail)
 }
+
+func TestPostDeleteItemOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		DeleteItem: &ncip.DeleteItem{
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.DeleteItemResponse)
+	assert.Len(t, ncipResponse.DeleteItemResponse.Problem, 0)
+}
+
+func TestPostDeleteItemFailItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		DeleteItem: &ncip.DeleteItem{
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "fitem-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.DeleteItemResponse)
+	assert.Len(t, ncipResponse.DeleteItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.DeleteItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "fitem-001", ncipResponse.DeleteItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostRequestItemOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		RequestItem: &ncip.RequestItem{
+			ItemId: []ncip.ItemId{{
+				ItemIdentifierValue: "item-001",
+			}},
+			RequestScopeType: ncip.SchemeValuePair{
+				Text: "Bibliographic",
+			},
+			RequestType: ncip.SchemeValuePair{
+				Text: "Hold",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.RequestItemResponse)
+	assert.Len(t, ncipResponse.RequestItemResponse.Problem, 0)
+}
+
+func TestPostRequestMissingRequestType(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		RequestItem: &ncip.RequestItem{
+			ItemId: []ncip.ItemId{{
+				ItemIdentifierValue: "item-001",
+			}},
+			RequestScopeType: ncip.SchemeValuePair{
+				Text: "Bibliographic",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.RequestItemResponse)
+	assert.Len(t, ncipResponse.RequestItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.RequestItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "RequestType is required", ncipResponse.RequestItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostRequestMissingRequestScopeType(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		RequestItem: &ncip.RequestItem{
+			ItemId: []ncip.ItemId{{
+				ItemIdentifierValue: "item-001",
+			}},
+			RequestType: ncip.SchemeValuePair{
+				Text: "Hold",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.RequestItemResponse)
+	assert.Len(t, ncipResponse.RequestItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.RequestItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "RequestScopeType is required", ncipResponse.RequestItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostRequestItemFailItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		RequestItem: &ncip.RequestItem{
+			ItemId: []ncip.ItemId{{
+				ItemIdentifierValue: "fitem-001",
+			}},
+			RequestScopeType: ncip.SchemeValuePair{
+				Text: "Bibliographic",
+			},
+			RequestType: ncip.SchemeValuePair{
+				Text: "Hold",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.RequestItemResponse)
+	assert.Len(t, ncipResponse.RequestItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.RequestItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "fitem-001", ncipResponse.RequestItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostRequestItemFailUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		RequestItem: &ncip.RequestItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "f12345",
+			},
+			RequestScopeType: ncip.SchemeValuePair{
+				Text: "Bibliographic",
+			},
+			RequestType: ncip.SchemeValuePair{
+				Text: "Hold",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.RequestItemResponse)
+	assert.Len(t, ncipResponse.RequestItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownUser), ncipResponse.RequestItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "f12345", ncipResponse.RequestItemResponse.Problem[0].ProblemDetail)
+}

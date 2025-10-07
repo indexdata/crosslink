@@ -50,6 +50,41 @@ func handleAcceptItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	res.AcceptItemResponse.Problem = problem
 }
 
+func handleDeleteItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.DeleteItemResponse = &ncip.DeleteItemResponse{}
+	if strings.HasPrefix(req.DeleteItem.ItemId.ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.DeleteItem.ItemId.ItemIdentifierValue)
+	}
+	res.DeleteItemResponse.ItemId = &req.DeleteItem.ItemId
+	res.DeleteItemResponse.Problem = problem
+}
+
+func handleRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.RequestItemResponse = &ncip.RequestItemResponse{}
+	if req.RequestItem.RequestType.Text == "" {
+		problem = setProblem(ncip.NeededDataMissing, "RequestType is required")
+	}
+	if problem == nil && req.RequestItem.RequestScopeType.Text == "" {
+		problem = setProblem(ncip.NeededDataMissing, "RequestScopeType is required")
+	}
+	if problem == nil && req.RequestItem.UserId != nil && strings.HasPrefix(req.RequestItem.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.RequestItem.UserId.UserIdentifierValue)
+	}
+	if problem == nil && len(req.RequestItem.ItemId) > 0 && strings.HasPrefix(req.RequestItem.ItemId[0].ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.RequestItem.ItemId[0].ItemIdentifierValue)
+	}
+	if len(req.RequestItem.ItemId) > 0 {
+		res.RequestItemResponse.ItemId = &req.RequestItem.ItemId[0]
+	}
+	res.RequestItemResponse.RequestScopeType = &req.RequestItem.RequestScopeType
+	res.RequestItemResponse.RequestType = &req.RequestItem.RequestType
+	res.RequestItemResponse.RequestId = req.RequestItem.RequestId
+	res.RequestItemResponse.UserId = req.RequestItem.UserId
+	res.RequestItemResponse.Problem = problem
+}
+
 func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -98,6 +133,10 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 		handleLookupUser(&ncipRequest, &ncipResponse)
 	case ncipRequest.AcceptItem != nil:
 		handleAcceptItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.DeleteItem != nil:
+		handleDeleteItem(&ncipRequest, &ncipResponse)
+	case ncipRequest.RequestItem != nil:
+		handleRequestItem(&ncipRequest, &ncipResponse)
 	default:
 		ncipResponse.Problem = setProblem(ncip.UnsupportedService, "")
 	}
