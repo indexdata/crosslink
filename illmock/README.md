@@ -165,6 +165,16 @@ The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`
 
 The mock NCIP server accepts messages from `/ncip` endpoint.
 
+The following services are recognized: Lookup User, Accept Item, Delete Item, Request Item,
+Cancel Request Item, Check In Item, Check Out Item, Create User Fiscal Transaction. If any other service
+is received Problem `Unsupported Service` is returned.
+
+If required elements are missing, Problem `Needed Data Missing` is returned with details.
+
+If a service includes a User Id element that has value with prefix of `f`, then a Problem is returned
+with `Unknown User`. If a service includes an Item Id element that has a vlue with prefix `f`, then a Problem is
+returned with `Unknown Item`. All services include at least one of these elements.
+
 # Environment variables
 
 | Name                         | Description                                                          | Default value                                |
