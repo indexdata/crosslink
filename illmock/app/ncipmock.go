@@ -97,10 +97,10 @@ func handleCancelRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	if req.CancelRequestItem.UserId == nil && len(req.CancelRequestItem.AuthenticationInput) == 0 {
 		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
 	}
-	if req.CancelRequestItem.RequestId == nil && req.CancelRequestItem.ItemId == nil {
+	if problem == nil && req.CancelRequestItem.RequestId == nil && req.CancelRequestItem.ItemId == nil {
 		problem = setProblem(ncip.NeededDataMissing, "RequestId or ItemId is required")
 	}
-	if req.CancelRequestItem.RequestType.Text == "" {
+	if problem == nil && req.CancelRequestItem.RequestType.Text == "" {
 		problem = setProblem(ncip.NeededDataMissing, "RequestType is required")
 	}
 	if problem == nil && req.CancelRequestItem.UserId != nil && strings.HasPrefix(req.CancelRequestItem.UserId.UserIdentifierValue, "f") {
@@ -154,7 +154,7 @@ func handleCreateUserFiscalTransaction(req *ncip.NCIPMessage, res *ncip.NCIPMess
 	if req.CreateUserFiscalTransaction.UserId == nil && len(req.CreateUserFiscalTransaction.AuthenticationInput) == 0 {
 		problem = setProblem(ncip.NeededDataMissing, "UserId or AuthenticationInput is required")
 	}
-	if req.CreateUserFiscalTransaction.FiscalTransactionInformation.FiscalActionType.Text == "" {
+	if problem == nil && req.CreateUserFiscalTransaction.FiscalTransactionInformation.FiscalActionType.Text == "" {
 		problem = setProblem(ncip.NeededDataMissing, "FiscalTransactionInformation is required")
 	}
 	if problem == nil && req.CreateUserFiscalTransaction.UserId != nil && strings.HasPrefix(req.CreateUserFiscalTransaction.UserId.UserIdentifierValue, "f") {
