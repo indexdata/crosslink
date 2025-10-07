@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/ncip"
@@ -26,7 +27,27 @@ func handleLookupUser(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	}
 	res.LookupUserResponse = &ncip.LookupUserResponse{}
 	res.LookupUserResponse.UserId = req.LookupUser.UserId
+	if problem == nil && req.LookupUser.UserId != nil && strings.HasPrefix(req.LookupUser.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.LookupUser.UserId.UserIdentifierValue)
+	}
 	res.LookupUserResponse.Problem = problem
+}
+
+func handleAcceptItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
+	var problem []ncip.Problem
+	res.AcceptItemResponse = &ncip.AcceptItemResponse{}
+	if req.AcceptItem.RequestId.RequestIdentifierValue == "" {
+		problem = setProblem(ncip.NeededDataMissing, "RequestId is required")
+	}
+	if problem == nil && req.AcceptItem.UserId != nil && strings.HasPrefix(req.AcceptItem.UserId.UserIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownUser, req.AcceptItem.UserId.UserIdentifierValue)
+	}
+	if problem == nil && req.AcceptItem.ItemId != nil && strings.HasPrefix(req.AcceptItem.ItemId.ItemIdentifierValue, "f") {
+		problem = setProblem(ncip.UnknownItem, req.AcceptItem.ItemId.ItemIdentifierValue)
+	}
+	res.AcceptItemResponse.RequestId = &req.AcceptItem.RequestId
+	res.AcceptItemResponse.ItemId = req.AcceptItem.ItemId
+	res.AcceptItemResponse.Problem = problem
 }
 
 func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +96,8 @@ func ncipMockHandler(w http.ResponseWriter, r *http.Request) {
 		ncipResponse.Problem = problem
 	case ncipRequest.LookupUser != nil:
 		handleLookupUser(&ncipRequest, &ncipResponse)
+	case ncipRequest.AcceptItem != nil:
+		handleAcceptItem(&ncipRequest, &ncipResponse)
 	default:
 		ncipResponse.Problem = setProblem(ncip.UnsupportedService, "")
 	}

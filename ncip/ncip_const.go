@@ -10,4 +10,6 @@ const (
 	UnsupportedService        ProblemTypeMessage = "Unsupported Service"
 	NeededDataMissing         ProblemTypeMessage = "Needed Data Missing"
 	InvalidMessageSyntaxError ProblemTypeMessage = "Invalid Message Syntax Error"
+	UnknownUser               ProblemTypeMessage = "Unknown User"
+	UnknownItem               ProblemTypeMessage = "Unknown Item"
 )

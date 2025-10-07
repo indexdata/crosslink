@@ -165,3 +165,194 @@ func TestPostLookupUserMissingUserId(t *testing.T) {
 	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.LookupUserResponse.Problem[0].ProblemType.Text)
 	assert.Equal(t, "UserId or AuthenticationInput is required", ncipResponse.LookupUserResponse.Problem[0].ProblemDetail)
 }
+
+func TestPostLookupUserOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		LookupUser: &ncip.LookupUser{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.LookupUserResponse)
+	assert.Len(t, ncipResponse.LookupUserResponse.Problem, 0)
+}
+
+func TestPostLookupUserFakeFailed(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		LookupUser: &ncip.LookupUser{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "f12345",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.LookupUserResponse)
+	assert.Len(t, ncipResponse.LookupUserResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownUser), ncipResponse.LookupUserResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "f12345", ncipResponse.LookupUserResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostAcceptItemOK(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		AcceptItem: &ncip.AcceptItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: &ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+			RequestId: ncip.RequestId{
+				RequestIdentifierValue: "req-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.AcceptItemResponse)
+	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 0)
+}
+
+func TestPostAcceptItemMissingRequestId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		AcceptItem: &ncip.AcceptItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: &ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.AcceptItemResponse)
+	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.AcceptItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "RequestId is required", ncipResponse.AcceptItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostAcceptItemFailUserId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		AcceptItem: &ncip.AcceptItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "f12345",
+			},
+			ItemId: &ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+			RequestId: ncip.RequestId{
+				RequestIdentifierValue: "req-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.AcceptItemResponse)
+	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownUser), ncipResponse.AcceptItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "f12345", ncipResponse.AcceptItemResponse.Problem[0].ProblemDetail)
+}
+
+func TestPostAcceptItemFailItemId(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		AcceptItem: &ncip.AcceptItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: &ncip.ItemId{
+				ItemIdentifierValue: "fitem-001",
+			},
+			RequestId: ncip.RequestId{
+				RequestIdentifierValue: "req-001",
+			},
+		},
+	}
+	buf, err := xml.Marshal(req)
+	assert.NoError(t, err)
+	resp, err := http.Post(server.URL, "application/xml", bytes.NewReader(buf))
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	defer func() {
+		dErr := resp.Body.Close()
+		assert.NoError(t, dErr)
+	}()
+	buf, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	var ncipResponse ncip.NCIPMessage
+	err = xml.Unmarshal(buf, &ncipResponse)
+	assert.NoError(t, err)
+	assert.NotNil(t, ncipResponse.AcceptItemResponse)
+	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.UnknownItem), ncipResponse.AcceptItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "fitem-001", ncipResponse.AcceptItemResponse.Problem[0].ProblemDetail)
+}
