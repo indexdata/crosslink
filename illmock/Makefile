@@ -58,6 +58,8 @@ README.html: README.md
 	pandoc $< -o $@
 
 clean:
+	$(GO) clean -testcache
+	$(GO) clean -cache
 	rm -f $(PROGRAMS)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
