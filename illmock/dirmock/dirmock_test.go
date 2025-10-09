@@ -136,10 +136,6 @@ func TestNewEnv(t *testing.T) {
 		assert.NoError(t, dErr, "failed to remove file")
 	}()
 	gzipWriter := gzip.NewWriter(file2)
-	defer func() {
-		dErr := gzipWriter.Close()
-		assert.NoError(t, dErr, "failed to close gzip writer")
-	}()
 	_, err = gzipWriter.Write([]byte("[]"))
 	assert.NoError(t, err, "failed to write to gzip file")
 	err = gzipWriter.Close()
