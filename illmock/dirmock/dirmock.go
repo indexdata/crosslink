@@ -36,7 +36,8 @@ func NewEnv() (*DirectoryMock, error) {
 	var err error
 	var bytes []byte
 	if strings.HasSuffix(path, ".gz") || strings.HasSuffix(path, ".gzip") || strings.HasSuffix(path, ".zip") {
-		file, err := os.Open(path)
+		var file *os.File
+		file, err = os.Open(path)
 		if err != nil {
 			return nil, err
 		}
@@ -46,11 +47,11 @@ func NewEnv() (*DirectoryMock, error) {
 				fmt.Printf("error closing file: %v", dErr)
 			}
 		}()
-		gr, err := gzip.NewReader(file)
+		var gr *gzip.Reader
+		gr, err = gzip.NewReader(file)
 		if err != nil {
 			return nil, err
 		}
-
 		defer func() {
 			dErr := gr.Close()
 			if dErr != nil {
@@ -58,9 +59,6 @@ func NewEnv() (*DirectoryMock, error) {
 			}
 		}()
 		bytes, err = io.ReadAll(gr)
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		bytes, err = os.ReadFile(path)
 	}
