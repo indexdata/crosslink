@@ -109,10 +109,10 @@ paths:
           schema:
             type: string
           required: true
-          description: ID of the patrong request to retrieve
+          description: ID of the patron request to retrieve
       responses:
         '200':
-          description: Successful retrieval of the patrong request
+          description: Successful retrieval of the patron request
           content:
             application/json:
               schema:
@@ -133,7 +133,7 @@ paths:
           schema:
             type: string
           required: true
-          description: ID of the patrong request to update
+          description: ID of the patron request to update
       requestBody:
         content:
           application/json:
@@ -166,7 +166,7 @@ paths:
           schema:
             type: string
           required: true
-          description: ID of the patrong request to delete
+          description: ID of the patron request to delete
       responses:
         '204':
           description: Patron request deleted successfully (No Content)

@@ -79,7 +79,7 @@ type Context struct {
 	IllRepo    ill_db.IllRepo
 	EventRepo  events.EventRepo
 	DirAdapter adapter.DirectoryLookupAdapter
-	RpRepo     pr_db.PrRepo
+	PrRepo     pr_db.PrRepo
 }
 
 func configLog() slog.Handler {
@@ -163,7 +163,7 @@ func Init(ctx context.Context) (Context, error) {
 		IllRepo:    illRepo,
 		EventRepo:  eventRepo,
 		DirAdapter: dirAdapter,
-		RpRepo:     prRepo,
+		PrRepo:     prRepo,
 	}, nil
 }
 
@@ -194,8 +194,8 @@ func StartServer(ctx Context) error {
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
-	rpApiHandler := prapi.NewApiHandler(ctx.RpRepo)
-	proapi.HandlerFromMux(&rpApiHandler, ServeMux)
+	prApiHandler := prapi.NewApiHandler(ctx.PrRepo)
+	proapi.HandlerFromMux(&prApiHandler, ServeMux)
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
 		ServeMux.ServeHTTP(w, r)
