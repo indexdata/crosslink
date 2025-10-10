@@ -25,9 +25,9 @@ func (r *PgPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(PrRepo) error)
 
 // DerivedRepo
 func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
-	rpRepo := new(PgPrRepo)
-	rpRepo.PgBaseRepo = *base
-	return rpRepo
+	prRepo := new(PgPrRepo)
+	prRepo.PgBaseRepo = *base
+	return prRepo
 }
 
 func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error) {

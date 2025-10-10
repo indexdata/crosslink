@@ -14,12 +14,12 @@ import (
 )
 
 type PatronRequestApiHandler struct {
-	rpRepo pr_db.PrRepo
+	prRepo pr_db.PrRepo
 }
 
-func NewApiHandler(rpRepo pr_db.PrRepo) PatronRequestApiHandler {
+func NewApiHandler(prRepo pr_db.PrRepo) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
-		rpRepo: rpRepo,
+		prRepo: prRepo,
 	}
 }
 
@@ -28,7 +28,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: logParams,
 	})
-	prs, err := a.rpRepo.ListPatronRequests(ctx)
+	prs, err := a.prRepo.ListPatronRequests(ctx)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return
@@ -50,7 +50,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
-	pr, err := a.rpRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr)))
+	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr)))
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -64,7 +64,7 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeletePatronRequestsId", "id": id},
 	})
-	err := a.rpRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		pr, inErr := repo.GetPatronRequestById(ctx, id)
 		if inErr != nil {
 			return inErr
@@ -87,7 +87,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPatronRequestsId", "id": id},
 	})
-	pr, err := a.rpRepo.GetPatronRequestById(ctx, id)
+	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -110,7 +110,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 		addInternalError(ctx, w, err)
 		return
 	}
-	pr, err := a.rpRepo.GetPatronRequestById(ctx, id)
+	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			addNotFoundError(w)
@@ -123,7 +123,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	if updatePr.Requester != nil {
 		pr.Requester = getDbText(updatePr.Requester)
 	}
-	pr, err = a.rpRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(pr))
+	pr, err = a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(pr))
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
