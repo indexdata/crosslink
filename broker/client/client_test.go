@@ -811,3 +811,37 @@ func TestBlockUnfilled(t *testing.T) {
 	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
 	assert.False(t, blockUnfilled(trCtx))
 }
+
+func TestUpdateSupplierNote(t *testing.T) {
+	sam := iso18626.SupplyingAgencyMessage{}
+	trCtx := transactionContext{}
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
+	trCtx.requester = &requester
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	requester.BrokerMode = string(common.BrokerModeOpaque)
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	sam.StatusInfo.Status = iso18626.TypeStatusExpectToSupply
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	supplier := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"}
+	trCtx.selectedSupplier = &supplier
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	sam.MessageInfo.Note = "Original note"
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP1, Original note", sam.MessageInfo.Note)
+
+	sam.StatusInfo.Status = iso18626.TypeStatusUnfilled
+	sam.MessageInfo.Note = "Original note 2"
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
+}

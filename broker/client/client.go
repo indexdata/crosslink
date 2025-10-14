@@ -668,7 +668,19 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		populateVendor(sam, target.peer.Vendor)
 	}
 
+	updateSupplierNote(trCtx, sam)
+
 	return message
+}
+
+func updateSupplierNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
+	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
+		(sam.StatusInfo.Status == iso18626.TypeStatusExpectToSupply || sam.StatusInfo.Status == iso18626.TypeStatusUnfilled) &&
+		trCtx.selectedSupplier != nil && sam.MessageInfo.Note != "" {
+		symbol := strings.SplitN(trCtx.selectedSupplier.SupplierSymbol, ":", 2)
+		note := sam.MessageInfo.Note
+		sam.MessageInfo.Note = "Supplier: " + symbol[1] + ", " + note
+	}
 }
 
 func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message) (events.EventStatus, *events.EventResult) {
