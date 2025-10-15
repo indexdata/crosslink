@@ -676,10 +676,13 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 func updateSupplierNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
 		(sam.StatusInfo.Status == iso18626.TypeStatusExpectToSupply || sam.StatusInfo.Status == iso18626.TypeStatusUnfilled) &&
-		trCtx.selectedSupplier != nil && sam.MessageInfo.Note != "" {
+		trCtx.selectedSupplier != nil {
 		symbol := strings.SplitN(trCtx.selectedSupplier.SupplierSymbol, ":", 2)
 		note := sam.MessageInfo.Note
-		sam.MessageInfo.Note = "Supplier: " + symbol[1] + ", " + note
+		sam.MessageInfo.Note = "Supplier: " + symbol[1]
+		if note != "" {
+			sam.MessageInfo.Note += ", " + note
+		}
 	}
 }
 

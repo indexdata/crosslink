@@ -274,7 +274,9 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	case iso18626.TypeStatusLoanCompleted:
 		requester.delete(header)
 	case iso18626.TypeStatusUnfilled:
-		requester.delete(header)
+		if supplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageNotification {
+			requester.delete(header)
+		}
 	case iso18626.TypeStatusCancelled:
 		if supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
 			if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {

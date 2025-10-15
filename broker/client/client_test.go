@@ -834,7 +834,7 @@ func TestUpdateSupplierNote(t *testing.T) {
 	supplier := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"}
 	trCtx.selectedSupplier = &supplier
 	updateSupplierNote(trCtx, &sam)
-	assert.Equal(t, "", sam.MessageInfo.Note)
+	assert.Equal(t, "Supplier: SUP1", sam.MessageInfo.Note)
 
 	sam.MessageInfo.Note = "Original note"
 	updateSupplierNote(trCtx, &sam)
