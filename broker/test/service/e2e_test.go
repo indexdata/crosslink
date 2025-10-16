@@ -148,7 +148,7 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, select-supplier = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
@@ -587,7 +587,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS, doNotSend=true\n" +
+		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
