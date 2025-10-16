@@ -1,0 +1,180 @@
+openapi: 3.0.0
+info:
+  title: Patron Request API
+  version: 1.0.0
+  description: API for Patron Request CRUD and state actions
+
+components:
+  schemas:
+    PatronRequest:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Unique identifier of the patron request
+        Timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the patron reuqest
+        IllRequest:
+          type: string
+          description: JSON of ISO18626 request
+        State:
+          type: string
+          description: Patron request state
+        Side:
+          type: string
+          description: Patron request side - borrowing or lending
+        Requester:
+          type: string
+          description: User who requested item
+        BorrowingPeerId:
+          type: string
+          description: Borrowing peer id
+        LendingPeerId:
+          type: string
+          description: Lending peer id
+      required:
+        - ID
+        - Timestamp
+        - State
+        - Side
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+      required:
+        - error
+
+paths:
+  /patron_requests:
+    get:
+      summary: Retrieve patron requests
+      responses:
+        '200':
+          description: Successful retrieval of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new patron request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatronRequest'
+      responses:
+        '201':
+          description: Patron request created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}:
+    get:
+      summary: Get a patron request by ID
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to retrieve
+      responses:
+        '200':
+          description: Successful retrieval of the patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '404':
+          description: Patron request not found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a new patron request
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatronRequest'
+      responses:
+        '200':
+          description: Patron request updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a patron request
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to delete
+      responses:
+        '204':
+          description: Patron request deleted successfully (No Content)
+        '404':
+          description: Patron request not found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

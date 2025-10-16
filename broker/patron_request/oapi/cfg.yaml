@@ -1,0 +1,5 @@
+package: proapi
+output: patron_request/oapi/openapi_gen.go
+generate:
+  models: true
+  std-http-server: true

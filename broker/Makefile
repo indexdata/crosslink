@@ -30,6 +30,12 @@ OAPI_CFG = $(OAPI_DIR)/cfg.yaml
 OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
 OAPI_GEN = $(OAPI_DIR)/openapi_gen.go
 
+# Patron request OpenAPI
+PR_OAPI_DIR=patron_request/oapi
+PR_OAPI_CFG = $(PR_OAPI_DIR)/cfg.yaml
+PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
+PR_OAPI_GEN = $(PR_OAPI_DIR)/openapi_gen.go
+
 .PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
 
 all: $(BINARY) archive
@@ -43,10 +49,13 @@ generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
-generate-api: $(OAPI_GEN)
+generate-api: $(OAPI_GEN) $(PR_OAPI_GEN)
 
 $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
 	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
+
+$(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC)
+	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
@@ -54,10 +63,10 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(GOFILES)
+$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(GOFILES)
+archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
@@ -89,3 +98,4 @@ clean:
 	rm -f $(COMMIT_ID)
 	rm -f $(SQL_GEN_OUT)
 	rm -f $(OAPI_GEN)
+	rm -f $(PR_OAPI_GEN)
