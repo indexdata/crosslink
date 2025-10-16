@@ -1,6 +1,7 @@
 package dirmock
 
 import (
+	"compress/gzip"
 	"os"
 	"strings"
 	"testing"
@@ -88,7 +89,7 @@ func TestMatchQueries(t *testing.T) {
 
 func TestNewJson(t *testing.T) {
 	_, err := NewJson("{")
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 
@@ -113,18 +114,34 @@ func TestNewEnv(t *testing.T) {
 	_, err = NewEnv()
 	assert.ErrorContains(t, err, "no such file or directory")
 
-	file, err := os.CreateTemp("", "test.json")
-	assert.Nil(t, err)
+	file1, err := os.CreateTemp("", "test.json")
+	assert.NoError(t, err, "failed to create temp file")
 	defer func() {
-		dErr := os.Remove(file.Name())
+		dErr := os.Remove(file1.Name())
 		assert.NoError(t, dErr, "failed to remove file")
 	}()
-	_, err = file.WriteString("[]")
-	assert.Nil(t, err)
-	err = file.Close()
-	assert.Nil(t, err)
-	err = os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file.Name())
+	_, err = file1.WriteString("[]")
+	assert.NoError(t, err, "failed to write to temp file")
+	err = file1.Close()
+	assert.NoError(t, err, "failed to close temp file")
+	err = os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file1.Name())
 	assert.NoError(t, err, "failed to set env")
 	_, err = NewEnv()
-	assert.Nil(t, err)
+	assert.NoError(t, err, "failed to create new env")
+
+	file2, err := os.CreateTemp("", "test.json.*.gz")
+	assert.NoError(t, err, "failed to create temp file")
+	defer func() {
+		dErr := os.Remove(file2.Name())
+		assert.NoError(t, dErr, "failed to remove file")
+	}()
+	gzipWriter := gzip.NewWriter(file2)
+	_, err = gzipWriter.Write([]byte("[]"))
+	assert.NoError(t, err, "failed to write to gzip file")
+	err = gzipWriter.Close()
+	assert.NoError(t, err, "failed to close gzip writer")
+	err = os.Setenv("MOCK_DIRECTORY_ENTRIES_PATH", file2.Name())
+	assert.NoError(t, err, "failed to set env")
+	_, err = NewEnv()
+	assert.NoError(t, err, "failed to create new env")
 }
