@@ -60,11 +60,3 @@ CREATE TABLE IF NOT EXISTS membership_networks (
 	membership uuid NOT NULL REFERENCES memberships (id),
 	network uuid NOT NULL REFERENCES networks (id)
 );
-
--- Workaround for sqlc's poor left join handling https://github.com/sqlc-dev/sqlc/issues/2997
-CREATE OR REPLACE VIEW entrysymbols AS (
-  SELECT symbols.* FROM entries LEFT JOIN symbols ON entries.id = symbols.owner
-);
-CREATE OR REPLACE VIEW entryendpoints AS (
-  SELECT service_endpoints.* FROM entries LEFT JOIN service_endpoints ON entries.id = service_endpoints.entry
-);

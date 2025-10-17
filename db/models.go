@@ -25,21 +25,6 @@ type Entry struct {
 	Phone           *string
 }
 
-type Entryendpoint struct {
-	ID      *uuid.UUID
-	Entry   *uuid.UUID
-	Name    *string
-	Type    *string
-	Address *string
-}
-
-type Entrysymbol struct {
-	ID        *uuid.UUID
-	Owner     *uuid.UUID
-	Authority *string
-	Symbol    *string
-}
-
 type Membership struct {
 	ID          uuid.UUID
 	Institution uuid.UUID

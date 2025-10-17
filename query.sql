@@ -4,21 +4,6 @@ SELECT * FROM entries WHERE id = $1 LIMIT 1;
 -- name: EntryBySymbol :one
 SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
 
--- name: ListEntries :many
-SELECT sqlc.embed(e), sqlc.embed(s), sqlc.embed(ep)
-FROM entries e
-LEFT JOIN entrysymbols s ON e.id = s.owner
-LEFT JOIN entryendpoints ep ON e.id = ep.entry
-WHERE
-  (e.id = sqlc.narg(id) OR sqlc.narg(id) IS NULL)
-  AND (
-    (e.id = (
-      SELECT owner FROM symbols s2 WHERE s2.authority = sqlc.narg(authority) AND s2.symbol = sqlc.narg(symbol)
-    ))
-    OR (sqlc.narg(authority) IS NULL AND sqlc.narg(symbol) IS NULL)
-  )
-ORDER BY e.name, e.id;
-
 -- name: CreateEntry :one
 INSERT INTO entries (
   name, contact_name, email
