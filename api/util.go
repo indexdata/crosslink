@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -62,6 +63,21 @@ func elementHasProperty[T any, V comparable](s []T, propName string, value V) bo
 		}
 	}
 	return false
+}
+
+func unmarshalJSONArray[T any](jsonArray [][]byte) ([]T, error) {
+	if jsonArray == nil {
+		return nil, nil
+	}
+	result := make([]T, 0, len(jsonArray))
+	for _, jsonBytes := range jsonArray {
+		var item T
+		if err := json.Unmarshal(jsonBytes, &item); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 // func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {

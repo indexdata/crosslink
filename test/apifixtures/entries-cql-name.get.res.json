@@ -1,5 +1,4 @@
 [
-  "<<UNORDERED>>",
   {
     "id": "00000000-0000-0000-0000-000000000002",
     "name": "An Institution",
@@ -25,10 +24,5 @@
         "address": "https://whatever.host.tld/path"
       }
     ]
-  },
-  {
-    "id": "00000000-0000-0000-0000-000000000001",
-    "name": "No Symbol",
-    "description": "A very particular test entry"
   }
 ]

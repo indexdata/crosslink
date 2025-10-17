@@ -67,3 +67,59 @@ func TestElementHasProperty(t *testing.T) {
 		t.Error("Failed to return false when property not present with UUID value")
 	}
 }
+
+func TestUnmarshalJSONArray(t *testing.T) {
+	type TestStruct struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+
+	// Test with valid JSON array
+	jsonArray := [][]byte{
+		[]byte(`{"id":"1","name":"foo"}`),
+		[]byte(`{"id":"2","name":"bar"}`),
+	}
+
+	result, err := unmarshalJSONArray[TestStruct](jsonArray)
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if len(result) != 2 {
+		t.Errorf("Expected 2 items, got %d", len(result))
+	}
+	if result[0].ID != "1" || result[0].Name != "foo" {
+		t.Errorf("First item incorrect: %+v", result[0])
+	}
+	if result[1].ID != "2" || result[1].Name != "bar" {
+		t.Errorf("Second item incorrect: %+v", result[1])
+	}
+
+	// Test with empty array
+	emptyArray := [][]byte{}
+	result, err = unmarshalJSONArray[TestStruct](emptyArray)
+	if err != nil {
+		t.Errorf("Expected no error for empty array, got %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("Expected 0 items, got %d", len(result))
+	}
+
+	// Test with nil array
+	result, err = unmarshalJSONArray[TestStruct](nil)
+	if err != nil {
+		t.Errorf("Expected no error for nil array, got %v", err)
+	}
+	if result != nil {
+		t.Errorf("Expected nil result for nil array, got %+v", result)
+	}
+
+	// Test with invalid JSON
+	invalidArray := [][]byte{
+		[]byte(`{"id":"1","name":"foo"}`),
+		[]byte(`{invalid json}`),
+	}
+	_, err = unmarshalJSONArray[TestStruct](invalidArray)
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+}

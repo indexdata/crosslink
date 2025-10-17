@@ -1,123 +1,199 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"indexdata/directoryish/db"
 )
 
-func addRowToEntry(row db.ListEntriesRow, entry *Entry) {
-	if row.Entrysymbol.ID != nil {
-		if entry.Symbols == nil {
-			s := []Symbol{}
-			entry.Symbols = &s
-		}
+func scanEntryRow(rows pgx.Rows) (Entry, error) {
+	var (
+		id            uuid.UUID
+		name          string
+		description   *string
+		contactName   *string
+		email         *string
+		symbolsJSON   [][]byte
+		endpointsJSON [][]byte
+	)
 
-		if !elementHasProperty(*entry.Symbols, "Id", *row.Entrysymbol.ID) {
-			*entry.Symbols = append(*entry.Symbols, Symbol{
-				Id:        row.Entrysymbol.ID,
-				Symbol:    *row.Entrysymbol.Symbol,
-				Authority: *row.Entrysymbol.Authority,
-			})
-		}
+	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON); err != nil {
+		return Entry{}, err
 	}
 
-	if row.Entryendpoint.ID != nil {
-		if entry.Endpoints == nil {
-			s := []ServiceEndpoint{}
-			entry.Endpoints = &s
-		}
-
-		if !elementHasProperty(*entry.Endpoints, "Id", *row.Entryendpoint.ID) {
-			*entry.Endpoints = append(*entry.Endpoints, ServiceEndpoint{
-				Id:      row.Entryendpoint.ID,
-				Name:    *row.Entryendpoint.Name,
-				Type:    *row.Entryendpoint.Type,
-				Address: *row.Entryendpoint.Address,
-			})
-		}
+	symbols, err := unmarshalJSONArray[Symbol](symbolsJSON)
+	if err != nil {
+		return Entry{}, fmt.Errorf("unmarshalling symbols: %w", err)
 	}
+
+	endpoints, err := unmarshalJSONArray[ServiceEndpoint](endpointsJSON)
+	if err != nil {
+		return Entry{}, fmt.Errorf("unmarshalling endpoints: %w", err)
+	}
+
+	// Use nil for empty arrays so they're omitted in JSON (omitempty)
+	var symbolsPtr *[]Symbol
+	if len(symbols) > 0 {
+		symbolsPtr = &symbols
+	}
+
+	var endpointsPtr *[]ServiceEndpoint
+	if len(endpoints) > 0 {
+		endpointsPtr = &endpoints
+	}
+
+	return Entry{
+		Id:          &id,
+		Name:        name,
+		Description: description,
+		ContactName: contactName,
+		Email:       email,
+		Symbols:     symbolsPtr,
+		Endpoints:   endpointsPtr,
+	}, nil
+}
+
+const defaultEntryOrder = "ORDER BY e.name, e.id"
+
+// handleEntryCQL converts a CQL query string to a PostgreSQL WHERE clause
+func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+	def := pgcql.NewPgDefinition()
+
+	f := pgcql.NewFieldString().WithLikeOps()
+	f.SetColumn("e.name")
+	def.AddField("name", f)
+
+	f = pgcql.NewFieldString().WithLikeOps()
+	f.SetColumn("e.description")
+	def.AddField("description", f)
+
+	var parser cql.Parser
+	query, err := parser.Parse(cqlString)
+	if err != nil {
+		return nil, err
+	}
+	return def.Parse(query, noBaseArgs+1)
+}
+
+// buildEntrySQL builds the base SQL query for entries with nested subresources
+func buildEntrySQL(whereClause string) string {
+	baseQuery := `
+		SELECT
+			e.id,
+			e.name,
+			e.description,
+			e.contact_name,
+			e.email,
+			ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
+			ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints
+		FROM entries e
+	`
+	if whereClause != "" {
+		return baseQuery + "\n" + whereClause
+	}
+	return baseQuery
 }
 
 func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error) {
-	rows, err := a.queries.ListEntries(ctx, db.ListEntriesParams{})
+	var query string
+	var args []interface{}
+
+	if request.Params.Q != nil && *request.Params.Q != "" {
+		// Use CQL query
+		noBaseArgs := 0
+		res, err := handleEntryCQL(*request.Params.Q, noBaseArgs)
+		if err != nil {
+			return GetEntries400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+		}
+
+		whereClause := ""
+		if res.GetWhereClause() != "" {
+			whereClause = "WHERE " + res.GetWhereClause()
+		}
+
+		query = buildEntrySQL(whereClause + "\n" + defaultEntryOrder)
+		args = res.GetQueryArguments()
+	} else {
+		query = buildEntrySQL(defaultEntryOrder)
+		args = []interface{}{}
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer rows.Close()
 
 	// Need to initialise resp as explicitly zero length because a simple
 	// var resp []Entry will be JSON-encoded as null rather than [].
 	// See https://github.com/golang/go/issues/27589
-	// ...so may as well allocate an appropriate capacity while we're at it
-	resp := make([]Entry, 0, len(rows))
+	resp := make([]Entry, 0)
 
-	for _, row := range rows {
-		last := len(resp) - 1
-
-		if last < 0 || !bytes.Equal(resp[last].Id[:], (&row.Entry.ID)[:]) {
-			resp = append(resp, Entry{
-				Id:          &row.Entry.ID,
-				Name:        row.Entry.Name,
-				ContactName: row.Entry.ContactName,
-				Email:       row.Entry.Email,
-			})
-			last++
+	for rows.Next() {
+		entry, err := scanEntryRow(rows)
+		if err != nil {
+			log.Fatal(err)
 		}
+		resp = append(resp, entry)
+	}
 
-		addRowToEntry(row, &resp[last])
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
 	}
 
 	return GetEntries200JSONResponse(resp), nil
 }
 
-func getOneEntryFromRows(rows []db.ListEntriesRow) Entry {
-	var resp = Entry{
-		Id:          &rows[0].Entry.ID,
-		Name:        rows[0].Entry.Name,
-		ContactName: rows[0].Entry.ContactName,
-		Email:       rows[0].Entry.Email,
-	}
-
-	for _, row := range rows {
-		addRowToEntry(row, &resp)
-	}
-
-	return resp
-}
-
 func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
-	var rows []db.ListEntriesRow
-	var err error
+	var query string
+	var args []interface{}
+
 	if request.Key == GetEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)
 		if perr != nil {
 			return GetEntry400TextResponse("Error parsing id"), nil
 		}
-		rows, err = a.queries.ListEntries(ctx, db.ListEntriesParams{ID: &parsedId})
+		query = buildEntrySQL("WHERE e.id = $1")
+		args = []interface{}{parsedId}
 	} else if request.Key == GetEntryParamsKeyBySymbol {
 		authority, symbol, perr := resolveCombinedSymbol(request.Value)
 		if perr != nil {
 			return GetEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
 		}
-		rows, err = a.queries.ListEntries(ctx, db.ListEntriesParams{Authority: &authority, Symbol: &symbol})
+		query = buildEntrySQL(`
+			WHERE e.id = (
+				SELECT owner FROM symbols WHERE authority = $1 AND symbol = $2
+			)
+		`)
+		args = []interface{}{authority, symbol}
 	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return GetEntry404TextResponse("Entry not found"), nil
+	}
+
+	entry, err := scanEntryRow(rows)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if len(rows) == 0 {
-		return GetEntry404TextResponse("Entry not found"), nil
-	}
-
-	return GetEntry200JSONResponse(getOneEntryFromRows(rows)), nil
+	return GetEntry200JSONResponse(entry), nil
 }
 
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {

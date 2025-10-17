@@ -295,6 +295,26 @@ func TestEntryCases(t *testing.T) {
 			resFile:  "entries.get.res.json",
 		},
 		{
+			name:     "GET entries with CQL query by name",
+			method:   http.MethodGet,
+			endpoint: "/entries?q=name%3DAn%20Institution",
+			status:   http.StatusOK,
+			resFile:  "entries-cql-name.get.res.json",
+		},
+		{
+			name:     "GET entries with CQL wildcard query by description",
+			method:   http.MethodGet,
+			endpoint: "/entries?q=description%3D%2Aparticular%2A",
+			status:   http.StatusOK,
+			resFile:  "entries-cql-desc.get.res.json",
+		},
+		{
+			name:     "GET entries with invalid CQL query",
+			method:   http.MethodGet,
+			endpoint: "/entries?q=invalid%28%28%28",
+			status:   http.StatusBadRequest,
+		},
+		{
 			name:            "POST entry",
 			method:          http.MethodPost,
 			endpoint:        "/entries",
