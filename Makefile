@@ -17,6 +17,10 @@ docker:
 generate:
 	$(GO) generate
 
+verify-gen:
+	$(GO) generate
+	$(GIT) diff --exit-code --quiet -- ':/*.gen.go' 'db/' || (echo "Error: Generated code is out of date. Run 'make generate' and commit the changes." && exit 1)
+
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
