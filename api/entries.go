@@ -25,9 +25,10 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		email         *string
 		symbolsJSON   [][]byte
 		endpointsJSON [][]byte
+		addressesJSON [][]byte
 	)
 
-	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON); err != nil {
+	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON, &addressesJSON); err != nil {
 		return Entry{}, err
 	}
 
@@ -41,6 +42,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		return Entry{}, fmt.Errorf("unmarshalling endpoints: %w", err)
 	}
 
+	addresses, err := unmarshalJSONArray[Address](addressesJSON)
+	if err != nil {
+		return Entry{}, fmt.Errorf("unmarshalling addresses: %w", err)
+	}
+
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
 	var symbolsPtr *[]Symbol
 	if len(symbols) > 0 {
@@ -52,6 +58,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		endpointsPtr = &endpoints
 	}
 
+	var addressesPtr *[]Address
+	if len(addresses) > 0 {
+		addressesPtr = &addresses
+	}
+
 	return Entry{
 		Id:          &id,
 		Name:        name,
@@ -60,6 +71,7 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		Email:       email,
 		Symbols:     symbolsPtr,
 		Endpoints:   endpointsPtr,
+		Addresses:   addressesPtr,
 	}, nil
 }
 
@@ -95,7 +107,24 @@ func buildEntrySQL(whereClause string) string {
 			e.contact_name,
 			e.email,
 			ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
-			ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints
+			ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints,
+			ARRAY(
+				SELECT row_to_json(a_with_components)
+				FROM (
+					SELECT
+						a.id,
+						a.type,
+						ARRAY(
+							SELECT row_to_json(ac)
+							FROM address_components ac
+							WHERE ac.address = a.id
+							ORDER BY ac.seq
+						) as "addressComponents"
+					FROM addresses a
+					WHERE a.entry = e.id
+					ORDER BY a.id
+				) a_with_components
+			) as addresses
 		FROM entries e
 	`
 	if whereClause != "" {
@@ -247,6 +276,32 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
+	if request.Body.Addresses != nil {
+		for _, address := range *request.Body.Addresses {
+			insertedAddress, err := qtx.UpsertAddress(ctx, db.UpsertAddressParams{
+				Entry: insertedEntry.ID,
+				Type:  string(address.Type),
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if address.AddressComponents != nil {
+				for _, component := range *address.AddressComponents {
+					_, err = qtx.CreateAddressComponent(ctx, db.CreateAddressComponentParams{
+						Address: insertedAddress.ID,
+						Seq:     component.Seq,
+						Type:    string(component.Type),
+						Value:   component.Value,
+					})
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+
 	var resp Id
 	resp.Id = insertedEntry.ID
 
@@ -368,6 +423,55 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		}
 	} else if request.Body.Endpoints.IsNull() {
 		qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+	}
+
+	if request.Body.Addresses.IsSpecified() && !request.Body.Addresses.IsNull() {
+		reqaddrs := request.Body.Addresses.MustGet()
+		// Delete existing addresses not present
+		var patchedAddresses []uuid.UUID
+		for _, address := range reqaddrs {
+			if address.Id != nil {
+				patchedAddresses = append(patchedAddresses, *address.Id)
+			}
+		}
+		if len(patchedAddresses) > 0 {
+			qtx.DeleteOtherOwnedAddresses(ctx, db.DeleteOtherOwnedAddressesParams{Entry: orig.ID, Ids: patchedAddresses})
+		} else {
+			qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+		}
+
+		// Update/create addresses
+		for _, address := range reqaddrs {
+			insertedAddress, err := qtx.UpsertAddress(ctx, db.UpsertAddressParams{
+				ID:    address.Id,
+				Entry: orig.ID,
+				Type:  string(address.Type),
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// Handle address components
+			if address.AddressComponents != nil {
+				// Delete all existing components and insert new ones
+				qtx.DeleteAllOwnedAddressComponents(ctx, insertedAddress.ID)
+
+				// Insert new components
+				for _, component := range *address.AddressComponents {
+					_, err = qtx.CreateAddressComponent(ctx, db.CreateAddressComponentParams{
+						Address: insertedAddress.ID,
+						Seq:     component.Seq,
+						Type:    string(component.Type),
+						Value:   component.Value,
+					})
+					if err != nil {
+						log.Fatal(err)
+					}
+				}
+			}
+		}
+	} else if request.Body.Addresses.IsNull() {
+		qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
 	}
 
 	err = tx.Commit(ctx)

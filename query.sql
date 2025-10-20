@@ -77,6 +77,42 @@ DELETE FROM service_endpoints WHERE entry = @entry AND ID <> ALL(@ids::uuid[]);
 DELETE FROM service_endpoints WHERE entry = @entry;
 
 
+-- name: UpsertAddress :one
+INSERT INTO addresses (
+  id, entry, type
+) VALUES (
+  coalesce(sqlc.narg('id'), gen_random_uuid()),
+  @entry,
+  @type
+)
+ON CONFLICT (id) DO UPDATE SET
+  entry = @entry,
+  type = @type
+WHERE addresses.id = sqlc.narg('id')
+RETURNING *;
+
+-- name: DeleteOtherOwnedAddresses :exec
+DELETE FROM addresses WHERE entry = @entry AND ID <> ALL(@ids::uuid[]);
+
+-- name: DeleteAllOwnedAddresses :exec
+DELETE FROM addresses WHERE entry = @entry;
+
+
+-- name: CreateAddressComponent :one
+INSERT INTO address_components (
+  address, seq, type, value
+) VALUES (
+  @address,
+  @seq,
+  @type,
+  @value
+)
+RETURNING *;
+
+-- name: DeleteAllOwnedAddressComponents :exec
+DELETE FROM address_components WHERE address = @address;
+
+
 -- name: ListConsortia :many
 SELECT * FROM consortia
 WHERE

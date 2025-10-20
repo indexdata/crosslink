@@ -23,6 +23,43 @@ func (q *Queries) ConsortiumById(ctx context.Context, id uuid.UUID) (Consortium,
 	return i, err
 }
 
+const createAddressComponent = `-- name: CreateAddressComponent :one
+INSERT INTO address_components (
+  address, seq, type, value
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4
+)
+RETURNING id, address, seq, type, value
+`
+
+type CreateAddressComponentParams struct {
+	Address uuid.UUID
+	Seq     int32
+	Type    string
+	Value   string
+}
+
+func (q *Queries) CreateAddressComponent(ctx context.Context, arg CreateAddressComponentParams) (AddressComponent, error) {
+	row := q.db.QueryRow(ctx, createAddressComponent,
+		arg.Address,
+		arg.Seq,
+		arg.Type,
+		arg.Value,
+	)
+	var i AddressComponent
+	err := row.Scan(
+		&i.ID,
+		&i.Address,
+		&i.Seq,
+		&i.Type,
+		&i.Value,
+	)
+	return i, err
+}
+
 const createConsortium = `-- name: CreateConsortium :one
 INSERT INTO consortia (
   name, entry
@@ -75,6 +112,24 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 	return i, err
 }
 
+const deleteAllOwnedAddressComponents = `-- name: DeleteAllOwnedAddressComponents :exec
+DELETE FROM address_components WHERE address = $1
+`
+
+func (q *Queries) DeleteAllOwnedAddressComponents(ctx context.Context, address uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllOwnedAddressComponents, address)
+	return err
+}
+
+const deleteAllOwnedAddresses = `-- name: DeleteAllOwnedAddresses :exec
+DELETE FROM addresses WHERE entry = $1
+`
+
+func (q *Queries) DeleteAllOwnedAddresses(ctx context.Context, entry uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAllOwnedAddresses, entry)
+	return err
+}
+
 const deleteAllOwnedServiceEndpoints = `-- name: DeleteAllOwnedServiceEndpoints :exec
 DELETE FROM service_endpoints WHERE entry = $1
 `
@@ -125,6 +180,20 @@ type DeleteEntryBySymbolParams struct {
 
 func (q *Queries) DeleteEntryBySymbol(ctx context.Context, arg DeleteEntryBySymbolParams) error {
 	_, err := q.db.Exec(ctx, deleteEntryBySymbol, arg.Authority, arg.Symbol)
+	return err
+}
+
+const deleteOtherOwnedAddresses = `-- name: DeleteOtherOwnedAddresses :exec
+DELETE FROM addresses WHERE entry = $1 AND ID <> ALL($2::uuid[])
+`
+
+type DeleteOtherOwnedAddressesParams struct {
+	Entry uuid.UUID
+	Ids   []uuid.UUID
+}
+
+func (q *Queries) DeleteOtherOwnedAddresses(ctx context.Context, arg DeleteOtherOwnedAddressesParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherOwnedAddresses, arg.Entry, arg.Ids)
 	return err
 }
 
@@ -270,6 +339,34 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.ID,
 	)
 	return err
+}
+
+const upsertAddress = `-- name: UpsertAddress :one
+INSERT INTO addresses (
+  id, entry, type
+) VALUES (
+  coalesce($1, gen_random_uuid()),
+  $2,
+  $3
+)
+ON CONFLICT (id) DO UPDATE SET
+  entry = $2,
+  type = $3
+WHERE addresses.id = $1
+RETURNING id, entry, type
+`
+
+type UpsertAddressParams struct {
+	ID    interface{}
+	Entry uuid.UUID
+	Type  string
+}
+
+func (q *Queries) UpsertAddress(ctx context.Context, arg UpsertAddressParams) (Address, error) {
+	row := q.db.QueryRow(ctx, upsertAddress, arg.ID, arg.Entry, arg.Type)
+	var i Address
+	err := row.Scan(&i.ID, &i.Entry, &i.Type)
+	return i, err
 }
 
 const upsertServiceEndpoint = `-- name: UpsertServiceEndpoint :one

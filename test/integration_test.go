@@ -375,6 +375,46 @@ func TestEntryCases(t *testing.T) {
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 		},
+		{
+			name:            "POST entry with addresses",
+			method:          http.MethodPost,
+			endpoint:        "/entries",
+			status:          http.StatusCreated,
+			bodyFile:        "entry-with-address.post.req.json",
+			refetchEndpoint: "/entries/by-id",
+			refetchFile:     "entry-with-address.post.refetch.json",
+		},
+		{
+			name:        "PATCH entry addresses",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000003",
+			status:      http.StatusNoContent,
+			bodyFile:    "entry-with-address.patch.req.json",
+			refetchFile: "entry-with-address.patch.refetch.json",
+		},
+		{
+			name:     "PATCH entry addresses to null",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000003",
+			status:   http.StatusNoContent,
+			body:     `{"addresses": null}`,
+			resFunc: func(res *http.Response, data string) bool {
+				if res.StatusCode != http.StatusNoContent {
+					return false
+				}
+				// Verify no addresses remain in database
+				var count int
+				err := dbpool.QueryRow(context.Background(),
+					"SELECT COUNT(*) FROM addresses WHERE entry = '00000000-0000-0000-0000-000000000003'").Scan(&count)
+				if err != nil || count != 0 {
+					return false
+				}
+				// Verify no address components remain either
+				err = dbpool.QueryRow(context.Background(),
+					"SELECT COUNT(*) FROM address_components WHERE address IN (SELECT id FROM addresses WHERE entry = '00000000-0000-0000-0000-000000000003')").Scan(&count)
+				return err == nil && count == 0
+			},
+		},
 	}
 	testCases(t, cases)
 }

@@ -375,6 +375,11 @@ components:
           description: Service endpoints associated with this entry
           items:
             $ref: '#/components/schemas/ServiceEndpoint'
+        addresses:
+          type: array
+          description: Addresses associated with this entry
+          items:
+            $ref: '#/components/schemas/Address'
     EntryPatch:
       type: object
       properties:
@@ -403,6 +408,11 @@ components:
           nullable: true
           items:
             $ref: '#/components/schemas/ServiceEndpointPatch'
+        addresses:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/AddressPatch'
 
     SymbolProperties:
       required:
@@ -467,6 +477,65 @@ components:
               format: uuid
               description: Unique id
         - $ref: '#/components/schemas/ServiceEndpointProperties'
+
+    AddressComponent:
+      type: object
+      required:
+        - seq
+        - type
+        - value
+      properties:
+        seq:
+          type: integer
+          format: int32
+          description: Sequence number for ordering components
+        type:
+          type: string
+          enum:
+            - Thoroughfare
+            - Locality
+            - AdministrativeArea
+            - PostalCode
+            - CountryCode
+            - Other
+        value:
+          type: string
+
+    AddressProperties:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - Default
+            - Shipping
+            - Billing
+            - Other
+        addressComponents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressComponent'
+    Address:
+      allOf:
+        - required:
+          - id
+          properties:
+            id:
+              readOnly: true
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/AddressProperties'
+    AddressPatch:
+      allOf:
+        - properties:
+            id:
+              type: string
+              format: uuid
+              description: Unique id
+        - $ref: '#/components/schemas/AddressProperties'
 
     Consortium:
       type: object

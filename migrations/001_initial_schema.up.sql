@@ -27,6 +27,20 @@ CREATE TABLE IF NOT EXISTS service_endpoints (
 	address varchar(255) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS addresses (
+	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
+	type text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS address_components (
+	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	address uuid NOT NULL REFERENCES addresses (id) ON DELETE CASCADE,
+	seq integer NOT NULL,
+	type text NOT NULL,
+	value text NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS consortia (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	entry uuid REFERENCES entries (id) ON DELETE SET NULL,

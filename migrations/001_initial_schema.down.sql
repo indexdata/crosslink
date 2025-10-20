@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS address_components;
+DROP TABLE IF EXISTS addresses;
 DROP TABLE IF EXISTS entries;
 DROP TABLE IF EXISTS authorities;
 DROP TABLE IF EXISTS symbols;

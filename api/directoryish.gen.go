@@ -24,6 +24,40 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AddressType.
+const (
+	AddressTypeBilling  AddressType = "Billing"
+	AddressTypeDefault  AddressType = "Default"
+	AddressTypeOther    AddressType = "Other"
+	AddressTypeShipping AddressType = "Shipping"
+)
+
+// Defines values for AddressComponentType.
+const (
+	AddressComponentTypeAdministrativeArea AddressComponentType = "AdministrativeArea"
+	AddressComponentTypeCountryCode        AddressComponentType = "CountryCode"
+	AddressComponentTypeLocality           AddressComponentType = "Locality"
+	AddressComponentTypeOther              AddressComponentType = "Other"
+	AddressComponentTypePostalCode         AddressComponentType = "PostalCode"
+	AddressComponentTypeThoroughfare       AddressComponentType = "Thoroughfare"
+)
+
+// Defines values for AddressPatchType.
+const (
+	AddressPatchTypeBilling  AddressPatchType = "Billing"
+	AddressPatchTypeDefault  AddressPatchType = "Default"
+	AddressPatchTypeOther    AddressPatchType = "Other"
+	AddressPatchTypeShipping AddressPatchType = "Shipping"
+)
+
+// Defines values for AddressPropertiesType.
+const (
+	AddressPropertiesTypeBilling  AddressPropertiesType = "Billing"
+	AddressPropertiesTypeDefault  AddressPropertiesType = "Default"
+	AddressPropertiesTypeOther    AddressPropertiesType = "Other"
+	AddressPropertiesTypeShipping AddressPropertiesType = "Shipping"
+)
+
 // Defines values for EntryLookupKey.
 const (
 	EntryLookupKeyById     EntryLookupKey = "by-id"
@@ -48,6 +82,50 @@ const (
 	UpdateEntryParamsKeyBySymbol UpdateEntryParamsKey = "by-symbol"
 )
 
+// Address defines model for Address.
+type Address struct {
+	AddressComponents *[]AddressComponent `json:"addressComponents,omitempty"`
+
+	// Id Unique id
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Type AddressType         `json:"type"`
+}
+
+// AddressType defines model for Address.Type.
+type AddressType string
+
+// AddressComponent defines model for AddressComponent.
+type AddressComponent struct {
+	// Seq Sequence number for ordering components
+	Seq   int32                `json:"seq"`
+	Type  AddressComponentType `json:"type"`
+	Value string               `json:"value"`
+}
+
+// AddressComponentType defines model for AddressComponent.Type.
+type AddressComponentType string
+
+// AddressPatch defines model for AddressPatch.
+type AddressPatch struct {
+	AddressComponents *[]AddressComponent `json:"addressComponents,omitempty"`
+
+	// Id Unique id
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Type AddressPatchType    `json:"type"`
+}
+
+// AddressPatchType defines model for AddressPatch.Type.
+type AddressPatchType string
+
+// AddressProperties defines model for AddressProperties.
+type AddressProperties struct {
+	AddressComponents *[]AddressComponent   `json:"addressComponents,omitempty"`
+	Type              AddressPropertiesType `json:"type"`
+}
+
+// AddressPropertiesType defines model for AddressProperties.Type.
+type AddressPropertiesType string
+
 // Consortium defines model for Consortium.
 type Consortium struct {
 	Entry *openapi_types.UUID `json:"entry,omitempty"`
@@ -69,6 +147,9 @@ type ConsortiumPatch struct {
 
 // Entry defines model for Entry.
 type Entry struct {
+	// Addresses Addresses associated with this entry
+	Addresses *[]Address `json:"addresses,omitempty"`
+
 	// ContactName Name of contact person
 	ContactName *string `json:"contactName,omitempty"`
 
@@ -93,6 +174,7 @@ type Entry struct {
 
 // EntryPatch defines model for EntryPatch.
 type EntryPatch struct {
+	Addresses   nullable.Nullable[[]AddressPatch]         `json:"addresses,omitempty"`
 	ContactName nullable.Nullable[string]                 `json:"contactName,omitempty"`
 	Description nullable.Nullable[string]                 `json:"description,omitempty"`
 	Email       nullable.Nullable[string]                 `json:"email,omitempty"`
@@ -1353,31 +1435,35 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, key
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"lIAUKQAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

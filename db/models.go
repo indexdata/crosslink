@@ -8,6 +8,20 @@ import (
 	"github.com/google/uuid"
 )
 
+type Address struct {
+	ID    uuid.UUID
+	Entry uuid.UUID
+	Type  string
+}
+
+type AddressComponent struct {
+	ID      uuid.UUID
+	Address uuid.UUID
+	Seq     int32
+	Type    string
+	Value   string
+}
+
 type Consortium struct {
 	ID    uuid.UUID
 	Entry *uuid.UUID
