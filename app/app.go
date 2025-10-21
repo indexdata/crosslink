@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -39,19 +39,23 @@ func httpLoggingMiddleware(next http.Handler) http.Handler {
 func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
 	handler := InitHandler(ctx, dbpool)
 	addr := fmt.Sprintf("%s:%s", Host, Port)
-	log.Printf("Starting directoryish at %s...", addr)
+	slog.InfoContext(ctx, "Starting directoryish", "addr", addr)
 	s := &http.Server{
 		Handler: handler,
 		Addr:    addr,
 	}
 
-	log.Fatal(s.ListenAndServe())
+	if err := s.ListenAndServe(); err != nil {
+		slog.ErrorContext(ctx, "Server failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	swagger, err := api.GetSwagger()
 	if err != nil {
-		log.Fatal("Error loading API spec")
+		slog.ErrorContext(ctx, "Error loading API spec", "error", err)
+		os.Exit(1)
 	}
 
 	queries := db.New(dbpool)

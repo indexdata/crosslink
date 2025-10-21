@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -159,7 +159,8 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 
 	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to query entries", "error", err)
+		return GetEntries500TextResponse("Internal server error"), nil
 	}
 	defer rows.Close()
 
@@ -171,13 +172,15 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	for rows.Next() {
 		entry, err := scanEntryRow(rows)
 		if err != nil {
-			log.Fatal(err)
+			slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
+			return GetEntries500TextResponse("Internal server error"), nil
 		}
 		resp = append(resp, entry)
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "error iterating entry rows", "error", err)
+		return GetEntries500TextResponse("Internal server error"), nil
 	}
 
 	return GetEntries200JSONResponse(resp), nil
@@ -209,7 +212,8 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 
 	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to query entry", "error", err)
+		return GetEntry500TextResponse("Internal server error"), nil
 	}
 	defer rows.Close()
 
@@ -219,7 +223,8 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 
 	entry, err := scanEntryRow(rows)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
+		return GetEntry500TextResponse("Internal server error"), nil
 	}
 
 	return GetEntry200JSONResponse(entry), nil
@@ -228,9 +233,10 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
@@ -240,7 +246,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to create entry", "error", err, "name", request.Body.Name)
+		return AddEntry500TextResponse("Internal server error"), nil
 	}
 
 	if request.Body.Symbols != nil {
@@ -254,10 +261,12 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
+						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
 						return AddEntry400TextResponse("Duplicate symbol"), nil
 					}
 				}
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "failed to create symbol", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
+				return AddEntry500TextResponse("Internal server error"), nil
 			}
 		}
 	}
@@ -271,7 +280,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				Address: endpoint.Address,
 			})
 			if err != nil {
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "failed to create service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
+				return AddEntry500TextResponse("Internal server error"), nil
 			}
 		}
 	}
@@ -283,7 +293,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 				Type:  string(address.Type),
 			})
 			if err != nil {
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
+				return AddEntry500TextResponse("Internal server error"), nil
 			}
 
 			if address.AddressComponents != nil {
@@ -295,7 +306,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 						Value:   component.Value,
 					})
 					if err != nil {
-						log.Fatal(err)
+						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
+						return AddEntry500TextResponse("Internal server error"), nil
 					}
 				}
 			}
@@ -307,7 +319,8 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
+		return AddEntry500TextResponse("Internal server error"), nil
 	}
 
 	return AddEntry201JSONResponse(resp), nil
@@ -335,14 +348,16 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	if errors.Is(err, pgx.ErrNoRows) {
 		return UpdateEntry404TextResponse("Entry not found"), nil
 	} else if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
@@ -352,7 +367,8 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		ID:          orig.ID,
 	})
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)
+		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
 
 	if request.Body.Symbols.IsSpecified() && !request.Body.Symbols.IsNull() {
@@ -365,9 +381,17 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 		if len(patchedSymbols) > 0 {
-			qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: orig.ID, Ids: patchedSymbols})
+			err = qtx.DeleteOtherOwnedSymbols(ctx, db.DeleteOtherOwnedSymbolsParams{Owner: orig.ID, Ids: patchedSymbols})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned symbols", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		} else {
-			qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+			err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		}
 
 		// Update/create symbols
@@ -379,18 +403,23 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Authority: strings.ToUpper(symbol.Authority),
 			})
 			if err != nil {
-				log.Println(err)
 				var pge *pgconn.PgError
 				if errors.As(err, &pge) {
 					if pge.SQLState() == "23505" { //unique_violation
+						slog.InfoContext(ctx, "duplicate symbol rejected", "symbol", symbol.Symbol, "authority", symbol.Authority)
 						return UpdateEntry400TextResponse("Duplicate symbol"), nil
 					}
 				}
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "unexpected database error during symbol upsert", "error", err, "symbol", symbol.Symbol, "authority", symbol.Authority)
+				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		}
 	} else if request.Body.Symbols.IsNull() {
-		qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+		err = qtx.DeleteAllOwnedSymbols(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned symbols", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
 	}
 
 	if request.Body.Endpoints.IsSpecified() && !request.Body.Endpoints.IsNull() {
@@ -403,9 +432,17 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 		if len(patchedEndpoints) > 0 {
-			qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: orig.ID, Ids: patchedEndpoints})
+			err = qtx.DeleteOtherOwnedServiceEndpoints(ctx, db.DeleteOtherOwnedServiceEndpointsParams{Entry: orig.ID, Ids: patchedEndpoints})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned service endpoints", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		} else {
-			qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+			err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		}
 
 		// Update/create endpoints
@@ -418,11 +455,16 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Address: endpoint.Address,
 			})
 			if err != nil {
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "failed to upsert service endpoint", "error", err, "name", endpoint.Name, "type", endpoint.Type)
+				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 		}
 	} else if request.Body.Endpoints.IsNull() {
-		qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+		err = qtx.DeleteAllOwnedServiceEndpoints(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned service endpoints", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
 	}
 
 	if request.Body.Addresses.IsSpecified() && !request.Body.Addresses.IsNull() {
@@ -435,9 +477,17 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			}
 		}
 		if len(patchedAddresses) > 0 {
-			qtx.DeleteOtherOwnedAddresses(ctx, db.DeleteOtherOwnedAddressesParams{Entry: orig.ID, Ids: patchedAddresses})
+			err = qtx.DeleteOtherOwnedAddresses(ctx, db.DeleteOtherOwnedAddressesParams{Entry: orig.ID, Ids: patchedAddresses})
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete other owned addresses", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		} else {
-			qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+			err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+			if err != nil {
+				slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
+				return UpdateEntry500TextResponse("Internal server error"), nil
+			}
 		}
 
 		// Update/create addresses
@@ -448,13 +498,18 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 				Type:  string(address.Type),
 			})
 			if err != nil {
-				log.Fatal(err)
+				slog.ErrorContext(ctx, "failed to upsert address", "error", err, "type", address.Type)
+				return UpdateEntry500TextResponse("Internal server error"), nil
 			}
 
 			// Handle address components
 			if address.AddressComponents != nil {
 				// Delete all existing components and insert new ones
-				qtx.DeleteAllOwnedAddressComponents(ctx, insertedAddress.ID)
+				err = qtx.DeleteAllOwnedAddressComponents(ctx, insertedAddress.ID)
+				if err != nil {
+					slog.ErrorContext(ctx, "failed to delete all owned address components", "error", err, "address_id", insertedAddress.ID)
+					return UpdateEntry500TextResponse("Internal server error"), nil
+				}
 
 				// Insert new components
 				for _, component := range *address.AddressComponents {
@@ -465,18 +520,24 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 						Value:   component.Value,
 					})
 					if err != nil {
-						log.Fatal(err)
+						slog.ErrorContext(ctx, "failed to create address component", "error", err, "type", component.Type, "seq", component.Seq)
+						return UpdateEntry500TextResponse("Internal server error"), nil
 					}
 				}
 			}
 		}
 	} else if request.Body.Addresses.IsNull() {
-		qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+		err = qtx.DeleteAllOwnedAddresses(ctx, orig.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
 	}
 
 	return UpdateEntry204Response{}, nil
@@ -498,7 +559,8 @@ func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObje
 		err = a.queries.DeleteEntryBySymbol(ctx, db.DeleteEntryBySymbolParams{Authority: authority, Symbol: symbol})
 	}
 	if err != nil {
-		log.Fatal(err)
+		slog.ErrorContext(ctx, "failed to delete entry", "error", err)
+		return DeleteEntry500TextResponse("Internal server error"), nil
 	}
 	return DeleteEntry204Response{}, nil
 }
