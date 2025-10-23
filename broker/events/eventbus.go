@@ -21,10 +21,10 @@ const EB_COMP = "event_bus"
 
 type EventBus interface {
 	Start(ctx common.ExtendedContext) error
-	CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
-	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error)
-	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
-	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error)
+	CreateTask(illTransactionID string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
+	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
+	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
+	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
 	BeginTask(eventId string) (Event, error)
 	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
 	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
@@ -183,16 +183,23 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlersMap m
 	eventCtx.Logger().Debug("all handlers finished", "eventName", event.EventName, "signal", signal)
 }
 
-func (p *PostgresEventBus) CreateTask(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
-	return p.createTask(illTransactionID, eventName, data, parentId, false)
+func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error) {
+	return p.createTask(classId, eventName, data, eventClass, parentId, false)
 }
 
-func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, parentId *string) (string, error) {
-	return p.createTask(illTransactionID, eventName, data, parentId, true)
+func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error) {
+	return p.createTask(illTransactionID, eventName, data, eventClass, parentId, true)
 }
 
-func (p *PostgresEventBus) createTask(illTransactionID string, eventName EventName, data EventData, parentId *string, broadcast bool) (string, error) {
+func (p *PostgresEventBus) createTask(classId string, eventName EventName, data EventData, eventClass EventClass, parentId *string, broadcast bool) (string, error) {
 	id := uuid.New().String()
+	illTransactionID := ""
+	patronRequestID := ""
+	if eventClass == EventClassPatronRequest {
+		illTransactionID = classId
+	} else {
+		patronRequestID = classId
+	}
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -205,6 +212,7 @@ func (p *PostgresEventBus) createTask(illTransactionID string, eventName EventNa
 			ParentID:         getPgText(parentId),
 			LastSignal:       string(SignalTaskCreated),
 			Broadcast:        broadcast,
+			PatronRequestID:  patronRequestID,
 		})
 		if err != nil && event.ParentID.Valid {
 			return err
@@ -215,16 +223,23 @@ func (p *PostgresEventBus) createTask(illTransactionID string, eventName EventNa
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error) {
-	return p.createNotice(illTransactionID, eventName, data, status, false)
+func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventClass, false)
 }
 
-func (p *PostgresEventBus) CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus) (string, error) {
-	return p.createNotice(illTransactionID, eventName, data, status, true)
+func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventClass, true)
 }
 
-func (p *PostgresEventBus) createNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus, broadcast bool) (string, error) {
+func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventClass, broadcast bool) (string, error) {
 	id := uuid.New().String()
+	illTransactionID := ""
+	patronRequestID := ""
+	if eventClass == EventClassPatronRequest {
+		illTransactionID = classId
+	} else {
+		patronRequestID = classId
+	}
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -236,6 +251,7 @@ func (p *PostgresEventBus) createNotice(illTransactionID string, eventName Event
 			EventData:        data,
 			LastSignal:       string(SignalNoticeCreated),
 			Broadcast:        broadcast,
+			PatronRequestID:  patronRequestID,
 		})
 		if err != nil {
 			return err
