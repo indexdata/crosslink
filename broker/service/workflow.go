@@ -38,7 +38,7 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, con
 func (w *WorkflowManager) RequestReceived(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, &event.ID)
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 	}, "")
 }
 
@@ -46,9 +46,9 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		} else {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}
 	}, "")
 }
@@ -63,14 +63,14 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 				return "", fmt.Errorf("failed to process supplier selected event, no requester")
 			}
 			if requester.BrokerMode == string(common.BrokerModeTransparent) || requester.BrokerMode == string(common.BrokerModeTranslucent) {
-				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 				if err != nil {
 					return id, err
 				}
 			}
 			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
 				if !local {
-					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, &event.ID)
+					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 				} else {
 					return "", nil
 				}
@@ -78,7 +78,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 				return "", fmt.Errorf("failed to detect local supplier from event result data")
 			}
 		} else {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}
 	}, "")
 }
@@ -95,14 +95,14 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx common.ExtendedContext, ev
 	if w.handleAndCheckCancelResponse(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID) {
 		common.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, &event.ID)
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 	} else {
 		common.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 		common.Must(ctx, func() (string, error) { // This will also send unfilled message if no more suppliers
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 	}
 }
@@ -112,7 +112,7 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx common.ExtendedContext, e
 	if event.EventStatus == events.EventStatusSuccess {
 		common.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, &event.ID)
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 	}
 }
@@ -127,12 +127,12 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx common.ExtendedContext, 
 	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
 		// action message was send by requester so we must relay the confirmation
 		common.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmRequesterMsg, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 	} else if event.EventStatus != events.EventStatusSuccess {
 		// if the last requester action was Request and messaging supplier failed, we try next supplier
 		common.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 	}
 }
@@ -170,11 +170,11 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext,
 	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
 		// action message was send by supplier so we must relay the confirmation
 		common.Must(ctx, func() (string, error) {
-			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, &event.ID)
+			return w.eventBus.CreateTaskBroadcast(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 		}, "")
 		if event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
 			common.Must(ctx, func() (string, error) {
-				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, &event.ID)
+				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventClassIllTransaction, &event.ID)
 			}, "")
 		}
 		if cancelSuccessful(*event.EventData.IncomingMessage.SupplyingAgencyMessage) {

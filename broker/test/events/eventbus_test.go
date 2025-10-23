@@ -94,7 +94,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 
 	for i := 0; i < noEvents; i++ {
 		illId := apptest.GetIllTransId(t, illRepo)
-		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventClassIllTransaction, nil)
 		assert.NoError(t, err, "Task should be created without errors")
 	}
 
@@ -151,7 +151,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 
 	for i := 0; i < noEvents; i++ {
 		illId := apptest.GetIllTransId(t, illRepo)
-		_, err := eventBus.CreateTaskBroadcast(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, nil)
+		_, err := eventBus.CreateTaskBroadcast(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, events.EventClassIllTransaction, nil)
 		assert.NoError(t, err, "Task should be created without errors")
 	}
 
@@ -188,7 +188,7 @@ func TestCreateTask(t *testing.T) {
 	})
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventClassIllTransaction, nil)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -248,7 +248,7 @@ func TestCreateNotice(t *testing.T) {
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventClassIllTransaction)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -284,7 +284,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, nil)
+	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventClassIllTransaction, nil)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -426,7 +426,7 @@ func TestReconnectListener(t *testing.T) {
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventClassIllTransaction)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
