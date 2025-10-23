@@ -4,6 +4,9 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 	"log/slog"
 	"math"
 	"net/http"
@@ -76,6 +79,7 @@ type Context struct {
 	IllRepo    ill_db.IllRepo
 	EventRepo  events.EventRepo
 	DirAdapter adapter.DirectoryLookupAdapter
+	PrRepo     pr_db.PrRepo
 }
 
 func configLog() slog.Handler {
@@ -143,6 +147,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
+	prRepo := CreatePrRepo(pool)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
@@ -158,6 +163,7 @@ func Init(ctx context.Context) (Context, error) {
 		IllRepo:    illRepo,
 		EventRepo:  eventRepo,
 		DirAdapter: dirAdapter,
+		PrRepo:     prRepo,
 	}, nil
 }
 
@@ -188,6 +194,8 @@ func StartServer(ctx Context) error {
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
+	prApiHandler := prapi.NewApiHandler(ctx.PrRepo)
+	proapi.HandlerFromMux(&prApiHandler, ServeMux)
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
 		ServeMux.ServeHTTP(w, r)
@@ -283,6 +291,12 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 
 func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
 	illRepo := new(ill_db.PgIllRepo)
+	illRepo.Pool = dbPool
+	return illRepo
+}
+
+func CreatePrRepo(dbPool *pgxpool.Pool) pr_db.PrRepo {
+	illRepo := new(pr_db.PgPrRepo)
 	illRepo.Pool = dbPool
 	return illRepo
 }

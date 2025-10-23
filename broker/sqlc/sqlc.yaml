@@ -56,3 +56,15 @@ sql:
           - column: "event.event_status"
             go_type:
               type: "EventStatus"
+  - engine: "postgresql"
+    queries: "pr_query.sql"
+    schema: "pr_schema.sql"
+    gen:
+      go:
+        package: "pr_db"
+        out: "../patron_request/db"
+        output_db_file_name: "pr_db_gen.go"
+        output_models_file_name: "pr_models_gen.go"
+        output_files_suffix: "_gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
