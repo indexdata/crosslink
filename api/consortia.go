@@ -78,15 +78,6 @@ func (a ApiImpl) GetConsortium(ctx context.Context, request GetConsortiumRequest
 }
 
 func (a ApiImpl) UpdateConsortium(ctx context.Context, request UpdateConsortiumRequestObject) (UpdateConsortiumResponseObject, error) {
-	var orig db.Consortium
-	orig, err := a.queries.ConsortiumById(ctx, request.Id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return UpdateConsortium404TextResponse("Consortium not found"), nil
-	} else if err != nil {
-		slog.ErrorContext(ctx, "failed to get consortium for update", "error", err, "id", request.Id)
-		return UpdateConsortium500TextResponse("Internal server error"), nil
-	}
-
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "UpdateConsortium")
@@ -94,6 +85,14 @@ func (a ApiImpl) UpdateConsortium(ctx context.Context, request UpdateConsortiumR
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
+
+	orig, err := qtx.ConsortiumByIdForUpdate(ctx, request.Id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateConsortium404TextResponse("Consortium not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to get consortium for update", "error", err, "id", request.Id)
+		return UpdateConsortium500TextResponse("Internal server error"), nil
+	}
 
 	err = qtx.UpdateConsortium(ctx, db.UpdateConsortiumParams{
 		ID:    request.Id,

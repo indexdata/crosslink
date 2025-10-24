@@ -11,13 +11,13 @@ import (
 	"github.com/google/uuid"
 )
 
-const consortiumById = `-- name: ConsortiumById :one
+const consortiumByIdForUpdate = `-- name: ConsortiumByIdForUpdate :one
 SELECT id, entry, name FROM consortia
-WHERE id = $1 LIMIT 1
+WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
-func (q *Queries) ConsortiumById(ctx context.Context, id uuid.UUID) (Consortium, error) {
-	row := q.db.QueryRow(ctx, consortiumById, id)
+func (q *Queries) ConsortiumByIdForUpdate(ctx context.Context, id uuid.UUID) (Consortium, error) {
+	row := q.db.QueryRow(ctx, consortiumByIdForUpdate, id)
 	var i Consortium
 	err := row.Scan(&i.ID, &i.Entry, &i.Name)
 	return i, err
@@ -225,12 +225,12 @@ func (q *Queries) DeleteOtherOwnedSymbols(ctx context.Context, arg DeleteOtherOw
 	return err
 }
 
-const entryById = `-- name: EntryById :one
-SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries WHERE id = $1 LIMIT 1
+const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
+SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
-func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
-	row := q.db.QueryRow(ctx, entryById, id)
+func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, error) {
+	row := q.db.QueryRow(ctx, entryByIdForUpdate, id)
 	var i Entry
 	err := row.Scan(
 		&i.ID,
@@ -245,17 +245,17 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 	return i, err
 }
 
-const entryBySymbol = `-- name: EntryBySymbol :one
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `
 
-type EntryBySymbolParams struct {
+type EntryBySymbolForUpdateParams struct {
 	Authority string
 	Symbol    string
 }
 
-func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (Entry, error) {
-	row := q.db.QueryRow(ctx, entryBySymbol, arg.Authority, arg.Symbol)
+func (q *Queries) EntryBySymbolForUpdate(ctx context.Context, arg EntryBySymbolForUpdateParams) (Entry, error) {
+	row := q.db.QueryRow(ctx, entryBySymbolForUpdate, arg.Authority, arg.Symbol)
 	var i Entry
 	err := row.Scan(
 		&i.ID,
@@ -319,13 +319,15 @@ const updateEntry = `-- name: UpdateEntry :exec
 UPDATE entries
 SET
   name = $1,
-  contact_name = $2,
-  email = $3
-WHERE id = $4
+  description = $2,
+  contact_name = $3,
+  email = $4
+WHERE id = $5
 `
 
 type UpdateEntryParams struct {
 	Name        string
+	Description *string
 	ContactName *string
 	Email       *string
 	ID          uuid.UUID
@@ -334,6 +336,7 @@ type UpdateEntryParams struct {
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
 	_, err := q.db.Exec(ctx, updateEntry,
 		arg.Name,
+		arg.Description,
 		arg.ContactName,
 		arg.Email,
 		arg.ID,

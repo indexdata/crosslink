@@ -327,31 +327,6 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 }
 
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
-	var orig db.Entry
-	var err error
-	if request.Key == UpdateEntryParamsKeyById {
-		parsedId, perr := uuid.Parse(request.Value)
-		if perr != nil {
-			return UpdateEntry400TextResponse("Error parsing id"), nil
-		}
-		orig, err = a.queries.EntryById(ctx, parsedId)
-		if err != nil {
-			print(err.Error())
-		}
-	} else if request.Key == UpdateEntryParamsKeyBySymbol {
-		authority, symbol, perr := resolveCombinedSymbol(request.Value)
-		if perr != nil {
-			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
-		}
-		orig, err = a.queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: authority, Symbol: symbol})
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return UpdateEntry404TextResponse("Entry not found"), nil
-	} else if err != nil {
-		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
-		return UpdateEntry500TextResponse("Internal server error"), nil
-	}
-
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
@@ -360,8 +335,30 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := a.queries.WithTx(tx)
 
+	var orig db.Entry
+	if request.Key == UpdateEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("Error parsing id"), nil
+		}
+		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
+	} else if request.Key == UpdateEntryParamsKeyBySymbol {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return UpdateEntry400TextResponse("No delimiter found or other issue parsing symbol"), nil
+		}
+		orig, err = qtx.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return UpdateEntry404TextResponse("Entry not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
+		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
 		Name:        derefOrDefault(request.Body.Name, orig.Name),
+		Description: maybeUpdateCol(orig.Description, request.Body.Description),
 		ContactName: maybeUpdateCol(orig.ContactName, request.Body.ContactName),
 		Email:       maybeUpdateCol(orig.Email, request.Body.Email),
 		ID:          orig.ID,

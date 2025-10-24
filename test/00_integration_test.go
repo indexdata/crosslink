@@ -415,6 +415,72 @@ func TestEntryCases(t *testing.T) {
 				return err == nil && count == 0
 			},
 		},
+		{
+			name:     "PATCH entry symbols to null",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:   http.StatusNoContent,
+			body:     `{"symbols": null}`,
+			resFunc: func(res *http.Response, data string) bool {
+				var count int
+				err := dbpool.QueryRow(context.Background(),
+					"SELECT COUNT(*) FROM symbols WHERE owner = '00000000-0000-0000-0000-000000000002'").Scan(&count)
+				return err == nil && count == 0
+			},
+		},
+		{
+			name:     "PATCH entry endpoints to null",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:   http.StatusNoContent,
+			body:     `{"endpoints": null}`,
+			resFunc: func(res *http.Response, data string) bool {
+				var count int
+				err := dbpool.QueryRow(context.Background(),
+					"SELECT COUNT(*) FROM service_endpoints WHERE entry = '00000000-0000-0000-0000-000000000002'").Scan(&count)
+				return err == nil && count == 0
+			},
+		},
+		{
+			name:     "POST entry with duplicate symbols in request",
+			method:   http.MethodPost,
+			endpoint: "/entries",
+			status:   http.StatusBadRequest,
+			body:     `{"name":"Test","symbols":[{"authority":"DUP","symbol":"SYM"},{"authority":"DUP","symbol":"SYM"}]}`,
+		},
+		{
+			name:     "POST entry with empty name",
+			method:   http.MethodPost,
+			endpoint: "/entries",
+			status:   http.StatusBadRequest,
+			body:     `{"name":""}`,
+		},
+		{
+			name:     "PATCH entry adding duplicate symbol from another entry",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			status:   http.StatusBadRequest,
+			body:     `{"symbols":[{"authority":"TEST","symbol":"ANINST"}]}`,
+		},
+		{
+			name:     "GET by symbol without colon",
+			method:   http.MethodGet,
+			endpoint: "/entries/by-symbol/NOSYMBOLHERE",
+			status:   http.StatusBadRequest,
+		},
+		{
+			name:     "PATCH by symbol without colon",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-symbol/NOSYMBOLHERE",
+			status:   http.StatusBadRequest,
+			body:     `{"name":"Updated"}`,
+		},
+		{
+			name:     "DELETE by symbol without colon",
+			method:   http.MethodDelete,
+			endpoint: "/entries/by-symbol/NOSYMBOLHERE",
+			status:   http.StatusBadRequest,
+		},
 	}
 	testCases(t, cases)
 }
@@ -469,6 +535,36 @@ func TestConsortiumCases(t *testing.T) {
 			endpoint:      "/consortia/00000000-0000-0000-0000-000000000001",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
+		},
+		{
+			name:     "POST consortium with non-existent entry FK",
+			method:   http.MethodPost,
+			endpoint: "/consortia",
+			status:   http.StatusInternalServerError,
+			body:     `{"name":"Test Consortium","entry":"f0000000-0000-0000-0000-000000000099"}`,
+		},
+		{
+			name:     "PATCH consortium.entry to non-existent UUID",
+			method:   http.MethodPatch,
+			endpoint: "/consortia/00000000-0000-0000-0000-000000000001",
+			status:   http.StatusInternalServerError,
+			body:     `{"entry":"f0000000-0000-0000-0000-000000000099"}`,
+		},
+		{
+			name:     "DELETE entry referenced by consortium verifies SET NULL",
+			method:   http.MethodDelete,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			status:   http.StatusNoContent,
+			resFunc: func(res *http.Response, data string) bool {
+				if res.StatusCode != http.StatusNoContent {
+					return false
+				}
+				// Verify consortium still exists but entry is null
+				var entryID *string
+				err := dbpool.QueryRow(context.Background(),
+					"SELECT entry FROM consortia WHERE id = '00000000-0000-0000-0000-000000000001'").Scan(&entryID)
+				return err == nil && entryID == nil
+			},
 		},
 	}
 	testCases(t, cases)

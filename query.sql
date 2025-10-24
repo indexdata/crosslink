@@ -1,8 +1,8 @@
--- name: EntryById :one
-SELECT * FROM entries WHERE id = $1 LIMIT 1;
+-- name: EntryByIdForUpdate :one
+SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE;
 
--- name: EntryBySymbol :one
-SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1;
+-- name: EntryBySymbolForUpdate :one
+SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @authority AND s.symbol = @symbol LIMIT 1 FOR UPDATE OF e;
 
 -- name: CreateEntry :one
 INSERT INTO entries (
@@ -16,6 +16,7 @@ RETURNING *;
 UPDATE entries
 SET
   name = @name,
+  description = @description,
   contact_name = @contact_name,
   email = @email
 WHERE id = @id;
@@ -118,9 +119,9 @@ SELECT * FROM consortia
 WHERE
   (id = sqlc.narg(id) OR sqlc.narg(id) IS NULL);
 
--- name: ConsortiumById :one
+-- name: ConsortiumByIdForUpdate :one
 SELECT * FROM consortia
-WHERE id = $1 LIMIT 1;
+WHERE id = $1 LIMIT 1 FOR UPDATE;
 
 -- name: CreateConsortium :one
 INSERT INTO consortia (
