@@ -45,7 +45,9 @@ func TestConcurrency(t *testing.T) {
 		// Verify both updates were applied (without FOR UPDATE, one will be lost)
 		_, data := jsonReq(t, http.MethodGet, "/entries/by-id/00000000-0000-0000-0000-000000000002", "")
 		var entry map[string]interface{}
-		json.Unmarshal([]byte(data), &entry)
+		if err := json.Unmarshal([]byte(data), &entry); err != nil {
+			t.Fatalf("Failed to unmarshal entry: %v", err)
+		}
 
 		if desc, _ := entry["description"].(string); desc != "Updated concurrently" {
 			t.Errorf("Description lost in race: got %v", entry["description"])
