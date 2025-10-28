@@ -233,6 +233,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tier'
+        ncip:
+          type: object
+          $ref: '#/components/schemas/NcipConfig'
+    NcipConfig:
+      required:
+        - server_address
+      properties:
+        from_agency:
+          type: string
+        from_agency_authentication:
+          type: string
+        to_agency:
+          type: string
+        server_address:
+          type: string
     Symbol:
       required:
         - id
