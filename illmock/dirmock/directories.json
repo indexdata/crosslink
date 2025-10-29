@@ -12,6 +12,15 @@
         "authority": "ISIL"
       }
     ],
+    "ncip" : {
+      "address": "http://localhost:8083/ncip",
+      "from_agency": "NALB",
+      "from_agency_authentication": "password",
+      "to_agency": "NALB",
+      "authuser_mode": "disabled",
+      "request_item_mode": "auto",
+      "accept_item_mode": "manual"
+    },
     "endpoints": [
       {
         "id": "4ded1655-cc7e-59d1-bcaa-98bc3fe10588",

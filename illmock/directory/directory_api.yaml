@@ -235,10 +235,12 @@ components:
             $ref: '#/components/schemas/Tier'
         ncip:
           type: object
-          $ref: '#/components/schemas/NcipConfig'
-    NcipConfig:
+          $ref: '#/components/schemas/Ncip'
+    Ncip:
       required:
-        - server_address
+        - from_agency
+        - from_agency_authentication
+        - to_agency
       properties:
         from_agency:
           type: string
@@ -246,8 +248,26 @@ components:
           type: string
         to_agency:
           type: string
-        server_address:
+        address:
           type: string
+        authuser_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
+        request_item_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
+        accept_item_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
     Symbol:
       required:
         - id
