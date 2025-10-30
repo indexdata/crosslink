@@ -1,11 +1,11 @@
 package ncipclient
 
 import (
-	"bytes"
 	"encoding/xml"
 	"fmt"
 	"net/http"
 
+	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/ncip"
 )
 
@@ -109,22 +109,12 @@ func (n *NcipClientImpl) sendReceiveMessage(ncipInfo map[string]any, message *nc
 		return nil, fmt.Errorf("missing NCIP address in customData")
 	}
 	message.Version = ncip.NCIP_V2_02_XSD
-	xmlData, err := xml.Marshal(message)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal NCIP message: %s", err.Error())
-	}
-	resp, err := n.client.Post(url, "application/xml", bytes.NewBuffer(xmlData))
-	if err != nil {
-		return nil, fmt.Errorf("NCIP message send error: %s", err.Error())
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("NCIP server returned status code %d", resp.StatusCode)
-	}
+
 	var respMessage ncip.NCIPMessage
-	err = xml.NewDecoder(resp.Body).Decode(&respMessage)
+	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
+		url, message, &respMessage, xml.Marshal, xml.Unmarshal)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode NCIP response: %s", err.Error())
+		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}
 	if len(respMessage.Problem) > 0 {
 		return nil, &NcipError{
