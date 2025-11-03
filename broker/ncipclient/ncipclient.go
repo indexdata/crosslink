@@ -5,11 +5,11 @@ import "github.com/indexdata/crosslink/ncip"
 // NcipClient defines the interface for NCIP operations
 // customData is from the DirectoryEntry.CustomData field
 type NcipClient interface {
-	// AuthenticateUser performs user authentication
+	// LookupUser performs user authentication
 	// Returns true if authentication is successful (disabled or auto and NCIP lookup succeeded)
 	// Returns false if authentication is manual
 	// Returns an error otherwise (failed NCIP lookup, misconfiguration, etc)
-	AuthenticateUser(customData map[string]any, arg ncip.LookupUser) (bool, error)
+	LookupUser(customData map[string]any, arg ncip.LookupUser) (bool, error)
 	AcceptItem(customData map[string]any, arg ncip.AcceptItem) (bool, error)
 	CheckOutItem(customData map[string]any, arg ncip.CheckOutItem) error
 	CheckInItem(customData map[string]any, arg ncip.CheckInItem) error

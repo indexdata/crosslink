@@ -46,7 +46,7 @@ func TestAuthenticateUserAutoOK(t *testing.T) {
 			UserIdentifierValue: "validuser",
 		},
 	}
-	b, err := ncipClient.AuthenticateUser(customData, lookup)
+	b, err := ncipClient.LookupUser(customData, lookup)
 	assert.NoError(t, err)
 	assert.True(t, b)
 }
@@ -68,7 +68,7 @@ func TestAuthenticateUserAutoImvalidUser(t *testing.T) {
 			UserIdentifierValue: "foo",
 		},
 	}
-	_, err := ncipClient.AuthenticateUser(customData, lookup)
+	_, err := ncipClient.LookupUser(customData, lookup)
 	assert.Error(t, err, "NCIP user authentication failed: Unknown User: foo")
 }
 
@@ -85,7 +85,7 @@ func TestAuthenticateUserAutoManual(t *testing.T) {
 			UserIdentifierValue: "validuser",
 		},
 	}
-	b, err := ncipClient.AuthenticateUser(customData, lookup)
+	b, err := ncipClient.LookupUser(customData, lookup)
 	assert.NoError(t, err)
 	assert.False(t, b)
 }
@@ -103,7 +103,7 @@ func TestAuthenticateUserDisabled(t *testing.T) {
 			UserIdentifierValue: "validuser",
 		},
 	}
-	b, err := ncipClient.AuthenticateUser(customData, lookup)
+	b, err := ncipClient.LookupUser(customData, lookup)
 	assert.NoError(t, err)
 	assert.True(t, b)
 }
@@ -123,6 +123,6 @@ func TestAuthenticateUserMissingAddress(t *testing.T) {
 			UserIdentifierValue: "validuser",
 		},
 	}
-	_, err := ncipClient.AuthenticateUser(customData, lookup)
+	_, err := ncipClient.LookupUser(customData, lookup)
 	assert.Error(t, err, "missing NCIP address in customData")
 }

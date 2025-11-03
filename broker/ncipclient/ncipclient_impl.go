@@ -19,7 +19,7 @@ func CreateNcipClient(client *http.Client) NcipClient {
 	}
 }
 
-func (n *NcipClientImpl) AuthenticateUser(customData map[string]any, lookup ncip.LookupUser) (bool, error) {
+func (n *NcipClientImpl) LookupUser(customData map[string]any, lookup ncip.LookupUser) (bool, error) {
 	ncipInfo, ok := customData["ncip"].(map[string]any)
 	if !ok {
 		return false, fmt.Errorf("missing ncip configuration in customData")
