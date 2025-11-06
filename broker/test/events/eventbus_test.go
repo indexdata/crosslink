@@ -216,6 +216,7 @@ func TestTransactionRollback(t *testing.T) {
 			EventName:        events.EventNameMessageRequester,
 			EventStatus:      events.EventStatusNew,
 			EventData:        events.EventData{},
+			PatronRequestID:  events.DEFAULT_PATRON_REQUEST_ID,
 		})
 		if err != nil {
 			t.Error("Should not be error")

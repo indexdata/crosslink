@@ -42,6 +42,8 @@ const (
 	EventNameMessageSupplier      EventName = "message-supplier"
 	EventNameConfirmRequesterMsg  EventName = "confirm-requester-msg"
 	EventNameConfirmSupplierMsg   EventName = "confirm-supplier-msg"
+	EventNameInvokeAction         EventName = "invoke-action"
+	EventNamePatronRequestMessage EventName = "patron-request-message"
 )
 
 type Signal string
@@ -65,6 +67,7 @@ type CommonEventData struct {
 	HttpFailure     *httpclient.HttpError     `json:"httpFailure,omitempty"`
 	EventError      *EventError               `json:"eventError,omitempty"`
 	Note            string                    `json:"note,omitempty"`
+	Action          *string                   `json:"action,omitempty"`
 }
 
 type EventError struct {

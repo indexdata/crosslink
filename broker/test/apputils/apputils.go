@@ -71,6 +71,7 @@ func GetEventIdWithData(t *testing.T, eventRepo events.EventRepo, illId string, 
 		EventStatus:      status,
 		EventData:        data,
 		LastSignal:       string(events.SignalTaskCreated),
+		PatronRequestID:  events.DEFAULT_PATRON_REQUEST_ID,
 	})
 
 	if err != nil {

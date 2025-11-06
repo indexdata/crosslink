@@ -96,8 +96,8 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
-	assert.Len(t, foundPrs, 1)
-	assert.Equal(t, newPr.ID, foundPrs[0].ID)
+	assert.Len(t, foundPrs, 2)
+	assert.Equal(t, newPr.ID, foundPrs[1].ID)
 
 	// GET by id
 	thisPrPath := basePath + "/" + newPr.ID
