@@ -18,13 +18,15 @@ import (
 
 const EVENT_BUS_CHANNEL = "crosslink_channel"
 const EB_COMP = "event_bus"
+const DEFAULT_ILL_TRANSACTION_ID = "00000000-0000-0000-0000-000000000001"
+const DEFAULT_PATRON_REQUEST_ID = "00000000-0000-0000-0000-000000000002"
 
 type EventBus interface {
 	Start(ctx common.ExtendedContext) error
-	CreateTask(illTransactionID string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
-	CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
-	CreateNotice(illTransactionID string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
-	CreateNoticeBroadcast(illTransactionID string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
+	CreateTask(id string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
+	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventClass EventClass, parentId *string) (string, error)
+	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
+	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventClass EventClass) (string, error)
 	BeginTask(eventId string) (Event, error)
 	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
 	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
@@ -130,7 +132,7 @@ func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 			if err != nil {
 				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
 			}
-			p.handleNotify(notifyData)
+			go p.handleNotify(notifyData)
 		}
 	}()
 	return nil
@@ -193,13 +195,7 @@ func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventNam
 
 func (p *PostgresEventBus) createTask(classId string, eventName EventName, data EventData, eventClass EventClass, parentId *string, broadcast bool) (string, error) {
 	id := uuid.New().String()
-	illTransactionID := ""
-	patronRequestID := ""
-	if eventClass == EventClassPatronRequest {
-		illTransactionID = classId
-	} else {
-		patronRequestID = classId
-	}
+	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventClass)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -233,13 +229,7 @@ func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName Event
 
 func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventClass, broadcast bool) (string, error) {
 	id := uuid.New().String()
-	illTransactionID := ""
-	patronRequestID := ""
-	if eventClass == EventClassPatronRequest {
-		illTransactionID = classId
-	} else {
-		patronRequestID = classId
-	}
+	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventClass)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -419,5 +409,13 @@ func getPgText(value *string) pgtype.Text {
 	return pgtype.Text{
 		Valid:  value != nil,
 		String: stringValue,
+	}
+}
+
+func getIllTransactionAndPatronRequestId(classId string, eventClass EventClass) (string, string) {
+	if eventClass == EventClassPatronRequest {
+		return DEFAULT_ILL_TRANSACTION_ID, classId
+	} else {
+		return classId, DEFAULT_PATRON_REQUEST_ID
 	}
 }
