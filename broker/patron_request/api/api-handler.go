@@ -51,18 +51,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostPatronRequests"},
 	})
-	var newPr proapi.PatronRequest
+	var newPr proapi.CreatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&newPr)
 	if err != nil {
 		addInternalError(ctx, w, err)
-		return
-	}
-	if newPr.State != prservice.BorrowerStateNew {
-		addBadRequestError(ctx, w, errors.New("only "+prservice.BorrowerStateNew+" state is allowed"))
-		return
-	}
-	if newPr.Side != prservice.SideBorrowing {
-		addBadRequestError(ctx, w, errors.New("only "+prservice.SideBorrowing+" side is allowed"))
 		return
 	}
 
@@ -126,7 +118,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPatronRequestsId", "id": id},
 	})
-	var updatePr proapi.PatronRequest
+	var updatePr proapi.UpdatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&updatePr)
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -292,7 +284,7 @@ func toStringFromBytes(bytes []byte) *string {
 	return value
 }
 
-func toDbPatronRequest(request proapi.PatronRequest) pr_db.PatronRequest {
+func toDbPatronRequest(request proapi.CreatePatronRequest) pr_db.PatronRequest {
 	var illRequest []byte
 	if request.IllRequest != nil {
 		illRequest = []byte(*request.IllRequest)
@@ -300,8 +292,8 @@ func toDbPatronRequest(request proapi.PatronRequest) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
 		ID:              getId(request.ID),
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: request.Timestamp},
-		State:           request.State,
-		Side:            request.Side,
+		State:           prservice.BorrowerStateNew,
+		Side:            prservice.SideBorrowing,
 		Requester:       getDbText(request.Requester),
 		BorrowingPeerID: getDbText(request.BorrowingPeerId),
 		LendingPeerID:   getDbText(request.LendingPeerId),
