@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/go-utils/utils"
@@ -62,10 +63,8 @@ func TestCrud(t *testing.T) {
 	borrowingId := "b1"
 	requester := "r1"
 	illMessage := "{\"request\": {}}"
-	newPr := proapi.PatronRequest{
+	newPr := proapi.CreatePatronRequest{
 		ID:              uuid.NewString(),
-		State:           "new",
-		Side:            "landing",
 		Timestamp:       time.Now(),
 		LendingPeerId:   &landingId,
 		BorrowingPeerId: &borrowingId,
@@ -82,8 +81,8 @@ func TestCrud(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Equal(t, newPr.ID, foundPr.ID)
-	assert.Equal(t, newPr.State, foundPr.State)
-	assert.Equal(t, newPr.Side, foundPr.Side)
+	assert.True(t, foundPr.State != "")
+	assert.Equal(t, prservice.SideBorrowing, foundPr.Side)
 	assert.Equal(t, newPr.Timestamp.YearDay(), foundPr.Timestamp.YearDay())
 	assert.Equal(t, *newPr.LendingPeerId, *foundPr.LendingPeerId)
 	assert.Equal(t, *newPr.BorrowingPeerId, *foundPr.BorrowingPeerId)
@@ -126,8 +125,8 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, newPr.ID, foundPr.ID)
-	assert.Equal(t, newPr.State, foundPr.State)
-	assert.Equal(t, newPr.Side, foundPr.Side)
+	assert.True(t, foundPr.State != "ACCEPTED")
+	assert.Equal(t, prservice.SideBorrowing, foundPr.Side)
 	assert.Equal(t, newPr.Timestamp.YearDay(), foundPr.Timestamp.YearDay())
 	assert.Equal(t, "l1", *foundPr.LendingPeerId)
 	assert.Equal(t, "b1", *foundPr.BorrowingPeerId)

@@ -39,6 +39,40 @@ components:
         - Timestamp
         - State
         - Side
+
+    CreatePatronRequest:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Unique identifier of the patron request
+        Timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the patron reuqest
+        IllRequest:
+          type: string
+          description: JSON of ISO18626 request
+        Requester:
+          type: string
+          description: User who requested item
+        BorrowingPeerId:
+          type: string
+          description: Borrowing peer id
+        LendingPeerId:
+          type: string
+          description: Lending peer id
+      required:
+        - ID
+        - Timestamp
+
+    UpdatePatronRequest:
+      type: object
+      properties:
+        Requester:
+          type: string
+          description: User who requested item
+
     Error:
       type: object
       properties:
@@ -103,7 +137,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatronRequest'
+              $ref: '#/components/schemas/CreatePatronRequest'
       responses:
         '201':
           description: Patron request created successfully
@@ -162,7 +196,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatronRequest'
+              $ref: '#/components/schemas/UpdatePatronRequest'
       responses:
         '200':
           description: Patron request updated successfully
