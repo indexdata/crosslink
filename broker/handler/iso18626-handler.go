@@ -60,14 +60,18 @@ var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
 var waitingReqs = map[string]RequestWait{}
 
 type Iso18626Handler struct {
-	eventBus  events.EventBus
-	eventRepo events.EventRepo
+	eventBus   events.EventBus
+	eventRepo  events.EventRepo
+	illRepo    ill_db.IllRepo
+	dirAdapter adapter.DirectoryLookupAdapter
 }
 
-func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo) Iso18626Handler {
+func CreateIso18626Handler(eventBus events.EventBus, eventRepo events.EventRepo, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter) Iso18626Handler {
 	return Iso18626Handler{
-		eventBus:  eventBus,
-		eventRepo: eventRepo,
+		eventBus:   eventBus,
+		eventRepo:  eventRepo,
+		illRepo:    illRepo,
+		dirAdapter: dirAdapter,
 	}
 }
 
@@ -203,6 +207,10 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 	return id, err
 }
 
+func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+	handleRequest(ctx, illMessage, w, h.illRepo, h.eventBus, h.dirAdapter)
+}
+
 func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus, dirAdapter adapter.DirectoryLookupAdapter) {
 	request := illMessage.Request
 	if request.Header.RequestingAgencyRequestId == "" {
@@ -333,6 +341,10 @@ func createConfirmationHeader(inHeader *iso18626.Header, messageStatus iso18626.
 	header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	header.MessageStatus = messageStatus
 	return header
+}
+
+func (h *Iso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+	handleRequestingAgencyMessage(ctx, illMessage, w, h.illRepo, h.eventBus)
 }
 
 func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {

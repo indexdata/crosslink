@@ -1,3 +1,3 @@
 ALTER TABLE event DROP COLUMN patron_request_id;
 
-DROP INDEX IF EXISTS event_patron_request_id_idx;
+DELETE FROM event_config WHERE event_name ='invoke-action';
