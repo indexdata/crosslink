@@ -192,8 +192,8 @@ func TestFilterAndSort(t *testing.T) {
 	var rotaInfo adapter.RotaInfo
 	entries, rotaInfo = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
 	assert.Len(t, entries, 2)
-	assert.Equal(t, "3", entries[0].PeerId)
-	assert.Equal(t, "2", entries[1].PeerId)
+	assert.Equal(t, "2", entries[0].PeerId)
+	assert.Equal(t, "3", entries[1].PeerId)
 
 	assert.Equal(t, "copy", rotaInfo.Request.Type)
 	assert.Equal(t, "rush", rotaInfo.Request.Level)
@@ -214,7 +214,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, float32(0.5), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
 
-	sup = rotaInfo.Suppliers[0]
+	sup = rotaInfo.Suppliers[1]
 	assert.Equal(t, "AU-VVWA", sup.Symbol)
 	assert.True(t, sup.Match)
 	assert.Len(t, sup.Networks, 4)
@@ -223,7 +223,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Networks[2], adapter.NetworkMatch{Name: "Victoria Health", Priority: 3, Match: false})
 	assert.Equal(t, sup.Networks[3], adapter.NetworkMatch{Name: "National", Priority: 9, Match: false})
 	assert.Equal(t, "44.80", sup.Cost)
-	assert.Equal(t, 1, sup.Priority)
+	assert.Equal(t, 2, sup.Priority)
 	assert.Equal(t, float32(0.7), sup.Ratio)
 	assert.Len(t, sup.Tiers, 4)
 	assert.Equal(t, sup.Tiers[0], adapter.TierMatch{Name: "Premium Pay for Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "44.80", Match: true})
@@ -231,7 +231,7 @@ func TestFilterAndSort(t *testing.T) {
 	assert.Equal(t, sup.Tiers[2], adapter.TierMatch{Name: "Reciprocal Peer to Peer - Rush Copy", Level: "rush", Type: "copy", Cost: "0.00", Match: false})
 	assert.Equal(t, sup.Tiers[3], adapter.TierMatch{Name: "Premium Pay for Peer - Core Copy", Level: "core", Type: "copy", Cost: "22.40", Match: false})
 
-	sup = rotaInfo.Suppliers[1]
+	sup = rotaInfo.Suppliers[0]
 	assert.Equal(t, "AU-NU", sup.Symbol)
 	assert.True(t, sup.Match)
 	assert.Len(t, sup.Networks, 6)
