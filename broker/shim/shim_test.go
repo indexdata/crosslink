@@ -593,12 +593,18 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
 				},
 			},
 			Action: iso18626.TypeActionNotification,
-			Note:   "Accept",
+			Note:   "`Accept`",
 		},
 	}
 	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
-	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"Accept", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"`Accept`", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+
+	msg.RequestingAgencyMessage.Note = "I will accept"
+	resmsg = GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+
+	assert.Equal(t, "I will accept", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
@@ -614,12 +620,12 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 				},
 			},
 			Action: iso18626.TypeActionNotification,
-			Note:   "ReJeCT",
+			Note:   "--ReJeCT;",
 		},
 	}
 	resmsg := GetShim(string(common.VendorAlma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
-	assert.Equal(t, "ReJeCT", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, "SUP1", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 

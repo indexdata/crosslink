@@ -32,6 +32,7 @@ const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
 const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
+var edgeNonWord = regexp.MustCompile(`^\W+|\W+$`)
 
 type Iso18626Shim interface {
 	ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error)
@@ -491,6 +492,7 @@ func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyM
 func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
 		note := rsNoteRegexp.ReplaceAllString(requestingAgencyMessage.Note, "") //this is only needed to test human-notes from ReShare
+		note = edgeNonWord.ReplaceAllString(note, "")
 		if strings.EqualFold(note, ACCEPT) {
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE + requestingAgencyMessage.Note
 		} else if strings.EqualFold(note, REJECT) {
