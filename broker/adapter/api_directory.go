@@ -164,10 +164,10 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			})
 		}
 		priority := math.MaxInt
-		for name := range reqNetworks {
-			if net, ok := supNetworks[name]; ok {
-				if priority > net.Priority {
-					priority = net.Priority
+		for name, reqNet := range reqNetworks {
+			if _, ok := supNetworks[name]; ok {
+				if priority > reqNet.Priority {
+					priority = reqNet.Priority
 				}
 				for i, n := range supMatch.Networks {
 					if n.Name == name {
