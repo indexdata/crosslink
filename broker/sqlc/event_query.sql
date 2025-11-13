@@ -42,9 +42,9 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, broadcast
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, broadcast, patron_request_id
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
@@ -56,7 +56,8 @@ ON CONFLICT (id) DO UPDATE
     event_data = EXCLUDED.event_data,
     result_data = EXCLUDED.result_data,
     last_signal = EXCLUDED.last_signal,
-    broadcast = EXCLUDED.broadcast
+    broadcast = EXCLUDED.broadcast,
+    patron_request_id = EXCLUDED.patron_request_id
 RETURNING sqlc.embed(event);
 
 -- name: DeleteEvent :exec
