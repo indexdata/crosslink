@@ -557,7 +557,7 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 	if reason == "" {
 		return
 	}
-	err = updateLocatedSupplier(ctx, repo, illTrans, symbol, status, reason, supReqId)
+	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, supReqId, supplierPeer.ID, supplier.ID)
 	if err != nil {
 		ctx.Logger().Error("failed to update located supplier status to: "+string(status), "error", err, "transactionId", illTrans.ID)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -607,18 +607,14 @@ func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *i
 }
 
 func updateLocatedSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTrans ill_db.IllTransaction,
-	symbol string, status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string) error {
+	status iso18626.TypeStatus, reason iso18626.TypeReasonForMessage, supReqId string, supPeerId string, supId string) error {
 	return repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		peer, err := repo.GetPeerBySymbol(ctx, symbol)
+		peer, err := repo.GetPeerById(ctx, supPeerId)
 		if err != nil {
-			ctx.Logger().Error("failed to locate supplier peer for symbol: "+symbol, "error", err, "transactionId", illTrans.ID)
+			ctx.Logger().Error("failed to locate supplier peer for id: "+supPeerId, "error", err, "transactionId", illTrans.ID)
 			return err
 		}
-		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx,
-			ill_db.GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams{
-				IllTransactionID: illTrans.ID,
-				SupplierID:       peer.ID,
-			})
+		locSup, err := repo.GetLocatedSupplierByIdForUpdate(ctx, supId)
 		if err != nil {
 			ctx.Logger().Error("failed to read located supplier with peer id: "+peer.ID, "error", err, "transactionId", illTrans.ID)
 			return err

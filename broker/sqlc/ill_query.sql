@@ -163,6 +163,12 @@ WHERE ill_transaction_id = $1
   and supplier_id = $2
     FOR UPDATE;
 
+-- name: GetLocatedSupplierByIdForUpdate :one
+SELECT sqlc.embed(located_supplier)
+FROM located_supplier
+WHERE id = $1
+    FOR UPDATE;
+
 -- name: GetLocatedSupplierByIllTransactionAndSymbol :one
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
@@ -229,3 +235,8 @@ WHERE peer_id = $1;
 
 -- name: CallArchiveIllTransactionByDateAndStatus :one
 SELECT archive_ill_transaction_by_date_and_status($1, $2);
+
+-- name: GetBranchSymbolsWhichAreNotMainSymbolsByPeerId :many
+SELECT sqlc.embed(branch_symbol)
+FROM branch_symbol b
+WHERE b.peer_id = $1 AND b.symbol_value not in (SELECT s.symbol_value FROM symbol s);
