@@ -133,11 +133,25 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *updatedPr.Requester, *foundPr.Requester) // Only requester can be updated now
 	assert.Equal(t, *newPr.IllRequest, *foundPr.IllRequest)
 
-	// DELETE patron request
-	httpRequest(t, "DELETE", thisPrPath, []byte{}, 204)
+	// GET actions by PR id
+	respBytes = httpRequest(t, "GET", thisPrPath+"/actions", []byte{}, 200)
+	assert.Equal(t, "[\"send-request\"]\n", string(respBytes))
 
-	// GET patron request which is deleted
-	httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
+	// POST execute action
+	action := proapi.ExecuteAction{
+		Action: "send-request",
+	}
+	actionBytes, err := json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"PROBLEM\",\"message\":\"could not find borrower symbols\"}\n", string(respBytes))
+
+	// TODO Do we really want to delete from DB or just add DELETED status ?
+	//// DELETE patron request
+	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 204)
+	//
+	//// GET patron request which is deleted
+	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
 }
 
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {

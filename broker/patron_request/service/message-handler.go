@@ -136,6 +136,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	case iso18626.TypeStatusUnfilled:
 		pr.State = BorrowerStateUnfilled
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+	case iso18626.TypeStatusCancelled:
+		pr.State = BorrowerStateCancelled
+		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	}
 	return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 		ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,

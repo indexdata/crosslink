@@ -156,7 +156,7 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	prActionService := prservice.CreatePatronRequestAction(prRepo, illRepo, eventBus, iso18626Handler)
+	prActionService := prservice.CreatePatronRequestAction(prRepo, illRepo, eventBus, &iso18626Handler)
 	prApiHandler := prapi.NewApiHandler(prRepo, eventBus)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)
