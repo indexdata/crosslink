@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/stretchr/testify/mock"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -845,4 +848,34 @@ func TestUpdateSupplierNote(t *testing.T) {
 	sam.MessageInfo.Note = "Original note 2"
 	updateSupplierNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
+}
+
+func TestSendIllMessage(t *testing.T) {
+	mockPrMessageHandler := prservice.CreatePatronRequestMessageHandler(new(MockPrRepo), new(events.PgEventRepo), new(ill_db.PgIllRepo), new(events.PostgresEventBus))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), mockPrMessageHandler, 1, 0*time.Second)
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			Header: iso18626.Header{
+				RequestingAgencyRequestId: "req-1",
+			},
+		},
+	}
+
+	// To local peer
+	_, err := client.SendIllMessage(appCtx, &ill_db.Peer{Name: "local peer"}, &sam)
+	assert.Equal(t, "searching pr with id=req-1", err.Error())
+
+	_, err = client.SendIllMessage(appCtx, &ill_db.Peer{Name: "random peer"}, &sam)
+	assert.Equal(t, "Post \"\": unsupported protocol scheme \"\"", err.Error())
+}
+
+type MockPrRepo struct {
+	mock.Mock
+	pr_db.PgPrRepo
+}
+
+func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
 }

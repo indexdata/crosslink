@@ -61,10 +61,10 @@ type PatronRequestActionService struct {
 	prRepo          pr_db.PrRepo
 	illRepo         ill_db.IllRepo
 	eventBus        events.EventBus
-	iso18626Handler handler.Iso18626Handler
+	iso18626Handler handler.Iso18626HandlerInterface
 }
 
-func CreatePatronRequestAction(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626Handler) PatronRequestActionService {
+func CreatePatronRequestAction(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
 	return PatronRequestActionService{
 		prRepo:          prRepo,
 		illRepo:         illRepo,
@@ -115,6 +115,12 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		return a.checkinBorrowingRequest(ctx, pr)
 	case ActionShipReturn:
 		return a.shipReturnBorrowingRequest(ctx, pr)
+	case ActionCancelRequest:
+		return a.cancelBorrowingRequest(ctx, pr)
+	case ActionAcceptCondition:
+		return a.acceptConditionBorrowingRequest(ctx, pr)
+	case ActionRejectCondition:
+		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
 		return events.LogErrorAndReturnResult(ctx, "action "+action+" is not implemented yet", errors.New("invalid action"))
 	}
@@ -137,13 +143,14 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	if !pr.BorrowingPeerID.Valid {
-		result.Note = "missing borrowing peer id"
-		return events.EventStatusProblem, &result
+		return events.LogErrorAndReturnResult(ctx, "missing borrowing peer id", nil)
 	}
 	borrowerSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.BorrowingPeerID.String)
 	if err != nil {
-		result.Note = err.Error()
-		return events.EventStatusProblem, &result
+		return events.LogErrorAndReturnResult(ctx, "cannot fetch borrowing peer symbols", err)
+	}
+	if borrowerSymbols == nil {
+		return events.LogErrorAndReturnResult(ctx, "missing borrowing peer symbols", err)
 	}
 	borrowerSymbol := strings.SplitN(borrowerSymbols[0].SymbolValue, ":", 2)
 	var illMessage = iso18626.ISO18626Message{
@@ -175,8 +182,16 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 }
 
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
-	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateReceived, nil)
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived)
+	if httpStatus == nil {
+		return status, eventResult
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+		return events.EventStatusProblem, &result
+	}
+	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateReceived, &result)
 }
 
 func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
@@ -191,19 +206,43 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
-	if !pr.BorrowingPeerID.Valid {
-		result.Note = "missing borrowing peer id"
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn)
+	if httpStatus == nil {
+		return status, eventResult
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
 		return events.EventStatusProblem, &result
+	}
+	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateShippedReturned, &result)
+}
+
+func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction) (events.EventStatus, *events.EventResult, *int) {
+	if !pr.BorrowingPeerID.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing borrowing peer id", nil)
+		return status, eventResult, nil
 	}
 	borrowerSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.BorrowingPeerID.String)
 	if err != nil {
-		result.Note = err.Error()
-		return events.EventStatusProblem, &result
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "cannot fetch borrowing peer symbols", err)
+		return status, eventResult, nil
+	}
+	if borrowerSymbols == nil {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing borrowing peer symbols", err)
+		return status, eventResult, nil
+	}
+	if !pr.LendingPeerID.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing lending peer id", nil)
+		return status, eventResult, nil
 	}
 	lenderSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.LendingPeerID.String)
 	if err != nil {
-		result.Note = err.Error()
-		return events.EventStatusProblem, &result
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "cannot fetch lending peer symbols", err)
+		return status, eventResult, nil
+	}
+	if lenderSymbols == nil {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing lending peer symbols", err)
+		return status, eventResult, nil
 	}
 	borrowerSymbol := strings.SplitN(borrowerSymbols[0].SymbolValue, ":", 2)
 	lenderSymbol := strings.SplitN(lenderSymbols[0].SymbolValue, ":", 2)
@@ -224,18 +263,37 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 				},
 				RequestingAgencyRequestId: pr.ID,
 			},
-			Action: iso18626.TypeActionShippedReturn,
+			Action: action,
 		},
 	}
 	w := NewResponseCaptureWriter()
 	a.iso18626Handler.HandleRequestingAgencyMessage(ctx, &illMessage, w)
 	result.OutgoingMessage = &illMessage
 	result.IncomingMessage = w.IllMessage
-	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestingAgencyMessageConfirmation == nil ||
-		w.IllMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+	return "", nil, &w.StatusCode
+}
+
+func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel)
+	if httpStatus == nil {
+		return status, eventResult
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
 		return events.EventStatusProblem, &result
 	}
-	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateShippedReturned, nil)
+	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, &result)
+}
+
+func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	// TODO Make NCIP calls
+	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateWillSupply, nil)
+}
+
+func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	// TODO Make NCIP calls
+	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, nil)
 }
 
 type ResponseCaptureWriter struct {

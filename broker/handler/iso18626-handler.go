@@ -59,6 +59,11 @@ var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
 
 var waitingReqs = map[string]RequestWait{}
 
+type Iso18626HandlerInterface interface {
+	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
+	HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
+}
+
 type Iso18626Handler struct {
 	eventBus   events.EventBus
 	eventRepo  events.EventRepo
