@@ -47,7 +47,7 @@ type IllRepo interface {
 	GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]Symbol, error)
 	SaveBranchSymbol(ctx common.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error)
 	GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
-	GetBranchSymbolsWhichAreNotMainSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
+	GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
 	CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error
 }
@@ -484,8 +484,8 @@ func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx common.Extended
 	return err
 }
 
-func (r *PgIllRepo) GetBranchSymbolsWhichAreNotMainSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {
-	rows, err := r.queries.GetBranchSymbolsWhichAreNotMainSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
+func (r *PgIllRepo) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {
+	rows, err := r.queries.GetExclusiveBranchSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
 	var symbols []BranchSymbol
 	if err == nil {
 		for _, r := range rows {

@@ -236,7 +236,7 @@ WHERE peer_id = $1;
 -- name: CallArchiveIllTransactionByDateAndStatus :one
 SELECT archive_ill_transaction_by_date_and_status($1, $2);
 
--- name: GetBranchSymbolsWhichAreNotMainSymbolsByPeerId :many
+-- name: GetExclusiveBranchSymbolsByPeerId :many
 SELECT sqlc.embed(branch_symbol)
 FROM branch_symbol b
 WHERE b.peer_id = $1 AND b.symbol_value not in (SELECT s.symbol_value FROM symbol s);
