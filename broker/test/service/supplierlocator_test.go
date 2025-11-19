@@ -732,7 +732,7 @@ func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	assert.Equal(t, ill_db.SupplierStateSkipped, supMap["SupplierStatus"])
 }
 
-func TestLocalSupplyMainAndBranch(t *testing.T) {
+func TestSupplyMainAndBranch(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
 	requester := apptest.CreatePeerWithMode(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
@@ -804,6 +804,15 @@ func TestLocalSupplyMainAndBranch(t *testing.T) {
 	assert.Equal(t, ill_db.SupplierStateNew, branchMap["SupplierStatus"])
 	assert.Equal(t, branchSymbol, branchMap["SupplierSymbol"])
 	assert.Equal(t, branch.ID, branchMap["SupplierID"])
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool { // Need to wait till all events are processed otherwise tests fail with panic
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqReqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqReqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled)
+	})
+	assert.Equal(t, string(iso18626.TypeStatusUnfilled), illTrans.LastSupplierStatus.String)
 }
 
 func createIllTransaction(t *testing.T, illRepo ill_db.IllRepo, supplierRecordId string) string {
