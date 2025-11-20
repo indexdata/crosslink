@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,8 @@ import (
 	"net/http/httptest"
 	"testing"
 )
+
+var mockEventBus = new(MockEventBus)
 
 func TestGetId(t *testing.T) {
 	assert.True(t, getId("") != "")
@@ -31,7 +34,7 @@ func TestGetDbText(t *testing.T) {
 }
 
 func TestGetPatronRequests(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequests(rr, req)
@@ -42,7 +45,7 @@ func TestGetPatronRequests(t *testing.T) {
 }
 
 func TestPostPatronRequests(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	toCreate := proapi.PatronRequest{ID: "1"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -56,7 +59,7 @@ func TestPostPatronRequests(t *testing.T) {
 }
 
 func TestPostPatronRequestsInvalidJson(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\": v\"")))
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequests(rr, req)
@@ -67,7 +70,7 @@ func TestPostPatronRequestsInvalidJson(t *testing.T) {
 }
 
 func TestDeletePatronRequestsIdNotFound(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2")
@@ -78,7 +81,7 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 }
 
 func TestDeletePatronRequestsId(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "3")
@@ -89,7 +92,7 @@ func TestDeletePatronRequestsId(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotFound(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "2")
@@ -100,7 +103,7 @@ func TestGetPatronRequestsIdNotFound(t *testing.T) {
 }
 
 func TestGetPatronRequestsId(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "1")
@@ -111,7 +114,7 @@ func TestGetPatronRequestsId(t *testing.T) {
 }
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	toCreate := proapi.PatronRequest{ID: "2"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -125,7 +128,7 @@ func TestPutPatronRequestsIdNotFound(t *testing.T) {
 }
 
 func TestPutPatronRequestsId(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	toCreate := proapi.PatronRequest{ID: "1"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -139,7 +142,7 @@ func TestPutPatronRequestsId(t *testing.T) {
 }
 
 func TestPutPatronRequestsIdSaveError(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	toCreate := proapi.PatronRequest{ID: "3"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -153,7 +156,7 @@ func TestPutPatronRequestsIdSaveError(t *testing.T) {
 }
 
 func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
-	handler := NewApiHandler(new(PrRepoError))
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\":v\"")))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3")
@@ -189,4 +192,9 @@ func (r *PrRepoError) SavePatronRequest(ctx common.ExtendedContext, params pr_db
 }
 func (r *PrRepoError) DeletePatronRequest(ctx common.ExtendedContext, id string) error {
 	return errors.New("DB error")
+}
+
+type MockEventBus struct {
+	mock.Mock
+	events.EventBus
 }

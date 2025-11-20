@@ -304,11 +304,11 @@ type MockEventBus struct {
 	BroadcastCreated int
 }
 
-func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.EventName, data events.EventData, parentId *string) (string, error) {
+func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
 	r.TasksCreated++
 	return "id1", nil
 }
-func (r *MockEventBus) CreateTaskBroadcast(illTransactionID string, eventName events.EventName, data events.EventData, parentId *string) (string, error) {
+func (r *MockEventBus) CreateTaskBroadcast(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
 	r.BroadcastCreated++
 	return "id2", nil
 }
