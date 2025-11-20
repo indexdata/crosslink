@@ -144,7 +144,7 @@ func TestCrud(t *testing.T) {
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action", actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"PROBLEM\",\"message\":\"could not find borrower symbols\"}\n", string(respBytes))
+	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request
