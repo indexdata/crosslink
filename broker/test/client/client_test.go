@@ -584,7 +584,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	}
 	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
 	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventClassIllTransaction)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -596,7 +596,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 				},
 			},
 		},
-	}, events.EventStatusSuccess, events.EventClassIllTransaction)
+	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
@@ -649,7 +649,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	}
 	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
 	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventClassIllTransaction)
+	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 		CommonEventData: events.CommonEventData{
@@ -661,7 +661,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 				},
 			},
 		},
-	}, events.EventStatusSuccess, events.EventClassIllTransaction)
+	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+

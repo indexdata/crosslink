@@ -22,11 +22,11 @@ const (
 	EventTypeNotice EventType = "NOTICE"
 )
 
-type EventClass string
+type EventDomain string
 
 const (
-	EventClassPatronRequest  EventClass = "PATRON_REQUEST"
-	EventClassIllTransaction EventClass = "ILL_TRANSACTION"
+	EventDomainPatronRequest  EventDomain = "PATRON_REQUEST"
+	EventDomainIllTransaction EventDomain = "ILL_TRANSACTION"
 )
 
 type EventName string

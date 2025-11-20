@@ -33,7 +33,7 @@ func TestIsBorrowerActionAvailable(t *testing.T) {
 }
 func TestInvokeAction(t *testing.T) {
 	mockEventBus := new(MockEventBus)
-	prAction := CreatePatronRequestAction(*new(pr_db.PrRepo), *new(ill_db.IllRepo), mockEventBus, new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), mockEventBus, new(handler.Iso18626Handler))
 	event := events.Event{
 		ID: "action-1",
 	}
@@ -45,7 +45,7 @@ func TestInvokeAction(t *testing.T) {
 }
 
 func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
-	prAction := CreatePatronRequestAction(*new(pr_db.PrRepo), *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{})
 
@@ -55,7 +55,7 @@ func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
 
 func TestHandleInvokeActionNoPR(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestAction(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("not fund"))
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -66,7 +66,7 @@ func TestHandleInvokeActionNoPR(t *testing.T) {
 
 func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestAction(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -77,7 +77,7 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 
 func TestHandleInvokeActionValidate(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestAction(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateNew}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -90,7 +90,7 @@ func TestHandleInvokeActionValidate(t *testing.T) {
 func TestHandleInvokeActionSendRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionSendRequest}}})
@@ -103,7 +103,7 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 func TestHandleInvokeActionReceive(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
@@ -115,7 +115,7 @@ func TestHandleInvokeActionReceive(t *testing.T) {
 
 func TestHandleInvokeActionCheckOut(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestAction(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateReceived}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
@@ -127,7 +127,7 @@ func TestHandleInvokeActionCheckOut(t *testing.T) {
 
 func TestHandleInvokeActionCheckIn(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestAction(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
@@ -140,7 +140,7 @@ func TestHandleInvokeActionCheckIn(t *testing.T) {
 func TestHandleInvokeActionShipReturn(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShipReturn}}})
@@ -153,7 +153,7 @@ func TestHandleInvokeActionShipReturn(t *testing.T) {
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateWillSupply, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCancelRequest}}})
@@ -166,7 +166,7 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionAcceptCondition}}})
@@ -179,7 +179,7 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionRejectCondition}}})
@@ -192,7 +192,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 func TestSendBorrowingRequestNoRequester(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated})
 
@@ -203,7 +203,7 @@ func TestSendBorrowingRequestNoRequester(t *testing.T) {
 func TestSendBorrowingRequestSymbolSearchError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "error"}})
 
@@ -214,7 +214,7 @@ func TestSendBorrowingRequestSymbolSearchError(t *testing.T) {
 func TestSendBorrowingRequestSymbolMissing(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "missing"}})
 
@@ -225,7 +225,7 @@ func TestSendBorrowingRequestSymbolMissing(t *testing.T) {
 func TestSendBorrowingRequestFailedProcess(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "error", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}})
 
@@ -236,7 +236,7 @@ func TestSendBorrowingRequestFailedProcess(t *testing.T) {
 func TestShipReturnBorrowingRequestNoBorrowingId(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated})
 
@@ -246,7 +246,7 @@ func TestShipReturnBorrowingRequestNoBorrowingId(t *testing.T) {
 func TestShipReturnBorrowingRequestErrorBorrowing(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "error"}})
 
@@ -256,7 +256,7 @@ func TestShipReturnBorrowingRequestErrorBorrowing(t *testing.T) {
 func TestShipReturnBorrowingRequestMissingBorrowing(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "missing"}})
 
@@ -266,7 +266,7 @@ func TestShipReturnBorrowingRequestMissingBorrowing(t *testing.T) {
 func TestShipReturnBorrowingRequestNoLendingId(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}})
 
@@ -276,7 +276,7 @@ func TestShipReturnBorrowingRequestNoLendingId(t *testing.T) {
 func TestShipReturnBorrowingRequestLendingError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "error"}})
 
@@ -286,7 +286,7 @@ func TestShipReturnBorrowingRequestLendingError(t *testing.T) {
 func TestShipReturnBorrowingRequestLendingMissing(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "missing"}})
 
@@ -296,7 +296,7 @@ func TestShipReturnBorrowingRequestLendingMissing(t *testing.T) {
 func TestShipReturnBorrowingRequestProblemProcessing(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestAction(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "error", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "pr321"}})
 
@@ -314,7 +314,7 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 	return args.Get(0).(events.Event), args.Error(1)
 }
 
-func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventClass, parentId *string) (string, error) {
+func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}

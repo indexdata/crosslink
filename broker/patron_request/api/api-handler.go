@@ -64,7 +64,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 
-	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &prservice.ActionValidate}}, events.EventClassPatronRequest, nil)
+	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &prservice.ActionValidate}}, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -191,7 +191,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
-	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventClassPatronRequest, nil)
+	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return

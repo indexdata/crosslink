@@ -728,7 +728,7 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventClassIllTransaction)
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
@@ -738,7 +738,7 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 }
 
 func createNoticeAndCheckDBError(ctx common.ExtendedContext, w http.ResponseWriter, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) string {
-	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventClassIllTransaction)
+	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
