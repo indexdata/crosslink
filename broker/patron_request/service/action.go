@@ -64,7 +64,7 @@ type PatronRequestActionService struct {
 	iso18626Handler handler.Iso18626HandlerInterface
 }
 
-func CreatePatronRequestAction(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
 	return PatronRequestActionService{
 		prRepo:          prRepo,
 		illRepo:         illRepo,

@@ -44,7 +44,7 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 		return nil, err
 	}
 
-	eventId, err := m.eventBus.CreateTask(pr.ID, events.EventNamePatronRequestMessage, events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg}}, events.EventClassPatronRequest, nil)
+	eventId, err := m.eventBus.CreateTask(pr.ID, events.EventNamePatronRequestMessage, events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg}}, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		return nil, err
 	}
