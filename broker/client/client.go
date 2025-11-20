@@ -258,9 +258,9 @@ func isDoNotSend(event events.Event) bool {
 	return false
 }
 
-func (c *Iso18626Client) updateSelectedSupplierAction(ctx common.ExtendedContext, illTransId string, supplierSymbol string, action string) error {
+func (c *Iso18626Client) updateSelectedSupplierAction(ctx common.ExtendedContext, supplierId string, action string) error {
 	return c.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
-		locSup, err := repo.GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx, illTransId, supplierSymbol)
+		locSup, err := repo.GetLocatedSupplierByIdForUpdate(ctx, supplierId)
 		if err != nil {
 			return err // transaction gone meanwhile
 		}
@@ -810,7 +810,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 		resData.OutgoingMessage = nil
 	}
 	// check for status == EvenStatusError and NOT save??
-	err := c.updateSelectedSupplierAction(ctx, trCtx.transaction.ID, trCtx.selectedSupplier.SupplierSymbol, string(action))
+	err := c.updateSelectedSupplierAction(ctx, trCtx.selectedSupplier.ID, string(action))
 	if err != nil {
 		return events.LogErrorAndReturnExistingResult(ctx, FailedToUpdateSupplierStatus, err, &resData)
 	}

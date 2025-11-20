@@ -34,6 +34,7 @@ type IllRepo interface {
 	GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params GetLocatedSuppliersByIllTransactionAndStatusParams) ([]LocatedSupplier, error)
 	GetLocatedSuppliersByIllTransaction(ctx common.ExtendedContext, id string) ([]LocatedSupplier, int64, error)
 	GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error)
+	GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSymbol(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
 	GetLocatedSupplierByIllTransactionAndSymbolForUpdate(ctx common.ExtendedContext, id, symbol string) (LocatedSupplier, error)
 	GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (LocatedSupplier, error)
@@ -46,6 +47,7 @@ type IllRepo interface {
 	GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]Symbol, error)
 	SaveBranchSymbol(ctx common.ExtendedContext, params SaveBranchSymbolParams) (BranchSymbol, error)
 	GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
+	GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error)
 	DeleteBranchSymbolByPeerId(ctx common.ExtendedContext, peerId string) error
 	CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error
 }
@@ -187,6 +189,11 @@ func (r *PgIllRepo) SaveLocatedSupplier(ctx common.ExtendedContext, params SaveL
 
 func (r *PgIllRepo) GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx common.ExtendedContext, params GetLocatedSupplierByIllTransactionAndSupplierForUpdateParams) (LocatedSupplier, error) {
 	row, err := r.queries.GetLocatedSupplierByIllTransactionAndSupplierForUpdate(ctx, r.GetConnOrTx(), params)
+	return row.LocatedSupplier, err
+}
+
+func (r *PgIllRepo) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (LocatedSupplier, error) {
+	row, err := r.queries.GetLocatedSupplierByIdForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.LocatedSupplier, err
 }
 
@@ -475,6 +482,17 @@ func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols
 func (r *PgIllRepo) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
 	_, err := r.queries.CallArchiveIllTransactionByDateAndStatus(ctx, r.GetConnOrTx(), CallArchiveIllTransactionByDateAndStatusParams{toDate, statuses})
 	return err
+}
+
+func (r *PgIllRepo) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]BranchSymbol, error) {
+	rows, err := r.queries.GetExclusiveBranchSymbolsByPeerId(ctx, r.GetConnOrTx(), peerId)
+	var symbols []BranchSymbol
+	if err == nil {
+		for _, r := range rows {
+			symbols = append(symbols, r.BranchSymbol)
+		}
+	}
+	return symbols, err
 }
 
 func getSliceFromMapInOrder(symbolToPeer map[string]Peer, symbols []string) []Peer {

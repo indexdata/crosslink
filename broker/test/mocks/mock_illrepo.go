@@ -195,6 +195,14 @@ func (r *MockIllRepositorySuccess) GetLocatedSupplierByIllTransactionAndSymbolFo
 	}, nil
 }
 
+func (r *MockIllRepositorySuccess) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.BranchSymbol, error) {
+	return []ill_db.BranchSymbol{{SymbolValue: "ISIL:SUP1", PeerID: peerId}}, nil
+}
+
+func (r *MockIllRepositorySuccess) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{ID: id}, nil
+}
+
 type MockIllRepositoryError struct {
 	mock.Mock
 }
@@ -331,4 +339,12 @@ func (r *MockIllRepositoryError) DeleteBranchSymbolByPeerId(ctx common.ExtendedC
 
 func (r *MockIllRepositoryError) CallArchiveIllTransactionByDateAndStatus(ctx common.ExtendedContext, toDate time.Time, statuses []string) error {
 	return errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.BranchSymbol, error) {
+	return []ill_db.BranchSymbol{}, errors.New("DB error")
+}
+
+func (r *MockIllRepositoryError) GetLocatedSupplierByIdForUpdate(ctx common.ExtendedContext, id string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, errors.New("DB error")
 }

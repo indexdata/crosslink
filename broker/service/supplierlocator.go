@@ -98,7 +98,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 				symbolsLog += sep + sym.SymbolValue
 				sep = ", "
 			}
-			branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+			// In normal case this will be giving empty list because each branch has its own peer entry,
+			// but we will keep this check because of flexibility
+			branchSymbols, err := s.illRepo.GetExclusiveBranchSymbolsByPeerId(ctx, peer.ID)
 			if err != nil {
 				return events.LogErrorAndReturnResult(ctx, "failed to read branch symbols", err)
 			}
