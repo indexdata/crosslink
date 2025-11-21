@@ -661,7 +661,7 @@ func TestCheckOutItemMissingNcipInfo(t *testing.T) {
 	assert.Equal(t, "missing ncip configuration in customData", err.Error())
 }
 
-func TestCreateUserFiscsalTransactionOK(t *testing.T) {
+func TestCreateUserFiscalTransactionOK(t *testing.T) {
 	ncipClient := CreateNcipClient(http.DefaultClient)
 
 	customData := make(map[string]any)
