@@ -233,6 +233,47 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tier'
+        ncip:
+          type: object
+          $ref: '#/components/schemas/Ncip'
+    Ncip:
+      required:
+        - from_agency
+        - from_agency_authentication
+        - to_agency
+      properties:
+        from_agency:
+          type: string
+        from_agency_authentication:
+          type: string
+        to_agency:
+          type: string
+        address:
+          type: string
+        lookup_user_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
+        request_item_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
+        accept_item_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
+        create_user_fiscal_transaction_mode:
+          type: string
+          enum:
+            - disabled
+            - auto
+            - manual
     Symbol:
       required:
         - id
