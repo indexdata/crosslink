@@ -30,10 +30,11 @@ var fixtures *testfixtures.Loader
 
 func jsonReq(t *testing.T, method string, endpoint string, bodyStr string) (*http.Response, string) {
 	var req *http.Request
+	fullPath := app.BasePath + endpoint
 	if bodyStr != "" {
-		req = httptest.NewRequest(method, endpoint, bytes.NewBufferString(bodyStr))
+		req = httptest.NewRequest(method, fullPath, bytes.NewBufferString(bodyStr))
 	} else {
-		req = httptest.NewRequest(method, endpoint, nil)
+		req = httptest.NewRequest(method, fullPath, nil)
 	}
 	req.Header.Add("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -193,7 +194,7 @@ func testCase(t *testing.T, c httpTestCase) {
 			refetchEndpoint = c.endpoint
 		}
 		if idOfPosted != "" {
-			refetchEndpoint += "/" + idOfPosted
+			refetchEndpoint = refetchEndpoint + "/" + idOfPosted
 		}
 		reres, redata := jsonReq(t, http.MethodGet, refetchEndpoint, "")
 		if c.refetchStatus != 0 {

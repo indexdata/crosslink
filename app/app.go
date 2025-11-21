@@ -27,6 +27,7 @@ var Host = cmp.Or(os.Getenv("HOST"), "localhost")
 var Port = cmp.Or(os.Getenv("PORT"), "8086")
 var ConnectionString = cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://postgres:directoryish@localhost:54322/directoryish")
 var MigrationsFolder = "file://migrations"
+var BasePath = "/rsdir"
 
 func httpLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +63,10 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	impl := api.NewApiImpl(dbpool, queries)
 	si := api.NewStrictHandler(impl, nil)
 	m := http.NewServeMux()
-	h := api.HandlerFromMux(si, m)
+	h := api.HandlerWithOptions(si, api.StdHTTPServerOptions{
+		BaseURL:    BasePath,
+		BaseRouter: m,
+	})
 	validationMiddleware := apiValidator.OapiRequestValidator(swagger)
 	wrapped := httpLoggingMiddleware(validationMiddleware(h))
 	return wrapped
