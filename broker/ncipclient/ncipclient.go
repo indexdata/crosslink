@@ -2,6 +2,28 @@ package ncipclient
 
 import "github.com/indexdata/crosslink/ncip"
 
+type NcipMode string
+
+const (
+	ModeDisabled NcipMode = "disabled"
+	ModeAuto     NcipMode = "auto"
+	ModeManual   NcipMode = "manual"
+)
+
+type NcipProperty string
+
+const (
+	Ncip                            NcipProperty = "ncip"
+	FromAgency                      NcipProperty = "from_agency"
+	FromAgencyAuthentication        NcipProperty = "from_agency_authentication"
+	ToAgency                        NcipProperty = "to_agency"
+	Address                         NcipProperty = "address"
+	LookupUserMode                  NcipProperty = "lookup_user_mode"
+	AcceptItemMode                  NcipProperty = "accept_item_mode"
+	RequestItemMode                 NcipProperty = "request_item_mode"
+	CreateUserFiscalTransactionMode NcipProperty = "create_user_fiscal_transaction_mode"
+)
+
 // NcipClient defines the interface for NCIP operations
 // customData is from the DirectoryEntry.CustomData field
 type NcipClient interface {

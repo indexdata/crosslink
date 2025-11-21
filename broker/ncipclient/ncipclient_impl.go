@@ -24,7 +24,7 @@ func (n *NcipClientImpl) LookupUser(customData map[string]any, lookup ncip.Looku
 	if err != nil {
 		return false, err
 	}
-	handle, ret, err := n.checkMode(ncipInfo, "lookup_user_mode")
+	handle, ret, err := n.checkMode(ncipInfo, LookupUserMode)
 	if handle {
 		return ret, err
 	}
@@ -49,7 +49,7 @@ func (n *NcipClientImpl) AcceptItem(customData map[string]any, accept ncip.Accep
 	if err != nil {
 		return false, err
 	}
-	handle, ret, err := n.checkMode(ncipInfo, "accept_item_mode")
+	handle, ret, err := n.checkMode(ncipInfo, AcceptItemMode)
 	if handle {
 		return ret, err
 	}
@@ -93,7 +93,7 @@ func (n *NcipClientImpl) RequestItem(customData map[string]any, request ncip.Req
 	if err != nil {
 		return false, err
 	}
-	handle, ret, err := n.checkMode(ncipInfo, "request_item_mode")
+	handle, ret, err := n.checkMode(ncipInfo, RequestItemMode)
 	if handle {
 		return ret, err
 	}
@@ -177,7 +177,7 @@ func (n *NcipClientImpl) CreateUserFiscalTransaction(customData map[string]any, 
 	if err != nil {
 		return false, err
 	}
-	handle, ret, err := n.checkMode(ncipInfo, "create_user_fiscal_transaction_mode")
+	handle, ret, err := n.checkMode(ncipInfo, CreateUserFiscalTransactionMode)
 	if handle {
 		return ret, err
 	}
@@ -215,17 +215,17 @@ func (n *NcipClientImpl) getNcipInfo(customData map[string]any) (map[string]any,
 	return ncipInfo, nil
 }
 
-func (n *NcipClientImpl) checkMode(ncipInfo map[string]any, key string) (bool, bool, error) {
-	mode, ok := ncipInfo[key].(string)
+func (n *NcipClientImpl) checkMode(ncipInfo map[string]any, key NcipProperty) (bool, bool, error) {
+	mode, ok := ncipInfo[string(key)].(string)
 	if !ok {
 		return true, false, fmt.Errorf("missing %s in ncip configuration", key)
 	}
 	switch mode {
-	case "disabled":
+	case string(ModeDisabled):
 		return true, true, nil
-	case "manual":
+	case string(ModeManual):
 		return true, false, nil
-	case "auto":
+	case string(ModeAuto):
 		break
 	default:
 		return true, false, fmt.Errorf("unknown value for %s: %s", key, mode)
@@ -237,20 +237,28 @@ func (n *NcipClientImpl) prepareHeader(ncipInfo map[string]any, header *ncip.Ini
 	if header == nil {
 		header = &ncip.InitiationHeader{}
 	}
+	from_agency, ok := ncipInfo[string(FromAgency)].(string)
+	if !ok || from_agency == "" {
+		from_agency = "default-from-agency"
+	}
 	header.FromAgencyId.AgencyId = ncip.SchemeValuePair{
-		Text: ncipInfo["from_agency"].(string),
+		Text: from_agency,
+	}
+	to_agency, ok := ncipInfo[string(ToAgency)].(string)
+	if !ok || to_agency == "" {
+		to_agency = "default-to-agency"
 	}
 	header.ToAgencyId.AgencyId = ncip.SchemeValuePair{
-		Text: ncipInfo["to_agency"].(string),
+		Text: to_agency,
 	}
-	if auth, ok := ncipInfo["from_agency_authentication"].(string); ok {
+	if auth, ok := ncipInfo[string(FromAgencyAuthentication)].(string); ok {
 		header.FromAgencyAuthentication = auth
 	}
 	return header
 }
 
 func (n *NcipClientImpl) sendReceiveMessage(ncipInfo map[string]any, message *ncip.NCIPMessage) (*ncip.NCIPMessage, error) {
-	url, ok := ncipInfo["address"].(string)
+	url, ok := ncipInfo[string(Address)].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing NCIP address in customData")
 	}

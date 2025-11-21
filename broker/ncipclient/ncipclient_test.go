@@ -32,6 +32,29 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
+func TestPrepareHeaderEmpty(t *testing.T) {
+	ncipClient := NcipClientImpl{}
+	ncipData := make(map[string]any)
+
+	header := ncipClient.prepareHeader(ncipData, nil)
+	assert.Equal(t, "default-from-agency", header.FromAgencyId.AgencyId.Text)
+	assert.Equal(t, "default-to-agency", header.ToAgencyId.AgencyId.Text)
+	assert.Equal(t, "", header.FromAgencyAuthentication)
+}
+
+func TestPrepareHeaderValues(t *testing.T) {
+	ncipClient := NcipClientImpl{}
+	ncipData := make(map[string]any)
+	ncipData["to_agency"] = "ILL-MOCK1"
+	ncipData["from_agency"] = "ILL-MOCK2"
+	ncipData["from_agency_authentication"] = "pass"
+
+	header := ncipClient.prepareHeader(ncipData, nil)
+	assert.Equal(t, "ILL-MOCK1", header.ToAgencyId.AgencyId.Text)
+	assert.Equal(t, "ILL-MOCK2", header.FromAgencyId.AgencyId.Text)
+	assert.Equal(t, "pass", header.FromAgencyAuthentication)
+}
+
 func TestLookupUserAutoOK(t *testing.T) {
 	ncipClient := CreateNcipClient(http.DefaultClient)
 
