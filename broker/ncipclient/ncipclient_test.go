@@ -450,7 +450,7 @@ func TestAcceptItemModeManual(t *testing.T) {
 	assert.False(t, b)
 }
 
-func TestAccepItemMissingNcipInfo(t *testing.T) {
+func TestAcceptItemMissingNcipInfo(t *testing.T) {
 	ncipClient := CreateNcipClient(http.DefaultClient)
 	customData := make(map[string]any)
 	accept := ncip.AcceptItem{}
@@ -496,7 +496,20 @@ func TestRequestItemOK(t *testing.T) {
 	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	customData["ncip"] = ncipData
 
-	request := ncip.RequestItem{}
+	request := ncip.RequestItem{
+		UserId: &ncip.UserId{
+			UserIdentifierValue: "validuser",
+		},
+		ItemId: []ncip.ItemId{{
+			ItemIdentifierValue: "item-001",
+		}},
+		RequestScopeType: ncip.SchemeValuePair{
+			Text: "Bibliographic",
+		},
+		RequestType: ncip.SchemeValuePair{
+			Text: "Hold",
+		},
+	}
 	b, err := ncipClient.RequestItem(customData, request)
 	assert.NoError(t, err)
 	assert.True(t, b)
@@ -540,7 +553,17 @@ func TestCancelRequestItemOK(t *testing.T) {
 	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	customData["ncip"] = ncipData
 
-	request := ncip.CancelRequestItem{}
+	request := ncip.CancelRequestItem{
+		UserId: &ncip.UserId{
+			UserIdentifierValue: "validuser",
+		},
+		ItemId: &ncip.ItemId{
+			ItemIdentifierValue: "item-001",
+		},
+		RequestType: ncip.SchemeValuePair{
+			Text: "Hold",
+		},
+	}
 	err := ncipClient.CancelRequestItem(customData, request)
 	assert.NoError(t, err)
 }
@@ -565,7 +588,11 @@ func TestCheckInItemOK(t *testing.T) {
 	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	customData["ncip"] = ncipData
 
-	request := ncip.CheckInItem{}
+	request := ncip.CheckInItem{
+		ItemId: ncip.ItemId{
+			ItemIdentifierValue: "item-001",
+		},
+	}
 	err := ncipClient.CheckInItem(customData, request)
 	assert.NoError(t, err)
 }
@@ -590,7 +617,14 @@ func TestCheckOutItemOK(t *testing.T) {
 	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	customData["ncip"] = ncipData
 
-	request := ncip.CheckOutItem{}
+	request := ncip.CheckOutItem{
+		UserId: &ncip.UserId{
+			UserIdentifierValue: "validuser",
+		},
+		ItemId: ncip.ItemId{
+			ItemIdentifierValue: "item-001",
+		},
+	}
 	err := ncipClient.CheckOutItem(customData, request)
 	assert.NoError(t, err)
 }
@@ -619,6 +653,12 @@ func TestCreateUserFiscsalTransactionOK(t *testing.T) {
 	lookup := ncip.CreateUserFiscalTransaction{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
+		},
+		FiscalTransactionInformation: ncip.FiscalTransactionInformation{
+			FiscalActionType: ncip.SchemeValuePair{Text: "Charge"},
+			FiscalTransactionReferenceId: &ncip.FiscalTransactionReferenceId{
+				FiscalTransactionIdentifierValue: "ft-001",
+			},
 		},
 	}
 	b, err := ncipClient.CreateUserFiscalTransaction(customData, lookup)

@@ -5,13 +5,13 @@ import "github.com/indexdata/crosslink/ncip"
 // NcipClient defines the interface for NCIP operations
 // customData is from the DirectoryEntry.CustomData field
 type NcipClient interface {
-	// LookupUser performs user authentication
+	// LookupUser performs user authentication.
 	// Returns true if authentication is successful (disabled or auto and NCIP lookup succeeded)
 	// Returns false if authentication is manual
 	// Returns an error otherwise (failed NCIP lookup, misconfiguration, etc)
 	LookupUser(customData map[string]any, arg ncip.LookupUser) (bool, error)
 
-	// Accepts Item
+	// AcceptItem accepts an item.
 	// Returns true if accept is successful (disabled or auto and NCIP accept succeeded)
 	// Returns false if accept is manual
 	// Returns an error otherwise (failed NCIP accept, misconfiguration, etc)
@@ -19,7 +19,7 @@ type NcipClient interface {
 
 	DeleteItem(customData map[string]any, arg ncip.DeleteItem) error
 
-	// Request Item
+	// RequestItem requests an item.
 	// Returns true if request is successful (disabled or auto and NCIP request succeeded)
 	// Returns false if request is manual
 	// Returns an error otherwise (failed NCIP request, misconfiguration, etc)
@@ -31,7 +31,7 @@ type NcipClient interface {
 
 	CheckOutItem(customData map[string]any, arg ncip.CheckOutItem) error
 
-	// create user fiscal transaction
+	// CreateUserFiscalTransaction creates a user fiscal transaction.
 	// Returns true if creation is successful (disabled or auto and NCIP creation succeeded)
 	// Returns false if creation is manual
 	// Returns an error otherwise (failed NCIP creation, misconfiguration, etc)

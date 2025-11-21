@@ -41,13 +41,7 @@ func (n *NcipClientImpl) LookupUser(customData map[string]any, lookup ncip.Looku
 	if lookupUserResponse == nil {
 		return false, fmt.Errorf("invalid NCIP response: missing LookupUserResponse")
 	}
-	if len(lookupUserResponse.Problem) > 0 {
-		return false, &NcipError{
-			Message: "NCIP user lookup failed",
-			Problem: lookupUserResponse.Problem[0],
-		}
-	}
-	return true, nil
+	return true, n.checkProblem("NCIP user lookup", lookupUserResponse.Problem)
 }
 
 func (n *NcipClientImpl) AcceptItem(customData map[string]any, accept ncip.AcceptItem) (bool, error) {
@@ -71,13 +65,7 @@ func (n *NcipClientImpl) AcceptItem(customData map[string]any, accept ncip.Accep
 	if acceptItemResponse == nil {
 		return false, fmt.Errorf("invalid NCIP response: missing AcceptItemResponse")
 	}
-	if len(acceptItemResponse.Problem) > 0 {
-		return false, &NcipError{
-			Message: "NCIP accept item failed",
-			Problem: acceptItemResponse.Problem[0],
-		}
-	}
-	return true, nil
+	return true, n.checkProblem("NCIP accept item", acceptItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) DeleteItem(customData map[string]any, delete ncip.DeleteItem) error {
@@ -97,7 +85,7 @@ func (n *NcipClientImpl) DeleteItem(customData map[string]any, delete ncip.Delet
 	if deleteItemResponse == nil {
 		return fmt.Errorf("invalid NCIP response: missing DeleteItemResponse")
 	}
-	return nil
+	return n.checkProblem("NCIP delete item", deleteItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) RequestItem(customData map[string]any, request ncip.RequestItem) (bool, error) {
@@ -121,7 +109,7 @@ func (n *NcipClientImpl) RequestItem(customData map[string]any, request ncip.Req
 	if requestItemResponse == nil {
 		return false, fmt.Errorf("invalid NCIP response: missing RequestItemResponse")
 	}
-	return true, nil
+	return true, n.checkProblem("NCIP request item", requestItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) CancelRequestItem(customData map[string]any, request ncip.CancelRequestItem) error {
@@ -141,7 +129,7 @@ func (n *NcipClientImpl) CancelRequestItem(customData map[string]any, request nc
 	if cancelRequestItemResponse == nil {
 		return fmt.Errorf("invalid NCIP response: missing CancelRequestItemResponse")
 	}
-	return nil
+	return n.checkProblem("NCIP cancel request item", cancelRequestItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) CheckInItem(customData map[string]any, request ncip.CheckInItem) error {
@@ -161,7 +149,7 @@ func (n *NcipClientImpl) CheckInItem(customData map[string]any, request ncip.Che
 	if checkInItemResponse == nil {
 		return fmt.Errorf("invalid NCIP response: missing CheckInItemResponse")
 	}
-	return nil
+	return n.checkProblem("NCIP check in item", checkInItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) CheckOutItem(customData map[string]any, request ncip.CheckOutItem) error {
@@ -181,7 +169,7 @@ func (n *NcipClientImpl) CheckOutItem(customData map[string]any, request ncip.Ch
 	if checkOutItemResponse == nil {
 		return fmt.Errorf("invalid NCIP response: missing CheckOutItemResponse")
 	}
-	return nil
+	return n.checkProblem("NCIP check out item", checkOutItemResponse.Problem)
 }
 
 func (n *NcipClientImpl) CreateUserFiscalTransaction(customData map[string]any, request ncip.CreateUserFiscalTransaction) (bool, error) {
@@ -206,7 +194,17 @@ func (n *NcipClientImpl) CreateUserFiscalTransaction(customData map[string]any, 
 	if createUserFiscalTransactionResponse == nil {
 		return false, fmt.Errorf("invalid NCIP response: missing CreateUserFiscalTransactionResponse")
 	}
-	return true, nil
+	return true, n.checkProblem("NCIP create user fiscal transaction", createUserFiscalTransactionResponse.Problem)
+}
+
+func (n *NcipClientImpl) checkProblem(op string, responseProblems []ncip.Problem) error {
+	if len(responseProblems) > 0 {
+		return &NcipError{
+			Message: op + " failed",
+			Problem: responseProblems[0],
+		}
+	}
+	return nil
 }
 
 func (n *NcipClientImpl) getNcipInfo(customData map[string]any) (map[string]any, error) {
