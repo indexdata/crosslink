@@ -291,7 +291,6 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 
 	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
 	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)
-	eventBus.HandleEventCreated(events.EventNamePatronRequestMessage, prMessageHandler.PatronRequestMessage)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))

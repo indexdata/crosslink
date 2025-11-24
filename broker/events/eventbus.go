@@ -23,10 +23,10 @@ const DEFAULT_PATRON_REQUEST_ID = "00000000-0000-0000-0000-000000000002"
 
 type EventBus interface {
 	Start(ctx common.ExtendedContext) error
-	CreateTask(id string, eventName EventName, data EventData, eventClass EventDomain, parentId *string) (string, error)
-	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventClass EventDomain, parentId *string) (string, error)
-	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventClass EventDomain) (string, error)
-	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventClass EventDomain) (string, error)
+	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
+	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
+	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
+	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
 	BeginTask(eventId string) (Event, error)
 	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
 	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
@@ -132,6 +132,7 @@ func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 			if err != nil {
 				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
 			}
+			// TODO We could run this method in separate go routine
 			go p.handleNotify(notifyData)
 		}
 	}()
@@ -185,17 +186,17 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlersMap m
 	eventCtx.Logger().Debug("all handlers finished", "eventName", event.EventName, "signal", signal)
 }
 
-func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventClass EventDomain, parentId *string) (string, error) {
-	return p.createTask(classId, eventName, data, eventClass, parentId, false)
+func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error) {
+	return p.createTask(classId, eventName, data, eventDomain, parentId, false)
 }
 
-func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventClass EventDomain, parentId *string) (string, error) {
-	return p.createTask(illTransactionID, eventName, data, eventClass, parentId, true)
+func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error) {
+	return p.createTask(illTransactionID, eventName, data, eventDomain, parentId, true)
 }
 
-func (p *PostgresEventBus) createTask(classId string, eventName EventName, data EventData, eventClass EventDomain, parentId *string, broadcast bool) (string, error) {
+func (p *PostgresEventBus) createTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, broadcast bool) (string, error) {
 	id := uuid.New().String()
-	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventClass)
+	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -219,17 +220,17 @@ func (p *PostgresEventBus) createTask(classId string, eventName EventName, data 
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventClass, false)
+func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventDomain, false)
 }
 
-func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventClass, true)
+func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventDomain, true)
 }
 
-func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventClass EventDomain, broadcast bool) (string, error) {
+func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, broadcast bool) (string, error) {
 	id := uuid.New().String()
-	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventClass)
+	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		event, err := eventRepo.SaveEvent(p.ctx, SaveEventParams{
 			ID:               id,
@@ -412,8 +413,8 @@ func getPgText(value *string) pgtype.Text {
 	}
 }
 
-func getIllTransactionAndPatronRequestId(classId string, eventClass EventDomain) (string, string) {
-	if eventClass == EventDomainPatronRequest {
+func getIllTransactionAndPatronRequestId(classId string, eventDomain EventDomain) (string, string) {
+	if eventDomain == EventDomainPatronRequest {
 		return DEFAULT_ILL_TRANSACTION_ID, classId
 	} else {
 		return classId, DEFAULT_PATRON_REQUEST_ID

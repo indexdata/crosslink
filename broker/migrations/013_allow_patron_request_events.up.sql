@@ -8,4 +8,4 @@ ALTER TABLE event ADD COLUMN patron_request_id  VARCHAR NOT NULL DEFAULT '000000
 INSERT INTO event_config (event_name, event_type, retry_count)
 VALUES ('invoke-action', 'TASK', 1);
 INSERT INTO event_config (event_name, event_type, retry_count)
-VALUES ('patron-request-message', 'TASK', 1);
+VALUES ('patron-request-message', 'NOTICE', 1);

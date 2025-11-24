@@ -9,13 +9,10 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
-	"sync"
 )
 
 const COMP_MESSAGE = "pr_massage_handler"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
-
-var waitings = map[string]*sync.WaitGroup{}
 
 type PatronRequestMessageHandler struct {
 	prRepo    pr_db.PrRepo
@@ -43,41 +40,31 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 	if err != nil {
 		return nil, err
 	}
-
-	eventId, err := m.eventBus.CreateTask(pr.ID, events.EventNamePatronRequestMessage, events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg}}, events.EventDomainPatronRequest, nil)
+	// Create notice with result
+	status, response, err := m.handlePatronRequestMessage(ctx, msg)
+	eventData := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg, OutgoingMessage: response}}
+	if err != nil {
+		eventData.EventError = &events.EventError{
+			Message: err.Error(),
+		}
+	}
+	_, err = m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitings[eventId] = &wg
-	wg.Wait()
-
-	event, err := m.eventRepo.GetEvent(ctx, eventId)
-	if err != nil {
-		return nil, err
-	}
-	return event.ResultData.OutgoingMessage, nil
+	return response, err
 }
 
-func (m *PatronRequestMessageHandler) PatronRequestMessage(ctx common.ExtendedContext, event events.Event) {
-	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP_MESSAGE))
-	_, _ = m.eventBus.ProcessTask(ctx, event, m.handlePatronRequestMessage)
-	if waiting, ok := waitings[event.ID]; ok {
-		waiting.Done()
-	}
-}
-
-func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	if event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
-		return m.handleSupplyingAgencyMessage(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage)
-	} else if event.EventData.IncomingMessage.RequestingAgencyMessage != nil {
-		return events.EventStatusError, &events.EventResult{CommonEventData: events.CommonEventData{Note: "requesting agency message handling is not implemented yet"}}
-	} else if event.EventData.IncomingMessage.Request != nil {
-		return events.EventStatusError, &events.EventResult{CommonEventData: events.CommonEventData{Note: "request handling is not implemented yet"}}
+func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	if msg.SupplyingAgencyMessage != nil {
+		return m.handleSupplyingAgencyMessage(ctx, *msg.SupplyingAgencyMessage)
+	} else if msg.RequestingAgencyMessage != nil {
+		return events.EventStatusError, nil, errors.New("requesting agency message handling is not implemented yet")
+	} else if msg.Request != nil {
+		return events.EventStatusError, nil, errors.New("request handling is not implemented yet")
 	} else {
-		return events.EventStatusError, &events.EventResult{CommonEventData: events.CommonEventData{Note: "cannot process message without content"}}
+		return events.EventStatusError, nil, errors.New("cannot process message without content")
 	}
 }
 
@@ -93,13 +80,13 @@ func getPatronRequestId(msg iso18626.ISO18626Message) string {
 	}
 }
 
-func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *events.EventResult) {
+func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	pr, err := m.prRepo.GetPatronRequestById(ctx, sam.Header.RequestingAgencyRequestId)
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: "could not find patron request",
-		})
+			ErrorValue: "could not find patron request: " + err.Error(),
+		}, err)
 	}
 	// TODO handle notifications
 	switch sam.StatusInfo.Status {
@@ -110,8 +97,8 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 		if err != nil {
 			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: "could not find supplier",
-			})
+				ErrorValue: "could not find supplier: " + err.Error(),
+			}, err)
 		}
 		pr.LendingPeerID = pgtype.Text{
 			String: supplier.ID,
@@ -143,27 +130,26 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 		ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
 		ErrorValue: "status change no allowed",
-	})
+	}, errors.New("status change no allowed"))
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *events.EventResult) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
-		})
+		}, err)
 	}
-	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil)
+	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 }
 
-func createSAMResponse(sam iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData) (events.EventStatus, *events.EventResult) {
+func createSAMResponse(sam iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	eventStatus := events.EventStatusSuccess
 	if messageStatus != iso18626.TypeMessageStatusOK {
 		eventStatus = events.EventStatusProblem
 	}
-	return eventStatus, &events.EventResult{CommonEventData: events.CommonEventData{
-		OutgoingMessage: &iso18626.ISO18626Message{
+	return eventStatus, &iso18626.ISO18626Message{
 			SupplyingAgencyMessageConfirmation: &iso18626.SupplyingAgencyMessageConfirmation{
 				ConfirmationHeader: iso18626.ConfirmationHeader{
 					SupplyingAgencyId:         &sam.Header.SupplyingAgencyId,
@@ -175,5 +161,5 @@ func createSAMResponse(sam iso18626.SupplyingAgencyMessage, messageStatus iso186
 				ErrorData:        errorData,
 			},
 		},
-	}}
+		err
 }

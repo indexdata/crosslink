@@ -321,6 +321,13 @@ func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 	return id, nil
 }
 
+func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain) (string, error) {
+	if id == "error" {
+		return "", errors.New("event bus error")
+	}
+	return id, nil
+}
+
 type MockPrRepo struct {
 	mock.Mock
 	pr_db.PgPrRepo
