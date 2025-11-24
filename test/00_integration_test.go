@@ -116,14 +116,17 @@ func resetDb() {
 // Before loading fixtures let's confirm endpoints are able to handle the case
 // where the db has no records
 func TestEmptyGet(t *testing.T) {
-	endpoints := []string{"/entries", "/consortia"}
-	for _, endpoint := range endpoints {
+	endpoints := map[string]string{
+		"/entries":   `{"about":{"count":0},"items":[]}`,
+		"/consortia": "[]",
+	}
+	for endpoint, expected := range endpoints {
 		res, data := jsonReq(t, http.MethodGet, endpoint, "")
 		if res.StatusCode != http.StatusOK {
 			t.Errorf("Expected response status of 200 for %s, got %d and body of %s", endpoint, res.StatusCode, data)
 		}
-		if string(data) != "[]\n" {
-			t.Errorf("expected [] for %s got %v", endpoint, string(data))
+		if string(data) != expected+"\n" {
+			t.Errorf("expected %s for %s got %v", expected, endpoint, string(data))
 		}
 	}
 }

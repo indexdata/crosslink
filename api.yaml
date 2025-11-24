@@ -202,22 +202,15 @@ paths:
           style: form
           schema:
             type: string
-        - name: limit
-          in: query
-          description: maximum number of results to return
-          required: false
-          schema:
-            type: integer
-            format: int32
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Entry list response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Entry'
+                $ref: '#/components/schemas/EntriesResponse'
         '400':
           description: Bad request
           content:
@@ -362,6 +355,24 @@ paths:
 
 components:
   parameters:
+    Offset:
+      name: offset
+      in: query
+      description: Offset for pagination (first item is 0)
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+    Limit:
+      name: limit
+      in: query
+      description: Limit for pagination
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        maximum: 1000
+        default: 10
     entryLookupKey:
       name: key
       in: path
@@ -379,6 +390,33 @@ components:
         type: string
 
   schemas:
+    EntriesResponse:
+      type: object
+      required:
+        - about
+        - items
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entry'
+    About:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
     Id:
       required:
         - id

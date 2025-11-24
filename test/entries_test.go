@@ -247,6 +247,33 @@ func TestEntryCases(t *testing.T) {
 			endpoint: "/entries/by-symbol/NOSYMBOLHERE",
 			status:   http.StatusBadRequest,
 		},
+		{
+			name:     "GET entries with limit",
+			method:   http.MethodGet,
+			endpoint: "/entries?limit=2",
+			status:   http.StatusOK,
+			resFile:  "entries-limit-2.get.res.json",
+		},
+		{
+			name:     "GET entries with offset",
+			method:   http.MethodGet,
+			endpoint: "/entries?offset=2",
+			status:   http.StatusOK,
+			resFile:  "entries-offset-2.get.res.json",
+		},
+		{
+			name:     "GET entries with limit and offset",
+			method:   http.MethodGet,
+			endpoint: "/entries?limit=1&offset=1",
+			status:   http.StatusOK,
+			resFile:  "entries-limit-1-offset-1.get.res.json",
+		},
+		{
+			name:     "GET entries with negative limit rejected",
+			method:   http.MethodGet,
+			endpoint: "/entries?limit=-1",
+			status:   http.StatusBadRequest,
+		},
 	}
 	testCases(t, cases)
 }

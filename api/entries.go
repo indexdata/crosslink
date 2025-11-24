@@ -16,7 +16,7 @@ import (
 	"indexdata/directoryish/db"
 )
 
-func scanEntryRow(rows pgx.Rows) (Entry, error) {
+func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
 		id            uuid.UUID
 		name          string
@@ -26,25 +26,26 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		symbolsJSON   [][]byte
 		endpointsJSON [][]byte
 		addressesJSON [][]byte
+		totalCount    int
 	)
 
-	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON, &addressesJSON); err != nil {
-		return Entry{}, err
+	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON, &addressesJSON, &totalCount); err != nil {
+		return Entry{}, 0, err
 	}
 
 	symbols, err := unmarshalJSONArray[Symbol](symbolsJSON)
 	if err != nil {
-		return Entry{}, fmt.Errorf("unmarshalling symbols: %w", err)
+		return Entry{}, 0, fmt.Errorf("unmarshalling symbols: %w", err)
 	}
 
 	endpoints, err := unmarshalJSONArray[ServiceEndpoint](endpointsJSON)
 	if err != nil {
-		return Entry{}, fmt.Errorf("unmarshalling endpoints: %w", err)
+		return Entry{}, 0, fmt.Errorf("unmarshalling endpoints: %w", err)
 	}
 
 	addresses, err := unmarshalJSONArray[Address](addressesJSON)
 	if err != nil {
-		return Entry{}, fmt.Errorf("unmarshalling addresses: %w", err)
+		return Entry{}, 0, fmt.Errorf("unmarshalling addresses: %w", err)
 	}
 
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
@@ -72,10 +73,11 @@ func scanEntryRow(rows pgx.Rows) (Entry, error) {
 		Symbols:     symbolsPtr,
 		Endpoints:   endpointsPtr,
 		Addresses:   addressesPtr,
-	}, nil
+	}, totalCount, nil
 }
 
 const defaultEntryOrder = "ORDER BY e.name, e.id"
+const defaultEntryLimit = 10
 
 // handleEntryCQL converts a CQL query string to a PostgreSQL WHERE clause
 func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
@@ -124,7 +126,8 @@ func buildEntrySQL(whereClause string) string {
 					WHERE a.entry = e.id
 					ORDER BY a.id
 				) a_with_components
-			) as addresses
+			) as addresses,
+			COUNT(*) OVER() as total_count
 		FROM entries e
 	`
 	if whereClause != "" {
@@ -157,6 +160,20 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		args = []interface{}{}
 	}
 
+	// Add LIMIT clause
+	limit := defaultEntryLimit
+	if request.Params.Limit != nil {
+		limit = int(*request.Params.Limit)
+	}
+	args = append(args, limit)
+	query += fmt.Sprintf("\nLIMIT $%d", len(args))
+
+	// Add OFFSET clause if provided
+	if request.Params.Offset != nil {
+		args = append(args, *request.Params.Offset)
+		query += fmt.Sprintf("\nOFFSET $%d", len(args))
+	}
+
 	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to query entries", "error", err)
@@ -167,15 +184,17 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	// Need to initialise resp as explicitly zero length because a simple
 	// var resp []Entry will be JSON-encoded as null rather than [].
 	// See https://github.com/golang/go/issues/27589
-	resp := make([]Entry, 0)
+	items := make([]Entry, 0)
+	var totalCount int
 
 	for rows.Next() {
-		entry, err := scanEntryRow(rows)
+		entry, count, err := scanEntryRow(rows)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
 			return GetEntries500TextResponse("Internal server error"), nil
 		}
-		resp = append(resp, entry)
+		items = append(items, entry)
+		totalCount = count
 	}
 
 	if err := rows.Err(); err != nil {
@@ -183,7 +202,15 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 		return GetEntries500TextResponse("Internal server error"), nil
 	}
 
-	return GetEntries200JSONResponse(resp), nil
+	// Build response with pagination info
+	response := EntriesResponse{
+		Items: items,
+		About: About{
+			Count: int64(totalCount),
+		},
+	}
+
+	return GetEntries200JSONResponse(response), nil
 }
 
 func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
@@ -221,7 +248,7 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry404TextResponse("Entry not found"), nil
 	}
 
-	entry, err := scanEntryRow(rows)
+	entry, _, err := scanEntryRow(rows)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
 		return GetEntry500TextResponse("Internal server error"), nil
