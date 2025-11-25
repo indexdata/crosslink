@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -24,6 +27,7 @@ import (
 )
 
 var basePath = "/patron_requests"
+var illRepo ill_db.IllRepo
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
@@ -45,9 +49,20 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
+	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
+	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
+	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
+
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
+
+	go func() {
+		var mockApp mockapp.MockApp
+		test.Expect(mockApp.Run(), "failed to start illmock client")
+	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _, _ = apptest.StartApp(ctx)
+	_, illRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
@@ -58,16 +73,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestCrud(t *testing.T) {
+	reqPeer := apptest.CreatePeer(t, illRepo, "localISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL)
+	supPeer := apptest.CreatePeer(t, illRepo, "ISIL:SUP1", adapter.MOCK_CLIENT_URL)
 	// POST
-	landingId := "l1"
-	borrowingId := "b1"
 	requester := "r1"
 	illMessage := "{\"request\": {}}"
 	newPr := proapi.CreatePatronRequest{
 		ID:              uuid.NewString(),
 		Timestamp:       time.Now(),
-		LendingPeerId:   &landingId,
-		BorrowingPeerId: &borrowingId,
+		LendingPeerId:   &supPeer.ID,
+		BorrowingPeerId: &reqPeer.ID,
 		Requester:       &requester,
 		IllRequest:      &illMessage,
 	}
@@ -106,8 +121,8 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, newPr.ID, foundPr.ID)
 
 	// PUT update
-	landingId = "l2"
-	borrowingId = "b2"
+	landingId := "l2"
+	borrowingId := "b2"
 	requester = "r2"
 	updatedPr := proapi.PatronRequest{
 		ID:              newPr.ID,
@@ -128,8 +143,8 @@ func TestCrud(t *testing.T) {
 	assert.True(t, foundPr.State != "ACCEPTED")
 	assert.Equal(t, prservice.SideBorrowing, foundPr.Side)
 	assert.Equal(t, newPr.Timestamp.YearDay(), foundPr.Timestamp.YearDay())
-	assert.Equal(t, "l1", *foundPr.LendingPeerId)
-	assert.Equal(t, "b1", *foundPr.BorrowingPeerId)
+	assert.Equal(t, supPeer.ID, *foundPr.LendingPeerId)
+	assert.Equal(t, reqPeer.ID, *foundPr.BorrowingPeerId)
 	assert.Equal(t, *updatedPr.Requester, *foundPr.Requester) // Only requester can be updated now
 	assert.Equal(t, *newPr.IllRequest, *foundPr.IllRequest)
 
@@ -144,7 +159,22 @@ func TestCrud(t *testing.T) {
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action", actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait till requester response processed
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\"receive\"]\n"
+	})
+
+	// POST blocking action
+	action = proapi.ExecuteAction{
+		Action: "receive",
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request

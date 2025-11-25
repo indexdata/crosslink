@@ -850,7 +850,7 @@ func TestUpdateSupplierNote(t *testing.T) {
 	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
 }
 
-func TestSendIllMessage(t *testing.T) {
+func TestHandleIllMessage(t *testing.T) {
 	mockPrMessageHandler := prservice.CreatePatronRequestMessageHandler(new(MockPrRepo), new(events.PgEventRepo), new(ill_db.PgIllRepo), new(events.PostgresEventBus))
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
@@ -864,10 +864,10 @@ func TestSendIllMessage(t *testing.T) {
 	}
 
 	// To local peer
-	_, err := client.SendIllMessage(appCtx, &ill_db.Peer{Name: "local peer"}, &sam)
+	_, err := client.HandleIllMessage(appCtx, &ill_db.Peer{Name: "local peer"}, &sam)
 	assert.Equal(t, "searching pr with id=req-1", err.Error())
 
-	_, err = client.SendIllMessage(appCtx, &ill_db.Peer{Name: "random peer"}, &sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Name: "random peer"}, &sam)
 	assert.Equal(t, "Post \"\": unsupported protocol scheme \"\"", err.Error())
 }
 

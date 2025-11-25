@@ -440,7 +440,7 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 	return status
 }
 
-func (c *Iso18626Client) SendIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
 	if strings.Contains(peer.Name, "local") { // TODO Implement real check of local peer
 		return c.prMessageHandler.HandleMessage(ctx, msg)
 	} else {
@@ -705,7 +705,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx t
 		resData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
-		response, err := c.SendIllMessage(ctx, trCtx.requester, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.requester, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -800,7 +800,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
-		response, err := c.SendIllMessage(ctx, trCtx.selectedPeer, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.selectedPeer, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
