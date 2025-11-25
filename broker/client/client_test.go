@@ -848,6 +848,18 @@ func TestUpdateSupplierNote(t *testing.T) {
 	sam.MessageInfo.Note = "Original note 2"
 	updateSupplierNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
+
+	sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
+	sam.MessageInfo.Note = "Original note 3"
+	sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP1, Original note 3", sam.MessageInfo.Note)
+
+	sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
+	sam.MessageInfo.Note = "Original note 4"
+	sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	updateSupplierNote(trCtx, &sam)
+	assert.Equal(t, "Original note 4", sam.MessageInfo.Note)
 }
 
 func TestHandleIllMessage(t *testing.T) {
