@@ -3,6 +3,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"net/http"
 	"strings"
 	"time"
@@ -43,11 +44,12 @@ var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
 var prependVendor, _ = utils.GetEnvBool("VENDOR_INFO", true)
 
 type Iso18626Client struct {
-	eventBus   events.EventBus
-	illRepo    ill_db.IllRepo
-	client     *http.Client
-	maxMsgSize int
-	sendDelay  time.Duration
+	eventBus         events.EventBus
+	illRepo          ill_db.IllRepo
+	prMessageHandler prservice.PatronRequestMessageHandler
+	client           *http.Client
+	maxMsgSize       int
+	sendDelay        time.Duration
 }
 
 type transactionContext struct {
@@ -67,13 +69,14 @@ type messageTarget struct {
 	problemDetails *string
 }
 
-func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, maxMsgSize int, delay time.Duration) Iso18626Client {
+func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, prMessageHandler prservice.PatronRequestMessageHandler, maxMsgSize int, delay time.Duration) Iso18626Client {
 	return Iso18626Client{
-		eventBus:   eventBus,
-		illRepo:    illRepo,
-		client:     http.DefaultClient,
-		maxMsgSize: maxMsgSize,
-		sendDelay:  delay,
+		eventBus:         eventBus,
+		illRepo:          illRepo,
+		prMessageHandler: prMessageHandler,
+		client:           http.DefaultClient,
+		maxMsgSize:       maxMsgSize,
+		sendDelay:        delay,
 	}
 }
 
@@ -437,6 +440,14 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 	return status
 }
 
+func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+	if strings.Contains(peer.Name, "local") { // TODO Implement real check of local peer
+		return c.prMessageHandler.HandleMessage(ctx, msg)
+	} else {
+		return c.SendHttpPost(peer, msg)
+	}
+}
+
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
 	httpClient := httpclient.NewClient().
 		WithMaxSize(int64(c.maxMsgSize)).
@@ -694,7 +705,7 @@ func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx t
 		resData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 		resData.OutgoingMessage = nil
 	} else {
-		response, err := c.SendHttpPost(trCtx.requester, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.requester, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}
@@ -789,7 +800,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
-		response, err := c.SendHttpPost(trCtx.selectedPeer, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.selectedPeer, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}

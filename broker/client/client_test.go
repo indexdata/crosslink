@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/stretchr/testify/mock"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -82,7 +86,7 @@ func TestSendHttpPost(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), 0, 0*time.Second)
+	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), *new(prservice.PatronRequestMessageHandler), 0, 0*time.Second)
 
 	msg := &iso18626.ISO18626Message{}
 	peer := ill_db.Peer{
@@ -364,7 +368,7 @@ func TestPopulateVendorInNote(t *testing.T) {
 
 func TestReadTransactionContextSuccess(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := events.Event{IllTransactionID: "1"}
 	trCtx, err := client.readTransactionContext(appCtx, event, true)
 	assert.NoError(t, err)
@@ -377,7 +381,7 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 
 func TestReadTransactionContextError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositoryError), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositoryError), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := events.Event{IllTransactionID: "1"}
 	trCtx, err := client.readTransactionContext(appCtx, event, true)
 	assert.Equal(t, FailedToReadTransaction+": DB error", err.Error())
@@ -457,7 +461,7 @@ func (r *MockIllRepositorySkippedSup) GetLocatedSupplierByIllTransactionAndSymbo
 
 func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
 
@@ -469,7 +473,7 @@ func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeTran
 
 func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeOpaque(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
 
@@ -481,7 +485,7 @@ func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeOpaq
 
 func TestDetermineMessageTarget_handleSkippedSupplierNotification_Error(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
 
@@ -492,7 +496,7 @@ func TestDetermineMessageTarget_handleSkippedSupplierNotification_Error(t *testi
 
 func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(false)
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeOpaque)
 
@@ -505,7 +509,7 @@ func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) 
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeTransparent)
 
@@ -517,7 +521,7 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Br
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeOpaque(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeOpaque)
 
@@ -529,7 +533,7 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Br
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Error(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(mocks.MockIllRepositorySuccess), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	trCtx := createTransactionContext(event, &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}, &ill_db.Peer{}, common.BrokerModeOpaque)
 
@@ -540,7 +544,7 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Er
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LastStatus: getPgText(string(iso18626.TypeStatusLoaned))}
 	supPeer := &ill_db.Peer{}
@@ -557,7 +561,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LastStatus: getPgText("invalid")}
 	supPeer := &ill_db.Peer{}
@@ -570,7 +574,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.
 
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{}
@@ -587,7 +591,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus(t *testing.T) {
 
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeOpaque(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.IncomingMessage = nil
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
@@ -604,7 +608,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 }
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.IncomingMessage = nil
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
@@ -677,7 +681,7 @@ func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.CustomData = map[string]any{common.DO_NOT_SEND: true}
 	trCtx := createTransactionContext(event, nil, nil, common.BrokerModeTransparent)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 
 	status, resData := client.sendAndUpdateStatus(appCtx, trCtx, event.EventData.IncomingMessage)
 
@@ -762,7 +766,7 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 		Vendor: string(common.VendorAlma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), 1, 0*time.Second)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
 
 	status, resData := client.sendAndUpdateSupplier(appCtx, trCtx, event.EventData.IncomingMessage, "Received")
 
@@ -844,4 +848,34 @@ func TestUpdateSupplierNote(t *testing.T) {
 	sam.MessageInfo.Note = "Original note 2"
 	updateSupplierNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
+}
+
+func TestHandleIllMessage(t *testing.T) {
+	mockPrMessageHandler := prservice.CreatePatronRequestMessageHandler(new(MockPrRepo), new(events.PgEventRepo), new(ill_db.PgIllRepo), new(events.PostgresEventBus))
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), mockPrMessageHandler, 1, 0*time.Second)
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			Header: iso18626.Header{
+				RequestingAgencyRequestId: "req-1",
+			},
+		},
+	}
+
+	// To local peer
+	_, err := client.HandleIllMessage(appCtx, &ill_db.Peer{Name: "local peer"}, &sam)
+	assert.Equal(t, "searching pr with id=req-1", err.Error())
+
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Name: "random peer"}, &sam)
+	assert.Equal(t, "Post \"\": unsupported protocol scheme \"\"", err.Error())
+}
+
+type MockPrRepo struct {
+	mock.Mock
+	pr_db.PgPrRepo
+}
+
+func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
 }

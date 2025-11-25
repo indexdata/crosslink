@@ -7,6 +7,7 @@ import (
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"log/slog"
 	"math"
 	"net/http"
@@ -75,11 +76,12 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus   events.EventBus
-	IllRepo    ill_db.IllRepo
-	EventRepo  events.EventRepo
-	DirAdapter adapter.DirectoryLookupAdapter
-	PrRepo     pr_db.PrRepo
+	EventBus     events.EventBus
+	IllRepo      ill_db.IllRepo
+	EventRepo    events.EventRepo
+	DirAdapter   adapter.DirectoryLookupAdapter
+	PrRepo       pr_db.PrRepo
+	PrApiHandler prapi.PatronRequestApiHandler
 }
 
 func configLog() slog.Handler {
@@ -148,22 +150,27 @@ func Init(ctx context.Context) (Context, error) {
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
 	prRepo := CreatePrRepo(pool)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, MAX_MESSAGE_SIZE, delay)
-	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo)
 
+	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
+	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler)
+	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler)
+	prApiHandler := prapi.NewApiHandler(prRepo, eventBus)
+
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
 	}
 	return Context{
-		EventBus:   eventBus,
-		IllRepo:    illRepo,
-		EventRepo:  eventRepo,
-		DirAdapter: dirAdapter,
-		PrRepo:     prRepo,
+		EventBus:     eventBus,
+		IllRepo:      illRepo,
+		EventRepo:    eventRepo,
+		DirAdapter:   dirAdapter,
+		PrRepo:       prRepo,
+		PrApiHandler: prApiHandler,
 	}, nil
 }
 
@@ -194,8 +201,8 @@ func StartServer(ctx Context) error {
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
-	prApiHandler := prapi.NewApiHandler(ctx.PrRepo)
-	proapi.HandlerFromMux(&prApiHandler, ServeMux)
+
+	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
 		ServeMux.ServeHTTP(w, r)
@@ -264,7 +271,8 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 }
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
-	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler) {
+	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
+	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, prMessageHandler prservice.PatronRequestMessageHandler) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
@@ -280,6 +288,9 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
+
+	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
+	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
