@@ -30,7 +30,7 @@ jobs:
             chart_path: ./illmock/chart
             md_path: ./illmock/descriptors/ModuleDescriptor-template.json
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Calculate chart and app version with short SHA
         run: |
