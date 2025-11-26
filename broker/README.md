@@ -63,6 +63,7 @@ Configuration is provided via environment variables:
 | `SUPPLIER_INFO`        | Should `request/supplierInfo` be populated from Directory                                 | `true`                                    |
 | `RETURN_INFO`          | Should `returnInfo` be populated from Directory for supplier `Loaned` message             | `true`                                    |
 | `VENDOR_INFO`          | Should `note` be prepended with `Vendor: xxx` note                                        | `true`                                    |
+| `SUPPLIER_SYMBOL_NOTE` | Should `note` field be prepended with a `Supplier: {symbol}` note                         | `true`                                    |
 | `OFFERED_COSTS`        | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare requesters            | `false`                                   |
 | `NOTE_FIELD_SEP`       | Separator for fields (e.g. Vendor) prepended to the note                                  | `, `                                      |
 | `CLIENT_DELAY`         | Delay duration for outgoing ISO18626 messages                                             | `0ms`                                     |
