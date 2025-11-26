@@ -3,10 +3,11 @@ package client
 import (
 	"errors"
 	"fmt"
-	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"net/http"
 	"strings"
 	"time"
+
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -41,7 +42,7 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
-var prependVendor, _ = utils.GetEnvBool("VENDOR_INFO", true)
+var vendorNote, _ = utils.GetEnvBool("VENDOR_NOTE", true)
 var supplierSymbolNote, _ = utils.GetEnvBool("SUPPLIER_SYMBOL_NOTE", true)
 
 type Iso18626Client struct {
@@ -679,7 +680,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	if supplierSymbolNote {
 		prependSupplierSymbolNote(trCtx, sam)
 	}
-	if prependVendor && target.firstMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+	if vendorNote && target.firstMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNote(sam, target.peer.Vendor)
 	}
 	return message
