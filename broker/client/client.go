@@ -42,6 +42,7 @@ var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
 var prependVendor, _ = utils.GetEnvBool("VENDOR_INFO", true)
+var supplierSymbolNote, _ = utils.GetEnvBool("SUPPLIER_SYMBOL_NOTE", true)
 
 type Iso18626Client struct {
 	eventBus         events.EventBus
@@ -140,7 +141,7 @@ func populateReturnAddress(message *iso18626.ISO18626Message, name string, agenc
 	}
 }
 
-func populateVendor(message *iso18626.SupplyingAgencyMessage, vendor string) {
+func prependVendorNote(message *iso18626.SupplyingAgencyMessage, vendor string) {
 	if message.MessageInfo.Note != "" {
 		sep := shim.NOTE_FIELD_SEP
 		if strings.HasPrefix(message.MessageInfo.Note, "#") {
@@ -675,25 +676,27 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	if prependVendor && target.firstMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
-		populateVendor(sam, target.peer.Vendor)
+	if supplierSymbolNote {
+		prependSupplierSymbolNote(trCtx, sam)
 	}
-
-	updateSupplierNote(trCtx, sam)
-
+	if prependVendor && target.firstMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+		prependVendorNote(sam, target.peer.Vendor)
+	}
 	return message
 }
 
-func updateSupplierNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
+func prependSupplierSymbolNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
-		(sam.StatusInfo.Status == iso18626.TypeStatusExpectToSupply || sam.StatusInfo.Status == iso18626.TypeStatusUnfilled ||
-			sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification) &&
 		trCtx.selectedSupplier != nil {
 		symbol := strings.SplitN(trCtx.selectedSupplier.SupplierSymbol, ":", 2)
-		note := sam.MessageInfo.Note
-		sam.MessageInfo.Note = "Supplier: " + symbol[1]
-		if note != "" {
-			sam.MessageInfo.Note += ", " + note
+		if sam.MessageInfo.Note != "" {
+			sep := shim.NOTE_FIELD_SEP
+			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
+				sep = ""
+			}
+			sam.MessageInfo.Note = "Supplier: " + symbol[1] + sep + sam.MessageInfo.Note
+		} else {
+			sam.MessageInfo.Note = "Supplier: " + symbol[1]
 		}
 	}
 }

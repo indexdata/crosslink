@@ -351,18 +351,18 @@ func TestValidateReason(t *testing.T) {
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusRequestResponse, reason)
 }
 
-func TestPopulateVendorInNote(t *testing.T) {
+func TestPrependVendorInNote(t *testing.T) {
 	message := iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
 	}
 	message.SupplyingAgencyMessage.MessageInfo.Note = ""
-	populateVendor(message.SupplyingAgencyMessage, "Alma")
+	prependVendorNote(message.SupplyingAgencyMessage, "Alma")
 	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "Vendor: Alma")
 	message.SupplyingAgencyMessage.MessageInfo.Note = "some note"
-	populateVendor(message.SupplyingAgencyMessage, "Alma")
+	prependVendorNote(message.SupplyingAgencyMessage, "Alma")
 	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "Vendor: Alma, some note")
 	message.SupplyingAgencyMessage.MessageInfo.Note = "#special note#"
-	populateVendor(message.SupplyingAgencyMessage, "ReShare")
+	prependVendorNote(message.SupplyingAgencyMessage, "ReShare")
 	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "Vendor: ReShare#special note#")
 }
 
@@ -816,50 +816,38 @@ func TestBlockUnfilled(t *testing.T) {
 	assert.False(t, blockUnfilled(trCtx))
 }
 
-func TestUpdateSupplierNote(t *testing.T) {
+func TestPrependSupplierSymbolNote(t *testing.T) {
 	sam := iso18626.SupplyingAgencyMessage{}
 	trCtx := transactionContext{}
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
 	trCtx.requester = &requester
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	requester.BrokerMode = string(common.BrokerModeOpaque)
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	sam.StatusInfo.Status = iso18626.TypeStatusExpectToSupply
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	supplier := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"}
 	trCtx.selectedSupplier = &supplier
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1", sam.MessageInfo.Note)
 
 	sam.MessageInfo.Note = "Original note"
-	updateSupplierNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1, Original note", sam.MessageInfo.Note)
 
 	sam.StatusInfo.Status = iso18626.TypeStatusUnfilled
-	sam.MessageInfo.Note = "Original note 2"
-	updateSupplierNote(trCtx, &sam)
-	assert.Equal(t, "Supplier: SUP1, Original note 2", sam.MessageInfo.Note)
-
-	sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
-	sam.MessageInfo.Note = "Original note 3"
-	sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
-	updateSupplierNote(trCtx, &sam)
-	assert.Equal(t, "Supplier: SUP1, Original note 3", sam.MessageInfo.Note)
-
-	sam.StatusInfo.Status = iso18626.TypeStatusWillSupply
-	sam.MessageInfo.Note = "Original note 4"
-	sam.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
-	updateSupplierNote(trCtx, &sam)
-	assert.Equal(t, "Original note 4", sam.MessageInfo.Note)
+	sam.MessageInfo.Note = "#special note#"
+	prependSupplierSymbolNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP1#special note#", sam.MessageInfo.Note)
 }
 
 func TestHandleIllMessage(t *testing.T) {
