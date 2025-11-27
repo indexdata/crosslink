@@ -5,7 +5,6 @@ type BrokerMode string
 const (
 	BrokerModeOpaque      BrokerMode = "opaque"
 	BrokerModeTransparent BrokerMode = "transparent"
-	BrokerModeTranslucent BrokerMode = "translucent"
 )
 
 type Vendor string

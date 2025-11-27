@@ -145,6 +145,10 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.IllRequest, *foundPr.IllRequest)
 
 	// GET actions by PR id
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\"send-request\"]\n"
+	})
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions", []byte{}, 200)
 	assert.Equal(t, "[\"send-request\"]\n", string(respBytes))
 

@@ -612,6 +612,29 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 		}))
 	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
 	assert.NoError(t, err)
+	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+
+	// now change the broker mode to translucent and repeat the request with a new id
+	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
+	assert.NoError(t, err)
+	peer.BrokerMode = string(common.BrokerModeTransparent)
+	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
+	assert.NoError(t, err)
+	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)
+	reqId = reqId + "1"
+	req, err = http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
+	assert.NoError(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	httpClient = &http.Client{}
+	res, err = httpClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
+		assert.NoError(t, err, "failed to find ill transaction by requester request id %v", reqId)
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
 	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
 }
 
