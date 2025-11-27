@@ -621,7 +621,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	// now change the broker mode to translucent and repeat the request with a new id
 	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
 	assert.NoError(t, err)
-	peer.BrokerMode = string(common.BrokerModeTranslucent)
+	peer.BrokerMode = string(common.BrokerModeTransparent)
 	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
 	assert.NoError(t, err)
 	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)

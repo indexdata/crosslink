@@ -250,6 +250,9 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Is
 	reason := supplyingAgencyMessage.MessageInfo.ReasonForMessage
 	resmsg.SupplyingAgencyMessageConfirmation.ReasonForMessage = &reason
 	app.writeIso18626Response(resmsg, w, role.Requester, header)
+	if reason == iso18626.TypeReasonForMessageNotification {
+		return // No need to trigger action if it is notification
+	}
 	if state.cancel {
 		state.cancel = false
 		go app.sendRequestingAgencyMessageMinorDelay(header, iso18626.TypeActionCancel)

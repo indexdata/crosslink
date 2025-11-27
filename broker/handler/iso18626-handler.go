@@ -526,9 +526,8 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) || supplier.SupplierSymbol != symbol {
-		// we allow notification from skipped suppliers when requester is in transparent mode
-		if requester.BrokerMode == string(common.BrokerModeTransparent) &&
-			illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
+		// we allow notification from skipped suppliers
+		if illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
 			supplier, err = repo.GetLocatedSupplierByIllTransactionAndSymbol(ctx, illTrans.ID, symbol)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) && !errors.Is(err, pgx.ErrTooManyRows) {
 				ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)

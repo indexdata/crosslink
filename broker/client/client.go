@@ -642,12 +642,8 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 
 	if !lastReceivedStatus.Valid {
 		if trCtx.event.EventData.IncomingMessage == nil {
-			if trCtx.requester.BrokerMode == string(common.BrokerModeTransparent) || trCtx.requester.BrokerMode == string(common.BrokerModeTranslucent) {
-				// Send first ExpectToSupply message before supplier has confirmed
-				return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
-			}
-			// First message is not sent if broker mode is Opaque
-			return &messageTarget{note: fmt.Sprintf(BrokerDoesNotSendInThisMode, BrokerInfoStatus, trCtx.requester.BrokerMode)}, nil
+			// Send first ExpectToSupply message before supplier has confirmed
+			return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
 		}
 		// Send first ExpectToSupply message when supplier has confirmed
 		return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, firstMessage: true}, nil
@@ -663,6 +659,9 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	} else {
 		message = &iso18626.ISO18626Message{
 			SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
+		}
+		if trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) && target.firstMessage {
+			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
 		}
 	}
 
@@ -838,7 +837,5 @@ func blockUnfilled(trCtx transactionContext) bool {
 		trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status != iso18626.TypeStatusUnfilled {
 		return false
 	}
-	messageInfo := trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo
-	noteOrReasonExists := messageInfo.Note != "" || (messageInfo.ReasonUnfilled != nil && messageInfo.ReasonUnfilled.Text != "")
-	return !noteOrReasonExists
+	return trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageNotification
 }
