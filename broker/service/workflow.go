@@ -57,16 +57,9 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
-			requester, err := w.illRepo.GetRequesterByIllTransactionId(ctx, event.IllTransactionID)
+			id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 			if err != nil {
-				ctx.Logger().Error("failed to process supplier selected event, no requester", "error", err)
-				return "", fmt.Errorf("failed to process supplier selected event, no requester")
-			}
-			if requester.BrokerMode == string(common.BrokerModeTransparent) || requester.BrokerMode == string(common.BrokerModeTranslucent) {
-				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
-				if err != nil {
-					return id, err
-				}
+				return id, err
 			}
 			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
 				if !local {
@@ -191,7 +184,7 @@ func (w *WorkflowManager) shouldForwardMessage(ctx common.ExtendedContext, event
 		ctx.Logger().Info("cannot detect local supply: no requester", "error", err)
 		return false
 	}
-	if requester.BrokerMode == string(common.BrokerModeTransparent) || requester.BrokerMode == string(common.BrokerModeTranslucent) {
+	if requester.BrokerMode == string(common.BrokerModeTransparent) {
 		sup, err := w.illRepo.GetSelectedSupplierForIllTransaction(ctx, event.IllTransactionID)
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, pgx.ErrTooManyRows) {
 			symbol := getSymbol(event.EventData.IncomingMessage)
