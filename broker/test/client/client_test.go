@@ -555,7 +555,7 @@ func TestSendHttpPost(t *testing.T) {
 	}
 }
 
-func RequestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, brokerMode common.BrokerMode) ill_db.IllTransaction {
+func requestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, brokerMode common.BrokerMode) ill_db.IllTransaction {
 	existingId := "5636c993-c41c-48f4-a285-170545f6f343"
 	reqId := uuid.New().String()
 	data, err := os.ReadFile("../testdata/request-locally-available.xml")
@@ -599,7 +599,7 @@ func RequestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, b
 
 func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	illTrans := RequestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
+	illTrans := requestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
 	_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	assert.Equal(t,
@@ -624,7 +624,7 @@ func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 	for _, mode := range []common.BrokerMode{common.BrokerModeOpaque, common.BrokerModeTranslucent} {
 		t.Run(string(mode), func(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-			illTrans := RequestLocallyAvailableSetup(t, appCtx, mode)
+			illTrans := requestLocallyAvailableSetup(t, appCtx, mode)
 			_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 				CommonEventData: events.CommonEventData{
 					IncomingMessage: &iso18626.ISO18626Message{
