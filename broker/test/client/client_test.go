@@ -617,6 +617,20 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
 	assert.NoError(t, err)
 	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+}
+
+func TestRequestLocallyAvailableTrans(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
+	data, err := os.ReadFile("../testdata/request-locally-available.xml")
+	assert.NoError(t, err)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	assert.NoError(t, err)
+	req.Header.Add("Content-Type", "application/xml")
+	httpClient := &http.Client{}
+	res, err := httpClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 
 	// now change the broker mode to translucent and repeat the request with a new id
 	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
@@ -633,6 +647,7 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	res, err = httpClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, res.StatusCode)
+	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
 		assert.NoError(t, err, "failed to find ill transaction by requester request id %v", reqId)
@@ -641,6 +656,12 @@ func TestRequestLocallyAvailable(t *testing.T) {
 	})
 	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	selSup, err := illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
+	assert.NoError(t, err)
+	selSup.LastStatus = pgtype.Text{
+		String: string(iso18626.TypeStatusLoanCompleted),
+		Valid:  true,
+	}
 	selSup, err = illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
 	assert.NoError(t, err)
 	selSup.LastStatus = pgtype.Text{

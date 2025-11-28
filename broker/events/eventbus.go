@@ -215,7 +215,7 @@ func (p *PostgresEventBus) createTask(classId string, eventName EventName, data 
 			return err
 		}
 		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
-		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
+		p.ctx.Logger().Info("AD: created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
 		return err
 	})
 }
