@@ -49,7 +49,6 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 		if event.EventStatus == events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 		} else {
-			ctx.Logger().Info("AD: OnLocateSupplierComplete create message-requester task")
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 		}
 	}, "")
@@ -65,7 +64,6 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 				return "", fmt.Errorf("failed to process supplier selected event, no requester")
 			}
 			if requester.BrokerMode == string(common.BrokerModeTransparent) || requester.BrokerMode == string(common.BrokerModeTranslucent) {
-				ctx.Logger().Info("AD: OnSelectSupplierComplete 1 create message-requester task")
 				id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 				if err != nil {
 					return id, err
@@ -73,7 +71,6 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 			}
 			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
 				if !local {
-					ctx.Logger().Info("AD: OnSelectSupplierComplete create message-supplier task")
 					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 				} else {
 					return "", nil
@@ -82,7 +79,6 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 				return "", fmt.Errorf("failed to detect local supplier from event result data")
 			}
 		} else {
-			ctx.Logger().Info("AD: OnSelectSupplierComplete 2 create message-requester task")
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID)
 		}
 	}, "")
@@ -99,7 +95,6 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx common.ExtendedContext, ev
 	}
 	if w.handleAndCheckCancelResponse(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID) {
 		common.Must(ctx, func() (string, error) {
-			ctx.Logger().Info("AD: SupplierMessageReceived create message-requester task")
 			doNotSend := !w.shouldForwardMessage(ctx, event)
 			if doNotSend {
 				time.Sleep(1 * time.Millisecond)
@@ -121,7 +116,6 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx common.ExtendedContext, e
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.EventStatus == events.EventStatusSuccess {
 		common.Must(ctx, func() (string, error) {
-			ctx.Logger().Info("AD: RequesterMessageReceived create message-supplier task")
 			doNotSend := !w.shouldForwardMessage(ctx, event)
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
 				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: doNotSend}}, events.EventDomainIllTransaction, &event.ID)
