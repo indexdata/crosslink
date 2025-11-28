@@ -555,18 +555,28 @@ func TestSendHttpPost(t *testing.T) {
 	}
 }
 
-func TestRequestLocallyAvailable(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	reqId := "5636c993-c41c-48f4-a285-170545f6f343"
+func RequestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, brokerMode common.BrokerMode) ill_db.IllTransaction {
+	existingId := "5636c993-c41c-48f4-a285-170545f6f343"
+	reqId := uuid.New().String()
 	data, err := os.ReadFile("../testdata/request-locally-available.xml")
 	assert.NoError(t, err)
-	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader(data))
+	dataString := strings.Replace(string(data), existingId, reqId, 1)
+	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
 	assert.NoError(t, err)
 	req.Header.Add("Content-Type", "application/xml")
 	httpClient := &http.Client{}
 	res, err := httpClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	if brokerMode != common.BrokerModeOpaque {
+		peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
+		assert.NoError(t, err)
+		peer.BrokerMode = string(brokerMode)
+		peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
+		assert.NoError(t, err)
+	}
+
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
@@ -582,86 +592,15 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		String: string(iso18626.TypeStatusLoanCompleted),
 		Valid:  true,
 	}
-	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
+	_, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
 	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
-	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					StatusInfo: iso18626.StatusInfo{
-						Status: iso18626.TypeStatusLoaned,
-					},
-				},
-			},
-		},
-	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
-	assert.NoError(t, err)
-	assert.Equal(t,
-		"NOTICE, request-received = SUCCESS\n"+
-			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
-			"TASK, message-requester = SUCCESS\n"+
-			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = NEW\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 9, true, func(e events.Event) string {
-			if e.EventName == "select-supplier" {
-				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
-			}
-			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
-		}))
-	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
-	assert.NoError(t, err)
-	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+	return illTrans
+}
 
-	// now change the broker mode to translucent and repeat the request with a new id
-	peer, err := illRepo.GetPeerBySymbol(appCtx, "ISIL:REQ")
-	assert.NoError(t, err)
-	peer.BrokerMode = string(common.BrokerModeTranslucent)
-	peer, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(peer))
-	assert.NoError(t, err)
-	dataString := strings.Replace(string(data), reqId, reqId+"1", 1)
-	reqId = reqId + "1"
-	req, err = http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
-	assert.NoError(t, err)
-	req.Header.Add("Content-Type", "application/xml")
-	httpClient = &http.Client{}
-	res, err = httpClient.Do(req)
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-	test.WaitForPredicateToBeTrue(func() bool {
-		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, apptest.CreatePgText(reqId))
-		assert.NoError(t, err, "failed to find ill transaction by requester request id %v", reqId)
-		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusExpectToSupply) &&
-			illTrans.LastRequesterAction.String == "Request"
-	})
-	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
-	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	selSup, err = illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-	assert.NoError(t, err)
-	selSup.LastStatus = pgtype.Text{
-		String: string(iso18626.TypeStatusLoanCompleted),
-		Valid:  true,
-	}
-	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
-	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
-	assert.NoError(t, err)
-	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					StatusInfo: iso18626.StatusInfo{
-						Status: iso18626.TypeStatusLoaned,
-					},
-				},
-			},
-		},
-	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	illTrans := RequestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
+	_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
@@ -669,11 +608,8 @@ func TestRequestLocallyAvailable(t *testing.T) {
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
-			"NOTICE, supplier-msg-received = SUCCESS\n"+
-			"TASK, message-supplier = SUCCESS, doNotSend=true\n"+
-			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
-			"TASK, confirm-supplier-msg = NEW\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 9, true, func(e events.Event) string {
+			"TASK, message-supplier = SUCCESS, doNotSend=true\n",
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, true, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}
@@ -681,7 +617,45 @@ func TestRequestLocallyAvailable(t *testing.T) {
 		}))
 	illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+	assert.Equal(t, string(iso18626.TypeStatusExpectToSupply), illTrans.LastSupplierStatus.String)
+}
+
+func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
+	for _, mode := range []common.BrokerMode{common.BrokerModeOpaque, common.BrokerModeTranslucent} {
+		t.Run(string(mode), func(t *testing.T) {
+			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+			illTrans := RequestLocallyAvailableSetup(t, appCtx, mode)
+			_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
+				CommonEventData: events.CommonEventData{
+					IncomingMessage: &iso18626.ISO18626Message{
+						SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusLoaned,
+							},
+						},
+					},
+				},
+			}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+			assert.NoError(t, err)
+			assert.Equal(t,
+				"NOTICE, request-received = SUCCESS\n"+
+					"TASK, locate-suppliers = SUCCESS\n"+
+					"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+					"TASK, message-requester = SUCCESS\n"+
+					"NOTICE, supplier-msg-received = SUCCESS\n"+
+					"TASK, message-requester = SUCCESS, doNotSend=true\n"+
+					"TASK, confirm-supplier-msg = NEW\n",
+				apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 7, true, func(e events.Event) string {
+					if e.EventName == "select-supplier" {
+						return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
+					}
+					return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+				}))
+			illTrans, err = illRepo.GetIllTransactionById(appCtx, illTrans.ID)
+			assert.NoError(t, err)
+			assert.Equal(t, string(iso18626.TypeStatusLoanCompleted), illTrans.LastSupplierStatus.String)
+		})
+	}
 }
 
 func createIllTrans(t *testing.T, illRepo ill_db.IllRepo, requesterId string, requesterSymbol string, action string, supplierSymbol string) string {
