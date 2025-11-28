@@ -94,8 +94,9 @@ func (w *WorkflowManager) SupplierMessageReceived(ctx common.ExtendedContext, ev
 	}
 	if w.handleAndCheckCancelResponse(ctx, *event.EventData.IncomingMessage.SupplyingAgencyMessage, event.IllTransactionID) {
 		common.Must(ctx, func() (string, error) {
+			doNotSend := !w.shouldForwardMessage(ctx, event)
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventDomainIllTransaction, &event.ID)
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: doNotSend}}, events.EventDomainIllTransaction, &event.ID)
 		}, "")
 	} else {
 		common.Must(ctx, func() (string, error) {
@@ -111,8 +112,9 @@ func (w *WorkflowManager) RequesterMessageReceived(ctx common.ExtendedContext, e
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.EventStatus == events.EventStatusSuccess {
 		common.Must(ctx, func() (string, error) {
+			doNotSend := !w.shouldForwardMessage(ctx, event)
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier,
-				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: !w.shouldForwardMessage(ctx, event)}}, events.EventDomainIllTransaction, &event.ID)
+				events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: event.EventData.IncomingMessage}, CustomData: map[string]any{common.DO_NOT_SEND: doNotSend}}, events.EventDomainIllTransaction, &event.ID)
 		}, "")
 	}
 }
