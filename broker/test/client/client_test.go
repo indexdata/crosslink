@@ -662,12 +662,6 @@ func TestRequestLocallyAvailableTrans(t *testing.T) {
 		String: string(iso18626.TypeStatusLoanCompleted),
 		Valid:  true,
 	}
-	selSup, err = illRepo.GetSelectedSupplierForIllTransaction(appCtx, illTrans.ID)
-	assert.NoError(t, err)
-	selSup.LastStatus = pgtype.Text{
-		String: string(iso18626.TypeStatusLoanCompleted),
-		Valid:  true,
-	}
 	selSup, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(selSup))
 	assert.NoError(t, err)
 	_, err = eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
