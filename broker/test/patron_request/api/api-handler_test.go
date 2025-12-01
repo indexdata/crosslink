@@ -4,6 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -18,12 +25,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"io"
-	"net/http"
-	"os"
-	"strconv"
-	"testing"
-	"time"
 )
 
 var basePath = "/patron_requests"
@@ -49,17 +50,18 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
+	mockPort := utils.Must(test.GetFreePort())
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
-	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
+	test.Expect(os.Setenv("HTTP_PORT", strconv.Itoa(mockPort)), "failed to set mock client port")
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
 
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	go func() {
 		var mockApp mockapp.MockApp
 		test.Expect(mockApp.Run(), "failed to start illmock client")
 	}()
+	test.WaitForServiceUp(mockPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	_, illRepo, _ = apptest.StartApp(ctx)
