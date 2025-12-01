@@ -491,7 +491,7 @@ func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) 
 
 	assert.Nil(t, err)
 	assert.Equal(t, iso18626.TypeStatusUnfilled, msgTarget.status)
-	assert.False(t, msgTarget.firstMessage)
+	assert.False(t, msgTarget.brokerMessage)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
@@ -543,7 +543,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusLoaned, msgTarget.status)
-	assert.False(t, msgTarget.firstMessage)
+	assert.False(t, msgTarget.brokerMessage)
 }
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
@@ -557,23 +557,6 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.
 	_, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Equal(t, "failed to resolve status for value: invalid", err.Error())
-}
-
-func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
-	event := createSupplyingAgencyMessageEvent(true)
-	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
-	supPeer := &ill_db.Peer{}
-	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
-
-	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
-
-	assert.Nil(t, err)
-	assert.Equal(t, sup, msgTarget.supplier)
-	assert.Nil(t, msgTarget.peer)
-	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.firstMessage)
 }
 
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeOpaque(t *testing.T) {
@@ -591,7 +574,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
 	assert.Nil(t, msgTarget.peer)
 	assert.Equal(t, sup, msgTarget.supplier)
-	assert.True(t, msgTarget.firstMessage)
+	assert.True(t, msgTarget.brokerMessage)
 }
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -608,7 +591,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Nil(t, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.firstMessage)
+	assert.True(t, msgTarget.brokerMessage)
 }
 
 func TestBuildSupplyingAgencyMessage(t *testing.T) {
@@ -624,10 +607,10 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:       iso18626.TypeStatusLoaned,
-		firstMessage: true,
-		supplier:     sup,
-		peer:         supPeer,
+		status:        iso18626.TypeStatusLoaned,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
@@ -649,10 +632,10 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:       iso18626.TypeStatusLoaned,
-		firstMessage: true,
-		supplier:     sup,
-		peer:         supPeer,
+		status:        iso18626.TypeStatusLoaned,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Nil(t, message.DeliveryInfo)

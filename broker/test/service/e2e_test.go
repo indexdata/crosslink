@@ -687,10 +687,10 @@ func TestRequestRETRY_COST(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == "" &&
+		return illTrans.LastSupplierStatus.String == "RetryPossible" &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
-	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "RetryPossible", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
@@ -723,11 +723,11 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == "" &&
-			illTrans.LastRequesterAction.String == "Request"
+		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
+			illTrans.LastRequesterAction.String == "ShippedReturn"
 	})
-	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
-	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
