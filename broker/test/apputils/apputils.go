@@ -196,7 +196,7 @@ func StartMockApp(mockPort int) {
 
 	go func() {
 		var mockApp mockapp.MockApp
-		utils.Expect(mockApp.Run(), "failed to start illmock client")
+		utils.Expect(mockApp.Run(), "failed to start illmock server")
 	}()
 	utils.WaitForServiceUp(mockPort)
 }
