@@ -3,6 +3,7 @@ package apputils
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/utils"
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -187,4 +189,14 @@ func EventsToCompareStringFunc(appCtx common.ExtendedContext, eventRepo events.E
 		value += "\n"
 	}
 	return value
+}
+
+func StartMockApp(mockPort int) {
+	utils.Expect(os.Setenv("HTTP_PORT", strconv.Itoa(mockPort)), "failed to set mock server port")
+
+	go func() {
+		var mockApp mockapp.MockApp
+		utils.Expect(mockApp.Run(), "failed to start illmock client")
+	}()
+	utils.WaitForServiceUp(mockPort)
 }

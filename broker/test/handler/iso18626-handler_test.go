@@ -19,7 +19,6 @@ import (
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/vcs"
-	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
@@ -62,18 +61,14 @@ func TestMain(m *testing.M) {
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
-	mockPort := strconv.Itoa(utils.Must(test.GetFreePort()))
+	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	test.Expect(os.Setenv("HTTP_PORT", mockPort), "failed to set mock client port")
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)), "failed to set peer URL")
 
-	go func() {
-		var mockApp mockapp.MockApp
-		test.Expect(mockApp.Run(), "failed to start ill mock client")
-	}()
+	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + mockPort + "/iso18626"
+	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
