@@ -53,19 +53,6 @@ func TestCreateMessageHeaderOpaque(t *testing.T) {
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
-func TestCreateMessageHeaderTranslucent(t *testing.T) {
-	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "ISIL:REQ"}}
-	sup := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP"}
-
-	reqHeader := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTranslucent))
-	assert.Equal(t, "BROKER", reqHeader.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, "SUP", reqHeader.SupplyingAgencyId.AgencyIdValue)
-
-	supHeader := createMessageHeader(illTrans, &sup, false, string(common.BrokerModeTranslucent))
-	assert.Equal(t, "REQ", supHeader.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
-}
-
 func TestSendHttpPost(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "mytenant",
@@ -504,7 +491,7 @@ func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) 
 
 	assert.Nil(t, err)
 	assert.Equal(t, iso18626.TypeStatusUnfilled, msgTarget.status)
-	assert.False(t, msgTarget.firstMessage)
+	assert.False(t, msgTarget.brokerMessage)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
@@ -556,7 +543,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusLoaned, msgTarget.status)
-	assert.False(t, msgTarget.firstMessage)
+	assert.False(t, msgTarget.brokerMessage)
 }
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
@@ -572,23 +559,6 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.
 	assert.Equal(t, "failed to resolve status for value: invalid", err.Error())
 }
 
-func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
-	event := createSupplyingAgencyMessageEvent(true)
-	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
-	supPeer := &ill_db.Peer{}
-	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
-
-	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
-
-	assert.Nil(t, err)
-	assert.Equal(t, sup, msgTarget.supplier)
-	assert.Nil(t, msgTarget.peer)
-	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.firstMessage)
-}
-
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeOpaque(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
@@ -601,10 +571,10 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Nil(t, err)
-	assert.Equal(t, "broker does not send ExpectToSupply in mode opaque", msgTarget.note)
+	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
 	assert.Nil(t, msgTarget.peer)
-	assert.Nil(t, msgTarget.supplier)
-	assert.False(t, msgTarget.firstMessage)
+	assert.Equal(t, sup, msgTarget.supplier)
+	assert.True(t, msgTarget.brokerMessage)
 }
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -621,7 +591,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Nil(t, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.firstMessage)
+	assert.True(t, msgTarget.brokerMessage)
 }
 
 func TestBuildSupplyingAgencyMessage(t *testing.T) {
@@ -637,10 +607,10 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:       iso18626.TypeStatusLoaned,
-		firstMessage: true,
-		supplier:     sup,
-		peer:         supPeer,
+		status:        iso18626.TypeStatusLoaned,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
@@ -662,10 +632,10 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:       iso18626.TypeStatusLoaned,
-		firstMessage: true,
-		supplier:     sup,
-		peer:         supPeer,
+		status:        iso18626.TypeStatusLoaned,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Nil(t, message.DeliveryInfo)
@@ -791,10 +761,7 @@ func TestBlockUnfilled(t *testing.T) {
 	assert.False(t, blockUnfilled(trCtx))
 
 	messageInfo := iso18626.MessageInfo{
-		Note: "Will not deliver",
-		ReasonUnfilled: &iso18626.TypeSchemeValuePair{
-			Text: "Not available",
-		},
+		ReasonForMessage: iso18626.TypeReasonForMessageNotification,
 	}
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = messageInfo
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo = iso18626.StatusInfo{
@@ -806,14 +773,10 @@ func TestBlockUnfilled(t *testing.T) {
 	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusUnfilled
-	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = iso18626.MessageInfo{}
+	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo = iso18626.MessageInfo{
+		ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+	}
 	assert.True(t, blockUnfilled(trCtx))
-
-	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Will not deliver"
-	assert.False(t, blockUnfilled(trCtx))
-
-	trCtx.requester.BrokerMode = string(common.BrokerModeOpaque)
-	assert.False(t, blockUnfilled(trCtx))
 }
 
 func TestPrependSupplierSymbolNote(t *testing.T) {

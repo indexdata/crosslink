@@ -34,6 +34,7 @@
             <requestType>New</requestType>
             <requestSubType>PatronRequest</requestSubType>
             <serviceType>Loan</serviceType>
+            <note>#RETRYKEEPID#</note>
         </serviceInfo>
         <supplierInfo></supplierInfo>
         <requestedDeliveryInfo>

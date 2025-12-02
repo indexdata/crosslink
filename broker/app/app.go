@@ -319,8 +319,6 @@ func HandleHealthz(w http.ResponseWriter, r *http.Request) {
 func getBrokerMode(mode string) common.BrokerMode {
 	if strings.EqualFold(mode, string(common.BrokerModeTransparent)) {
 		return common.BrokerModeTransparent
-	} else if strings.EqualFold(mode, string(common.BrokerModeTranslucent)) {
-		return common.BrokerModeTranslucent
 	} else {
 		return common.BrokerModeOpaque
 	}
