@@ -23,13 +23,24 @@ see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for det
 
 # Mode of operation
 
-CrossLink broker can operate in three modes:
+ISO18626 is designed as a peer-to-peer protocol and, as such, does not include any specific provisions (e.g., message types or statuses) for broker-based operations.
 
-1. `opaque` -- in this mode, the broker behaves like a regular ISO18626 peer and does not reveal any information about the located supplier. Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the header of outgoing messages.
+CrossLink Broker relies on regular ISO18626 messages to provide broker-specific functionality:
 
-2. `translucent` -- in this mode the broker sends ISO18626 `ExpectToSupply` message to the requester each time a new supplier is selected. Also in this mode, the broker supports the _local supply_ feature, where it detects that the selected supplier is the same institution as the requester or one of its branches. With _local supply_, messages are handled directly in the broker and are not forwarded to the supplier.
+1. Automatically sends ISO18626 `ExpectToSupply` message to the requester each time a new supplier is selected
+2. Forwards the ISO18626 `Unfilled` message from the supplier as a `Notification` rather than a `StatusChange`, to avoid terminating the request.
+   Regular `Unfilled` status is communicated at the end of the transaction when the broker exhausts all suppliers ("end of rota").
+3. _local supply_ feature: detects when the supplier is part of or the same institution as the requester
 
-3. `transparent` -- this mode does everything the `translucent` mode does but the broker transmits the requester and supplier symbols in the forwarded message header, thus fully revealing both parties to each other. Additionally, in this mode, suppliers can send notifications to the requester even after the request is rejected.
+To remain compatible with standard ISO18626 peers, CrossLink Broker can operate in two modes:
+
+1. `opaque` -- in this mode, Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the headers of outgoing messages, behaving as a regular ISO18626 peer.
+   Actual supplier can be identified by prepending `Supplier: {symbol}` to the message note field, see `SUPPLIER_SYMBOL_NOTE` env var.
+   `ExpectToSupply` messages after a supplier change are sent as a `Notification` rather than `StatusChange`.
+   Upon detecting _local supply_, the supplier is skipped.
+
+2. `transparent` -- the requester and supplier symbols are used in the forwarded message headers, thus fully revealing both parties.
+   When detecting _local supply_, messages are not forwarded but instead handled between the requester and the broker.
 
 The broker mode can be configured for each peer individually by setting the `BrokerMode` field on the `peer` entity (via the `/peers/:id` endpoint). Unless explicitly set, the broker will configure the `BrokerMode` based on the peer `Vendor` field as follows:
 
@@ -57,14 +68,14 @@ Configuration is provided via environment variables:
 | `DB_PORT`              | Database port                                                                             | `25432`                                   |
 | `LOG_LEVEL`            | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                               | `INFO`                                    |
 | `ENABLE_JSON_LOG`      | Should JSON log format be enabled                                                         | `false`                                   |
-| `BROKER_MODE`          | Default broker mode if not configured for a peer: `opaque`, `transparent` or `translucent`| `opaque`                                  |
+| `BROKER_MODE`          | Default broker mode if not configured for a peer: `opaque` or `transparent`               | `opaque`                                  |
 | `BROKER_SYMBOL`        | Symbol for the broker when in the `opaque` mode                                           | `ISIL:BROKER`                             |
 | `REQ_AGENCY_INFO`      | Should `request/requestingAgencyInfo` be populated from Directory                         | `true`                                    |
 | `SUPPLIER_INFO`        | Should `request/supplierInfo` be populated from Directory                                 | `true`                                    |
 | `RETURN_INFO`          | Should `returnInfo` be populated from Directory for supplier `Loaned` message             | `true`                                    |
-| `VENDOR_NOTE`          | Should `note` be prepended with `Vendor: xxx` note                                        | `true`                                    |
-| `SUPPLIER_SYMBOL_NOTE` | Should `note` field be prepended with a `Supplier: {symbol}` note                         | `true`                                    |
-| `OFFERED_COSTS`        | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare requesters            | `false`                                   |
+| `VENDOR_NOTE`          | Should `note` field be prepended with `Vendor: {vendor}` text                             | `true`                                    |
+| `SUPPLIER_SYMBOL_NOTE` | Should `note` field be prepended with a `Supplier: {symbol}` text, `opaque` mode only     | `true`                                    |
+| `OFFERED_COSTS`        | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters     | `false`                                   |
 | `NOTE_FIELD_SEP`       | Separator for fields (e.g. Vendor) prepended to the note                                  | `, `                                      |
 | `CLIENT_DELAY`         | Delay duration for outgoing ISO18626 messages                                             | `0ms`                                     |
 | `SHUTDOWN_DELAY`       | Delay duration for graceful shutdown (in-flight connections)                              | `15s`                                     |
