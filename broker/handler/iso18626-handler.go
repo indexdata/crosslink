@@ -461,7 +461,7 @@ func validateAction(ctx common.ExtendedContext, w http.ResponseWriter, eventData
 		err := fmt.Errorf(string(InvalidAction), eventData.IncomingMessage.RequestingAgencyMessage.Action)
 		resp := handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(err.Error()))
 		eventData.OutgoingMessage = resp
-		createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
+		_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
 		return "", err
 	}
 	return action, nil
@@ -605,7 +605,7 @@ func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *i
 			err := fmt.Errorf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)
 			resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(err.Error()))
 			eventData.OutgoingMessage = resp
-			createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
+			_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
 			return "", "", err
 		}
 	} else {
@@ -617,7 +617,7 @@ func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *i
 		err := fmt.Errorf(string(InvalidReason), illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(err.Error()))
 		eventData.OutgoingMessage = resp
-		createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
+		_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
 		return "", "", err
 	}
 	return status, reason, nil
