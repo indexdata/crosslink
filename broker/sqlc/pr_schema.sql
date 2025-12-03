@@ -7,5 +7,6 @@ CREATE TABLE patron_request
     side              VARCHAR   NOT NULL,
     requester         VARCHAR,
     borrowing_peer_id VARCHAR,
-    lending_peer_id   VARCHAR
+    lending_peer_id   VARCHAR,
+    tenant            VARCHAR
 );

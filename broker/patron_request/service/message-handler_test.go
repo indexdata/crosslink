@@ -2,12 +2,13 @@ package prservice
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGetPatronRequestId(t *testing.T) {

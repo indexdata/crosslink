@@ -4,10 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
-	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
-	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"log/slog"
 	"math"
 	"net/http"
@@ -17,6 +13,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 
 	"github.com/dustin/go-humanize"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -35,6 +36,8 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/indexdata/crosslink/broker/ncipclient"
 )
 
 var HTTP_PORT = utils.Must(utils.GetEnvInt("HTTP_PORT", 8081))
@@ -156,7 +159,8 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler)
+	ncipAdapter := prservice.CreateNcipAdapter(ncipclient.CreateNcipClient(http.DefaultClient), dirAdapter)
+	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, ncipAdapter)
 	prApiHandler := prapi.NewApiHandler(prRepo, eventBus)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)

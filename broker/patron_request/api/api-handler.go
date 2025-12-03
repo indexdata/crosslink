@@ -55,11 +55,15 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	var newPr proapi.CreatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&newPr)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
-
-	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr)))
+	tenant := params.XOkapiTenant
+	if tenant == nil {
+		addBadRequestError(ctx, w, errors.New("X-Okapi-Tenant header is required"))
+		return
+	}
+	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr, *tenant)))
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -122,7 +126,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	var updatePr proapi.UpdatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&updatePr)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
@@ -170,7 +174,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	var action proapi.ExecuteAction
 	err := json.NewDecoder(r.Body).Decode(&action)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
@@ -285,7 +289,7 @@ func toStringFromBytes(bytes []byte) *string {
 	return value
 }
 
-func toDbPatronRequest(request proapi.CreatePatronRequest) pr_db.PatronRequest {
+func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.PatronRequest {
 	var illRequest []byte
 	if request.IllRequest != nil {
 		illRequest = []byte(*request.IllRequest)
@@ -299,6 +303,7 @@ func toDbPatronRequest(request proapi.CreatePatronRequest) pr_db.PatronRequest {
 		BorrowingPeerID: getDbText(request.BorrowingPeerId),
 		LendingPeerID:   getDbText(request.LendingPeerId),
 		IllRequest:      illRequest,
+		Tenant:          getDbText(&tenant),
 	}
 }
 

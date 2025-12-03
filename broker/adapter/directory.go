@@ -1,8 +1,9 @@
 package adapter
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
 	"strconv"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/iso18626"
@@ -26,7 +27,8 @@ type DirectoryEntry struct {
 	URL           string
 	Vendor        common.Vendor
 	BrokerMode    common.BrokerMode
-	CustomData    map[string]any
+	// TODO: add NCIP info here
+	CustomData map[string]any
 }
 
 type SupplierOrdering interface {

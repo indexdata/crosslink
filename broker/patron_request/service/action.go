@@ -3,15 +3,16 @@ package prservice
 import (
 	"encoding/xml"
 	"errors"
+	"net/http"
+	"slices"
+	"strings"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
-	"net/http"
-	"slices"
-	"strings"
 )
 
 const COMP = "pr_action_service"
@@ -62,14 +63,16 @@ type PatronRequestActionService struct {
 	illRepo         ill_db.IllRepo
 	eventBus        events.EventBus
 	iso18626Handler handler.Iso18626HandlerInterface
+	NcipAdapter     NcipAdapter
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, ncipAdapter NcipAdapter) PatronRequestActionService {
 	return PatronRequestActionService{
 		prRepo:          prRepo,
 		illRepo:         illRepo,
 		eventBus:        eventBus,
 		iso18626Handler: iso18626Handler,
+		NcipAdapter:     ncipAdapter,
 	}
 }
 func GetBorrowerActionsByState(state string) []string {
@@ -135,8 +138,21 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO do validation
+	user := "" // TODO: pr patron
+	if !pr.Tenant.Valid {
+		return events.LogErrorAndReturnResult(ctx, "missing tenant", nil)
+	}
+	symbols := []string{pr.Tenant.String}
 
+	password := "" // perhaps later pin, password from the request
+	pass, err := a.NcipAdapter.LookupUser(symbols, user, password)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "NCIP LookupUser failed", err)
+	}
+	if !pass {
+		// TODO: what to do in manual case?
+		return events.LogErrorAndReturnResult(ctx, "NCIP LookupUser manual", nil)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateValidated, nil)
 }
 

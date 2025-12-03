@@ -188,6 +188,7 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
 	assert.NoError(t, err)
+	hreq.Header.Set("X-Okapi-Tenant", "test-lib")
 
 	if method == "POST" || method == "PUT" {
 		hreq.Header.Set("Content-Type", "application/json")
