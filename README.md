@@ -35,3 +35,6 @@ go build
 ## Real
 - https://github.com/leg100/otf
 - https://github.com/helpwave/services/tree/main/services/tasks-svc
+
+# Environment variables
+- SYMBOL_AUTHORITY: The authority that is paired with the incoming institution/tenant to form a full symbol

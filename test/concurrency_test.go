@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+var consortiumPermissionHeaders = map[string]string{
+	"X-Okapi-Tenant":      "ANINST",
+	"X-Okapi-Permissions": `["directoryish.consortium.all"]`,
+}
+
 func TestConcurrency(t *testing.T) {
 	t.Run("ConcurrentEntryPatch", func(t *testing.T) {
 		resetDb()
@@ -22,14 +27,14 @@ func TestConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			res1, data1 = jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002",
-				`{"symbols":[{"authority":"TEST","symbol":"CONCURRENT1"}]}`)
+				`{"symbols":[{"authority":"TEST","symbol":"CONCURRENT1"}]}`, consortiumPermissionHeaders)
 		}()
 
 		// PATCH 2: Update description
 		go func() {
 			defer wg.Done()
 			res2, data2 = jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002",
-				`{"description":"Updated concurrently"}`)
+				`{"description":"Updated concurrently"}`, consortiumPermissionHeaders)
 		}()
 
 		wg.Wait()
@@ -43,7 +48,7 @@ func TestConcurrency(t *testing.T) {
 		}
 
 		// Verify both updates were applied (without FOR UPDATE, one will be lost)
-		_, data := jsonReq(t, http.MethodGet, "/entries/by-id/00000000-0000-0000-0000-000000000002", "")
+		_, data := jsonReq(t, http.MethodGet, "/entries/by-id/00000000-0000-0000-0000-000000000002", "", consortiumPermissionHeaders)
 		var entry map[string]interface{}
 		if err := json.Unmarshal([]byte(data), &entry); err != nil {
 			t.Fatalf("Failed to unmarshal entry: %v", err)
@@ -70,13 +75,13 @@ func TestConcurrency(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			patchRes, _ = jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000001",
-				`{"name":"Updated"}`)
+				`{"name":"Updated"}`, consortiumPermissionHeaders)
 		}()
 
 		// DELETE: Remove same entry
 		go func() {
 			defer wg.Done()
-			deleteRes, _ = jsonReq(t, http.MethodDelete, "/entries/by-id/00000000-0000-0000-0000-000000000001", "")
+			deleteRes, _ = jsonReq(t, http.MethodDelete, "/entries/by-id/00000000-0000-0000-0000-000000000001", "", consortiumPermissionHeaders)
 		}()
 
 		wg.Wait()

@@ -28,7 +28,7 @@ var dbpool *pgxpool.Pool
 var handler http.Handler
 var fixtures *testfixtures.Loader
 
-func jsonReq(t *testing.T, method string, endpoint string, bodyStr string) (*http.Response, string) {
+func jsonReq(t *testing.T, method string, endpoint string, bodyStr string, addlHeaders map[string]string) (*http.Response, string) {
 	var req *http.Request
 	fullPath := app.BasePath + endpoint
 	if bodyStr != "" {
@@ -37,6 +37,13 @@ func jsonReq(t *testing.T, method string, endpoint string, bodyStr string) (*htt
 		req = httptest.NewRequest(method, fullPath, nil)
 	}
 	req.Header.Add("Content-Type", "application/json")
+
+	if addlHeaders != nil {
+		for key, val := range addlHeaders {
+			req.Header.Add(key, val)
+		}
+	}
+
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	res := w.Result()
@@ -113,6 +120,11 @@ func resetDb() {
 	}
 }
 
+var standardHeaders = map[string]string{
+	"X-Okapi-Tenant":      "ANINST",
+	"X-Okapi-Permissions": `["directoryish.consortium.all"]`,
+}
+
 // Before loading fixtures let's confirm endpoints are able to handle the case
 // where the db has no records
 func TestEmptyGet(t *testing.T) {
@@ -121,7 +133,7 @@ func TestEmptyGet(t *testing.T) {
 		"/consortia": "[]",
 	}
 	for endpoint, expected := range endpoints {
-		res, data := jsonReq(t, http.MethodGet, endpoint, "")
+		res, data := jsonReq(t, http.MethodGet, endpoint, "", standardHeaders)
 		if res.StatusCode != http.StatusOK {
 			t.Errorf("Expected response status of 200 for %s, got %d and body of %s", endpoint, res.StatusCode, data)
 		}
@@ -152,7 +164,7 @@ func testCase(t *testing.T, c httpTestCase) {
 		body = c.body
 	}
 
-	res, data := jsonReq(t, c.method, c.endpoint, body)
+	res, data := jsonReq(t, c.method, c.endpoint, body, c.addlHeaders)
 
 	if c.status != 0 && res.StatusCode != c.status {
 		t.Errorf(pre+"Expected response status of %d, got %d and body of %s", c.status, res.StatusCode, data)
@@ -166,7 +178,7 @@ func testCase(t *testing.T, c httpTestCase) {
 		ja.Assertf(data, expectedResponse)
 	} else if c.res != "" {
 		if data != c.res {
-			t.Errorf(pre+"Exprected %v got %v", c.res, data)
+			t.Errorf(pre+"Expected %v got %v", c.res, data)
 		}
 	}
 
@@ -199,7 +211,7 @@ func testCase(t *testing.T, c httpTestCase) {
 		if idOfPosted != "" {
 			refetchEndpoint = refetchEndpoint + "/" + idOfPosted
 		}
-		reres, redata := jsonReq(t, http.MethodGet, refetchEndpoint, "")
+		reres, redata := jsonReq(t, http.MethodGet, refetchEndpoint, "", c.addlHeaders)
 		if c.refetchStatus != 0 {
 			if reres.StatusCode != c.refetchStatus {
 				t.Errorf(pre+"Expected response status of %d when refetching, got %d and body of %s", c.refetchStatus, reres.StatusCode, redata)
@@ -241,6 +253,7 @@ type httpTestCase struct {
 	refetchFile     string                            // if nonempty a GET will be performed and compared to this
 	refetchEndpoint string                            // alternate endpoint prefix to id for refetch
 	refetchStatus   int
+	addlHeaders     map[string]string
 }
 
 func testCases(t *testing.T, cases []httpTestCase) {

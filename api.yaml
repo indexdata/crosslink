@@ -40,6 +40,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Internal server error
           content:
@@ -79,6 +85,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Internal server error
           content:
@@ -106,6 +118,12 @@ paths:
                 $ref: '#/components/schemas/Consortium'
         '400':
           description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Forbidden
           content:
             text/plain:
               schema:
@@ -150,6 +168,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: Not found
           content:
@@ -176,6 +200,12 @@ paths:
       responses:
         '204':
           description: consortium deleted
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
         '400':
           description: Bad request
           content:
@@ -213,6 +243,12 @@ paths:
                 $ref: '#/components/schemas/EntriesResponse'
         '400':
           description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
           content:
             text/plain:
               schema:
@@ -256,6 +292,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
         '500':
           description: Internal server error
           content:
@@ -278,6 +320,12 @@ paths:
                 $ref: '#/components/schemas/Entry'
         '400':
           description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
           content:
             text/plain:
               schema:
@@ -317,6 +365,12 @@ paths:
             text/plain:
               schema:
                 type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
         '404':
           description: Not found
           content:
@@ -340,6 +394,12 @@ paths:
           description: entry deleted
         '400':
           description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
           content:
             text/plain:
               schema:

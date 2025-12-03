@@ -808,6 +808,16 @@ func (response GetConsortia400TextResponse) VisitGetConsortiaResponse(w http.Res
 	return err
 }
 
+type GetConsortia401TextResponse string
+
+func (response GetConsortia401TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type GetConsortia500TextResponse string
 
 func (response GetConsortia500TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
@@ -840,6 +850,16 @@ type AddConsortium400TextResponse string
 func (response AddConsortium400TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddConsortium401TextResponse string
+
+func (response AddConsortium401TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
 
 	_, err := w.Write([]byte(response))
 	return err
@@ -881,6 +901,16 @@ func (response DeleteConsortium400TextResponse) VisitDeleteConsortiumResponse(w 
 	return err
 }
 
+type DeleteConsortium401TextResponse string
+
+func (response DeleteConsortium401TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type DeleteConsortium500TextResponse string
 
 func (response DeleteConsortium500TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
@@ -913,6 +943,16 @@ type GetConsortium400TextResponse string
 func (response GetConsortium400TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetConsortium401TextResponse string
+
+func (response GetConsortium401TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
 
 	_, err := w.Write([]byte(response))
 	return err
@@ -965,6 +1005,16 @@ func (response UpdateConsortium400TextResponse) VisitUpdateConsortiumResponse(w 
 	return err
 }
 
+type UpdateConsortium401TextResponse string
+
+func (response UpdateConsortium401TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type UpdateConsortium404TextResponse string
 
 func (response UpdateConsortium404TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
@@ -1012,6 +1062,16 @@ func (response GetEntries400TextResponse) VisitGetEntriesResponse(w http.Respons
 	return err
 }
 
+type GetEntries401TextResponse string
+
+func (response GetEntries401TextResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type GetEntries500TextResponse string
 
 func (response GetEntries500TextResponse) VisitGetEntriesResponse(w http.ResponseWriter) error {
@@ -1044,6 +1104,16 @@ type AddEntry400TextResponse string
 func (response AddEntry400TextResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddEntry401TextResponse string
+
+func (response AddEntry401TextResponse) VisitAddEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
 
 	_, err := w.Write([]byte(response))
 	return err
@@ -1086,6 +1156,16 @@ func (response DeleteEntry400TextResponse) VisitDeleteEntryResponse(w http.Respo
 	return err
 }
 
+type DeleteEntry401TextResponse string
+
+func (response DeleteEntry401TextResponse) VisitDeleteEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 type DeleteEntry500TextResponse string
 
 func (response DeleteEntry500TextResponse) VisitDeleteEntryResponse(w http.ResponseWriter) error {
@@ -1119,6 +1199,16 @@ type GetEntry400TextResponse string
 func (response GetEntry400TextResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetEntry401TextResponse string
+
+func (response GetEntry401TextResponse) VisitGetEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
 
 	_, err := w.Write([]byte(response))
 	return err
@@ -1167,6 +1257,16 @@ type UpdateEntry400TextResponse string
 func (response UpdateEntry400TextResponse) VisitUpdateEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type UpdateEntry401TextResponse string
+
+func (response UpdateEntry401TextResponse) VisitUpdateEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
 
 	_, err := w.Write([]byte(response))
 	return err
@@ -1545,38 +1645,39 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, key
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"AP//Mvbv60QyAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

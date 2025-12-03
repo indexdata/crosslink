@@ -245,6 +245,31 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 	return i, err
 }
 
+const entryBySymbol = `-- name: EntryBySymbol :one
+SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+`
+
+type EntryBySymbolParams struct {
+	Authority string
+	Symbol    string
+}
+
+func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (Entry, error) {
+	row := q.db.QueryRow(ctx, entryBySymbol, arg.Authority, arg.Symbol)
+	var i Entry
+	err := row.Scan(
+		&i.ID,
+		&i.Parent,
+		&i.Name,
+		&i.Description,
+		&i.LmsLocationCode,
+		&i.ContactName,
+		&i.Email,
+		&i.Phone,
+	)
+	return i, err
+}
+
 const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
 SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `

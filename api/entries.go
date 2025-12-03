@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,8 +14,20 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"indexdata/directoryish/auth"
 	"indexdata/directoryish/db"
 )
+
+const defaultSymbolAuthority string = "TEST"
+const tenantSymbolAuthorityEnv string = "TENANT_SYMBOL_AUTHORITY"
+
+func getSymbolAuthority() string {
+	symbolAuthority := os.Getenv(tenantSymbolAuthorityEnv)
+	if symbolAuthority == "" {
+		return defaultSymbolAuthority
+	}
+	return symbolAuthority
+}
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
@@ -140,6 +153,17 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	var query string
 	var args []interface{}
 
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.PublicUserRole}
+	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetEntries401TextResponse("Access denied"), nil
+	}
+
+	ourEntry, _ := a.queries.EntryBySymbol(ctx,
+		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
+
 	if request.Params.Q != nil && *request.Params.Q != "" {
 		// Use CQL query
 		noBaseArgs := 0
@@ -181,18 +205,25 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 	}
 	defer rows.Close()
 
-	// Need to initialise resp as explicitly zero length because a simple
-	// var resp []Entry will be JSON-encoded as null rather than [].
+	// Need to initialise items as explicitly zero length because a simple
+	// var items []Entry will be JSON-encoded as null rather than [].
 	// See https://github.com/golang/go/issues/27589
 	items := make([]Entry, 0)
 	var totalCount int
 
 	for rows.Next() {
+
 		entry, count, err := scanEntryRow(rows)
+		seeSensitive := (ourEntry.ID.String() == entry.Id.String()) || authData.HasRoleFromList(seeSensitiveRoles)
+
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to scan entry row", "error", err)
 			return GetEntries500TextResponse("Internal server error"), nil
 		}
+		if !seeSensitive {
+			sanitizeEntry(&entry)
+		}
+
 		items = append(items, entry)
 		totalCount = count
 	}
@@ -216,6 +247,18 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (GetEntryResponseObject, error) {
 	var query string
 	var args []interface{}
+	var seeSensitive bool
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
+	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetEntry401TextResponse("Access denied"), nil
+	}
+
+	ownedEntry, _ := a.queries.EntryBySymbol(ctx,
+		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
 
 	if request.Key == GetEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)
@@ -254,10 +297,30 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry500TextResponse("Internal server error"), nil
 	}
 
+	if ownedEntry.ID.String() == entry.Id.String() || authData.HasRoleFromList(seeSensitiveRoles) {
+		seeSensitive = true
+	}
+
+	if !seeSensitive {
+		sanitizeEntry(&entry)
+	}
+
 	return GetEntry200JSONResponse(entry), nil
 }
 
+func sanitizeEntry(entry *Entry) {
+	//do nada til we have some specifically sensitive fields
+}
+
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return AddEntry401TextResponse("Access denied"), nil
+	}
+
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
@@ -354,6 +417,19 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 }
 
 func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error) {
+
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole}
+	writeRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateEntry401TextResponse("Access denied"), nil
+	}
+
+	ownedEntry, _ := a.queries.EntryBySymbol(ctx,
+		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
+
 	tx, err := a.pool.Begin(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to begin transaction", "error", err)
@@ -381,6 +457,11 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	} else if err != nil {
 		slog.ErrorContext(ctx, "failed to fetch entry for update", "error", err)
 		return UpdateEntry500TextResponse("Internal server error"), nil
+	}
+
+	if !authData.HasRoleFromList(writeRoles) && ownedEntry.ID.String() != orig.ID.String() {
+		slog.ErrorContext(ctx, "permission denied")
+		return UpdateEntry401TextResponse("Access denied"), nil
 	}
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
@@ -568,6 +649,13 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 }
 
 func (a ApiImpl) DeleteEntry(ctx context.Context, request DeleteEntryRequestObject) (DeleteEntryResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole}
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return DeleteEntry401TextResponse("Access denied"), nil
+	}
+
 	var err error
 	if request.Key == DeleteEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)

@@ -20,6 +20,7 @@ import (
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
 
 	"indexdata/directoryish/api"
+	"indexdata/directoryish/auth"
 	"indexdata/directoryish/db"
 )
 
@@ -67,9 +68,10 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 		BaseURL:    BasePath,
 		BaseRouter: m,
 	})
-	validationMiddleware := apiValidator.OapiRequestValidator(swagger)
-	wrapped := httpLoggingMiddleware(validationMiddleware(h))
-	return wrapped
+	handlerWithValidation := apiValidator.OapiRequestValidator(swagger)
+	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
+	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithLogging)
+	return handlerWithAuth
 }
 
 func InitDbPool() *pgxpool.Pool {
