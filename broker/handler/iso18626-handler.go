@@ -57,6 +57,7 @@ const InternalFailedToConfirmRequesterMessage = "failed to confirm requester mes
 const InternalFailedToConfirmSupplierMessage = "failed to confirm supplier message"
 
 var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
+var ErrInvalidAction = errors.New("invalid action")
 
 var waitingReqs = map[string]RequestWait{}
 
@@ -372,7 +373,6 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 	}
 	var err error
 	var illTrans ill_db.IllTransaction
-	var action iso18626.TypeAction
 	errorValue := ReqIdNotFound
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err = repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(requestingRequestId))
@@ -398,9 +398,9 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 				return errShim
 			}
 		}
-		action, err = validateAction(ctx, w, eventData, eventBus, illTrans)
-		if err != nil {
-			return err
+		action, ok := validateAction(eventData)
+		if !ok {
+			return ErrInvalidAction
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 		illTrans.LastRequesterAction = createPgText(string(action))
@@ -412,11 +412,12 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 			handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, errorValue)
 			return
 		}
+		if errors.Is(err, ErrInvalidAction) {
+			handleInvalidAction(ctx, w, eventData, eventBus, illTrans)
+			return
+		}
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-		return
-	}
-	if action == "" {
 		return
 	}
 
@@ -455,16 +456,16 @@ func getSupplierSymbol(header *iso18626.Header) string {
 		header.SupplyingAgencyId.AgencyIdValue
 }
 
-func validateAction(ctx common.ExtendedContext, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeAction, error) {
+func validateAction(eventData events.EventData) (iso18626.TypeAction, bool) {
 	action, ok := iso18626.ActionMap[string(eventData.IncomingMessage.RequestingAgencyMessage.Action)]
-	if !ok {
-		err := fmt.Errorf(string(InvalidAction), eventData.IncomingMessage.RequestingAgencyMessage.Action)
-		resp := handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(err.Error()))
-		eventData.OutgoingMessage = resp
-		_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
-		return "", err
-	}
-	return action, nil
+	return action, ok
+}
+
+func handleInvalidAction(ctx common.ExtendedContext, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) {
+	errMsg := fmt.Sprintf(string(InvalidAction), eventData.IncomingMessage.RequestingAgencyMessage.Action)
+	resp := handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(errMsg))
+	eventData.OutgoingMessage = resp
+	_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
 }
 
 func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorType *iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {

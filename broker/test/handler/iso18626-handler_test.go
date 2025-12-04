@@ -518,12 +518,12 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 			}
 			assert.Equal(t, vcs.GetSignature(), res.Header.Get("Server"))
 			if res.StatusCode != tt.status {
-				t.Errorf("handler returned wrong status code: got %v want %v",
+				t.Errorf("handler returned wrong status code: got '%v' want %v",
 					res.StatusCode, tt.status)
 			}
 			body, _ := io.ReadAll(res.Body)
 			if !strings.Contains(string(body), tt.contains) {
-				t.Errorf("handler returned unexpected body: got %v want to contain %v",
+				t.Errorf("handler returned unexpected body: got '%v' want to contain %v",
 					string(body), tt.contains)
 			}
 		})
