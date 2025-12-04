@@ -5,6 +5,16 @@ info:
   description: API for Patron Request CRUD and state actions
 
 components:
+  parameters:
+    Tenant:
+      name: X-Okapi-Tenant
+      in: header
+      description: Okapi Tenant
+      required: false
+      schema:
+        type: string
+        pattern: '^[_a-z][_a-z0-9]*$'
+
   schemas:
     PatronRequest:
       type: object
@@ -133,6 +143,8 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       summary: Create a new patron request
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
       requestBody:
         content:
           application/json:
@@ -168,6 +180,7 @@ paths:
             type: string
           required: true
           description: ID of the patron request to retrieve
+        - $ref: '#/components/parameters/Tenant'
       responses:
         '200':
           description: Successful retrieval of the patron request
@@ -192,6 +205,7 @@ paths:
             type: string
           required: true
           description: ID of the patron request to update
+        - $ref: '#/components/parameters/Tenant'
       requestBody:
         content:
           application/json:
@@ -225,6 +239,7 @@ paths:
             type: string
           required: true
           description: ID of the patron request to delete
+        - $ref: '#/components/parameters/Tenant'
       responses:
         '204':
           description: Patron request deleted successfully (No Content)
@@ -247,6 +262,7 @@ paths:
             type: string
           required: true
           description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
       responses:
         '200':
           description: List of available actions
@@ -279,6 +295,7 @@ paths:
             type: string
           required: true
           description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
       requestBody:
         content:
           application/json:
