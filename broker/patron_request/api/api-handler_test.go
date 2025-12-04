@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -11,9 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"net/http"
-	"net/http/httptest"
-	"testing"
 )
 
 var mockEventBus = new(MockEventBus)
@@ -51,7 +52,7 @@ func TestPostPatronRequests(t *testing.T) {
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
-	handler.PostPatronRequests(rr, req)
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -62,7 +63,7 @@ func TestPostPatronRequestsInvalidJson(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\": v\"")))
 	rr := httptest.NewRecorder()
-	handler.PostPatronRequests(rr, req)
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -73,7 +74,7 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
-	handler.DeletePatronRequestsId(rr, req, "2")
+	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusNotFound {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusNotFound)
@@ -84,7 +85,7 @@ func TestDeletePatronRequestsId(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
-	handler.DeletePatronRequestsId(rr, req, "3")
+	handler.DeletePatronRequestsId(rr, req, "3", proapi.DeletePatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -95,7 +96,7 @@ func TestGetPatronRequestsIdNotFound(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
-	handler.GetPatronRequestsId(rr, req, "2")
+	handler.GetPatronRequestsId(rr, req, "2", proapi.GetPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusNotFound {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusNotFound)
@@ -106,7 +107,7 @@ func TestGetPatronRequestsId(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
-	handler.GetPatronRequestsId(rr, req, "1")
+	handler.GetPatronRequestsId(rr, req, "1", proapi.GetPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -120,7 +121,7 @@ func TestPutPatronRequestsIdNotFound(t *testing.T) {
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "2")
+	handler.PutPatronRequestsId(rr, req, "2", proapi.PutPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusNotFound {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusNotFound)
@@ -134,7 +135,7 @@ func TestPutPatronRequestsId(t *testing.T) {
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "1")
+	handler.PutPatronRequestsId(rr, req, "1", proapi.PutPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -148,7 +149,7 @@ func TestPutPatronRequestsIdSaveError(t *testing.T) {
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3")
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
@@ -159,7 +160,7 @@ func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\":v\"")))
 	rr := httptest.NewRecorder()
-	handler.PutPatronRequestsId(rr, req, "3")
+	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
 	if status := rr.Code; status != http.StatusInternalServerError {
 		t.Errorf("handler returned wrong status code: got %v want %v",
 			status, http.StatusInternalServerError)
