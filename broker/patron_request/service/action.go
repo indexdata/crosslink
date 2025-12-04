@@ -138,12 +138,14 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	user := "" // TODO: pr patron
 	if !pr.Tenant.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing tenant", nil)
 	}
 	symbols := []string{pr.Tenant.String}
-
+	user := ""
+	if pr.Patron.Valid {
+		user = pr.Patron.String
+	}
 	password := "" // perhaps later pin, password from the request
 	pass, err := a.NcipAdapter.LookupUser(symbols, user, password)
 	if err != nil {

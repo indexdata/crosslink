@@ -269,6 +269,7 @@ func toApiPatronRequest(request pr_db.PatronRequest) proapi.PatronRequest {
 		BorrowingPeerId: toString(request.BorrowingPeerID),
 		LendingPeerId:   toString(request.LendingPeerID),
 		IllRequest:      toStringFromBytes(request.IllRequest),
+		Patron:          toString(request.Patron),
 	}
 }
 
@@ -303,6 +304,7 @@ func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.
 		BorrowingPeerID: getDbText(request.BorrowingPeerId),
 		LendingPeerID:   getDbText(request.LendingPeerId),
 		IllRequest:      illRequest,
+		Patron:          getDbText(request.Patron),
 		Tenant:          getDbText(&tenant),
 	}
 }

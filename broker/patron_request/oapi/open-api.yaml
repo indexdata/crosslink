@@ -44,6 +44,9 @@ components:
         LendingPeerId:
           type: string
           description: Lending peer id
+        Patron:
+          type: string
+          description: user name of the patron
       required:
         - ID
         - Timestamp
@@ -72,6 +75,9 @@ components:
         LendingPeerId:
           type: string
           description: Lending peer id
+        Patron:
+          type: string
+          description: user name of the patron
       required:
         - ID
         - Timestamp

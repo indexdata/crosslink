@@ -8,5 +8,6 @@ CREATE TABLE patron_request
     requester         VARCHAR,
     borrowing_peer_id VARCHAR,
     lending_peer_id   VARCHAR,
+    patron            VARCHAR,
     tenant            VARCHAR
 );
