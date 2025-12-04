@@ -1,4 +1,4 @@
-module indexdata/directoryish
+module indexdata/directory
 
 go 1.23.4
 

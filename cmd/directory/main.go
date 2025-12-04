@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"indexdata/directoryish/app"
+	"indexdata/directory/app"
 	"log/slog"
 	"os"
 	"strings"

@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 	"errors"
-	"indexdata/directoryish/auth"
-	"indexdata/directoryish/db"
+	"indexdata/directory/auth"
+	"indexdata/directory/db"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5"

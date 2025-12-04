@@ -21,7 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"indexdata/directoryish/app"
+	"indexdata/directory/app"
 )
 
 var dbpool *pgxpool.Pool
@@ -59,9 +59,9 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
-		postgres.WithDatabase("directoryish_test"),
-		postgres.WithUsername("directoryish"),
-		postgres.WithPassword("directoryish"),
+		postgres.WithDatabase("directory_test"),
+		postgres.WithUsername("directory"),
+		postgres.WithPassword("directory"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
@@ -122,7 +122,7 @@ func resetDb() {
 
 var standardHeaders = map[string]string{
 	"X-Okapi-Tenant":      "ANINST",
-	"X-Okapi-Permissions": `["directoryish.consortium.all"]`,
+	"X-Okapi-Permissions": `["directory.consortium.all"]`,
 }
 
 // Before loading fixtures let's confirm endpoints are able to handle the case

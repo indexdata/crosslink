@@ -5,7 +5,7 @@ OS ?= $(shell uname)
 DOCKER ?= docker
 GOFILES := $(shell find . -name "*.go")
 GOTOOLS=tools.go
-BINARY=directoryish
+BINARY=directory
 MAIN_PACKAGE=cmd/directory
 COVERAGE=coverage.out
 

@@ -19,14 +19,14 @@ import (
 	sloghttp "github.com/veqryn/slog-context/http"
 	pgxUUID "github.com/vgarvardt/pgx-google-uuid/v5"
 
-	"indexdata/directoryish/api"
-	"indexdata/directoryish/auth"
-	"indexdata/directoryish/db"
+	"indexdata/directory/api"
+	"indexdata/directory/auth"
+	"indexdata/directory/db"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")
 var Port = cmp.Or(os.Getenv("PORT"), "8086")
-var ConnectionString = cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://postgres:directoryish@localhost:54322/directoryish")
+var ConnectionString = cmp.Or(os.Getenv("DATABASE_URL"), "postgresql://postgres:directory@localhost:54322/directory")
 var MigrationsFolder = "file://migrations"
 var BasePath = "/rsdir"
 
@@ -41,7 +41,7 @@ func httpLoggingMiddleware(next http.Handler) http.Handler {
 func StartApp(ctx context.Context, dbpool *pgxpool.Pool) {
 	handler := InitHandler(ctx, dbpool)
 	addr := fmt.Sprintf("%s:%s", Host, Port)
-	slog.InfoContext(ctx, "Starting directoryish", "addr", addr)
+	slog.InfoContext(ctx, "Starting directory", "addr", addr)
 	s := &http.Server{
 		Handler: handler,
 		Addr:    addr,

@@ -10,7 +10,7 @@ import (
 
 var consortiumPermissionHeaders = map[string]string{
 	"X-Okapi-Tenant":      "ANINST",
-	"X-Okapi-Permissions": `["directoryish.consortium.all"]`,
+	"X-Okapi-Permissions": `["directory.consortium.all"]`,
 }
 
 func TestConcurrency(t *testing.T) {
