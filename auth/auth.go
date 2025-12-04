@@ -71,10 +71,10 @@ func contextWithAuthData(ctx context.Context, authDataPtr *AuthData) context.Con
 }
 
 var rolePermMap = map[string]DirectoryRole{
-	"directoryish.consortium.all":  ConsortialAdminRole,
-	"directoryish.institution.all": InstitutionalAdminRole,
-	"directoryish.system.all":      SystemUserRole,
-	"directoryish.public.all":      PublicUserRole,
+	"directory.consortium.all":  ConsortialAdminRole,
+	"directory.institution.all": InstitutionalAdminRole,
+	"directory.system.all":      SystemUserRole,
+	"directory.public.all":      PublicUserRole,
 }
 
 func FolioTokenAwareMiddleware(handler http.Handler) http.Handler {

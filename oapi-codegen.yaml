@@ -4,6 +4,6 @@ generate:
   strict-server: true
   models: true
   embedded-spec: true
-output: api/directoryish.gen.go
+output: api/directory.gen.go
 output-options:
   nullable-type: true

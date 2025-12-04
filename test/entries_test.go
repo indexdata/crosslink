@@ -10,12 +10,12 @@ func TestEntryCases(t *testing.T) {
 
 	consortiumPermissionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "ANINST",
-		"X-Okapi-Permissions": `["directoryish.consortium.all"]`,
+		"X-Okapi-Permissions": `["directory.consortium.all"]`,
 	}
 
 	institutionPermissionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "ANINST",
-		"X-Okapi-Permissions": `["directoryish.institution.all"]`,
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
 	}
 
 	cases := []httpTestCase{

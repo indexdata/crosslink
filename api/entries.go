@@ -14,8 +14,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"indexdata/directoryish/auth"
-	"indexdata/directoryish/db"
+	"indexdata/directory/auth"
+	"indexdata/directory/db"
 )
 
 const defaultSymbolAuthority string = "TEST"

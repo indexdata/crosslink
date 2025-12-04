@@ -12,12 +12,12 @@ func TestEntryEnvironment(t *testing.T) {
 
 	shooInstitutionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "SHOO",
-		"X-Okapi-Permissions": `["directoryish.institution.all"]`,
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
 	}
 
 	testInstitutionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "TEST",
-		"X-Okapi-Permissions": `["directoryish.institution.all"]`,
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
 	}
 
 	os.Setenv(symbolAuthorityEnv, "GRONK")
