@@ -49,7 +49,7 @@ COPY --from=build /directory .
 # copy migrations
 COPY --from=build /app/directory/migrations /migrations
 
-ENV HTTP_PORT=8081
+ENV HTTP_PORT=8086
 EXPOSE ${HTTP_PORT}
 
 # Run

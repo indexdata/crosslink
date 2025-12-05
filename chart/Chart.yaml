@@ -1,0 +1,16 @@
+apiVersion: v2
+name: directory
+description: Directory
+type: application
+
+# Use semver, note that this is replaced by the publish action
+version: 0.1.0
+
+# appVersion is used as the Docker image tag by the chart
+appVersion: "main"
+
+dependencies:
+  - name: okapi-hooks
+    repository: oci://ghcr.io/indexdata/charts
+    version: ">0.1.0-0"
+    condition: okapi-hooks.enabled

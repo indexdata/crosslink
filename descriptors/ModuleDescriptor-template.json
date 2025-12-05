@@ -1,0 +1,7 @@
+{
+  "id": "directory-@version@",
+  "name": "Directory",
+  "provides": [],
+  "requires": [],
+  "permissionSets": []
+}
