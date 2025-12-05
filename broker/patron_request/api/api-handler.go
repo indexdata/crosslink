@@ -139,8 +139,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 			return
 		}
 	}
-	if updatePr.Requester != nil {
-		pr.Requester = getDbText(updatePr.Requester)
+	if updatePr.Patron != nil {
+		pr.Patron = getDbText(updatePr.Patron)
 	}
 	pr, err = a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(pr))
 	if err != nil {
@@ -265,11 +265,10 @@ func toApiPatronRequest(request pr_db.PatronRequest) proapi.PatronRequest {
 		Timestamp:       request.Timestamp.Time,
 		State:           request.State,
 		Side:            request.Side,
-		Requester:       toString(request.Requester),
+		Patron:          toString(request.Patron),
 		BorrowingPeerId: toString(request.BorrowingPeerID),
 		LendingPeerId:   toString(request.LendingPeerID),
 		IllRequest:      toStringFromBytes(request.IllRequest),
-		Patron:          toString(request.Patron),
 	}
 }
 
@@ -300,11 +299,10 @@ func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: request.Timestamp},
 		State:           prservice.BorrowerStateNew,
 		Side:            prservice.SideBorrowing,
-		Requester:       getDbText(request.Requester),
+		Patron:          getDbText(request.Patron),
 		BorrowingPeerID: getDbText(request.BorrowingPeerId),
 		LendingPeerID:   getDbText(request.LendingPeerId),
 		IllRequest:      illRequest,
-		Patron:          getDbText(request.Patron),
 		Tenant:          getDbText(&tenant),
 	}
 }

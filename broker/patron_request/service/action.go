@@ -182,7 +182,7 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 				},
 				RequestingAgencyRequestId: pr.ID,
 			},
-			PatronInfo: &iso18626.PatronInfo{PatronId: pr.Requester.String},
+			PatronInfo: &iso18626.PatronInfo{PatronId: pr.Patron.String},
 			BibliographicInfo: iso18626.BibliographicInfo{
 				SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
 			},

@@ -35,7 +35,7 @@ components:
         Side:
           type: string
           description: Patron request side - borrowing or lending
-        Requester:
+        Patron:
           type: string
           description: User who requested item
         BorrowingPeerId:
@@ -44,9 +44,6 @@ components:
         LendingPeerId:
           type: string
           description: Lending peer id
-        Patron:
-          type: string
-          description: user name of the patron
       required:
         - ID
         - Timestamp
@@ -66,7 +63,7 @@ components:
         IllRequest:
           type: string
           description: JSON of ISO18626 request
-        Requester:
+        Patron:
           type: string
           description: User who requested item
         BorrowingPeerId:
@@ -75,9 +72,6 @@ components:
         LendingPeerId:
           type: string
           description: Lending peer id
-        Patron:
-          type: string
-          description: user name of the patron
       required:
         - ID
         - Timestamp
@@ -85,7 +79,7 @@ components:
     UpdatePatronRequest:
       type: object
       properties:
-        Requester:
+        Patron:
           type: string
           description: User who requested item
 
