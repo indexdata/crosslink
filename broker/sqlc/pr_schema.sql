@@ -6,7 +6,7 @@ CREATE TABLE patron_request
     state             VARCHAR   NOT NULL,
     side              VARCHAR   NOT NULL,
     patron            VARCHAR,
-    borrowing_peer_id VARCHAR,
-    lending_peer_id   VARCHAR,
+    requester_symbol  VARCHAR,
+    supplier_symbol   VARCHAR,
     tenant            VARCHAR
 );

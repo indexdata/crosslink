@@ -6,6 +6,7 @@ import (
 	"github.com/indexdata/crosslink/ncip"
 )
 
+// TODO : create IlsAdapter and make NcipAdapter an implmentation of that interface
 type NcipAdapter struct {
 	ncipClient ncipclient.NcipClient
 	dirAdapter adapter.DirectoryLookupAdapter

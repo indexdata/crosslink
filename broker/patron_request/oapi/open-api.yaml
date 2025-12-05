@@ -38,12 +38,12 @@ components:
         Patron:
           type: string
           description: User who requested item
-        BorrowingPeerId:
+        RequesterSymbol:
           type: string
-          description: Borrowing peer id
-        LendingPeerId:
+          description: Requester symbol
+        SupplierSymbol:
           type: string
-          description: Lending peer id
+          description: Supplier symbol
       required:
         - ID
         - Timestamp
@@ -66,12 +66,12 @@ components:
         Patron:
           type: string
           description: User who requested item
-        BorrowingPeerId:
+        RequesterSymbol:
           type: string
-          description: Borrowing peer id
-        LendingPeerId:
+          description: Requester symbol
+        SupplierSymbol:
           type: string
-          description: Lending peer id
+          description: Supplier symbol
       required:
         - ID
         - Timestamp

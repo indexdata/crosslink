@@ -144,6 +144,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *
 	}
 	pr, err = a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(pr))
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// some fields are immutable
+			addBadRequestError(ctx, w, errors.New("cannot change immutable fields"))
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
@@ -188,6 +193,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		}
 	}
 	if !prservice.IsBorrowerActionAvailable(pr.State, action.Action) {
+		ctx.Logger().Error("action not allowed for patron request", "pr.State", pr.State, "action", action.Action)
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}
@@ -266,8 +272,8 @@ func toApiPatronRequest(request pr_db.PatronRequest) proapi.PatronRequest {
 		State:           request.State,
 		Side:            request.Side,
 		Patron:          toString(request.Patron),
-		BorrowingPeerId: toString(request.BorrowingPeerID),
-		LendingPeerId:   toString(request.LendingPeerID),
+		RequesterSymbol: toString(request.RequesterSymbol),
+		SupplierSymbol:  toString(request.SupplierSymbol),
 		IllRequest:      toStringFromBytes(request.IllRequest),
 	}
 }
@@ -300,8 +306,8 @@ func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.
 		State:           prservice.BorrowerStateNew,
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
-		BorrowingPeerID: getDbText(request.BorrowingPeerId),
-		LendingPeerID:   getDbText(request.LendingPeerId),
+		RequesterSymbol: getDbText(request.RequesterSymbol),
+		SupplierSymbol:  getDbText(request.SupplierSymbol),
 		IllRequest:      illRequest,
 		Tenant:          getDbText(&tenant),
 	}

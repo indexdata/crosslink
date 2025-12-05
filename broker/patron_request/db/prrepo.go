@@ -48,6 +48,9 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext) ([]PatronReque
 
 func (r *PgPrRepo) SavePatronRequest(ctx common.ExtendedContext, params SavePatronRequestParams) (PatronRequest, error) {
 	row, err := r.queries.SavePatronRequest(ctx, r.GetConnOrTx(), params)
+	if err != nil {
+		ctx.Logger().Error("AD: failed to save patron request", "error", err)
+	}
 	return row.PatronRequest, err
 }
 
