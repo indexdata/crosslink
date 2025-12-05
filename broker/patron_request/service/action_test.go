@@ -4,18 +4,22 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
+
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"net/http"
-	"strings"
-	"testing"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -33,7 +37,7 @@ func TestIsBorrowerActionAvailable(t *testing.T) {
 }
 func TestInvokeAction(t *testing.T) {
 	mockEventBus := new(MockEventBus)
-	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), mockEventBus, new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), mockEventBus, new(handler.Iso18626Handler), CreateMockNcipAdapter())
 	event := events.Event{
 		ID: "action-1",
 	}
@@ -45,7 +49,7 @@ func TestInvokeAction(t *testing.T) {
 }
 
 func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
-	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{})
 
@@ -55,7 +59,7 @@ func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
 
 func TestHandleInvokeActionNoPR(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("not fund"))
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -66,7 +70,7 @@ func TestHandleInvokeActionNoPR(t *testing.T) {
 
 func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -77,8 +81,8 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 
 func TestHandleInvokeActionValidate(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateNew}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateNew, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
 
@@ -90,8 +94,8 @@ func TestHandleInvokeActionValidate(t *testing.T) {
 func TestHandleInvokeActionSendRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionSendRequest}}})
 
@@ -103,8 +107,8 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 func TestHandleInvokeActionReceive(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
 
@@ -115,7 +119,7 @@ func TestHandleInvokeActionReceive(t *testing.T) {
 
 func TestHandleInvokeActionCheckOut(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateReceived}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
@@ -127,7 +131,7 @@ func TestHandleInvokeActionCheckOut(t *testing.T) {
 
 func TestHandleInvokeActionCheckIn(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler), CreateMockNcipAdapter())
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
@@ -140,8 +144,8 @@ func TestHandleInvokeActionCheckIn(t *testing.T) {
 func TestHandleInvokeActionShipReturn(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShipReturn}}})
 
@@ -153,8 +157,8 @@ func TestHandleInvokeActionShipReturn(t *testing.T) {
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateWillSupply, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateWillSupply, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCancelRequest}}})
 
@@ -166,8 +170,8 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionAcceptCondition}}})
 
@@ -179,8 +183,8 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, BorrowingPeerID: pgtype.Text{Valid: true, String: "peer1"}, LendingPeerID: pgtype.Text{Valid: true, String: "peer1"}}, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionRejectCondition}}})
 
@@ -189,119 +193,70 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
 }
 
-func TestSendBorrowingRequestNoRequester(t *testing.T) {
+func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
+
+	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
+}
+
+func TestSendBorrowingRequestMissingSymbol(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing borrowing peer id", resultData.EventError.Message)
+	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
 }
 
-func TestSendBorrowingRequestSymbolSearchError(t *testing.T) {
+func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
 
-	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "error"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "cannot fetch borrowing peer symbols", resultData.EventError.Message)
+	assert.Equal(t, "missing supplier symbol", resultData.EventError.Message)
 }
 
-func TestSendBorrowingRequestSymbolMissing(t *testing.T) {
+func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
 
-	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "missing"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing borrowing peer symbols", resultData.EventError.Message)
+	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
 }
 
-func TestSendBorrowingRequestFailedProcess(t *testing.T) {
+func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
 
-	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "error", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}})
-
-	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, iso18626.TypeMessageStatusERROR, resultData.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
-}
-
-func TestShipReturnBorrowingRequestNoBorrowingId(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing borrowing peer id", resultData.EventError.Message)
+	assert.Equal(t, "invalid supplier symbol", resultData.EventError.Message)
 }
-func TestShipReturnBorrowingRequestErrorBorrowing(t *testing.T) {
+
+func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler, CreateMockNcipAdapter())
 
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "error"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "cannot fetch borrowing peer symbols", resultData.EventError.Message)
-}
-func TestShipReturnBorrowingRequestMissingBorrowing(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "missing"}})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing borrowing peer symbols", resultData.EventError.Message)
-}
-func TestShipReturnBorrowingRequestNoLendingId(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing lending peer id", resultData.EventError.Message)
-}
-func TestShipReturnBorrowingRequestLendingError(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "error"}})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "cannot fetch lending peer symbols", resultData.EventError.Message)
-}
-func TestShipReturnBorrowingRequestLendingMissing(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "missing"}})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing lending peer symbols", resultData.EventError.Message)
-}
-func TestShipReturnBorrowingRequestProblemProcessing(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "error", State: BorrowerStateValidated, BorrowingPeerID: pgtype.Text{Valid: true, String: "pr123"}, LendingPeerID: pgtype.Text{Valid: true, String: "pr321"}})
-
-	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, iso18626.TypeMessageStatusERROR, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
 }
 
 type MockEventBus struct {
@@ -400,17 +355,8 @@ type MockIllRepo struct {
 	ill_db.PgIllRepo
 }
 
-func (r *MockIllRepo) GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
-	if peerId == "error" {
-		return []ill_db.Symbol{}, errors.New("db error")
-	}
-	if peerId == "missing" {
-		return nil, nil
-	}
-	return []ill_db.Symbol{{SymbolValue: "ISIL:PEER1", PeerID: peerId}}, nil
-}
-
-func (r *MockIllRepo) GetPeerBySymbol(ctx common.ExtendedContext, symbol string) (ill_db.Peer, error) {
-	args := r.Called(symbol)
-	return args.Get(0).(ill_db.Peer), args.Error(1)
+func CreateMockNcipAdapter() NcipAdapter {
+	ncipClient := ncipclient.CreateNcipClient(http.DefaultClient)
+	adapter := adapter.MockDirectoryLookupAdapter{}
+	return CreateNcipAdapter(ncipClient, &adapter)
 }

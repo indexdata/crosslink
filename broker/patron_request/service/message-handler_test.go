@@ -2,12 +2,13 @@ package prservice
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestGetPatronRequestId(t *testing.T) {
@@ -131,17 +132,15 @@ func TestHandleSupplyingAgencyMessageNoSupplier(t *testing.T) {
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
 	})
-	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, "db error", err.Error())
-	assert.Equal(t, "could not find supplier: db error", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.NoError(t, err)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 }
 
 func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, nil)
-	mockIllRepo := new(MockIllRepo)
-	mockIllRepo.On("GetPeerBySymbol", "ISIL:SUP1").Return(ill_db.Peer{ID: "peer1"}, nil)
-	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), mockIllRepo, *new(events.EventBus))
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
 	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{

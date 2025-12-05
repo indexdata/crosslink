@@ -5,7 +5,8 @@ CREATE TABLE patron_request
     ill_request       jsonb,
     state             VARCHAR   NOT NULL,
     side              VARCHAR   NOT NULL,
-    requester         VARCHAR,
-    borrowing_peer_id VARCHAR,
-    lending_peer_id   VARCHAR
+    patron            VARCHAR,
+    requester_symbol  VARCHAR,
+    supplier_symbol   VARCHAR,
+    tenant            VARCHAR
 );

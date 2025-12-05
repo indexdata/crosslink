@@ -50,24 +50,36 @@ func TestPostPatronRequests(t *testing.T) {
 	toCreate := proapi.PatronRequest{ID: "1"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
-	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
+	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
+	assert.NoError(t, err, "failed to create request")
+	rr := httptest.NewRecorder()
+	tenant := proapi.Tenant("test-lib")
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPostPatronRequestsMissingTenant(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus)
+	toCreate := proapi.PatronRequest{ID: "1"}
+	jsonBytes, err := json.Marshal(toCreate)
+	assert.NoError(t, err, "failed to marshal patron request")
+	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
+	assert.NoError(t, err, "failed to create request")
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "X-Okapi-Tenant")
 }
 
 func TestPostPatronRequestsInvalidJson(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\": v\"")))
 	rr := httptest.NewRecorder()
-	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	tenant := proapi.Tenant("test-lib")
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid character")
 }
 
 func TestDeletePatronRequestsIdNotFound(t *testing.T) {
@@ -75,10 +87,7 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
-	}
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestDeletePatronRequestsId(t *testing.T) {
@@ -86,10 +95,8 @@ func TestDeletePatronRequestsId(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "3", proapi.DeletePatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 func TestGetPatronRequestsIdNotFound(t *testing.T) {
@@ -97,10 +104,7 @@ func TestGetPatronRequestsIdNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "2", proapi.GetPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
-	}
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestGetPatronRequestsId(t *testing.T) {
@@ -108,10 +112,8 @@ func TestGetPatronRequestsId(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "1", proapi.GetPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 func TestPutPatronRequestsIdNotFound(t *testing.T) {
@@ -122,10 +124,7 @@ func TestPutPatronRequestsIdNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "2", proapi.PutPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusNotFound {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusNotFound)
-	}
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
 func TestPutPatronRequestsId(t *testing.T) {
@@ -136,10 +135,8 @@ func TestPutPatronRequestsId(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "1", proapi.PutPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 func TestPutPatronRequestsIdSaveError(t *testing.T) {
@@ -150,10 +147,8 @@ func TestPutPatronRequestsIdSaveError(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
@@ -161,10 +156,8 @@ func TestPutPatronRequestsIdInvalidJson(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\":v\"")))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsId(rr, req, "3", proapi.PutPatronRequestsIdParams{})
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
-	}
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "invalid character")
 }
 
 type PrRepoError struct {
