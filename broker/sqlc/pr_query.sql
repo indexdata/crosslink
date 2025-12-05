@@ -17,10 +17,9 @@ ON CONFLICT (id) DO UPDATE
         ill_request       = EXCLUDED.ill_request,
         state             = EXCLUDED.state,
         side              = EXCLUDED.side,
-        patron            = EXCLUDED.patron,
         borrowing_peer_id = EXCLUDED.borrowing_peer_id,
-        lending_peer_id   = EXCLUDED.lending_peer_id,
-        tenant            = EXCLUDED.tenant
+        lending_peer_id   = EXCLUDED.lending_peer_id
+    WHERE patron_request.tenant = EXCLUDED.tenant AND patron_request.patron = EXCLUDED.patron
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec
