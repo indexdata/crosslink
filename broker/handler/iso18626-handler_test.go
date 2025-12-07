@@ -2,11 +2,12 @@ package handler
 
 import (
 	"context"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
-	"testing"
 
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
@@ -36,8 +37,7 @@ func TestApplyRequesterShimError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	mockRepo := new(mocks.MockIllRepositoryError)
 	eventData := events.EventData{}
-	eVal, err := applyRequesterShim(appCtx, mockRepo, "1", &iso18626.ISO18626Message{}, &eventData, nil)
-	assert.Equal(t, eVal, ReqAgencyNotFound)
+	err := applyRequesterShim(appCtx, mockRepo, "1", &iso18626.ISO18626Message{}, &eventData, nil)
 	assert.Equal(t, "DB error", err.Error())
 }
 
@@ -45,7 +45,7 @@ func TestApplyRequesterShim(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	mockRepo := new(mocks.MockIllRepositorySuccess)
 	eventData := events.EventData{}
-	_, err := applyRequesterShim(appCtx, mockRepo, "1", &iso18626.ISO18626Message{}, &eventData, nil)
+	err := applyRequesterShim(appCtx, mockRepo, "1", &iso18626.ISO18626Message{}, &eventData, nil)
 	assert.NoError(t, err, "should not have DB error")
 	assert.NotNil(t, eventData.IncomingMessage)
 	assert.NotNil(t, eventData.CustomData[ORIGINAL_INCOMING_MESSAGE])
@@ -69,7 +69,7 @@ func TestApplyRequesterShimAlma(t *testing.T) {
 			Note:   "ReJeCT",
 		},
 	}
-	_, err := applyRequesterShim(appCtx, mockRepo, "1", &message, &eventData, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	err := applyRequesterShim(appCtx, mockRepo, "1", &message, &eventData, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 	assert.NoError(t, err, "should not have DB error")
 	assert.NotNil(t, eventData.IncomingMessage)
 	assert.Equal(t, "SUP1", eventData.IncomingMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
