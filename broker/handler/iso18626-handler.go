@@ -501,7 +501,7 @@ func handleRequestingAgencyError(ctx common.ExtendedContext, w http.ResponseWrit
 func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
 	errorType iso18626.TypeErrorType, errorValue ErrorValue,
 	eventBus events.EventBus, illTransId string) *iso18626.ISO18626Message {
-	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue,
+	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue, "transactionId", illTransId,
 		"requesterSymbol", illMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
 		"supplierSymbol", illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
 		"requesterRequestId", illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
