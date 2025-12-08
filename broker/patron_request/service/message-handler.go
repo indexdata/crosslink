@@ -2,13 +2,14 @@ package prservice
 
 import (
 	"errors"
+	"strings"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
-	"strings"
 )
 
 const COMP_MESSAGE = "pr_massage_handler"
@@ -93,15 +94,8 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	case iso18626.TypeStatusExpectToSupply:
 		pr.State = BorrowerStateSupplierLocated
 		supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
-		supplier, err := m.illRep.GetPeerBySymbol(ctx, supSymbol)
-		if err != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: "could not find supplier: " + err.Error(),
-			}, err)
-		}
-		pr.LendingPeerID = pgtype.Text{
-			String: supplier.ID,
+		pr.SupplierSymbol = pgtype.Text{
+			String: supSymbol,
 			Valid:  true,
 		}
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)

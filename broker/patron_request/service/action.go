@@ -3,15 +3,16 @@ package prservice
 import (
 	"encoding/xml"
 	"errors"
+	"net/http"
+	"slices"
+	"strings"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
-	"net/http"
-	"slices"
-	"strings"
 )
 
 const COMP = "pr_action_service"
@@ -135,36 +136,33 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO do validation
-
+	if !pr.Tenant.Valid {
+		return events.LogErrorAndReturnResult(ctx, "missing tenant", nil)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateValidated, nil)
 }
 
 func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
-	if !pr.BorrowingPeerID.Valid {
-		return events.LogErrorAndReturnResult(ctx, "missing borrowing peer id", nil)
+	if !pr.RequesterSymbol.Valid {
+		return events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 	}
-	borrowerSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.BorrowingPeerID.String)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "cannot fetch borrowing peer symbols", err)
+	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
+	if len(requesterSymbol) != 2 {
+		return events.LogErrorAndReturnResult(ctx, "invalid requester symbol", nil)
 	}
-	if borrowerSymbols == nil {
-		return events.LogErrorAndReturnResult(ctx, "missing borrowing peer symbols", err)
-	}
-	borrowerSymbol := strings.SplitN(borrowerSymbols[0].SymbolValue, ":", 2)
 	var illMessage = iso18626.ISO18626Message{
 		Request: &iso18626.Request{
 			Header: iso18626.Header{
 				RequestingAgencyId: iso18626.TypeAgencyId{
 					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: borrowerSymbol[0],
+						Text: requesterSymbol[0],
 					},
-					AgencyIdValue: borrowerSymbol[1],
+					AgencyIdValue: requesterSymbol[1],
 				},
 				RequestingAgencyRequestId: pr.ID,
 			},
-			PatronInfo: &iso18626.PatronInfo{PatronId: pr.Requester.String},
+			PatronInfo: &iso18626.PatronInfo{PatronId: pr.Patron.String},
 			BibliographicInfo: iso18626.BibliographicInfo{
 				SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
 			},
@@ -218,48 +216,38 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction) (events.EventStatus, *events.EventResult, *int) {
-	if !pr.BorrowingPeerID.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing borrowing peer id", nil)
+	if !pr.RequesterSymbol.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
 	}
-	borrowerSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.BorrowingPeerID.String)
-	if err != nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "cannot fetch borrowing peer symbols", err)
+	if !pr.SupplierSymbol.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	if borrowerSymbols == nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing borrowing peer symbols", err)
+	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
+	if len(requesterSymbol) != 2 {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "invalid requester symbol", nil)
 		return status, eventResult, nil
 	}
-	if !pr.LendingPeerID.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing lending peer id", nil)
+	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
+	if len(supplierSymbol) != 2 {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	lenderSymbols, err := a.illRepo.GetSymbolsByPeerId(ctx, pr.LendingPeerID.String)
-	if err != nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "cannot fetch lending peer symbols", err)
-		return status, eventResult, nil
-	}
-	if lenderSymbols == nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing lending peer symbols", err)
-		return status, eventResult, nil
-	}
-	borrowerSymbol := strings.SplitN(borrowerSymbols[0].SymbolValue, ":", 2)
-	lenderSymbol := strings.SplitN(lenderSymbols[0].SymbolValue, ":", 2)
 	var illMessage = iso18626.ISO18626Message{
 		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
 			Header: iso18626.Header{
 				RequestingAgencyId: iso18626.TypeAgencyId{
 					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: borrowerSymbol[0],
+						Text: requesterSymbol[0],
 					},
-					AgencyIdValue: borrowerSymbol[1],
+					AgencyIdValue: requesterSymbol[1],
 				},
 				SupplyingAgencyId: iso18626.TypeAgencyId{
 					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: lenderSymbol[0],
+						Text: supplierSymbol[0],
 					},
-					AgencyIdValue: lenderSymbol[1],
+					AgencyIdValue: supplierSymbol[1],
 				},
 				RequestingAgencyRequestId: pr.ID,
 			},

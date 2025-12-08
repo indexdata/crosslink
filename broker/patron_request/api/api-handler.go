@@ -55,11 +55,15 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	var newPr proapi.CreatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&newPr)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
-
-	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr)))
+	tenant := params.XOkapiTenant
+	if tenant == nil {
+		addBadRequestError(ctx, w, errors.New("X-Okapi-Tenant header is required"))
+		return
+	}
+	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr, *tenant)))
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -115,37 +119,6 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	writeJsonResponse(w, toApiPatronRequest(pr))
 }
 
-func (a *PatronRequestApiHandler) PutPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
-		Other: map[string]string{"method": "GetPatronRequestsId", "id": id},
-	})
-	var updatePr proapi.UpdatePatronRequest
-	err := json.NewDecoder(r.Body).Decode(&updatePr)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
-			return
-		} else {
-			addInternalError(ctx, w, err)
-			return
-		}
-	}
-	if updatePr.Requester != nil {
-		pr.Requester = getDbText(updatePr.Requester)
-	}
-	pr, err = a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(pr))
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	writeJsonResponse(w, toApiPatronRequest(pr))
-}
-
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPatronRequestsIdActions", "id": id},
@@ -170,7 +143,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	var action proapi.ExecuteAction
 	err := json.NewDecoder(r.Body).Decode(&action)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
@@ -184,6 +157,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		}
 	}
 	if !prservice.IsBorrowerActionAvailable(pr.State, action.Action) {
+		ctx.Logger().Error("action not allowed for patron request", "pr.State", pr.State, "action", action.Action)
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}
@@ -261,9 +235,9 @@ func toApiPatronRequest(request pr_db.PatronRequest) proapi.PatronRequest {
 		Timestamp:       request.Timestamp.Time,
 		State:           request.State,
 		Side:            request.Side,
-		Requester:       toString(request.Requester),
-		BorrowingPeerId: toString(request.BorrowingPeerID),
-		LendingPeerId:   toString(request.LendingPeerID),
+		Patron:          toString(request.Patron),
+		RequesterSymbol: toString(request.RequesterSymbol),
+		SupplierSymbol:  toString(request.SupplierSymbol),
 		IllRequest:      toStringFromBytes(request.IllRequest),
 	}
 }
@@ -285,7 +259,7 @@ func toStringFromBytes(bytes []byte) *string {
 	return value
 }
 
-func toDbPatronRequest(request proapi.CreatePatronRequest) pr_db.PatronRequest {
+func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.PatronRequest {
 	var illRequest []byte
 	if request.IllRequest != nil {
 		illRequest = []byte(*request.IllRequest)
@@ -295,10 +269,11 @@ func toDbPatronRequest(request proapi.CreatePatronRequest) pr_db.PatronRequest {
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: request.Timestamp},
 		State:           prservice.BorrowerStateNew,
 		Side:            prservice.SideBorrowing,
-		Requester:       getDbText(request.Requester),
-		BorrowingPeerID: getDbText(request.BorrowingPeerId),
-		LendingPeerID:   getDbText(request.LendingPeerId),
+		Patron:          getDbText(request.Patron),
+		RequesterSymbol: getDbText(request.RequesterSymbol),
+		SupplierSymbol:  getDbText(request.SupplierSymbol),
 		IllRequest:      illRequest,
+		Tenant:          getDbText(&tenant),
 	}
 }
 
