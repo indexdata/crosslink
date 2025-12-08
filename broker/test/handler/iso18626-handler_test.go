@@ -592,7 +592,7 @@ func TestIso18626PostHandlerInvalidAction(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedActionType</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>WeCancelThisMessage is not a valid action</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>invalid action: WeCancelThisMessage</errorValue>")
 }
 
 func TestIso18626PostHandlerSupplierNotFound(t *testing.T) {
@@ -618,7 +618,7 @@ func TestIso18626PostHandlerInvalidStatus(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnrecognisedDataValue</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>WeCouldLoan is not a valid status</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>invalid status: WeCouldLoan</errorValue>")
 }
 
 func TestIso18626PostHandlerInvalidReason(t *testing.T) {
@@ -631,7 +631,7 @@ func TestIso18626PostHandlerInvalidReason(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Contains(t, rr.Body.String(), "<messageStatus>ERROR</messageStatus>")
 	assert.Contains(t, rr.Body.String(), "<errorType>UnsupportedReasonForMessageType</errorType>")
-	assert.Contains(t, rr.Body.String(), "<errorValue>NoGoodReason is not a valid reason</errorValue>")
+	assert.Contains(t, rr.Body.String(), "<errorValue>invalid reason: NoGoodReason</errorValue>")
 }
 
 type MockRepositoryOnlyPeersOK struct {
@@ -653,8 +653,12 @@ func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestId(ctx co
 	return ill_db.IllTransaction{}, pgx.ErrNoRows
 }
 
+func (r *MockRepositoryReqNotFound) GetIllTransactionByRequesterRequestIdForUpdate(ctx common.ExtendedContext, requesterRequestID pgtype.Text) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{}, pgx.ErrNoRows
+}
+
 func (r *MockRepositoryReqNotFound) WithTxFunc(ctx common.ExtendedContext, fn func(repo ill_db.IllRepo) error) error {
-	return pgx.ErrNoRows
+	return fn(r)
 }
 
 type MockRepositoryReqExists struct {

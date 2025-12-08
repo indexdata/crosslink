@@ -43,9 +43,9 @@ const (
 	UnsupportedRequestType    ErrorValue = "requestType: unsupported value"
 	ReqAgencyNotFound         ErrorValue = "requestingAgencyId: requesting agency not found"
 	CouldNotSendReqToPeer     ErrorValue = "Could not send request to peer"
-	InvalidAction             ErrorValue = "%v is not a valid action"
-	InvalidStatus             ErrorValue = "%v is not a valid status"
-	InvalidReason             ErrorValue = "%v is not a valid reason"
+	InvalidAction             ErrorValue = "invalid action"
+	InvalidStatus             ErrorValue = "invalid status"
+	InvalidReason             ErrorValue = "invalid reason"
 )
 
 const PublicFailedToProcessReqMsg = "failed to process request"
@@ -57,7 +57,12 @@ const InternalFailedToConfirmRequesterMessage = "failed to confirm requester mes
 const InternalFailedToConfirmSupplierMessage = "failed to confirm supplier message"
 
 var ErrRetryNotPossible = errors.New(string(RetryNotPossible))
-var ErrInvalidAction = errors.New("invalid action")
+var ErrReqIdNotFound = errors.New(string(ReqIdNotFound))
+var ErrSupplierNotFoundOrInvalid = errors.New(string(SupplierNotFoundOrInvalid))
+var ErrReqAgencyNotFound = errors.New(string(ReqAgencyNotFound))
+var ErrInvalidAction = errors.New(string(InvalidAction))
+var ErrInvalidStatus = errors.New(string(InvalidStatus))
+var ErrInvalidReason = errors.New(string(InvalidReason))
 
 var waitingReqs = map[string]RequestWait{}
 
@@ -361,11 +366,6 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqIdIsEmpty)
 		return
 	}
-	symbol := getSupplierSymbol(&illMessage.RequestingAgencyMessage.Header)
-	if len(symbol) == 0 {
-		handleRequestingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
-		return
-	}
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: illMessage,
@@ -373,34 +373,42 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 	}
 	var err error
 	var illTrans ill_db.IllTransaction
-	errorValue := ReqIdNotFound
 	err = repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err = repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, createPgText(requestingRequestId))
 		if err != nil {
-			errorValue = ReqIdNotFound
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrReqIdNotFound
+			}
 			return err
+		}
+		symbol := getSupplierSymbol(&illMessage.RequestingAgencyMessage.Header)
+		if len(symbol) == 0 {
+			return ErrSupplierNotFoundOrInvalid
 		}
 		supp, supErr := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
 		if symbol != brokerSymbol {
 			if supErr != nil {
-				errorValue = SupplierNotFoundOrInvalid
+				if errors.Is(supErr, pgx.ErrNoRows) {
+					return ErrSupplierNotFoundOrInvalid
+				}
 				return supErr
 			}
 			if supp.SupplierSymbol != symbol {
-				errorValue = SupplierNotFoundOrInvalid
-				return pgx.ErrNoRows
+				return ErrSupplierNotFoundOrInvalid
 			}
 		}
 		if illTrans.RequesterID.Valid {
-			eValue, errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData, &supp)
+			errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData, &supp)
 			if errShim != nil {
-				errorValue = eValue
+				if errors.Is(errShim, pgx.ErrNoRows) {
+					return ErrReqAgencyNotFound
+				}
 				return errShim
 			}
 		}
-		action, ok := validateAction(eventData)
-		if !ok {
-			return ErrInvalidAction
+		action, err := validateAction(eventData)
+		if err != nil {
+			return err
 		}
 		illTrans.PrevRequesterAction = illTrans.LastRequesterAction
 		illTrans.LastRequesterAction = createPgText(string(action))
@@ -408,12 +416,21 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		return err
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, errorValue)
+		if errors.Is(err, ErrReqIdNotFound) {
+			handleRequestingAgencyError(ctx, w, eventData.IncomingMessage,
+				iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(err.Error()))
+			return
+		}
+		if errors.Is(err, ErrSupplierNotFoundOrInvalid) || errors.Is(err, ErrReqAgencyNotFound) {
+			handleRequestingAgencyErrorWithNotice(ctx, w, eventData.IncomingMessage,
+				iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(err.Error()),
+				eventBus, illTrans.ID)
 			return
 		}
 		if errors.Is(err, ErrInvalidAction) {
-			handleInvalidAction(ctx, w, eventData, eventBus, illTrans)
+			handleRequestingAgencyErrorWithNotice(ctx, w, eventData.IncomingMessage,
+				iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(err.Error()),
+				eventBus, illTrans.ID)
 			return
 		}
 		ctx.Logger().Error(InternalFailedToSaveTx, "error", err)
@@ -435,17 +452,17 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 	wg.Wait()
 }
 
-func applyRequesterShim(ctx common.ExtendedContext, repo ill_db.IllRepo, reqId string, illMessage *iso18626.ISO18626Message, eventData *events.EventData, supplier *ill_db.LocatedSupplier) (ErrorValue, error) {
+func applyRequesterShim(ctx common.ExtendedContext, repo ill_db.IllRepo, reqId string, illMessage *iso18626.ISO18626Message, eventData *events.EventData, supplier *ill_db.LocatedSupplier) error {
 	requester, err := repo.GetPeerById(ctx, reqId)
 	if err != nil {
-		return ReqAgencyNotFound, err
+		return err
 	}
 	afterShim := shim.GetShim(requester.Vendor).ApplyToIncomingRequest(illMessage, &requester, supplier)
 	eventData.IncomingMessage = afterShim
 	eventData.CustomData = map[string]any{
 		ORIGINAL_INCOMING_MESSAGE: illMessage,
 	}
-	return "", nil
+	return nil
 }
 
 func getSupplierSymbol(header *iso18626.Header) string {
@@ -456,16 +473,13 @@ func getSupplierSymbol(header *iso18626.Header) string {
 		header.SupplyingAgencyId.AgencyIdValue
 }
 
-func validateAction(eventData events.EventData) (iso18626.TypeAction, bool) {
-	action, ok := iso18626.ActionMap[string(eventData.IncomingMessage.RequestingAgencyMessage.Action)]
-	return action, ok
-}
-
-func handleInvalidAction(ctx common.ExtendedContext, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) {
-	errMsg := fmt.Sprintf(string(InvalidAction), eventData.IncomingMessage.RequestingAgencyMessage.Action)
-	resp := handleRequestingAgencyError(ctx, w, eventData.IncomingMessage, iso18626.TypeErrorTypeUnsupportedActionType, ErrorValue(errMsg))
-	eventData.OutgoingMessage = resp
-	_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem)
+func validateAction(eventData events.EventData) (iso18626.TypeAction, error) {
+	action := string(eventData.IncomingMessage.RequestingAgencyMessage.Action)
+	valid, ok := iso18626.ActionMap[action]
+	if !ok {
+		return "", fmt.Errorf("%w: %s", ErrInvalidAction, action)
+	}
+	return valid, nil
 }
 
 func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messageStatus iso18626.TypeMessageStatus, errorType *iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
@@ -480,15 +494,38 @@ func createRequestingAgencyResponse(illMessage *iso18626.ISO18626Message, messag
 	return resmsg
 }
 
-func handleRequestingAgencyError(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
+func handleRequestingAgencyError(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
 	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue,
 		"requesterSymbol", illMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
 		"supplierSymbol", illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
 		"requesterRequestId", illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
-	//TODO create error notice when possible
 	writeResponse(ctx, resmsg, w)
-	return resmsg
+}
+
+func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
+	errorType iso18626.TypeErrorType, errorValue ErrorValue,
+	eventBus events.EventBus, illTransId string) {
+	ctx.Logger().Warn("requester message confirmation error", "errorType", errorType, "errorValue", errorValue, "transactionId", illTransId,
+		"requesterSymbol", illMessage.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
+		"supplierSymbol", illMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
+		"requesterRequestId", illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
+	var resmsg = createRequestingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
+	writeResponse(ctx, resmsg, w)
+	eventData := events.EventData{
+		CommonEventData: events.CommonEventData{
+			IncomingMessage: illMessage,
+			OutgoingMessage: resmsg,
+			Problem: &events.Problem{
+				Kind:    "requester-message-problem",
+				Details: string(errorValue),
+			},
+		},
+	}
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
+	if err != nil {
+		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
+	}
 }
 
 func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
@@ -509,13 +546,15 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 	}
 	symbol := getSupplierSymbol(&illMessage.SupplyingAgencyMessage.Header)
 	if len(symbol) == 0 {
-		handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid)
+		handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid,
+			eventBus, illTrans.ID)
 		return
 	}
 	requester, err := repo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound)
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ReqAgencyNotFound,
+				eventBus, illTrans.ID)
 			return
 		}
 		ctx.Logger().Error(InternalFailedToLookupTx, "error", err)
@@ -555,6 +594,11 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 	}
 	supplierPeer, err := repo.GetPeerById(ctx, supplier.SupplierID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, SupplierNotFoundOrInvalid,
+				eventBus, illTrans.ID)
+			return
+		}
 		ctx.Logger().Error(InternalFailedToLookupSupplier, "error", err)
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
@@ -574,7 +618,16 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 	supReqId := afterShim.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId
 	status, reason, err := validateStatusAndReasonForMessage(ctx, afterShim, w, eventData, eventBus, illTrans)
 	if err != nil {
-		return
+		if errors.Is(err, ErrInvalidStatus) {
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(err.Error()),
+				eventBus, illTrans.ID)
+			return
+		}
+		if errors.Is(err, ErrInvalidReason) {
+			handleSupplyingAgencyErrorWithNotice(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(err.Error()),
+				eventBus, illTrans.ID)
+			return
+		}
 	}
 	err = updateLocatedSupplier(ctx, repo, illTrans, status, reason, supReqId, supplierPeer.ID, supplier.ID)
 	if err != nil {
@@ -599,26 +652,18 @@ func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso186
 
 func validateStatusAndReasonForMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, eventData events.EventData, eventBus events.EventBus, illTrans ill_db.IllTransaction) (iso18626.TypeStatus, iso18626.TypeReasonForMessage, error) {
 	status := illMessage.SupplyingAgencyMessage.StatusInfo.Status
+	// suppliers like Alma/Rapido, may send an empty status to indicate no status change
 	if len(status) > 0 {
 		var ok bool
 		status, ok = iso18626.StatusMap[string(status)]
 		if !ok {
-			err := fmt.Errorf(string(InvalidStatus), illMessage.SupplyingAgencyMessage.StatusInfo.Status)
-			resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnrecognisedDataValue, ErrorValue(err.Error()))
-			eventData.OutgoingMessage = resp
-			_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
+			err := fmt.Errorf("%w: %s", ErrInvalidStatus, illMessage.SupplyingAgencyMessage.StatusInfo.Status)
 			return "", "", err
 		}
-	} else {
-		// suppliers like Alma/Rapido, may send an empty status to indicate no status change
-		status = ""
 	}
 	reason, ok := iso18626.ReasonForMassageMap[string(illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)]
 	if !ok {
-		err := fmt.Errorf(string(InvalidReason), illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
-		resp := handleSupplyingAgencyError(ctx, w, illMessage, iso18626.TypeErrorTypeUnsupportedReasonForMessageType, ErrorValue(err.Error()))
-		eventData.OutgoingMessage = resp
-		_, _ = createNotice(ctx, eventBus, illTrans.ID, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem)
+		err := fmt.Errorf("%w: %s", ErrInvalidReason, illMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 		return "", "", err
 	}
 	return status, reason, nil
@@ -701,14 +746,13 @@ func createSupplyingAgencyResponse(illMessage *iso18626.ISO18626Message, message
 	return resmsg
 }
 
-func handleSupplyingAgencyError(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) *iso18626.ISO18626Message {
+func handleSupplyingAgencyError(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
 	ctx.Logger().Warn("supplier message confirmation error", "errorType", errorType, "errorValue", errorValue,
 		"requesterSymbol", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue,
 		"supplierSymbol", illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
 		"requesterRequestId", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
 	writeResponse(ctx, resmsg, w)
-	return resmsg
 }
 
 func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.ResponseWriter, illMessage *iso18626.ISO18626Message,
@@ -719,6 +763,7 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 		"supplierSymbol", illMessage.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue,
 		"requesterRequestId", illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
 	var resmsg = createSupplyingAgencyResponse(illMessage, iso18626.TypeMessageStatusERROR, &errorType, errorValue)
+	writeResponse(ctx, resmsg, w)
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
 			IncomingMessage: illMessage,
@@ -732,9 +777,6 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
-		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
-	} else {
-		writeResponse(ctx, resmsg, w)
 	}
 }
 
