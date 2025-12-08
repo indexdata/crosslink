@@ -157,7 +157,6 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		}
 	}
 	if !prservice.IsBorrowerActionAvailable(pr.State, action.Action) {
-		ctx.Logger().Error("action not allowed for patron request", "pr.State", pr.State, "action", action.Action)
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}
