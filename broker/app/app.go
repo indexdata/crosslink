@@ -4,10 +4,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
-	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
-	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"log/slog"
 	"math"
 	"net/http"
@@ -17,6 +13,11 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 
 	"github.com/dustin/go-humanize"
 	"github.com/indexdata/crosslink/broker/adapter"

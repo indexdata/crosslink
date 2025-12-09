@@ -35,15 +35,15 @@ components:
         Side:
           type: string
           description: Patron request side - borrowing or lending
-        Requester:
+        Patron:
           type: string
           description: User who requested item
-        BorrowingPeerId:
+        RequesterSymbol:
           type: string
-          description: Borrowing peer id
-        LendingPeerId:
+          description: Requester symbol
+        SupplierSymbol:
           type: string
-          description: Lending peer id
+          description: Supplier symbol
       required:
         - ID
         - Timestamp
@@ -63,25 +63,18 @@ components:
         IllRequest:
           type: string
           description: JSON of ISO18626 request
-        Requester:
+        Patron:
           type: string
           description: User who requested item
-        BorrowingPeerId:
+        RequesterSymbol:
           type: string
-          description: Borrowing peer id
-        LendingPeerId:
+          description: Requester symbol
+        SupplierSymbol:
           type: string
-          description: Lending peer id
+          description: Supplier symbol
       required:
         - ID
         - Timestamp
-
-    UpdatePatronRequest:
-      type: object
-      properties:
-        Requester:
-          type: string
-          description: User who requested item
 
     Error:
       type: object
@@ -190,40 +183,6 @@ paths:
                 $ref: '#/components/schemas/PatronRequest'
         '404':
           description: Patron request not found
-        '500':
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    put:
-      summary: Update a new patron request
-      parameters:
-        - in: path
-          name: id
-          schema:
-            type: string
-          required: true
-          description: ID of the patron request to update
-        - $ref: '#/components/parameters/Tenant'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdatePatronRequest'
-      responses:
-        '200':
-          description: Patron request updated successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PatronRequest'
-        '400':
-          description: Bad Request.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:

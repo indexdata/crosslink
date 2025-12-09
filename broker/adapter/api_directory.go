@@ -79,6 +79,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				}
 			}
 		}
+		// TODO: populate NCIP info
 		if apiUrl != "" && len(symbols) > 0 {
 			vendor := GetVendorFromUrl(apiUrl)
 			name, ok := d["name"].(string)
