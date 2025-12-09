@@ -5,24 +5,32 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 
+	mockapp "github.com/indexdata/crosslink/illmock/app"
 	"github.com/indexdata/crosslink/illmock/netutil"
 	"github.com/indexdata/crosslink/ncip"
 
-	"github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 )
 
 func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 
-	apputils.StartMockApp(mockPort)
+	// same as apputils.StartMockApp
+	// but not used here as this results in cyclic dependencies
+	test.Expect(os.Setenv("HTTP_PORT", strconv.Itoa(mockPort)), "failed to set mock server port")
+	go func() {
+		var mockApp mockapp.MockApp
+		test.Expect(mockApp.Run(), "failed to start illmock server")
+	}()
+	test.WaitForServiceUp(mockPort)
 
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func TestPrepareHeaderEmpty(t *testing.T) {
