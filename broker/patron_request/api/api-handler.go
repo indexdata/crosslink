@@ -20,14 +20,16 @@ import (
 var waitingReqs = map[string]RequestWait{}
 
 type PatronRequestApiHandler struct {
-	prRepo   pr_db.PrRepo
-	eventBus events.EventBus
+	prRepo               pr_db.PrRepo
+	eventBus             events.EventBus
+	actionMappingService prservice.ActionMappingService
 }
 
 func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
-		prRepo:   prRepo,
-		eventBus: eventBus,
+		prRepo:               prRepo,
+		eventBus:             eventBus,
+		actionMappingService: prservice.ActionMappingService{},
 	}
 }
 
@@ -133,7 +135,8 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 			return
 		}
 	}
-	writeJsonResponse(w, prservice.GetBorrowerActionsByState(pr.State))
+	actions := a.actionMappingService.GetActionMapping(pr).GeActionsForPatronRequest(pr)
+	writeJsonResponse(w, actions)
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
@@ -156,7 +159,8 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 			return
 		}
 	}
-	if !prservice.IsBorrowerActionAvailable(pr.State, action.Action) {
+
+	if !a.actionMappingService.GetActionMapping(pr).IsActionAvailable(pr, action.Action) {
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}
