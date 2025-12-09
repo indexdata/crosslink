@@ -1,18 +1,17 @@
 package prservice
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"net/http"
-	"slices"
-	"strings"
-
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
+	"net/http"
+	"strings"
 )
 
 const COMP = "pr_action_service"
@@ -36,6 +35,18 @@ var BorrowerStateCompleted = "COMPLETED"
 var BorrowerStateCancelled = "CANCELLED"
 var BorrowerStateUnfilled = "UNFILLED"
 
+var LenderStateNew = "NEW"
+var LenderStateValidated = "VALIDATED"
+var LenderStateWillSupply = "WILL_SUPPLY"
+var LenderStateConditionPending = "CONDITION_PENDING"
+var LenderStateConditionAccepted = "CONDITION_ACCEPTED"
+var LenderStateShipped = "SHIPPED"
+var LenderStateShippedReturn = "SHIPPED_RETURN"
+var LenderStateCancelRequested = "CANCEL_REQUESTED"
+var LenderStateCompleted = "COMPLETED"
+var LenderStateCancelled = "CANCELLED"
+var LenderStateUnfilled = "UNFILLED"
+
 var ActionValidate = "validate"
 var ActionSendRequest = "send-request"
 var ActionCancelRequest = "cancel-request"
@@ -45,44 +56,29 @@ var ActionReceive = "receive"
 var ActionCheckOut = "check-out"
 var ActionCheckIn = "check-in"
 var ActionShipReturn = "ship-return"
-
-var BorrowerStateActionMapping = map[string][]string{
-	BorrowerStateNew:              {ActionValidate},
-	BorrowerStateValidated:        {ActionSendRequest},
-	BorrowerStateSupplierLocated:  {ActionCancelRequest},
-	BorrowerStateConditionPending: {ActionAcceptCondition, ActionRejectCondition},
-	BorrowerStateWillSupply:       {ActionCancelRequest},
-	BorrowerStateShipped:          {ActionReceive},
-	BorrowerStateReceived:         {ActionCheckOut},
-	BorrowerStateCheckedOut:       {ActionCheckIn},
-	BorrowerStateCheckedIn:        {ActionShipReturn},
-}
+var ActionWillSupply = "will-supply"
+var ActionCannotSupply = "cannot-supply"
+var ActionAddCondition = "add-condition"
+var ActionShip = "ship"
+var ActionMarkReceived = "mark-received"
+var ActionMarkCancelled = "mark-cancelled"
 
 type PatronRequestActionService struct {
-	prRepo          pr_db.PrRepo
-	illRepo         ill_db.IllRepo
-	eventBus        events.EventBus
-	iso18626Handler handler.Iso18626HandlerInterface
+	prRepo               pr_db.PrRepo
+	illRepo              ill_db.IllRepo
+	eventBus             events.EventBus
+	iso18626Handler      handler.Iso18626HandlerInterface
+	actionMappingService ActionMappingService
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
 	return PatronRequestActionService{
-		prRepo:          prRepo,
-		illRepo:         illRepo,
-		eventBus:        eventBus,
-		iso18626Handler: iso18626Handler,
+		prRepo:               prRepo,
+		illRepo:              illRepo,
+		eventBus:             eventBus,
+		iso18626Handler:      iso18626Handler,
+		actionMappingService: ActionMappingService{},
 	}
-}
-func GetBorrowerActionsByState(state string) []string {
-	if actions, ok := BorrowerStateActionMapping[state]; ok {
-		return actions
-	} else {
-		return []string{}
-	}
-}
-
-func IsBorrowerActionAvailable(state string, action string) bool {
-	return slices.Contains(GetBorrowerActionsByState(state), action)
 }
 
 func (a *PatronRequestActionService) InvokeAction(ctx common.ExtendedContext, event events.Event) {
@@ -99,10 +95,20 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
-	if !IsBorrowerActionAvailable(pr.State, action) {
+	if !a.actionMappingService.GetActionMapping(pr).IsActionAvailable(pr, action) {
 		return events.LogErrorAndReturnResult(ctx, "state "+pr.State+" does not support action "+action, errors.New("invalid action"))
 	}
+	switch pr.Side {
+	case SideBorrowing:
+		return a.handleBorrowingAction(ctx, action, pr)
+	case SideLanding:
+		return a.handleLenderAction(ctx, action, pr, event.EventData.CustomData)
+	default:
+		return events.LogErrorAndReturnResult(ctx, "side "+pr.Side+" is not supported", errors.New("invalid side"))
+	}
+}
 
+func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action string, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	switch action {
 	case ActionValidate:
 		return a.validateBorrowingRequest(ctx, pr)
@@ -123,9 +129,31 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	case ActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
-		return events.LogErrorAndReturnResult(ctx, "action "+action+" is not implemented yet", errors.New("invalid action"))
+		return events.LogErrorAndReturnResult(ctx, "borrower action "+action+" is not implemented yet", errors.New("invalid action"))
 	}
 }
+
+func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action string, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+	switch action {
+	case ActionValidate:
+		return a.validateLenderRequest(ctx, pr)
+	case ActionWillSupply:
+		return a.willSupplyLenderRequest(ctx, pr)
+	case ActionCannotSupply:
+		return a.cannotSupplyLenderRequest(ctx, pr)
+	case ActionAddCondition:
+		return a.addConditionsLenderRequest(ctx, pr, actionParams)
+	case ActionShip:
+		return a.shipLenderRequest(ctx, pr)
+	case ActionMarkReceived:
+		return a.markReceivedLenderRequest(ctx, pr)
+	case ActionMarkCancelled:
+		return a.markCancelledLenderRequest(ctx, pr)
+	default:
+		return events.LogErrorAndReturnResult(ctx, "lender action "+action+" is not implemented yet", errors.New("invalid action"))
+	}
+}
+
 func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state string, result *events.EventResult) (events.EventStatus, *events.EventResult) {
 	pr.State = state
 	pr, err := a.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
@@ -133,6 +161,16 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 		return events.LogErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
 	return events.EventStatusSuccess, result
+}
+func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx common.ExtendedContext, pr pr_db.PatronRequest, state string, result *events.EventResult, status events.EventStatus, eventResult *events.EventResult, httpStatus *int) (events.EventStatus, *events.EventResult) {
+	if httpStatus == nil {
+		return status, eventResult
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.SupplyingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+		return events.EventStatusProblem, result
+	}
+	return a.updateStateAndReturnResult(ctx, pr, state, nil)
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
@@ -151,6 +189,12 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	if len(requesterSymbol) != 2 {
 		return events.LogErrorAndReturnResult(ctx, "invalid requester symbol", nil)
 	}
+
+	var request *iso18626.Request
+	err := json.Unmarshal(pr.IllRequest, &request)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to parse request", err)
+	}
 	var illMessage = iso18626.ISO18626Message{
 		Request: &iso18626.Request{
 			Header: iso18626.Header{
@@ -162,10 +206,8 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 				},
 				RequestingAgencyRequestId: pr.ID,
 			},
-			PatronInfo: &iso18626.PatronInfo{PatronId: pr.Patron.String},
-			BibliographicInfo: iso18626.BibliographicInfo{
-				SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
-			},
+			PatronInfo:        &iso18626.PatronInfo{PatronId: pr.Patron.String},
+			BibliographicInfo: request.BibliographicInfo,
 		},
 	}
 	w := NewResponseCaptureWriter()
@@ -282,6 +324,93 @@ func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	// TODO Make NCIP calls
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, nil)
+}
+
+func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	// TODO do validation
+
+	return a.updateStateAndReturnResult(ctx, pr, LenderStateValidated, nil)
+}
+
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageNotification}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateWillSupply, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateUnfilled, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			Note:             "#ReShareAddLoanCondition#", // TODO add action params
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateConditionPending, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateShipped, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCompleted, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) markCancelledLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled})
+	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCancelled, &result, status, eventResult, httpStatus)
+}
+
+func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo) (events.EventStatus, *events.EventResult, *int) {
+	if !pr.RequesterSymbol.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		return status, eventResult, nil
+	}
+	if !pr.SupplierSymbol.Valid {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		return status, eventResult, nil
+	}
+	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
+	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
+	var illMessage = iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			Header: iso18626.Header{
+				RequestingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType: iso18626.TypeSchemeValuePair{
+						Text: requesterSymbol[0],
+					},
+					AgencyIdValue: requesterSymbol[1],
+				},
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType: iso18626.TypeSchemeValuePair{
+						Text: supplierSymbol[0],
+					},
+					AgencyIdValue: supplierSymbol[1],
+				},
+				RequestingAgencyRequestId: pr.RequesterReqID.String,
+				SupplyingAgencyRequestId:  pr.ID,
+			},
+			MessageInfo: messageInfo,
+			StatusInfo:  statusInfo,
+		},
+	}
+	w := NewResponseCaptureWriter()
+	a.iso18626Handler.HandleSupplyingAgencyMessage(ctx, &illMessage, w)
+	result.OutgoingMessage = &illMessage
+	result.IncomingMessage = w.IllMessage
+	return "", nil, &w.StatusCode
 }
 
 type ResponseCaptureWriter struct {

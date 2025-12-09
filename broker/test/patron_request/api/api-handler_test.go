@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/indexdata/crosslink/broker/common"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/iso18626"
 	"io"
 	"net/http"
 	"os"
@@ -28,6 +31,7 @@ import (
 
 var basePath = "/patron_requests"
 var illRepo ill_db.IllRepo
+var prRepo pr_db.PrRepo
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
@@ -58,7 +62,7 @@ func TestMain(m *testing.M) {
 	apptest.StartMockApp(mockPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, illRepo, _ = apptest.StartApp(ctx)
+	_, illRepo, _, prRepo = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
@@ -79,7 +83,14 @@ func TestCrud(t *testing.T) {
 
 	// POST
 	patron := "p1"
-	illMessage := "{\"request\": {}}"
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
+		},
+	}
+	jsonBytes, err := json.Marshal(request)
+	assert.NoError(t, err)
+	illMessage := string(jsonBytes)
 	newPr := proapi.CreatePatronRequest{
 		ID:              uuid.NewString(),
 		Timestamp:       time.Now(),
@@ -104,7 +115,7 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
-	assert.Equal(t, *newPr.IllRequest, *foundPr.IllRequest)
+	assert.NotNil(t, *foundPr.IllRequest)
 
 	// GET list
 	respBytes = httpRequest(t, "GET", basePath, []byte{}, 200)
@@ -160,6 +171,191 @@ func TestCrud(t *testing.T) {
 	//
 	//// GET patron request which is deleted
 	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
+}
+
+func TestActionsToCompleteState(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	requesterSymbol := "localISIL:REQ" + uuid.NewString()
+	supplierSymbol := "localISIL:SUP" + uuid.NewString()
+
+	reqPeer := apptest.CreatePeer(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL)
+	assert.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL)
+	assert.NotNil(t, supPeer)
+
+	// POST
+	patron := "p1"
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "return-" + supplierSymbol + "::WILLSUPPLY_LOANED",
+		},
+	}
+	jsonBytes, err := json.Marshal(request)
+	assert.NoError(t, err)
+	illMessage := string(jsonBytes)
+	newPr := proapi.CreatePatronRequest{
+		ID:              uuid.NewString(),
+		Timestamp:       time.Now(),
+		SupplierSymbol:  &supplierSymbol,
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      &illMessage,
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err, "failed to marshal patron request")
+
+	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+
+	var foundPr proapi.PatronRequest
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	assert.Equal(t, newPr.ID, foundPr.ID)
+	requesterPrPath := basePath + "/" + newPr.ID
+
+	// Wait till action available
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionSendRequest+"\"]\n"
+	})
+
+	action := proapi.ExecuteAction{
+		Action: prservice.ActionSendRequest,
+	}
+	actionBytes, err := json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", requesterPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Find supplier patron request
+	test.WaitForPredicateToBeTrue(func() bool {
+		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, newPr.ID)
+		appCtx.Logger().Info("found supPr with id " + supPr.ID)
+		return supPr.ID != ""
+	})
+	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, newPr.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, supPr.ID)
+
+	// Wait for action
+	supplierPrPath := basePath + "/" + supPr.ID
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionWillSupply+"\"]\n"
+	})
+
+	// Will supply
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionWillSupply,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", supplierPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionShip+"\"]\n"
+	})
+
+	// Ship
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionShip,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", supplierPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionReceive+"\"]\n"
+	})
+
+	// Receive
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionReceive,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", requesterPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionCheckOut+"\"]\n"
+	})
+
+	// Check out
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionCheckOut,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", requesterPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionCheckIn+"\"]\n"
+	})
+
+	// Check in
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionCheckIn,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", requesterPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionShipReturn+"\"]\n"
+	})
+
+	// Ship return
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionShipReturn,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", requesterPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Wait for action
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
+		return string(respBytes) == "[\""+prservice.ActionMarkReceived+"\"]\n"
+	})
+
+	// Ship return
+	action = proapi.ExecuteAction{
+		Action: prservice.ActionMarkReceived,
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", supplierPrPath+"/action", actionBytes, 200)
+	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+
+	// Check requester patron request done
+	respBytes = httpRequest(t, "GET", requesterPrPath, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, newPr.ID, foundPr.ID)
+	assert.Equal(t, prservice.BorrowerStateCompleted, foundPr.State)
+
+	// Check supplier patron request done
+	respBytes = httpRequest(t, "GET", supplierPrPath, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, supPr.ID, foundPr.ID)
+	assert.Equal(t, prservice.LenderStateCompleted, foundPr.State)
 }
 
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {

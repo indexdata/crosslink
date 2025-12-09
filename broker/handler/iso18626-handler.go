@@ -69,6 +69,7 @@ var waitingReqs = map[string]RequestWait{}
 type Iso18626HandlerInterface interface {
 	HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 	HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
+	HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter)
 }
 
 type Iso18626Handler struct {
@@ -528,6 +529,9 @@ func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Re
 	}
 }
 
+func (h *Iso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+	handleSupplyingAgencyMessage(ctx, illMessage, w, h.illRepo, h.eventBus)
+}
 func handleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter, repo ill_db.IllRepo, eventBus events.EventBus) {
 	var requestingRequestId = illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId
 	if requestingRequestId == "" {
