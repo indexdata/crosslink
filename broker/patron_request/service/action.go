@@ -17,7 +17,7 @@ import (
 const COMP = "pr_action_service"
 
 var SideBorrowing = "borrowing"
-var SideLanding = "landing"
+var SideLending = "lending"
 
 var BorrowerStateNew = "NEW"
 var BorrowerStateValidated = "VALIDATED"
@@ -101,7 +101,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	switch pr.Side {
 	case SideBorrowing:
 		return a.handleBorrowingAction(ctx, action, pr)
-	case SideLanding:
+	case SideLending:
 		return a.handleLenderAction(ctx, action, pr, event.EventData.CustomData)
 	default:
 		return events.LogErrorAndReturnResult(ctx, "side "+pr.Side+" is not supported", errors.New("invalid side"))

@@ -200,7 +200,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
 			ErrorValue: "there is already request with this id " + raRequestId,
-		}, err)
+		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
 	}
 	requestBytes, err := json.Marshal(request)
 	if err != nil {
@@ -213,7 +213,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		ID:              uuid.NewString(),
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: time.Now()},
 		State:           LenderStateNew,
-		Side:            SideLanding,
+		Side:            SideLending,
 		Patron:          getDbText("What to add here"), // TODO add correct patron
 		RequesterSymbol: getDbText(requesterSymbol),
 		IllRequest:      requestBytes,

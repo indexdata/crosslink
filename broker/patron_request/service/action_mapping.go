@@ -7,7 +7,7 @@ import (
 
 type ActionMapping interface {
 	IsActionAvailable(pr pr_db.PatronRequest, action string) bool
-	GeActionsForPatronRequest(pr pr_db.PatronRequest) []string
+	GetActionsForPatronRequest(pr pr_db.PatronRequest) []string
 }
 
 var returnableBorrowerStateActionMapping = map[string][]string{
@@ -48,7 +48,7 @@ func (r *ReturnableActionMapping) IsActionAvailable(pr pr_db.PatronRequest, acti
 		return isActionAvailable(pr.State, action, returnableLenderStateActionMapping)
 	}
 }
-func (r *ReturnableActionMapping) GeActionsForPatronRequest(pr pr_db.PatronRequest) []string {
+func (r *ReturnableActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []string {
 	if pr.Side == SideBorrowing {
 		return getActionsByStateFromMapping(pr.State, returnableBorrowerStateActionMapping)
 	} else {

@@ -135,7 +135,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 			return
 		}
 	}
-	actions := a.actionMappingService.GetActionMapping(pr).GeActionsForPatronRequest(pr)
+	actions := a.actionMappingService.GetActionMapping(pr).GetActionsForPatronRequest(pr)
 	writeJsonResponse(w, actions)
 }
 
