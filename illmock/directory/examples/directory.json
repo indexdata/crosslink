@@ -107,7 +107,24 @@
             }
           ]
         }
-      ]
+      ],
+      "closures": [
+        {
+          "id": "00251ffa-d517-5e1a-9a9a-a98033dda361",
+          "entry": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+          "startDate": "2025-12-25",
+          "endDate": "2025-12-25",
+          "reason": "Christmas Day"
+        },
+        {
+          "id": "df9bc014-ac1e-527d-8ec1-971830b6511e",
+          "entry": "d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2",
+          "startDate": "2026-01-02",
+          "endDate": "2026-03-01",
+          "reason": "Renovation"
+        }
+      ],
+      "timeZone": "Australia/ACT"
     },
     {
       "id": "69794360-8304-5d8b-9f00-525ab77fc4c0",

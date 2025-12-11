@@ -211,6 +211,8 @@ components:
           type: string
         hrid:
           type: string
+        timeZone:
+          type: string
         symbols:
           type: array
           items:
@@ -219,6 +221,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Address'
+        closures:
+          type: array
+          items:
+            $ref: '#/components/schemas/Closure'
         endpoints:
           type: array
           items:
@@ -378,4 +384,26 @@ components:
             - CountryCode
             - Other
         value:
+          type: string
+    Closure:
+      type: object
+      required:
+        - id
+        - entry
+      properties:
+        id:
+          readOnly: true
+          type: string
+          format: uuid
+          description: Unique identifier
+        entry:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          description: ISO8601 date
+        endDate:
+          type: string
+          description: ISO8601 date
+        reason:
           type: string
