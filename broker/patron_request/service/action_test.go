@@ -271,7 +271,7 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateNew, Side: SideLanding}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateNew, Side: SideLending}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
 
@@ -283,7 +283,7 @@ func TestHandleInvokeLenderActionWillSupply(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionWillSupply}}})
 
@@ -295,7 +295,7 @@ func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCannotSupply}}})
 
@@ -307,7 +307,7 @@ func TestHandleInvokeLenderActionAddCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionAddCondition}}})
 
@@ -319,7 +319,7 @@ func TestHandleInvokeLenderActionShip(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateWillSupply, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShip}}})
 
@@ -331,7 +331,7 @@ func TestHandleInvokeLenderActionMarkReceived(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateShippedReturn, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateShippedReturn, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionMarkReceived}}})
 
@@ -343,7 +343,7 @@ func TestHandleInvokeLenderActionMarkCancelled(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLanding, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionMarkCancelled}}})
 
@@ -356,7 +356,7 @@ func TestHandleInvokeLenderActionMarkCancelledMissingSupplierSymbol(t *testing.T
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLanding, SupplierSymbol: pgtype.Text{Valid: false, String: ""}, RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLending, SupplierSymbol: pgtype.Text{Valid: false, String: ""}, RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionMarkCancelled}}})
 
@@ -368,7 +368,7 @@ func TestHandleInvokeLenderActionMarkCancelledMissingRequesterSymbol(t *testing.
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLanding, RequesterSymbol: pgtype.Text{Valid: false, String: ""}, SupplierSymbol: getDbText("ISIL:SUP1")}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateCancelRequested, Side: SideLending, RequesterSymbol: pgtype.Text{Valid: false, String: ""}, SupplierSymbol: getDbText("ISIL:SUP1")}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionMarkCancelled}}})
 

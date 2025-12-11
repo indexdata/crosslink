@@ -230,7 +230,6 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
 		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, newPr.ID)
-		appCtx.Logger().Info("found supPr with id " + supPr.ID)
 		return supPr.ID != ""
 	})
 	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, newPr.ID)
