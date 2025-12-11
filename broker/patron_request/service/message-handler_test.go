@@ -459,7 +459,7 @@ func TestHandleRequestMessageExistingRequest(t *testing.T) {
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, "there is already request with this id req-id-1", resp.RequestConfirmation.ErrorData.ErrorValue)
-	assert.NoError(t, err)
+	assert.Equal(t, "duplicate request: there is already a request with this id req-id-1", err.Error())
 }
 
 func TestHandleRequestMessageSearchDbError(t *testing.T) {
