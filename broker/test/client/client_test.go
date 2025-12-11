@@ -68,7 +68,7 @@ func TestMain(m *testing.M) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
+	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	code := m.Run()

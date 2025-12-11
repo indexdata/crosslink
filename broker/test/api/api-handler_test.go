@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
+	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()

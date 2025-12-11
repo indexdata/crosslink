@@ -119,6 +119,7 @@ func TestGetPatronRequestsId(t *testing.T) {
 
 type PrRepoError struct {
 	mock.Mock
+	pr_db.PgPrRepo
 }
 
 func (r *PrRepoError) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
