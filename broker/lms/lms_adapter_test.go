@@ -52,6 +52,27 @@ func TestAcceptItem(t *testing.T) {
 	req := mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "author", req.ItemOptionalFields.BibliographicDescription.Author)
+	assert.Equal(t, "title", req.ItemOptionalFields.BibliographicDescription.Title)
+	assert.Equal(t, "isbn", req.ItemOptionalFields.BibliographicDescription.BibliographicItemId.BibliographicItemIdentifier)
+	assert.Equal(t, "ISBN", req.ItemOptionalFields.BibliographicDescription.BibliographicItemId.BibliographicItemIdentifierCode.Text)
+	assert.Equal(t, "callnum", req.ItemOptionalFields.ItemDescription.CallNumber)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "action", req.RequestedActionType.Text)
+
+	err = ad.AcceptItem("item1", "req1", "testuser", "author", "title", "", "", "", "")
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.AcceptItem)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "author", req.ItemOptionalFields.BibliographicDescription.Author)
+	assert.Equal(t, "title", req.ItemOptionalFields.BibliographicDescription.Title)
+	assert.Nil(t, req.ItemOptionalFields.BibliographicDescription.BibliographicItemId)
+	assert.Nil(t, req.ItemOptionalFields.ItemDescription)
+	assert.Nil(t, req.PickupLocation)
+	assert.Equal(t, "Hold For Pickup", req.RequestedActionType.Text)
 }
 
 func TestDeleteItem(t *testing.T) {

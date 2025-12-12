@@ -70,9 +70,40 @@ func (l *LmsAdapterNcip) AcceptItem(
 	pickupLocation string,
 	requestedAction string,
 ) error {
+	var bibliographicItemId *ncip.BibliographicItemId
+	if isbn != "" {
+		bibliographicItemId = &ncip.BibliographicItemId{
+			BibliographicItemIdentifier:     isbn,
+			BibliographicItemIdentifierCode: &ncip.SchemeValuePair{Text: "ISBN"},
+		}
+	}
+	biblioInfo := &ncip.BibliographicDescription{
+		Author:              author,
+		Title:               title,
+		BibliographicItemId: bibliographicItemId,
+	}
+	var itemDescription *ncip.ItemDescription
+	if callNumber != "" {
+		itemDescription = &ncip.ItemDescription{CallNumber: callNumber}
+	}
+	itemOptionalFields := &ncip.ItemOptionalFields{
+		BibliographicDescription: biblioInfo,
+		ItemDescription:          itemDescription,
+	}
+	var pickupLocationField *ncip.SchemeValuePair
+	if pickupLocation != "" {
+		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
+	}
+	if requestedAction == "" {
+		requestedAction = "Hold For Pickup"
+	}
 	arg := ncip.AcceptItem{
-		UserId: &ncip.UserId{UserIdentifierValue: userId},
-		ItemId: &ncip.ItemId{ItemIdentifierValue: itemId},
+		RequestId:           ncip.RequestId{RequestIdentifierValue: requestId},
+		RequestedActionType: ncip.SchemeValuePair{Text: requestedAction},
+		UserId:              &ncip.UserId{UserIdentifierValue: userId},
+		ItemId:              &ncip.ItemId{ItemIdentifierValue: itemId},
+		ItemOptionalFields:  itemOptionalFields,
+		PickupLocation:      pickupLocationField,
 	}
 	_, err := l.ncipClient.AcceptItem(arg)
 	return err
