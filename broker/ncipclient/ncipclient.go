@@ -24,40 +24,22 @@ const (
 	CreateUserFiscalTransactionMode NcipProperty = "create_user_fiscal_transaction_mode"
 )
 
-// NcipClient defines the interface for NCIP operations
-// customData is from the DirectoryEntry.CustomData field
 type NcipClient interface {
-	// LookupUser performs user authentication.
-	// Returns true if authentication is successful (disabled or auto and NCIP lookup succeeded)
-	// Returns false if authentication is manual
-	// Returns an error otherwise (failed NCIP lookup, misconfiguration, etc)
-	LookupUser(customData map[string]any, arg ncip.LookupUser) (bool, error)
+	LookupUser(arg ncip.LookupUser) (*ncip.LookupUserResponse, error)
 
-	// AcceptItem accepts an item.
-	// Returns true if accept is successful (disabled or auto and NCIP accept succeeded)
-	// Returns false if accept is manual
-	// Returns an error otherwise (failed NCIP accept, misconfiguration, etc)
-	AcceptItem(customData map[string]any, arg ncip.AcceptItem) (bool, error)
+	AcceptItem(arg ncip.AcceptItem) (*ncip.AcceptItemResponse, error)
 
-	DeleteItem(customData map[string]any, arg ncip.DeleteItem) error
+	DeleteItem(arg ncip.DeleteItem) (*ncip.DeleteItemResponse, error)
 
-	// RequestItem requests an item.
-	// Returns true if request is successful (disabled or auto and NCIP request succeeded)
-	// Returns false if request is manual
-	// Returns an error otherwise (failed NCIP request, misconfiguration, etc)
-	RequestItem(customData map[string]any, arg ncip.RequestItem) (bool, error)
+	RequestItem(arg ncip.RequestItem) (*ncip.RequestItemResponse, error)
 
-	CancelRequestItem(customData map[string]any, arg ncip.CancelRequestItem) error
+	CancelRequestItem(arg ncip.CancelRequestItem) (*ncip.CancelRequestItemResponse, error)
 
-	CheckInItem(customData map[string]any, arg ncip.CheckInItem) error
+	CheckInItem(arg ncip.CheckInItem) (*ncip.CheckInItemResponse, error)
 
-	CheckOutItem(customData map[string]any, arg ncip.CheckOutItem) error
+	CheckOutItem(arg ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error)
 
-	// CreateUserFiscalTransaction creates a user fiscal transaction.
-	// Returns true if creation is successful (disabled or auto and NCIP creation succeeded)
-	// Returns false if creation is manual
-	// Returns an error otherwise (failed NCIP creation, misconfiguration, etc)
-	CreateUserFiscalTransaction(customData map[string]any, arg ncip.CreateUserFiscalTransaction) (bool, error)
+	CreateUserFiscalTransaction(arg ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error)
 }
 
 type NcipError struct {

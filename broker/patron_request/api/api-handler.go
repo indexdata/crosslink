@@ -20,14 +20,16 @@ import (
 var waitingReqs = map[string]RequestWait{}
 
 type PatronRequestApiHandler struct {
-	prRepo   pr_db.PrRepo
-	eventBus events.EventBus
+	prRepo         pr_db.PrRepo
+	eventBus       events.EventBus
+	tenantToSymbol common.TenantToSymbol
 }
 
-func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus) PatronRequestApiHandler {
+func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenantToSymbol common.TenantToSymbol) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
-		prRepo:   prRepo,
-		eventBus: eventBus,
+		prRepo:         prRepo,
+		eventBus:       eventBus,
+		tenantToSymbol: tenantToSymbol,
 	}
 }
 
@@ -58,12 +60,12 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	tenant := params.XOkapiTenant
-	if tenant == nil {
-		addBadRequestError(ctx, w, errors.New("X-Okapi-Tenant header is required"))
+	dbreq, err := toDbPatronRequest(a.tenantToSymbol, newPr, params.XOkapiTenant)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(toDbPatronRequest(newPr, *tenant)))
+	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(dbreq))
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -258,7 +260,14 @@ func toStringFromBytes(bytes []byte) *string {
 	return value
 }
 
-func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.PatronRequest {
+func toDbPatronRequest(tenantToSymbol common.TenantToSymbol, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
+	if tenant == nil {
+		return pr_db.PatronRequest{}, errors.New("X-Okapi-Tenant header is required")
+	}
+	if tenantToSymbol.TenantMode() {
+		symbol := tenantToSymbol.GetSymbolFromTenant(*tenant)
+		request.RequesterSymbol = &symbol
+	}
 	var illRequest []byte
 	if request.IllRequest != nil {
 		illRequest = []byte(*request.IllRequest)
@@ -272,8 +281,8 @@ func toDbPatronRequest(request proapi.CreatePatronRequest, tenant string) pr_db.
 		RequesterSymbol: getDbText(request.RequesterSymbol),
 		SupplierSymbol:  getDbText(request.SupplierSymbol),
 		IllRequest:      illRequest,
-		Tenant:          getDbText(&tenant),
-	}
+		Tenant:          getDbText(tenant),
+	}, nil
 }
 
 func getId(id string) string {

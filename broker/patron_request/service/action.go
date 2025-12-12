@@ -10,9 +10,10 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const COMP = "pr_action_service"
@@ -60,17 +61,17 @@ var BorrowerStateActionMapping = map[string][]string{
 
 type PatronRequestActionService struct {
 	prRepo          pr_db.PrRepo
-	illRepo         ill_db.IllRepo
 	eventBus        events.EventBus
 	iso18626Handler handler.Iso18626HandlerInterface
+	lmsCreator      lms.LmsCreator
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) PatronRequestActionService {
 	return PatronRequestActionService{
 		prRepo:          prRepo,
-		illRepo:         illRepo,
 		eventBus:        eventBus,
 		iso18626Handler: iso18626Handler,
+		lmsCreator:      lmsCreator,
 	}
 }
 func GetBorrowerActionsByState(state string) []string {
@@ -136,9 +137,21 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	if !pr.Tenant.Valid {
-		return events.LogErrorAndReturnResult(ctx, "missing tenant", nil)
+	user := ""
+	if pr.Patron.Valid {
+		user = pr.Patron.String
 	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	userId, err := lmsAdapter.LookupUser(user)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+	}
+	// change patron to canonical user id
+	// perhaps it would be better to have both original and canonical id stored?
+	pr.Patron = pgtype.Text{String: userId, Valid: true}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateValidated, nil)
 }
 
@@ -180,6 +193,19 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 }
 
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	user := ""
+	if pr.Patron.Valid {
+		user = pr.Patron.String
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	// TODO: get all these parameters from the patron request
+	err = lmsAdapter.AcceptItem("itemId", "requestId", user, "author", "title", "isbn", "callNumber", "pickupLocation", "requestedAction")
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived)
 	if httpStatus == nil {
@@ -193,16 +219,44 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
+	user := ""
+	if pr.Patron.Valid {
+		user = pr.Patron.String
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	err = lmsAdapter.CheckOutItem("requestId", "itemBarcode", user, "externalReferenceValue")
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedOut, nil)
 }
 
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	item := "" // TODO Get item identifier from the request
+	err = lmsAdapter.CheckInItem(item)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedIn, nil)
 }
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	item := "" // TODO Get item identifier from the request
+	err = lmsAdapter.DeleteItem(item)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn)
 	if httpStatus == nil {
