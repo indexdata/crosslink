@@ -7,49 +7,29 @@
       "version": "1.0",
       "handlers": [
         {
-          "methods": [
-            "GET"
-          ],
+          "methods": ["GET"],
           "pathPattern": "/consortia",
-          "permissionsRequired": [
-            "directory.consortia.collection.get"
-          ]
+          "permissionsRequired": ["directory.consortia.collection.get"]
         },
         {
-          "methods": [
-            "POST"
-          ],
+          "methods": ["POST"],
           "pathPattern": "/consortia",
-          "permissionsRequired": [
-            "directory.consortia.item.post"
-          ]
+          "permissionsRequired": ["directory.consortia.item.post"]
         },
         {
-          "methods": [
-            "GET"
-          ],
+          "methods": ["GET"],
           "pathPattern": "/consortia/{id}",
-          "permissionsRequired": [
-            "directory.consortia.item.get"
-          ]
+          "permissionsRequired": ["directory.consortia.item.get"]
         },
         {
-          "methods": [
-            "PATCH"
-          ],
+          "methods": ["PATCH"],
           "pathPattern": "/consortia/{id}",
-          "permissionsRequired": [
-            "directory.consortia.item.patch"
-          ]
+          "permissionsRequired": ["directory.consortia.item.patch"]
         },
         {
-          "methods": [
-            "DELETE"
-          ],
+          "methods": ["DELETE"],
           "pathPattern": "/consortia/{id}",
-          "permissionsRequired": [
-            "directory.consortia.item.delete"
-          ]
+          "permissionsRequired": ["directory.consortia.item.delete"]
         }
       ]
     },
@@ -58,70 +38,52 @@
       "version": "1.0",
       "handlers": [
         {
-          "methods": [
-            "GET"
-          ],
+          "methods": ["GET"],
           "pathPattern": "/entries",
-          "permissionsRequired": [
-            "directory.entries.collection.get"
-          ]
+          "permissionsRequired": ["directory.entries.collection.get"]
         },
         {
-          "methods": [
-            "POST"
-          ],
+          "methods": ["POST"],
           "pathPattern": "/entries",
-          "permissionsRequired": [
-            "directory.entries.item.post"
-          ]
+          "permissionsRequired": ["directory.entries.item.post"]
         },
         {
-          "methods": [
-            "GET"
-          ],
+          "methods": ["GET"],
           "pathPattern": "/entries/{key}/{value}",
-          "permissionsRequired": [
-            "directory.entries.item.get"
-          ]
+          "permissionsRequired": ["directory.entries.item.get"]
         },
         {
-          "methods": [
-            "PATCH"
-          ],
+          "methods": ["PATCH"],
           "pathPattern": "/entries/{key}/{value}",
-          "permissionsRequired": [
-            "directory.entries.item.patch"
-          ]
+          "permissionsRequired": ["directory.entries.item.patch"]
         },
         {
-          "methods": [
-            "DELETE"
-          ],
+          "methods": ["DELETE"],
           "pathPattern": "/entries/{key}/{value}",
-          "permissionsRequired": [
-            "directory.entries.item.delete"
-          ]
+          "permissionsRequired": ["directory.entries.item.delete"]
         }
+      ]
+    }
   ],
   "requires": [],
   "permissionSets": [
     {
-      "description": "All direcotry consortial permissions ",
+      "description": "All directory consortia permissions",
       "displayName": "Directory - all consortia permissions",
-      "permissionName": "direcotry.consortia.all",
+      "permissionName": "directory.consortia.all",
       "subPermissions": [
-         "directory.consortia.collection.get",
-         "directory.consortia.item.post",
-         "directory.consortia.item.get",
-         "directory.consortia.item.patch",
-         "directory.consortia.item.delete"
+        "directory.consortia.collection.get",
+        "directory.consortia.item.post",
+        "directory.consortia.item.get",
+        "directory.consortia.item.patch",
+        "directory.consortia.item.delete"
       ],
       "visible": true
     },
     {
-      "description": "All direcotry entry permissions ",
+      "description": "All directory entry permissions",
       "displayName": "Directory - all entry permissions",
-      "permissionName": "direcotry.entries.all",
+      "permissionName": "directory.entries.all",
       "subPermissions": [
         "directory.entries.collection.get",
         "directory.entries.item.post",
@@ -137,9 +99,9 @@
       "permissionName": "directory.all",
       "subPermissions": [
         "directory.consortia.all",
-        "directory.entries.all",
+        "directory.entries.all"
+      ],
       "visible": true
-      ]
     }
   ]
 }
