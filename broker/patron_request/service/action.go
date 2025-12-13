@@ -253,7 +253,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
 	item := "" // TODO Get item identifier from the request
-	err = lmsAdapter.DeleteItem(item)
+	_, err = lmsAdapter.DeleteItem(item)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 	}

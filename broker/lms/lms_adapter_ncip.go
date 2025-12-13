@@ -111,13 +111,17 @@ func (l *LmsAdapterNcip) AcceptItem(
 	return err
 }
 
-func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
+func (l *LmsAdapterNcip) DeleteItem(itemId string) (string, error) {
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
 	}
-	_, err := l.ncipClient.DeleteItem(arg)
-	return err
+	res, err := l.ncipClient.DeleteItem(arg)
+	if err == nil && res != nil && res.ItemId != nil {
+		return res.ItemId.ItemIdentifierValue, nil
+	}
+	return itemId, err
 }
+
 func (l *LmsAdapterNcip) RequestItem(
 	requestId string,
 	itemId string,
@@ -125,8 +129,31 @@ func (l *LmsAdapterNcip) RequestItem(
 	pickupLocation string,
 	itemLocation string,
 ) error {
+	// mod-rs: see getRequestItemPickupLocation which in some cases overrides pickupLocation
+	var pickupLocationField *ncip.SchemeValuePair
+	if pickupLocation != "" {
+		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
+	}
+	var userIdField *ncip.UserId
+	if borrowerBarcode != "" {
+		userIdField = &ncip.UserId{UserIdentifierValue: borrowerBarcode}
+	}
+	bibIdField := ncip.BibliographicId{
+		BibliographicRecordId: &ncip.BibliographicRecordId{
+			BibliographicRecordIdentifier:     itemId,
+			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: "SYSNUMBER"},
+		}}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: "Item"} // or "Title"
+
+	// mod-rs: getRequestItemRequestType()
+	requestTypeField := ncip.SchemeValuePair{Text: "Page"} // "Loan" in Base
 	arg := ncip.RequestItem{
-		ItemId: []ncip.ItemId{{ItemIdentifierValue: itemId}},
+		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
+		BibliographicId:  []ncip.BibliographicId{bibIdField},
+		UserId:           userIdField,
+		PickupLocation:   pickupLocationField,
+		RequestType:      requestTypeField,
+		RequestScopeType: requestScopeTypeField,
 	}
 	_, err := l.ncipClient.RequestItem(arg)
 	return err
@@ -150,7 +177,7 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 		ItemElementType: itemElements,
 	}
 	_, err := l.ncipClient.CheckInItem(arg)
-	// TODO: perhaps extend and return bibliographic info
+	// mod-rs does not seem to use the Bibliographic Description in response
 	return err
 }
 

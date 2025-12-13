@@ -26,9 +26,6 @@ func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	if handle {
 		return nil, err
 	}
-	if lookup.UserId != nil && lookup.UserId.UserIdentifierValue == "" {
-		return nil, fmt.Errorf("empty user Id")
-	}
 	lookup.InitiationHeader = n.prepareHeader(lookup.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{

@@ -1,6 +1,7 @@
 package lms
 
 import (
+	"encoding/xml"
 	"fmt"
 	"strings"
 	"testing"
@@ -81,10 +82,15 @@ func TestDeleteItem(t *testing.T) {
 		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
-	err := ad.DeleteItem("item1")
+	res, err := ad.DeleteItem("item1")
 	assert.NoError(t, err)
+	assert.Equal(t, "item1", res)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.DeleteItem)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
+
+	_, err = ad.DeleteItem("error")
+	assert.Error(t, err)
+	assert.Equal(t, "deletion error", err.Error())
 }
 
 func TestRequestItem(t *testing.T) {
@@ -96,7 +102,12 @@ func TestRequestItem(t *testing.T) {
 	err := ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
-	assert.Equal(t, "item1", req.ItemId[0].ItemIdentifierValue)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
 }
 
 func TestCancelRequestItem(t *testing.T) {
@@ -122,6 +133,8 @@ func TestCheckInItem(t *testing.T) {
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckInItem)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
+	assert.Equal(t, 1, len(req.ItemElementType))
+	assert.Equal(t, "Bibliographic Description", req.ItemElementType[0].Text)
 }
 
 func TestCheckOutItem(t *testing.T) {
@@ -134,6 +147,11 @@ func TestCheckOutItem(t *testing.T) {
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
+	assert.Equal(t, "barcodeid", req.UserId.UserIdentifierValue)
+	bytes, err := xml.Marshal(ncip.RequestId{RequestIdentifierValue: "extref"})
+	assert.NoError(t, err)
+	assert.Equal(t, bytes, req.Ext.XMLContent)
 }
 
 func TestCreateUserFiscalTransaction(t *testing.T) {
@@ -149,8 +167,7 @@ func TestCreateUserFiscalTransaction(t *testing.T) {
 }
 
 type ncipClientMock struct {
-	lastRequest    any
-	LookupUserFunc func(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error)
+	lastRequest any
 }
 
 func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
@@ -183,6 +200,9 @@ func (n *ncipClientMock) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemRes
 }
 
 func (n *ncipClientMock) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemResponse, error) {
+	if delete.ItemId.ItemIdentifierValue == "error" {
+		return nil, fmt.Errorf("deletion error")
+	}
 	n.lastRequest = delete
 	return nil, nil
 }
