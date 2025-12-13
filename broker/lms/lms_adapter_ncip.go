@@ -1,6 +1,7 @@
 package lms
 
 import (
+	"encoding/xml"
 	"fmt"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 
 // NCIP LMS Adapter, based on:
 // https://github.com/openlibraryenvironment/mod-rs/blob/master/service/grails-app/services/org/olf/rs/hostlms/BaseHostLMSService.groovy
+// https://github.com/openlibraryenvironment/lib-ncip-client/tree/master/lib-ncip-client/src/main/java/org/olf/rs/circ/client
 
 type LmsAdapterNcip struct {
 	ncipInfo   map[string]any
@@ -44,10 +46,10 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 		AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},
 		AuthenticationInputData: patron,
 	})
-	elements := []ncip.SchemeValuePair{{Text: "User Id"}}
+	userElements := []ncip.SchemeValuePair{{Text: "User Id"}}
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
-		UserElementType:     elements,
+		UserElementType:     userElements,
 	}
 	response, err := l.ncipClient.LookupUser(arg)
 	if err != nil {
@@ -140,10 +142,15 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 }
 
 func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
+	itemElements := []ncip.SchemeValuePair{
+		{Text: "Bibliographic Description"},
+	}
 	arg := ncip.CheckInItem{
-		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
+		ItemId:          ncip.ItemId{ItemIdentifierValue: itemId},
+		ItemElementType: itemElements,
 	}
 	_, err := l.ncipClient.CheckInItem(arg)
+	// TODO: perhaps extend and return bibliographic info
 	return err
 }
 
@@ -153,8 +160,20 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	borrowerBarcode string,
 	externalReferenceValue string,
 ) error {
+	var ext *ncip.Ext
+	if externalReferenceValue != "" {
+		externalId := ncip.RequestId{RequestIdentifierValue: externalReferenceValue}
+		bytes, err := xml.Marshal(externalId)
+		if err != nil {
+			return err
+		}
+		ext = &ncip.Ext{XMLContent: bytes}
+	}
 	arg := ncip.CheckOutItem{
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
+		UserId:    &ncip.UserId{UserIdentifierValue: borrowerBarcode},
+		ItemId:    ncip.ItemId{ItemIdentifierValue: itemBarcode},
+		Ext:       ext,
 	}
 	_, err := l.ncipClient.CheckOutItem(arg)
 	return err
