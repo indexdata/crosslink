@@ -11,7 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 
@@ -35,7 +35,7 @@ func TestIsBorrowerActionAvailable(t *testing.T) {
 }
 func TestInvokeAction(t *testing.T) {
 	mockEventBus := new(MockEventBus)
-	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), mockEventBus, new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), mockEventBus, new(handler.Iso18626Handler), nil)
 	event := events.Event{
 		ID: "action-1",
 	}
@@ -47,7 +47,7 @@ func TestInvokeAction(t *testing.T) {
 }
 
 func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
-	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(*new(pr_db.PrRepo), *new(events.EventBus), new(handler.Iso18626Handler), nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{})
 
@@ -57,7 +57,7 @@ func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
 
 func TestHandleInvokeActionNoPR(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("not fund"))
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -68,7 +68,7 @@ func TestHandleInvokeActionNoPR(t *testing.T) {
 
 func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
@@ -77,10 +77,12 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	assert.Equal(t, "state VALIDATED does not support action validate", resultData.EventError.Message)
 }
 
-func TestHandleInvokeActionValidate(t *testing.T) {
+func TestHandleInvokeActionValidateOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateNew, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:x"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
 
@@ -89,10 +91,37 @@ func TestHandleInvokeActionValidate(t *testing.T) {
 	assert.Equal(t, BorrowerStateValidated, mockPrRepo.savedPr.State)
 }
 
+func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:x"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+	assert.Equal(t, "assert.AnError general error for testing", resultData.EventError.Cause)
+}
+
+func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, State: BorrowerStateNew, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS LookupUser failed", resultData.EventError.Message)
+}
+
 func TestHandleInvokeActionSendRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionSendRequest}}})
@@ -102,10 +131,12 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionReceive(t *testing.T) {
+func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
@@ -115,10 +146,40 @@ func TestHandleInvokeActionReceive(t *testing.T) {
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionCheckOut(t *testing.T) {
+func TestHandleInvokeActionReceiveFailCreator(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateReceived}, nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionReceiveAcceptItemFailed(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockIso18626Handler := new(MockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS AcceptItem failed", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckOutOK(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{Patron: pgtype.Text{Valid: true, String: "patron1"}, State: BorrowerStateReceived, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
 
@@ -127,10 +188,36 @@ func TestHandleInvokeActionCheckOut(t *testing.T) {
 	assert.Equal(t, BorrowerStateCheckedOut, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionCheckIn(t *testing.T) {
+func TestHandleInvokeActionCheckOutFailCreator(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(ill_db.IllRepo), *new(events.EventBus), new(handler.Iso18626Handler))
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut}, nil)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateReceived, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckOutFails(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateReceived, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS CheckOutItem failed", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckInOK(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
 
@@ -139,10 +226,36 @@ func TestHandleInvokeActionCheckIn(t *testing.T) {
 	assert.Equal(t, BorrowerStateCheckedIn, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionShipReturn(t *testing.T) {
+func TestHandleInvokeActionCheckInFailCreator(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckInFails(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS CheckInItem failed", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionShipReturnOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShipReturn}}})
@@ -152,10 +265,38 @@ func TestHandleInvokeActionShipReturn(t *testing.T) {
 	assert.Equal(t, BorrowerStateShippedReturned, mockPrRepo.savedPr.State)
 }
 
+func TestHandleInvokeActionShipReturnFailCreator(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockIso18626Handler := new(MockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShipReturn}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionShipReturnFails(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockIso18626Handler := new(MockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedIn, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionShipReturn}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS DeleteItem failed", resultData.EventError.Message)
+}
+
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateWillSupply, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCancelRequest}}})
@@ -168,7 +309,7 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionAcceptCondition}}})
@@ -181,7 +322,7 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionRejectCondition}}})
@@ -194,7 +335,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}})
 
@@ -205,7 +346,7 @@ func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 func TestSendBorrowingRequestMissingSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 
 	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated})
 
@@ -216,9 +357,11 @@ func TestSendBorrowingRequestMissingSymbol(t *testing.T) {
 func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing supplier symbol", resultData.EventError.Message)
@@ -227,7 +370,9 @@ func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
 
@@ -238,7 +383,9 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}})
 
@@ -249,7 +396,9 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), *new(events.EventBus), mockIso18626Handler)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "x"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
 
@@ -326,6 +475,7 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 	w.WriteHeader(http.StatusOK)
 	w.Write(output)
 }
+
 func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
@@ -348,7 +498,72 @@ func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedC
 	w.Write(output)
 }
 
-type MockIllRepo struct {
+type MockLmsCreator struct {
 	mock.Mock
-	ill_db.PgIllRepo
+	lms.LmsCreator
+}
+
+func (m *MockLmsCreator) GetAdapter(ctx common.ExtendedContext, symbol pgtype.Text) (lms.LmsAdapter, error) {
+	args := m.Called(symbol)
+	return args.Get(0).(lms.LmsAdapter), args.Error(1)
+}
+
+func createLmsAdapterMockFail() lms.LmsAdapter {
+	return &MockLmsAdapterFail{}
+}
+
+type MockLmsAdapterFail struct {
+}
+
+func (l *MockLmsAdapterFail) LookupUser(patron string) (string, error) {
+	return "", errors.New("LookupUser failed")
+}
+
+func (l *MockLmsAdapterFail) AcceptItem(
+	itemId string,
+	requestId string,
+	userId string,
+	author string,
+	title string,
+	isbn string,
+	callNumber string,
+	pickupLocation string,
+	requestedAction string,
+) error {
+	return errors.New("AcceptItem failed")
+}
+
+func (l *MockLmsAdapterFail) DeleteItem(itemId string) error {
+	return errors.New("DeleteItem failed")
+}
+
+func (l *MockLmsAdapterFail) RequestItem(
+	requestId string,
+	itemId string,
+	borrowerBarcode string,
+	pickupLocation string,
+	itemLocation string,
+) error {
+	return errors.New("RequestItem failed")
+}
+
+func (l *MockLmsAdapterFail) CancelRequestItem(requestId string, userId string) error {
+	return errors.New("CancelRequestItem failed")
+}
+
+func (l *MockLmsAdapterFail) CheckInItem(itemId string) error {
+	return errors.New("CheckInItem failed")
+}
+
+func (l *MockLmsAdapterFail) CheckOutItem(
+	requestId string,
+	itemBarcode string,
+	borrowerBarcode string,
+	externalReferenceValue string,
+) error {
+	return errors.New("CheckOutItem failed")
+}
+
+func (l *MockLmsAdapterFail) CreateUserFiscalTransaction(userId string, itemId string) error {
+	return errors.New("CreateUserFiscalTransaction failed")
 }
