@@ -12,14 +12,18 @@ import (
 type NcipProperty string
 
 const (
-	FromAgency               NcipProperty = "from_agency"
-	FromAgencyAuthentication NcipProperty = "from_agency_authentication"
-	ToAgency                 NcipProperty = "to_agency"
-	Address                  NcipProperty = "address"
-	LookupUserEnable         NcipProperty = "lookup_user_enable"
-	AcceptItemEnable         NcipProperty = "accept_item_enable"
-	CheckInItemEnable        NcipProperty = "check_in_item_enable"
-	CheckOutItemEnable       NcipProperty = "check_out_item_enable"
+	FromAgency                      NcipProperty = "from_agency"
+	FromAgencyAuthentication        NcipProperty = "from_agency_authentication"
+	ToAgency                        NcipProperty = "to_agency"
+	Address                         NcipProperty = "address"
+	LookupUserEnable                NcipProperty = "lookup_user_enable"
+	AcceptItemEnable                NcipProperty = "accept_item_enable"
+	CheckInItemEnable               NcipProperty = "check_in_item_enable"
+	CheckOutItemEnable              NcipProperty = "check_out_item_enable"
+	RequestItemRequestType          NcipProperty = "request_item_request_type"
+	RequestItemRequestScopeType     NcipProperty = "request_item_request_scope_type"
+	RequestItemBibIdCode            NcipProperty = "request_item_bib_id_code"
+	RequestItemPickupLocationEnable NcipProperty = "request_item_pickup_location_enable"
 )
 
 type NcipUserElement string
@@ -39,18 +43,22 @@ const (
 // https://github.com/openlibraryenvironment/lib-ncip-client/tree/master/lib-ncip-client/src/main/java/org/olf/rs/circ/client
 
 type LmsAdapterNcip struct {
-	ncipClient               ncipclient.NcipClient
-	address                  string
-	toAgency                 string
-	fromAgency               string
-	fromAgencyAuthentication string
-	lookupUserEnable         bool
-	acceptItemEnable         bool
-	checkInItemEnable        bool
-	checkOutItemEnable       bool
+	ncipClient                      ncipclient.NcipClient
+	address                         string
+	toAgency                        string
+	fromAgency                      string
+	fromAgencyAuthentication        string
+	lookupUserEnable                bool
+	acceptItemEnable                bool
+	checkInItemEnable               bool
+	checkOutItemEnable              bool
+	requestItemRequestType          string
+	requestItemRequestScopeType     string
+	requestItemBibIdCode            string
+	requestItemPickupLocationEnable bool
 }
 
-func setField(m map[string]any, key NcipProperty, dst *string) error {
+func reqField(m map[string]any, key NcipProperty, dst *string) error {
 	v, ok := m[string(key)].(string)
 	if !ok || v == "" {
 		return fmt.Errorf("missing required NCIP configuration field: %s", key)
@@ -59,17 +67,8 @@ func setField(m map[string]any, key NcipProperty, dst *string) error {
 	return nil
 }
 
-func optField(m map[string]any, key NcipProperty, dst *string, def string) {
-	v, ok := m[string(key)].(string)
-	if !ok || v == "" {
-		*dst = def
-	} else {
-		*dst = v
-	}
-}
-
-func optBoolField(m map[string]any, key NcipProperty, dst *bool, def bool) {
-	v, ok := m[string(key)].(bool)
+func optField[T any](m map[string]any, key NcipProperty, dst *T, def T) {
+	v, ok := m[string(key)].(T)
 	if !ok {
 		*dst = def
 	} else {
@@ -78,20 +77,24 @@ func optBoolField(m map[string]any, key NcipProperty, dst *bool, def bool) {
 }
 
 func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
-	err := setField(ncipInfo, Address, &l.address)
+	err := reqField(ncipInfo, Address, &l.address)
 	if err != nil {
 		return err
 	}
-	err = setField(ncipInfo, FromAgency, &l.fromAgency)
+	err = reqField(ncipInfo, FromAgency, &l.fromAgency)
 	if err != nil {
 		return err
 	}
 	optField(ncipInfo, FromAgencyAuthentication, &l.fromAgencyAuthentication, "")
 	optField(ncipInfo, ToAgency, &l.toAgency, "default-to-agency")
-	optBoolField(ncipInfo, LookupUserEnable, &l.lookupUserEnable, true)
-	optBoolField(ncipInfo, AcceptItemEnable, &l.acceptItemEnable, true)
-	optBoolField(ncipInfo, CheckInItemEnable, &l.checkInItemEnable, true)
-	optBoolField(ncipInfo, CheckOutItemEnable, &l.checkOutItemEnable, true)
+	optField(ncipInfo, LookupUserEnable, &l.lookupUserEnable, true)
+	optField(ncipInfo, AcceptItemEnable, &l.acceptItemEnable, true)
+	optField(ncipInfo, CheckInItemEnable, &l.checkInItemEnable, true)
+	optField(ncipInfo, CheckOutItemEnable, &l.checkOutItemEnable, true)
+	optField(ncipInfo, RequestItemRequestType, &l.requestItemRequestType, "Page")
+	optField(ncipInfo, RequestItemRequestScopeType, &l.requestItemRequestScopeType, "Item")
+	optField(ncipInfo, RequestItemBibIdCode, &l.requestItemBibIdCode, "SYSNUMBER")
+	optField(ncipInfo, RequestItemPickupLocationEnable, &l.requestItemPickupLocationEnable, true)
 	return nil
 }
 
@@ -214,9 +217,8 @@ func (l *LmsAdapterNcip) RequestItem(
 	pickupLocation string,
 	itemLocation string,
 ) error {
-	// mod-rs: see getRequestItemPickupLocation which in some cases overrides pickupLocation
 	var pickupLocationField *ncip.SchemeValuePair
-	if pickupLocation != "" {
+	if l.requestItemPickupLocationEnable && pickupLocation != "" {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
@@ -226,12 +228,11 @@ func (l *LmsAdapterNcip) RequestItem(
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,
-			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: "SYSNUMBER"},
+			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: l.requestItemBibIdCode},
 		}}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: "Item"} // or "Title"
+	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType}
 
-	// mod-rs: getRequestItemRequestType()
-	requestTypeField := ncip.SchemeValuePair{Text: "Page"} // "Loan" in Base
+	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType}
 	arg := ncip.RequestItem{
 		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
 		BibliographicId:  []ncip.BibliographicId{bibIdField},

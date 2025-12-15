@@ -178,17 +178,29 @@ func TestDeleteItem(t *testing.T) {
 func TestRequestItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipClient: mock,
+		ncipClient:                      mock,
+		requestItemPickupLocationEnable: true,
+		requestItemRequestType:          "Loan",
+		requestItemRequestScopeType:     "Title",
+		requestItemBibIdCode:            "SYSNUMBER",
 	}
 	err := ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "loc", req.PickupLocation.Text)
-	assert.Equal(t, "Page", req.RequestType.Text)
-	assert.Equal(t, "Item", req.RequestScopeType.Text)
+	assert.Equal(t, "Loan", req.RequestType.Text)
+	assert.Equal(t, "Title", req.RequestScopeType.Text)
+
+	ad.requestItemPickupLocationEnable = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Nil(t, req.PickupLocation)
 }
 
 func TestCancelRequestItem(t *testing.T) {
