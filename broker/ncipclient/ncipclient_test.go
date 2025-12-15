@@ -33,25 +33,20 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestPrepareHeaderEmpty(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipClient := NcipClientImpl{}
-	ncipClient.ncipInfo = ncipData
-
-	header := ncipClient.prepareHeader(nil)
-	assert.Equal(t, "default-from-agency", header.FromAgencyId.AgencyId.Text)
-	assert.Equal(t, "default-to-agency", header.ToAgencyId.AgencyId.Text)
-	assert.Equal(t, "", header.FromAgencyAuthentication)
+func createTestClient() NcipClient {
+	return NewNcipClient(http.DefaultClient,
+		"http://localhost:"+os.Getenv("HTTP_PORT")+"/ncip",
+		"ILL-MOCK",
+		"ILL-MOCK",
+		"pass").(*NcipClientImpl)
 }
 
 func TestPrepareHeaderValues(t *testing.T) {
 	ncipClient := NcipClientImpl{}
-	ncipData := make(map[string]any)
-	ncipClient.ncipInfo = ncipData
-
-	ncipData["to_agency"] = "ILL-MOCK1"
-	ncipData["from_agency"] = "ILL-MOCK2"
-	ncipData["from_agency_authentication"] = "pass"
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK2"
+	ncipClient.toAgency = "ILL-MOCK1"
+	ncipClient.fromAgencyAuthentication = "pass"
 
 	header := ncipClient.prepareHeader(nil)
 	assert.Equal(t, "ILL-MOCK1", header.ToAgencyId.AgencyId.Text)
@@ -60,14 +55,7 @@ func TestPrepareHeaderValues(t *testing.T) {
 }
 
 func TestLookupUserAutoOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := createTestClient()
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -79,14 +67,7 @@ func TestLookupUserAutoOK(t *testing.T) {
 }
 
 func TestLookupUserAutoInvalidUser(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := createTestClient()
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "foo",
@@ -97,43 +78,12 @@ func TestLookupUserAutoInvalidUser(t *testing.T) {
 	assert.Equal(t, "NCIP user lookup failed: Unknown User: foo", err.Error())
 }
 
-func TestLookupUserModeManual(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "manual"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.LookupUser{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	res, err := ncipClient.LookupUser(lookup)
-	assert.NoError(t, err)
-	assert.Nil(t, res)
-}
-
-func TestLookupUserModeDisabled(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "disabled"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.LookupUser{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	res, err := ncipClient.LookupUser(lookup)
-	assert.NoError(t, err)
-	assert.Nil(t, res)
-}
-
 func TestLookupUserMissingAddress(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["to_agency"] = "ILL-MOCK"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.toAgency = "ILL-MOCK"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -143,39 +93,6 @@ func TestLookupUserMissingAddress(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "missing NCIP address in configuration", err.Error())
 	assert.Nil(t, res)
-}
-
-func TestLookupUserMissingAuthUserInfo(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["to_agency"] = "ILL-MOCK"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.LookupUser{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	_, err := ncipClient.LookupUser(lookup)
-	assert.Error(t, err)
-	assert.Equal(t, "missing lookup_user_mode in NCIP configuration", err.Error())
-}
-
-func TestLookupUserBadMode(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "foo"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["to_agency"] = "ILL-MOCK"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.LookupUser{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	_, err := ncipClient.LookupUser(lookup)
-	assert.Error(t, err)
-	assert.Equal(t, "unknown value for lookup_user_mode: foo", err.Error())
 }
 
 func TestBadNcipMessageResponse(t *testing.T) {
@@ -188,17 +105,13 @@ func TestBadNcipMessageResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["accept_item_mode"] = "auto"
-	ncipData["request_item_mode"] = "auto"
-	ncipData["create_user_fiscal_transaction_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = server.URL
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = server.URL
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -265,17 +178,12 @@ func TestEmptyNcipResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["accept_item_mode"] = "auto"
-	ncipData["request_item_mode"] = "auto"
-	ncipData["create_user_fiscal_transaction_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = server.URL
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = server.URL
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -353,14 +261,13 @@ func TestLookupUserProblemResponse(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ncipData := make(map[string]any)
-	ncipData["lookup_user_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = server.URL
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = server.URL
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -372,14 +279,12 @@ func TestLookupUserProblemResponse(t *testing.T) {
 }
 
 func TestAcceptItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["accept_item_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	accept := ncip.AcceptItem{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -394,14 +299,12 @@ func TestAcceptItemOK(t *testing.T) {
 }
 
 func TestAcceptItemInvalidUser(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["accept_item_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	accept := ncip.AcceptItem{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "foo",
@@ -415,63 +318,28 @@ func TestAcceptItemInvalidUser(t *testing.T) {
 	assert.Equal(t, "NCIP accept item failed: Unknown User: foo", err.Error())
 }
 
-func TestAcceptItemModeManual(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["accept_item_mode"] = "manual"
-
-	lookup := ncip.AcceptItem{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-		RequestId: ncip.RequestId{
-			RequestIdentifierValue: "validrequest",
-		},
-	}
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	res, err := ncipClient.AcceptItem(lookup)
-	assert.NoError(t, err)
-	assert.Nil(t, res)
-}
-
-func TestAcceptItemMissingNcipInfo(t *testing.T) {
-	ncipClient := NewNcipClient(http.DefaultClient, nil)
-	accept := ncip.AcceptItem{}
-	_, err := ncipClient.AcceptItem(accept)
-	assert.Error(t, err)
-	assert.Equal(t, "missing accept_item_mode in NCIP configuration", err.Error())
-}
-
 func TestDeleteItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	delete := ncip.DeleteItem{}
 	res, err := ncipClient.DeleteItem(delete)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 }
 
-func TestDeleteItemMissingNcipInfo(t *testing.T) {
-	ncipClient := NewNcipClient(http.DefaultClient, nil)
-	delete := ncip.DeleteItem{}
-	_, err := ncipClient.DeleteItem(delete)
-	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in configuration", err.Error())
-}
-
 func TestRequestItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["request_item_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	request := ncip.RequestItem{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -490,29 +358,14 @@ func TestRequestItemOK(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestRequestItemModeManual(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["request_item_mode"] = "manual"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.RequestItem{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	res, err := ncipClient.RequestItem(lookup)
-	assert.NoError(t, err)
-	assert.Nil(t, res)
-}
-
 func TestCancelRequestItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	request := ncip.CancelRequestItem{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -530,13 +383,12 @@ func TestCancelRequestItemOK(t *testing.T) {
 }
 
 func TestCheckInItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 	request := ncip.CheckInItem{
 		ItemId: ncip.ItemId{
 			ItemIdentifierValue: "item-001",
@@ -547,22 +399,14 @@ func TestCheckInItemOK(t *testing.T) {
 	assert.NotNil(t, res)
 }
 
-func TestCheckInItemMissingNcipInfo(t *testing.T) {
-	ncipClient := NewNcipClient(http.DefaultClient, nil)
-	request := ncip.CheckInItem{}
-	_, err := ncipClient.CheckInItem(request)
-	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in configuration", err.Error())
-}
-
 func TestCheckOutItemOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	request := ncip.CheckOutItem{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -575,23 +419,14 @@ func TestCheckOutItemOK(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestCheckOutItemMissingNcipInfo(t *testing.T) {
-	ncipClient := NewNcipClient(http.DefaultClient, nil)
-	request := ncip.CheckOutItem{}
-	_, err := ncipClient.CheckOutItem(request)
-	assert.Error(t, err)
-	assert.Equal(t, "missing NCIP address in configuration", err.Error())
-}
-
 func TestCreateUserFiscalTransactionOK(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["create_user_fiscal_transaction_mode"] = "auto"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["from_agency_authentication"] = "pass"
-	ncipData["to_agency"] = "ILL-MOCK"
-	ncipData["address"] = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
 
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
 	lookup := ncip.CreateUserFiscalTransaction{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -606,29 +441,4 @@ func TestCreateUserFiscalTransactionOK(t *testing.T) {
 	res, err := ncipClient.CreateUserFiscalTransaction(lookup)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
-}
-
-func TestCreateUserFiscalTransactionBadMode(t *testing.T) {
-	ncipData := make(map[string]any)
-	ncipData["create_user_fiscal_transaction_mode"] = "foo"
-	ncipData["from_agency"] = "ILL-MOCK"
-	ncipData["to_agency"] = "ILL-MOCK"
-
-	ncipClient := NewNcipClient(http.DefaultClient, ncipData)
-	lookup := ncip.CreateUserFiscalTransaction{
-		UserId: &ncip.UserId{
-			UserIdentifierValue: "validuser",
-		},
-	}
-	_, err := ncipClient.CreateUserFiscalTransaction(lookup)
-	assert.Error(t, err)
-	assert.Equal(t, "unknown value for create_user_fiscal_transaction_mode: foo", err.Error())
-}
-
-func TestCreateUserFiscalTransactionMissingNcipInfo(t *testing.T) {
-	ncipClient := NewNcipClient(http.DefaultClient, nil)
-	request := ncip.CreateUserFiscalTransaction{}
-	_, err := ncipClient.CreateUserFiscalTransaction(request)
-	assert.Error(t, err)
-	assert.Equal(t, "missing create_user_fiscal_transaction_mode in NCIP configuration", err.Error())
 }

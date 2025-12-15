@@ -9,21 +9,67 @@ import (
 	"github.com/indexdata/crosslink/ncip"
 )
 
+type NcipProperty string
+
+const (
+	FromAgency               NcipProperty = "from_agency"
+	FromAgencyAuthentication NcipProperty = "from_agency_authentication"
+	ToAgency                 NcipProperty = "to_agency"
+	Address                  NcipProperty = "address"
+)
+
 // NCIP LMS Adapter, based on:
 // https://github.com/openlibraryenvironment/mod-rs/blob/master/service/grails-app/services/org/olf/rs/hostlms/BaseHostLMSService.groovy
 // https://github.com/openlibraryenvironment/lib-ncip-client/tree/master/lib-ncip-client/src/main/java/org/olf/rs/circ/client
 
 type LmsAdapterNcip struct {
-	ncipInfo   map[string]any
-	ncipClient ncipclient.NcipClient
+	ncipClient               ncipclient.NcipClient
+	address                  string
+	toAgency                 string
+	fromAgency               string
+	fromAgencyAuthentication string
+}
+
+func setField(m map[string]any, field NcipProperty, dst *string) error {
+	v, ok := m[string(field)].(string)
+	if !ok || v == "" {
+		return fmt.Errorf("missing required NCIP configuration field: %s", field)
+	}
+	*dst = v
+	return nil
+}
+
+func optField(m map[string]any, field NcipProperty, dst *string, def string) {
+	v, ok := m[string(field)].(string)
+	if !ok || v == "" {
+		*dst = def
+	} else {
+		*dst = v
+	}
+}
+
+func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
+	err := setField(ncipInfo, Address, &l.address)
+	if err != nil {
+		return err
+	}
+	err = setField(ncipInfo, FromAgency, &l.fromAgency)
+	if err != nil {
+		return err
+	}
+	optField(ncipInfo, FromAgencyAuthentication, &l.fromAgencyAuthentication, "")
+	optField(ncipInfo, ToAgency, &l.toAgency, "default-to-agency")
+	return nil
 }
 
 func CreateLmsAdapterNcip(ncipInfo map[string]any) (LmsAdapter, error) {
-	nc := ncipclient.NewNcipClient(http.DefaultClient, ncipInfo)
-	return &LmsAdapterNcip{
-		ncipInfo:   ncipInfo,
-		ncipClient: nc,
-	}, nil
+	l := &LmsAdapterNcip{}
+	err := l.parseConfig(ncipInfo)
+	if err != nil {
+		return nil, err
+	}
+	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.address, l.fromAgency, l.toAgency, l.fromAgencyAuthentication)
+	return l, nil
 }
 
 func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {

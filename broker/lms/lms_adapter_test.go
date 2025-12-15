@@ -11,10 +11,61 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestParseConfigFull(t *testing.T) {
+	ncipConfig := map[string]any{
+		"address":                    "http://ncip.example.com",
+		"from_agency":                "AGENCY1",
+		"to_agency":                  "AGENCY2",
+		"from_agency_authentication": "auth",
+	}
+	lmsAdapaterNcip := &LmsAdapterNcip{}
+	err := lmsAdapaterNcip.parseConfig(ncipConfig)
+	assert.NoError(t, err)
+	assert.Equal(t, "http://ncip.example.com", lmsAdapaterNcip.address)
+	assert.Equal(t, "AGENCY1", lmsAdapaterNcip.fromAgency)
+	assert.Equal(t, "AGENCY2", lmsAdapaterNcip.toAgency)
+	assert.Equal(t, "auth", lmsAdapaterNcip.fromAgencyAuthentication)
+}
+
+func TestParseConfigMissing(t *testing.T) {
+	// Missing required address field
+	ncipConfigMissing := map[string]any{
+		"from_agency": "AGENCY1",
+	}
+	lmsAdapaterNcip := &LmsAdapterNcip{}
+	err := lmsAdapaterNcip.parseConfig(ncipConfigMissing)
+	assert.Error(t, err)
+	assert.Equal(t, "missing required NCIP configuration field: address", err.Error())
+
+	// Missing required from_agency field
+	ncipConfigMissing = map[string]any{
+		"address": "http://ncip.example.com",
+	}
+	lmsAdapaterNcip = &LmsAdapterNcip{}
+	err = lmsAdapaterNcip.parseConfig(ncipConfigMissing)
+	assert.Error(t, err)
+	assert.Equal(t, "missing required NCIP configuration field: from_agency", err.Error())
+}
+
+func TestParseConfigOptional(t *testing.T) {
+	// Missing optional to_agency and from_agency_authentication fields
+	ncipConfig := map[string]any{
+		"address":                    "http://ncip.example.com",
+		"from_agency":                "AGENCY1",
+		"from_agency_authentication": "auth",
+	}
+	lmsAdapaterNcip := &LmsAdapterNcip{}
+	err := lmsAdapaterNcip.parseConfig(ncipConfig)
+	assert.NoError(t, err)
+	assert.Equal(t, "http://ncip.example.com", lmsAdapaterNcip.address)
+	assert.Equal(t, "AGENCY1", lmsAdapaterNcip.fromAgency)
+	assert.Equal(t, "default-to-agency", lmsAdapaterNcip.toAgency)
+	assert.Equal(t, "auth", lmsAdapaterNcip.fromAgencyAuthentication)
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	_, err := ad.LookupUser("")
@@ -45,7 +96,6 @@ func TestLookupUser(t *testing.T) {
 func TestAcceptItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
@@ -79,7 +129,6 @@ func TestAcceptItem(t *testing.T) {
 func TestDeleteItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	res, err := ad.DeleteItem("item1")
@@ -96,7 +145,6 @@ func TestDeleteItem(t *testing.T) {
 func TestRequestItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
@@ -113,7 +161,6 @@ func TestRequestItem(t *testing.T) {
 func TestCancelRequestItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.CancelRequestItem("req1", "testuser")
@@ -126,7 +173,6 @@ func TestCancelRequestItem(t *testing.T) {
 func TestCheckInItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.CheckInItem("item1")
@@ -140,7 +186,6 @@ func TestCheckInItem(t *testing.T) {
 func TestCheckOutItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
@@ -157,7 +202,6 @@ func TestCheckOutItem(t *testing.T) {
 func TestCreateUserFiscalTransaction(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipInfo:   map[string]any{},
 		ncipClient: mock,
 	}
 	err := ad.CreateUserFiscalTransaction("testuser", "item1")

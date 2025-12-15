@@ -10,22 +10,24 @@ import (
 )
 
 type NcipClientImpl struct {
-	client   *http.Client
-	ncipInfo map[string]any
+	client                   *http.Client
+	address                  string
+	fromAgency               string
+	toAgency                 string
+	fromAgencyAuthentication string
 }
 
-func NewNcipClient(client *http.Client, ncipInfo map[string]any) NcipClient {
+func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string) NcipClient {
 	return &NcipClientImpl{
-		client:   client,
-		ncipInfo: ncipInfo,
+		client:                   client,
+		address:                  address,
+		fromAgency:               fromAgency,
+		toAgency:                 toAgency,
+		fromAgencyAuthentication: fromAgencyAuthentication,
 	}
 }
 
 func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
-	handle, _, err := n.checkMode(LookupUserMode)
-	if handle {
-		return nil, err
-	}
 	lookup.InitiationHeader = n.prepareHeader(lookup.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
@@ -43,10 +45,6 @@ func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 }
 
 func (n *NcipClientImpl) AcceptItem(accept ncip.AcceptItem) (*ncip.AcceptItemResponse, error) {
-	handle, _, err := n.checkMode(AcceptItemMode)
-	if handle {
-		return nil, err
-	}
 	accept.InitiationHeader = n.prepareHeader(accept.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		AcceptItem: &accept,
@@ -79,10 +77,6 @@ func (n *NcipClientImpl) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemRes
 }
 
 func (n *NcipClientImpl) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
-	handle, _, err := n.checkMode(RequestItemMode)
-	if handle {
-		return nil, err
-	}
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 	ncipMessage := &ncip.NCIPMessage{
 		RequestItem: &request,
@@ -147,10 +141,6 @@ func (n *NcipClientImpl) CheckOutItem(request ncip.CheckOutItem) (*ncip.CheckOut
 }
 
 func (n *NcipClientImpl) CreateUserFiscalTransaction(request ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error) {
-	handle, _, err := n.checkMode(CreateUserFiscalTransactionMode)
-	if handle {
-		return nil, err
-	}
 	request.InitiationHeader = n.prepareHeader(request.InitiationHeader)
 
 	ncipMessage := &ncip.NCIPMessage{
@@ -177,58 +167,37 @@ func (n *NcipClientImpl) checkProblem(op string, responseProblems []ncip.Problem
 	return nil
 }
 
-func (n *NcipClientImpl) checkMode(key NcipProperty) (bool, bool, error) {
-	mode, ok := n.ncipInfo[string(key)].(string)
-	if !ok {
-		return true, false, fmt.Errorf("missing %s in NCIP configuration", key)
-	}
-	switch mode {
-	case string(ModeDisabled):
-		return true, true, nil
-	case string(ModeManual):
-		return true, false, nil
-	case string(ModeAuto):
-		break
-	default:
-		return true, false, fmt.Errorf("unknown value for %s: %s", key, mode)
-	}
-	return false, false, nil
-}
-
 func (n *NcipClientImpl) prepareHeader(header *ncip.InitiationHeader) *ncip.InitiationHeader {
 	if header == nil {
 		header = &ncip.InitiationHeader{}
 	}
-	from_agency, ok := n.ncipInfo[string(FromAgency)].(string)
-	if !ok || from_agency == "" {
+	from_agency := n.fromAgency
+	if from_agency == "" {
 		from_agency = "default-from-agency"
 	}
 	header.FromAgencyId.AgencyId = ncip.SchemeValuePair{
 		Text: from_agency,
 	}
-	to_agency, ok := n.ncipInfo[string(ToAgency)].(string)
-	if !ok || to_agency == "" {
+	to_agency := n.toAgency
+	if to_agency == "" {
 		to_agency = "default-to-agency"
 	}
 	header.ToAgencyId.AgencyId = ncip.SchemeValuePair{
 		Text: to_agency,
 	}
-	if auth, ok := n.ncipInfo[string(FromAgencyAuthentication)].(string); ok {
-		header.FromAgencyAuthentication = auth
-	}
+	header.FromAgencyAuthentication = n.fromAgencyAuthentication
 	return header
 }
 
 func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NCIPMessage, error) {
-	url, ok := n.ncipInfo[string(Address)].(string)
-	if !ok {
+	if n.address == "" {
 		return nil, fmt.Errorf("missing NCIP address in configuration")
 	}
 	message.Version = ncip.NCIP_V2_02_XSD
 
 	var respMessage ncip.NCIPMessage
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		url, message, &respMessage, xml.Marshal, xml.Unmarshal)
+		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
 	if err != nil {
 		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}

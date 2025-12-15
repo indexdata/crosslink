@@ -44,12 +44,15 @@ func TestGetAdapterNoPeers(t *testing.T) {
 	assert.IsType(t, &LmsAdapterMock{}, LmsAdapter)
 }
 
-func TestGetAdapterNcip(t *testing.T) {
+func TestGetAdapterNcipMissing(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
 		CustomData: map[string]any{
 			"ncip": map[string]any{
-				"some_key": "some_value",
+				"address":                    "http://ncip.example.com",
+				"from_agency":                "AGENCY1",
+				"to_agency":                  "AGENCY2",
+				"from_agency_authentication": "auth",
 			},
 		},
 	}
