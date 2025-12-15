@@ -41,7 +41,7 @@ func TestGetAdapterNoPeers(t *testing.T) {
 	symbol := pgtype.Text{String: "TEST", Valid: true}
 	LmsAdapter, err := creator.GetAdapter(ctx, symbol)
 	assert.NoError(t, err)
-	assert.IsType(t, &LmsAdapterMock{}, LmsAdapter)
+	assert.IsType(t, &LmsAdapterManual{}, LmsAdapter)
 }
 
 func TestGetAdapterNcipOK(t *testing.T) {

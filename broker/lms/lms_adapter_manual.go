@@ -1,13 +1,13 @@
 package lms
 
-type LmsAdapterMock struct {
+type LmsAdapterManual struct {
 }
 
-func (l *LmsAdapterMock) LookupUser(patron string) (string, error) {
+func (l *LmsAdapterManual) LookupUser(patron string) (string, error) {
 	return patron, nil
 }
 
-func (l *LmsAdapterMock) AcceptItem(
+func (l *LmsAdapterManual) AcceptItem(
 	itemId string,
 	requestId string,
 	userId string,
@@ -21,11 +21,11 @@ func (l *LmsAdapterMock) AcceptItem(
 	return nil
 }
 
-func (l *LmsAdapterMock) DeleteItem(itemId string) error {
+func (l *LmsAdapterManual) DeleteItem(itemId string) error {
 	return nil
 }
 
-func (l *LmsAdapterMock) RequestItem(
+func (l *LmsAdapterManual) RequestItem(
 	requestId string,
 	itemId string,
 	borrowerBarcode string,
@@ -35,15 +35,15 @@ func (l *LmsAdapterMock) RequestItem(
 	return nil
 }
 
-func (l *LmsAdapterMock) CancelRequestItem(requestId string, userId string) error {
+func (l *LmsAdapterManual) CancelRequestItem(requestId string, userId string) error {
 	return nil
 }
 
-func (l *LmsAdapterMock) CheckInItem(itemId string) error {
+func (l *LmsAdapterManual) CheckInItem(itemId string) error {
 	return nil
 }
 
-func (l *LmsAdapterMock) CheckOutItem(
+func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
 	itemBarcode string,
 	borrowerBarcode string,
@@ -52,10 +52,10 @@ func (l *LmsAdapterMock) CheckOutItem(
 	return nil
 }
 
-func (l *LmsAdapterMock) CreateUserFiscalTransaction(userId string, itemId string) error {
+func (l *LmsAdapterManual) CreateUserFiscalTransaction(userId string, itemId string) error {
 	return nil
 }
 
 func CreateLmsAdapterMockOK() LmsAdapter {
-	return &LmsAdapterMock{}
+	return &LmsAdapterManual{}
 }
