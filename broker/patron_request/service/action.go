@@ -16,52 +16,54 @@ import (
 
 const COMP = "pr_action_service"
 
-var SideBorrowing = "borrowing"
-var SideLending = "lending"
+const (
+	SideBorrowing                 pr_db.PatronRequestSide  = "borrowing"
+	SideLending                   pr_db.PatronRequestSide  = "lending"
+	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
+	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
+	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
+	BorrowerStateSupplierLocated  pr_db.PatronRequestState = "SUPPLIER_LOCATED"
+	BorrowerStateConditionPending pr_db.PatronRequestState = "CONDITION_PENDING"
+	BorrowerStateWillSupply       pr_db.PatronRequestState = "WILL_SUPPLY"
+	BorrowerStateShipped          pr_db.PatronRequestState = "SHIPPED"
+	BorrowerStateReceived         pr_db.PatronRequestState = "RECEIVED"
+	BorrowerStateCheckedOut       pr_db.PatronRequestState = "CHECKED_OUT"
+	BorrowerStateCheckedIn        pr_db.PatronRequestState = "CHECKED_IN"
+	BorrowerStateShippedReturned  pr_db.PatronRequestState = "SHIPPED_RETURNED"
+	BorrowerStateCancelPending    pr_db.PatronRequestState = "CANCEL_PENDING"
+	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
+	BorrowerStateCancelled        pr_db.PatronRequestState = "CANCELLED"
+	BorrowerStateUnfilled         pr_db.PatronRequestState = "UNFILLED"
+	LenderStateNew                pr_db.PatronRequestState = "NEW"
+	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
+	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
+	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
+	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
+	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
+	LenderStateShippedReturn      pr_db.PatronRequestState = "SHIPPED_RETURN"
+	LenderStateCancelRequested    pr_db.PatronRequestState = "CANCEL_REQUESTED"
+	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
+	LenderStateCancelled          pr_db.PatronRequestState = "CANCELLED"
+	LenderStateUnfilled           pr_db.PatronRequestState = "UNFILLED"
+)
 
-var BorrowerStateNew = "NEW"
-var BorrowerStateValidated = "VALIDATED"
-var BorrowerStateSent = "SENT"
-var BorrowerStateSupplierLocated = "SUPPLIER_LOCATED"
-var BorrowerStateConditionPending = "CONDITION_PENDING"
-var BorrowerStateWillSupply = "WILL_SUPPLY"
-var BorrowerStateShipped = "SHIPPED"
-var BorrowerStateReceived = "RECEIVED"
-var BorrowerStateCheckedOut = "CHECKED_OUT"
-var BorrowerStateCheckedIn = "CHECKED_IN"
-var BorrowerStateShippedReturned = "SHIPPED_RETURNED"
-var BorrowerStateCancelPending = "CANCEL_PENDING"
-var BorrowerStateCompleted = "COMPLETED"
-var BorrowerStateCancelled = "CANCELLED"
-var BorrowerStateUnfilled = "UNFILLED"
-
-var LenderStateNew = "NEW"
-var LenderStateValidated = "VALIDATED"
-var LenderStateWillSupply = "WILL_SUPPLY"
-var LenderStateConditionPending = "CONDITION_PENDING"
-var LenderStateConditionAccepted = "CONDITION_ACCEPTED"
-var LenderStateShipped = "SHIPPED"
-var LenderStateShippedReturn = "SHIPPED_RETURN"
-var LenderStateCancelRequested = "CANCEL_REQUESTED"
-var LenderStateCompleted = "COMPLETED"
-var LenderStateCancelled = "CANCELLED"
-var LenderStateUnfilled = "UNFILLED"
-
-var ActionValidate = "validate"
-var ActionSendRequest = "send-request"
-var ActionCancelRequest = "cancel-request"
-var ActionAcceptCondition = "accept-condition"
-var ActionRejectCondition = "reject-condition"
-var ActionReceive = "receive"
-var ActionCheckOut = "check-out"
-var ActionCheckIn = "check-in"
-var ActionShipReturn = "ship-return"
-var ActionWillSupply = "will-supply"
-var ActionCannotSupply = "cannot-supply"
-var ActionAddCondition = "add-condition"
-var ActionShip = "ship"
-var ActionMarkReceived = "mark-received"
-var ActionMarkCancelled = "mark-cancelled"
+const (
+	ActionValidate        pr_db.PatronRequestAction = "validate"
+	ActionSendRequest     pr_db.PatronRequestAction = "send-request"
+	ActionCancelRequest   pr_db.PatronRequestAction = "cancel-request"
+	ActionAcceptCondition pr_db.PatronRequestAction = "accept-condition"
+	ActionRejectCondition pr_db.PatronRequestAction = "reject-condition"
+	ActionReceive         pr_db.PatronRequestAction = "receive"
+	ActionCheckOut        pr_db.PatronRequestAction = "check-out"
+	ActionCheckIn         pr_db.PatronRequestAction = "check-in"
+	ActionShipReturn      pr_db.PatronRequestAction = "ship-return"
+	ActionWillSupply      pr_db.PatronRequestAction = "will-supply"
+	ActionCannotSupply    pr_db.PatronRequestAction = "cannot-supply"
+	ActionAddCondition    pr_db.PatronRequestAction = "add-condition"
+	ActionShip            pr_db.PatronRequestAction = "ship"
+	ActionMarkReceived    pr_db.PatronRequestAction = "mark-received"
+	ActionMarkCancelled   pr_db.PatronRequestAction = "mark-cancelled"
+)
 
 type PatronRequestActionService struct {
 	prRepo               pr_db.PrRepo
@@ -96,7 +98,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		return events.LogErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
 	if !a.actionMappingService.GetActionMapping(pr).IsActionAvailable(pr, action) {
-		return events.LogErrorAndReturnResult(ctx, "state "+pr.State+" does not support action "+action, errors.New("invalid action"))
+		return events.LogErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
 	switch pr.Side {
 	case SideBorrowing:
@@ -104,11 +106,11 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	case SideLending:
 		return a.handleLenderAction(ctx, action, pr, event.EventData.CustomData)
 	default:
-		return events.LogErrorAndReturnResult(ctx, "side "+pr.Side+" is not supported", errors.New("invalid side"))
+		return events.LogErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
 }
 
-func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action string, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	switch action {
 	case ActionValidate:
 		return a.validateBorrowingRequest(ctx, pr)
@@ -129,11 +131,11 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case ActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
-		return events.LogErrorAndReturnResult(ctx, "borrower action "+action+" is not implemented yet", errors.New("invalid action"))
+		return events.LogErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 	}
 }
 
-func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action string, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
 	switch action {
 	case ActionValidate:
 		return a.validateLenderRequest(ctx, pr)
@@ -150,11 +152,11 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case ActionMarkCancelled:
 		return a.markCancelledLenderRequest(ctx, pr)
 	default:
-		return events.LogErrorAndReturnResult(ctx, "lender action "+action+" is not implemented yet", errors.New("invalid action"))
+		return events.LogErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 	}
 }
 
-func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state string, result *events.EventResult) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult) (events.EventStatus, *events.EventResult) {
 	pr.State = state
 	pr, err := a.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
 	if err != nil {
@@ -162,7 +164,7 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 	}
 	return events.EventStatusSuccess, result
 }
-func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx common.ExtendedContext, pr pr_db.PatronRequest, state string, result *events.EventResult, status events.EventStatus, eventResult *events.EventResult, httpStatus *int) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult, status events.EventStatus, eventResult *events.EventResult, httpStatus *int) (events.EventStatus, *events.EventResult) {
 	if httpStatus == nil {
 		return status, eventResult
 	}

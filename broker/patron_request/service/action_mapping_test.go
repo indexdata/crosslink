@@ -20,10 +20,10 @@ func TestIsActionAvailable(t *testing.T) {
 
 func TestGetActionsForPatronRequest(t *testing.T) {
 	// Borrower
-	assert.Equal(t, []string{ActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
-	assert.Equal(t, []string{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
+	assert.Equal(t, []pr_db.PatronRequestAction{ActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	assert.Equal(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 
 	// Lender
-	assert.Equal(t, []string{ActionAddCondition, ActionCannotSupply, ActionShip}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
-	assert.Equal(t, []string{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
+	assert.Equal(t, []pr_db.PatronRequestAction{ActionAddCondition, ActionCannotSupply, ActionShip}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+	assert.Equal(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
 }

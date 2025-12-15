@@ -1,6 +1,7 @@
 package events
 
 import (
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 )
@@ -61,13 +62,13 @@ type EventData struct {
 }
 
 type CommonEventData struct {
-	IncomingMessage *iso18626.ISO18626Message `json:"incomingMessage,omitempty"`
-	OutgoingMessage *iso18626.ISO18626Message `json:"outgoingMessage,omitempty"`
-	Problem         *Problem                  `json:"problem,omitempty"`
-	HttpFailure     *httpclient.HttpError     `json:"httpFailure,omitempty"`
-	EventError      *EventError               `json:"eventError,omitempty"`
-	Note            string                    `json:"note,omitempty"`
-	Action          *string                   `json:"action,omitempty"`
+	IncomingMessage *iso18626.ISO18626Message  `json:"incomingMessage,omitempty"`
+	OutgoingMessage *iso18626.ISO18626Message  `json:"outgoingMessage,omitempty"`
+	Problem         *Problem                   `json:"problem,omitempty"`
+	HttpFailure     *httpclient.HttpError      `json:"httpFailure,omitempty"`
+	EventError      *EventError                `json:"eventError,omitempty"`
+	Note            string                     `json:"note,omitempty"`
+	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
 }
 
 type EventError struct {

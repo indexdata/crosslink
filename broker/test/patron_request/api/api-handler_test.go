@@ -110,7 +110,7 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, newPr.ID, foundPr.ID)
 	assert.True(t, foundPr.State != "")
-	assert.Equal(t, prservice.SideBorrowing, foundPr.Side)
+	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, newPr.Timestamp.YearDay(), foundPr.Timestamp.YearDay())
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
@@ -216,11 +216,11 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait till action available
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionSendRequest+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionSendRequest)+"\"]\n"
 	})
 
 	action := proapi.ExecuteAction{
-		Action: prservice.ActionSendRequest,
+		Action: string(prservice.ActionSendRequest),
 	}
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -240,12 +240,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	supplierPrPath := basePath + "/" + supPr.ID
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionWillSupply+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionWillSupply)+"\"]\n"
 	})
 
 	// Will supply
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionWillSupply,
+		Action: string(prservice.ActionWillSupply),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -255,12 +255,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionShip+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionShip)+"\"]\n"
 	})
 
 	// Ship
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionShip,
+		Action: string(prservice.ActionShip),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -270,12 +270,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionReceive+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionReceive)+"\"]\n"
 	})
 
 	// Receive
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionReceive,
+		Action: string(prservice.ActionReceive),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -285,12 +285,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionCheckOut+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionCheckOut)+"\"]\n"
 	})
 
 	// Check out
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionCheckOut,
+		Action: string(prservice.ActionCheckOut),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -300,12 +300,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionCheckIn+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionCheckIn)+"\"]\n"
 	})
 
 	// Check in
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionCheckIn,
+		Action: string(prservice.ActionCheckIn),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -315,12 +315,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionShipReturn+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionShipReturn)+"\"]\n"
 	})
 
 	// Ship return
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionShipReturn,
+		Action: string(prservice.ActionShipReturn),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -330,12 +330,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+prservice.ActionMarkReceived+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.ActionMarkReceived)+"\"]\n"
 	})
 
 	// Ship return
 	action = proapi.ExecuteAction{
-		Action: prservice.ActionMarkReceived,
+		Action: string(prservice.ActionMarkReceived),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -347,14 +347,14 @@ func TestActionsToCompleteState(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, newPr.ID, foundPr.ID)
-	assert.Equal(t, prservice.BorrowerStateCompleted, foundPr.State)
+	assert.Equal(t, string(prservice.BorrowerStateCompleted), foundPr.State)
 
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, supPr.ID, foundPr.ID)
-	assert.Equal(t, prservice.LenderStateCompleted, foundPr.State)
+	assert.Equal(t, string(prservice.LenderStateCompleted), foundPr.State)
 }
 
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {

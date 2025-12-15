@@ -226,7 +226,8 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	_, err = m.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &ActionValidate}}, events.EventDomainPatronRequest, nil)
+	action := ActionValidate
+	_, err = m.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
