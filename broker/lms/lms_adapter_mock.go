@@ -21,8 +21,8 @@ func (l *LmsAdapterMock) AcceptItem(
 	return nil
 }
 
-func (l *LmsAdapterMock) DeleteItem(itemId string) (string, error) {
-	return itemId, nil
+func (l *LmsAdapterMock) DeleteItem(itemId string) error {
+	return nil
 }
 
 func (l *LmsAdapterMock) RequestItem(

@@ -533,8 +533,8 @@ func (l *MockLmsAdapterFail) AcceptItem(
 	return errors.New("AcceptItem failed")
 }
 
-func (l *MockLmsAdapterFail) DeleteItem(itemId string) (string, error) {
-	return "", errors.New("DeleteItem failed")
+func (l *MockLmsAdapterFail) DeleteItem(itemId string) error {
+	return errors.New("DeleteItem failed")
 }
 
 func (l *MockLmsAdapterFail) RequestItem(

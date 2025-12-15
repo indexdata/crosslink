@@ -17,6 +17,10 @@ func TestParseConfigFull(t *testing.T) {
 		"from_agency":                "AGENCY1",
 		"to_agency":                  "AGENCY2",
 		"from_agency_authentication": "auth",
+		"lookup_user_enable":         false,
+		"accept_item_enable":         false,
+		"check_in_item_enable":       false,
+		"check_out_item_enable":      false,
 	}
 	lmsAdapaterNcip := &LmsAdapterNcip{}
 	err := lmsAdapaterNcip.parseConfig(ncipConfig)
@@ -25,6 +29,28 @@ func TestParseConfigFull(t *testing.T) {
 	assert.Equal(t, "AGENCY1", lmsAdapaterNcip.fromAgency)
 	assert.Equal(t, "AGENCY2", lmsAdapaterNcip.toAgency)
 	assert.Equal(t, "auth", lmsAdapaterNcip.fromAgencyAuthentication)
+	assert.False(t, lmsAdapaterNcip.lookupUserEnable)
+	assert.False(t, lmsAdapaterNcip.acceptItemEnable)
+	assert.False(t, lmsAdapaterNcip.checkInItemEnable)
+}
+
+func TestParseConfigOptional(t *testing.T) {
+	// Missing optional to_agency and from_agency_authentication fields
+	ncipConfig := map[string]any{
+		"address":                    "http://ncip.example.com",
+		"from_agency":                "AGENCY1",
+		"from_agency_authentication": "auth",
+	}
+	lmsAdapaterNcip := &LmsAdapterNcip{}
+	err := lmsAdapaterNcip.parseConfig(ncipConfig)
+	assert.NoError(t, err)
+	assert.Equal(t, "http://ncip.example.com", lmsAdapaterNcip.address)
+	assert.Equal(t, "AGENCY1", lmsAdapaterNcip.fromAgency)
+	assert.Equal(t, "default-to-agency", lmsAdapaterNcip.toAgency)
+	assert.Equal(t, "auth", lmsAdapaterNcip.fromAgencyAuthentication)
+	assert.True(t, lmsAdapaterNcip.lookupUserEnable)
+	assert.True(t, lmsAdapaterNcip.acceptItemEnable)
+	assert.True(t, lmsAdapaterNcip.checkInItemEnable)
 }
 
 func TestParseConfigMissing(t *testing.T) {
@@ -47,26 +73,11 @@ func TestParseConfigMissing(t *testing.T) {
 	assert.Equal(t, "missing required NCIP configuration field: from_agency", err.Error())
 }
 
-func TestParseConfigOptional(t *testing.T) {
-	// Missing optional to_agency and from_agency_authentication fields
-	ncipConfig := map[string]any{
-		"address":                    "http://ncip.example.com",
-		"from_agency":                "AGENCY1",
-		"from_agency_authentication": "auth",
-	}
-	lmsAdapaterNcip := &LmsAdapterNcip{}
-	err := lmsAdapaterNcip.parseConfig(ncipConfig)
-	assert.NoError(t, err)
-	assert.Equal(t, "http://ncip.example.com", lmsAdapaterNcip.address)
-	assert.Equal(t, "AGENCY1", lmsAdapaterNcip.fromAgency)
-	assert.Equal(t, "default-to-agency", lmsAdapaterNcip.toAgency)
-	assert.Equal(t, "auth", lmsAdapaterNcip.fromAgencyAuthentication)
-}
-
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipClient: mock,
+		ncipClient:       mock,
+		lookupUserEnable: true,
 	}
 	_, err := ad.LookupUser("")
 	assert.Error(t, err)
@@ -90,13 +101,30 @@ func TestLookupUser(t *testing.T) {
 
 	userId, err = ad.LookupUser("good user")
 	assert.NoError(t, err)
+	assert.Equal(t, "user124", userId)
+
+	userId, err = ad.LookupUser("other user")
+	assert.NoError(t, err)
 	assert.Equal(t, "user123", userId)
+
+	ad.lookupUserEnable = false
+	userId, err = ad.LookupUser("")
+	assert.NoError(t, err)
+	assert.Equal(t, "", userId)
+
+	ad.lookupUserEnable = false
+	mock.(*ncipClientMock).lastRequest = nil
+	userId, err = ad.LookupUser("anyuser")
+	assert.NoError(t, err)
+	assert.Equal(t, "anyuser", userId)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest) // not called
 }
 
 func TestAcceptItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipClient: mock,
+		acceptItemEnable: true,
+		ncipClient:       mock,
 	}
 	err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
 	assert.NoError(t, err)
@@ -124,6 +152,12 @@ func TestAcceptItem(t *testing.T) {
 	assert.Nil(t, req.ItemOptionalFields.ItemDescription)
 	assert.Nil(t, req.PickupLocation)
 	assert.Equal(t, "Hold For Pickup", req.RequestedActionType.Text)
+
+	ad.acceptItemEnable = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
+	assert.NoError(t, err)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestDeleteItem(t *testing.T) {
@@ -131,13 +165,12 @@ func TestDeleteItem(t *testing.T) {
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 	}
-	res, err := ad.DeleteItem("item1")
+	err := ad.DeleteItem("item1")
 	assert.NoError(t, err)
-	assert.Equal(t, "item1", res)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.DeleteItem)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 
-	_, err = ad.DeleteItem("error")
+	err = ad.DeleteItem("error")
 	assert.Error(t, err)
 	assert.Equal(t, "deletion error", err.Error())
 }
@@ -173,7 +206,8 @@ func TestCancelRequestItem(t *testing.T) {
 func TestCheckInItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipClient: mock,
+		ncipClient:        mock,
+		checkInItemEnable: true,
 	}
 	err := ad.CheckInItem("item1")
 	assert.NoError(t, err)
@@ -181,12 +215,19 @@ func TestCheckInItem(t *testing.T) {
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 	assert.Equal(t, 1, len(req.ItemElementType))
 	assert.Equal(t, "Bibliographic Description", req.ItemElementType[0].Text)
+
+	ad.checkInItemEnable = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.CheckInItem("item1")
+	assert.NoError(t, err)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestCheckOutItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	ad := &LmsAdapterNcip{
-		ncipClient: mock,
+		ncipClient:         mock,
+		checkOutItemEnable: true,
 	}
 	err := ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.NoError(t, err)
@@ -197,6 +238,12 @@ func TestCheckOutItem(t *testing.T) {
 	bytes, err := xml.Marshal(ncip.RequestId{RequestIdentifierValue: "extref"})
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
+
+	ad.checkOutItemEnable = false
+	mock.(*ncipClientMock).lastRequest = nil
+	err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	assert.NoError(t, err)
+	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
 func TestCreateUserFiscalTransaction(t *testing.T) {
@@ -232,6 +279,15 @@ func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserRes
 	}
 	if lookup.AuthenticationInput[0].AuthenticationInputData == "missing data" {
 		return &ncip.LookupUserResponse{}, nil
+	}
+	if lookup.AuthenticationInput[0].AuthenticationInputData == "good user" {
+		return &ncip.LookupUserResponse{
+			UserOptionalFields: &ncip.UserOptionalFields{
+				UserId: []ncip.UserId{
+					{UserIdentifierValue: "user124"},
+				},
+			},
+		}, nil
 	}
 	return &ncip.LookupUserResponse{
 		UserId: &ncip.UserId{UserIdentifierValue: "user123"},

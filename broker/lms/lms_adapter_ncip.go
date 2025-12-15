@@ -16,6 +16,22 @@ const (
 	FromAgencyAuthentication NcipProperty = "from_agency_authentication"
 	ToAgency                 NcipProperty = "to_agency"
 	Address                  NcipProperty = "address"
+	LookupUserEnable         NcipProperty = "lookup_user_enable"
+	AcceptItemEnable         NcipProperty = "accept_item_enable"
+	CheckInItemEnable        NcipProperty = "check_in_item_enable"
+	CheckOutItemEnable       NcipProperty = "check_out_item_enable"
+)
+
+type NcipUserElement string
+
+const (
+	NCIPUserId NcipUserElement = "User Id"
+)
+
+type NcipItemElement string
+
+const (
+	NCIPBibliographicDescription NcipItemElement = "Bibliographic Description"
 )
 
 // NCIP LMS Adapter, based on:
@@ -28,20 +44,33 @@ type LmsAdapterNcip struct {
 	toAgency                 string
 	fromAgency               string
 	fromAgencyAuthentication string
+	lookupUserEnable         bool
+	acceptItemEnable         bool
+	checkInItemEnable        bool
+	checkOutItemEnable       bool
 }
 
-func setField(m map[string]any, field NcipProperty, dst *string) error {
-	v, ok := m[string(field)].(string)
+func setField(m map[string]any, key NcipProperty, dst *string) error {
+	v, ok := m[string(key)].(string)
 	if !ok || v == "" {
-		return fmt.Errorf("missing required NCIP configuration field: %s", field)
+		return fmt.Errorf("missing required NCIP configuration field: %s", key)
 	}
 	*dst = v
 	return nil
 }
 
-func optField(m map[string]any, field NcipProperty, dst *string, def string) {
-	v, ok := m[string(field)].(string)
+func optField(m map[string]any, key NcipProperty, dst *string, def string) {
+	v, ok := m[string(key)].(string)
 	if !ok || v == "" {
+		*dst = def
+	} else {
+		*dst = v
+	}
+}
+
+func optBoolField(m map[string]any, key NcipProperty, dst *bool, def bool) {
+	v, ok := m[string(key)].(bool)
+	if !ok {
 		*dst = def
 	} else {
 		*dst = v
@@ -59,6 +88,10 @@ func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
 	}
 	optField(ncipInfo, FromAgencyAuthentication, &l.fromAgencyAuthentication, "")
 	optField(ncipInfo, ToAgency, &l.toAgency, "default-to-agency")
+	optBoolField(ncipInfo, LookupUserEnable, &l.lookupUserEnable, true)
+	optBoolField(ncipInfo, AcceptItemEnable, &l.acceptItemEnable, true)
+	optBoolField(ncipInfo, CheckInItemEnable, &l.checkInItemEnable, true)
+	optBoolField(ncipInfo, CheckOutItemEnable, &l.checkOutItemEnable, true)
 	return nil
 }
 
@@ -73,6 +106,9 @@ func CreateLmsAdapterNcip(ncipInfo map[string]any) (LmsAdapter, error) {
 }
 
 func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
+	if !l.lookupUserEnable {
+		return patron, nil // could even be empty
+	}
 	if patron == "" {
 		return "", fmt.Errorf("empty patron identifier")
 	}
@@ -92,7 +128,7 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 		AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},
 		AuthenticationInputData: patron,
 	})
-	userElements := []ncip.SchemeValuePair{{Text: "User Id"}}
+	userElements := []ncip.SchemeValuePair{{Text: string(NCIPUserId)}}
 	arg = ncip.LookupUser{
 		AuthenticationInput: authenticationInput,
 		UserElementType:     userElements,
@@ -101,10 +137,13 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if response.UserId == nil {
-		return "", fmt.Errorf("missing User ID in LookupUser response")
+	if response.UserOptionalFields != nil && len(response.UserOptionalFields.UserId) != 0 {
+		return response.UserOptionalFields.UserId[0].UserIdentifierValue, nil
 	}
-	return response.UserId.UserIdentifierValue, nil
+	if response.UserId != nil {
+		return response.UserId.UserIdentifierValue, nil
+	}
+	return "", fmt.Errorf("missing User ID in LookupUser response")
 }
 
 func (l *LmsAdapterNcip) AcceptItem(
@@ -118,6 +157,9 @@ func (l *LmsAdapterNcip) AcceptItem(
 	pickupLocation string,
 	requestedAction string,
 ) error {
+	if !l.acceptItemEnable {
+		return nil
+	}
 	var bibliographicItemId *ncip.BibliographicItemId
 	if isbn != "" {
 		bibliographicItemId = &ncip.BibliographicItemId{
@@ -157,15 +199,12 @@ func (l *LmsAdapterNcip) AcceptItem(
 	return err
 }
 
-func (l *LmsAdapterNcip) DeleteItem(itemId string) (string, error) {
+func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
 	arg := ncip.DeleteItem{
 		ItemId: ncip.ItemId{ItemIdentifierValue: itemId},
 	}
-	res, err := l.ncipClient.DeleteItem(arg)
-	if err == nil && res != nil && res.ItemId != nil {
-		return res.ItemId.ItemIdentifierValue, nil
-	}
-	return itemId, err
+	_, err := l.ncipClient.DeleteItem(arg)
+	return err
 }
 
 func (l *LmsAdapterNcip) RequestItem(
@@ -215,8 +254,11 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 }
 
 func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
+	if !l.checkInItemEnable {
+		return nil
+	}
 	itemElements := []ncip.SchemeValuePair{
-		{Text: "Bibliographic Description"},
+		{Text: string(NCIPBibliographicDescription)},
 	}
 	arg := ncip.CheckInItem{
 		ItemId:          ncip.ItemId{ItemIdentifierValue: itemId},
@@ -233,6 +275,9 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	borrowerBarcode string,
 	externalReferenceValue string,
 ) error {
+	if !l.checkOutItemEnable {
+		return nil
+	}
 	var ext *ncip.Ext
 	if externalReferenceValue != "" {
 		externalId := ncip.RequestId{RequestIdentifierValue: externalReferenceValue}

@@ -171,19 +171,11 @@ func (n *NcipClientImpl) prepareHeader(header *ncip.InitiationHeader) *ncip.Init
 	if header == nil {
 		header = &ncip.InitiationHeader{}
 	}
-	from_agency := n.fromAgency
-	if from_agency == "" {
-		from_agency = "default-from-agency"
-	}
 	header.FromAgencyId.AgencyId = ncip.SchemeValuePair{
-		Text: from_agency,
-	}
-	to_agency := n.toAgency
-	if to_agency == "" {
-		to_agency = "default-to-agency"
+		Text: n.fromAgency,
 	}
 	header.ToAgencyId.AgencyId = ncip.SchemeValuePair{
-		Text: to_agency,
+		Text: n.toAgency,
 	}
 	header.FromAgencyAuthentication = n.fromAgencyAuthentication
 	return header

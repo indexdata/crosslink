@@ -44,7 +44,7 @@ func TestGetAdapterNoPeers(t *testing.T) {
 	assert.IsType(t, &LmsAdapterMock{}, LmsAdapter)
 }
 
-func TestGetAdapterNcipMissing(t *testing.T) {
+func TestGetAdapterNcipOK(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
 		CustomData: map[string]any{
@@ -63,6 +63,22 @@ func TestGetAdapterNcipMissing(t *testing.T) {
 	LmsAdapter, err := creator.GetAdapter(ctx, symbol)
 	assert.NoError(t, err)
 	assert.IsType(t, &LmsAdapterNcip{}, LmsAdapter)
+}
+
+func TestGetAdapterNcipFail(t *testing.T) {
+	illRepo := &MockIllRepo{}
+	peer := ill_db.Peer{
+		CustomData: map[string]any{
+			"ncip": map[string]any{},
+		},
+	}
+	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{peer}, "", nil)
+	creator := NewLmsCreator(illRepo, nil)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	symbol := pgtype.Text{String: "TEST", Valid: true}
+	_, err := creator.GetAdapter(ctx, symbol)
+	assert.Error(t, err)
+	assert.Equal(t, "missing required NCIP configuration field: address", err.Error())
 }
 
 type MockIllRepo struct {

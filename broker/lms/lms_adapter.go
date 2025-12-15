@@ -17,7 +17,7 @@ type LmsAdapter interface {
 		requestedAction string,
 	) error
 
-	DeleteItem(itemId string) (string, error)
+	DeleteItem(itemId string) error
 
 	RequestItem(
 		requestId string,
