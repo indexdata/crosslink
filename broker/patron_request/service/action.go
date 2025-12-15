@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"net/http"
@@ -201,8 +202,52 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
+
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	author := illRequest.BibliographicInfo.Author
+	title := illRequest.BibliographicInfo.Title
+	isbn := ""
+	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
+		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
+		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
+	}
+	callNumber := ""
+	if len(illRequest.SupplierInfo) > 0 {
+		callNumber = illRequest.SupplierInfo[0].CallNumber
+	}
+	pickupLocation := ""
+	if len(illRequest.RequestedDeliveryInfo) > 0 {
+		address := illRequest.RequestedDeliveryInfo[0].Address
+		if address != nil {
+			pa := address.PhysicalAddress
+			if pa != nil {
+				pickupLocation = pa.Line1
+				if pa.Line2 != "" {
+					pickupLocation += " " + pa.Line2
+				}
+				if pa.Locality != "" {
+					pickupLocation += " " + pa.Locality
+				}
+				if pa.PostalCode != "" {
+					pickupLocation += " " + pa.PostalCode
+				}
+				if pa.Region != nil {
+					pickupLocation += " " + pa.Region.Text
+				}
+				if pa.Country != nil {
+					pickupLocation += " " + pa.Country.Text
+				}
+			}
+		}
+	}
 	// TODO: get all these parameters from the patron request
-	err = lmsAdapter.AcceptItem("itemId", "requestId", user, "author", "title", "isbn", "callNumber", "pickupLocation", "requestedAction")
+	err = lmsAdapter.AcceptItem(itemId, requestId, user, author, title, isbn, callNumber, pickupLocation, "requestedAction")
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 	}
