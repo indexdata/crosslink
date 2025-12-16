@@ -272,7 +272,7 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
-	itemBarcode string,
+	itemId string,
 	borrowerBarcode string,
 	externalReferenceValue string,
 ) error {
@@ -291,7 +291,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	arg := ncip.CheckOutItem{
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
 		UserId:    &ncip.UserId{UserIdentifierValue: borrowerBarcode},
-		ItemId:    ncip.ItemId{ItemIdentifierValue: itemBarcode},
+		ItemId:    ncip.ItemId{ItemIdentifierValue: itemId},
 		Ext:       ext,
 	}
 	_, err := l.ncipClient.CheckOutItem(arg)

@@ -45,7 +45,7 @@ func (l *LmsAdapterManual) CheckInItem(itemId string) error {
 
 func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
-	itemBarcode string,
+	itemId string,
 	borrowerBarcode string,
 	externalReferenceValue string,
 ) error {

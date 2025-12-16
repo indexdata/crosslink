@@ -33,7 +33,7 @@ type LmsAdapter interface {
 
 	CheckOutItem(
 		requestId string,
-		itemBarcode string,
+		itemId string,
 		borrowerBarcode string,
 		externalReferenceValue string,
 	) error

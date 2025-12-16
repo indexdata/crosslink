@@ -138,15 +138,15 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	user := ""
+	patron := ""
 	if pr.Patron.Valid {
-		user = pr.Patron.String
+		patron = pr.Patron.String
 	}
 	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
-	userId, err := lmsAdapter.LookupUser(user)
+	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 	}
@@ -193,34 +193,8 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateSent, &result)
 }
 
-func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	user := ""
-	if pr.Patron.Valid {
-		user = pr.Patron.String
-	}
-	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
-	}
-
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
-	}
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	author := illRequest.BibliographicInfo.Author
-	title := illRequest.BibliographicInfo.Title
-	isbn := ""
-	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
-		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
-		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
-	}
-	callNumber := ""
-	if len(illRequest.SupplierInfo) > 0 {
-		callNumber = illRequest.SupplierInfo[0].CallNumber
-	}
+// TODO : should be resolved pickup location
+func pickupLocationFromIllRequest(illRequest iso18626.Request) string {
 	pickupLocation := ""
 	if len(illRequest.RequestedDeliveryInfo) > 0 {
 		address := illRequest.RequestedDeliveryInfo[0].Address
@@ -246,8 +220,49 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 			}
 		}
 	}
-	// TODO: get all these parameters from the patron request
-	err = lmsAdapter.AcceptItem(itemId, requestId, user, author, title, isbn, callNumber, pickupLocation, "requestedAction")
+	return pickupLocation
+}
+
+func callNumberFromIllRequest(illRequest iso18626.Request) string {
+	callNumber := ""
+	if len(illRequest.SupplierInfo) > 0 {
+		callNumber = illRequest.SupplierInfo[0].CallNumber
+	}
+	return callNumber
+}
+
+func isbnFromIllRequest(illRequest iso18626.Request) string {
+	isbn := ""
+	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
+		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
+		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
+	}
+	return isbn
+}
+
+func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	patron := ""
+	if pr.Patron.Valid {
+		patron = pr.Patron.String
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	author := illRequest.BibliographicInfo.Author
+	title := illRequest.BibliographicInfo.Title
+	isbn := isbnFromIllRequest(illRequest)
+	callNumber := callNumberFromIllRequest(illRequest)
+	pickupLocation := pickupLocationFromIllRequest(illRequest)
+	requestedAction := "Hold For Pickup"
+	err = lmsAdapter.AcceptItem(itemId, requestId, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 	}
@@ -264,15 +279,23 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	user := ""
+	patron := ""
 	if pr.Patron.Valid {
-		user = pr.Patron.String
+		patron = pr.Patron.String
 	}
 	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
-	err = lmsAdapter.CheckOutItem("requestId", "itemBarcode", user, "externalReferenceValue")
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	borrowerBarcode := patron
+	err = lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, "externalReferenceValue")
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 	}
@@ -284,8 +307,13 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
-	item := "" // TODO Get item identifier from the request
-	err = lmsAdapter.CheckInItem(item)
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	err = lmsAdapter.CheckInItem(itemId)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 	}
@@ -297,8 +325,13 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
-	item := "" // TODO Get item identifier from the request
-	err = lmsAdapter.DeleteItem(item)
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	err = lmsAdapter.DeleteItem(itemId)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 	}
