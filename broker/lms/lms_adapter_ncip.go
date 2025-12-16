@@ -123,9 +123,9 @@ func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	if err == nil {
 		return patron, nil
 	}
-	// then try by user user name
+	// then try by user username
 	// a better solution would be that the LookupUser had type argument (eg barcode or PIN)
-	// but this is now mod-rs does it
+	// but this is how mod-rs does it
 	var authenticationInput []ncip.AuthenticationInput
 	authenticationInput = append(authenticationInput, ncip.AuthenticationInput{
 		AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},

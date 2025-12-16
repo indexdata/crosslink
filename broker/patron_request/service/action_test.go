@@ -146,7 +146,7 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionReceiveBadIllRequeset(t *testing.T) {
+func TestHandleInvokeActionReceiveBadIllRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
@@ -160,13 +160,14 @@ func TestHandleInvokeActionReceiveBadIllRequeset(t *testing.T) {
 	assert.Equal(t, "failed to unmarshal ILL request", resultData.EventError.Message)
 }
 
-func TestHandleInvokeActionReceiveFailCreator(t *testing.T) {
+func TestHandleInvokeActionReceiveGetAdapterFail(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	illRequest := []byte("{\"request\": {}}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateShipped, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionReceive}}})
 
@@ -204,7 +205,7 @@ func TestHandleInvokeActionCheckOutOK(t *testing.T) {
 	assert.Equal(t, BorrowerStateCheckedOut, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionCheckOutFailCreator(t *testing.T) {
+func TestHandleInvokeActionCheckOutGetAdapterFail(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
@@ -215,6 +216,19 @@ func TestHandleInvokeActionCheckOutFailCreator(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckOutBadIllRequest(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	illRequest := []byte("{\"bad\": {}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateReceived, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckOut}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to unmarshal ILL request", resultData.EventError.Message)
 }
 
 func TestHandleInvokeActionCheckOutFails(t *testing.T) {
@@ -245,16 +259,30 @@ func TestHandleInvokeActionCheckInOK(t *testing.T) {
 	assert.Equal(t, BorrowerStateCheckedIn, mockPrRepo.savedPr.State)
 }
 
-func TestHandleInvokeActionCheckInFailCreator(t *testing.T) {
+func TestHandleInvokeActionCheckInGetAdapterFail(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+	illRequest := []byte("{\"request\": {}}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
+}
+
+func TestHandleInvokeActionCheckInBadIllRequest(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
+	illRequest := []byte("{\"bad\": {}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateCheckedOut, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &ActionCheckIn}}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "failed to unmarshal ILL request", resultData.EventError.Message)
 }
 
 func TestHandleInvokeActionCheckInFails(t *testing.T) {
@@ -620,4 +648,47 @@ func (l *MockLmsAdapterFail) CheckOutItem(
 
 func (l *MockLmsAdapterFail) CreateUserFiscalTransaction(userId string, itemId string) error {
 	return errors.New("CreateUserFiscalTransaction failed")
+}
+
+func TestPickupLocationFromIllRequest(t *testing.T) {
+	var r iso18626.Request
+	r.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{
+		Address: &iso18626.Address{
+			PhysicalAddress: &iso18626.PhysicalAddress{
+				Line1:      "Main Library",
+				Line2:      "123 Library St",
+				Locality:   "Booktown",
+				PostalCode: "12345",
+				Region:     &iso18626.TypeSchemeValuePair{Text: "State"},
+				Country:    &iso18626.TypeSchemeValuePair{Text: "Country"},
+			},
+		},
+	}}
+	location := pickupLocationFromIllRequest(r)
+	assert.Equal(t, "Main Library 123 Library St Booktown 12345 State Country", location)
+}
+
+func TestIsbnFromIllRequest(t *testing.T) {
+	var r iso18626.Request
+	r.BibliographicInfo = iso18626.BibliographicInfo{
+		BibliographicItemId: []iso18626.BibliographicItemId{
+			{
+				BibliographicItemIdentifier: "978-3-16-148410-0",
+				BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+					Text: "ISBN",
+				},
+			},
+		},
+	}
+	isbn := isbnFromIllRequest(r)
+	assert.Equal(t, "978-3-16-148410-0", isbn)
+}
+
+func TestCallNumberFromIllRequest(t *testing.T) {
+	var r iso18626.Request
+	r.SupplierInfo = []iso18626.SupplierInfo{{
+		CallNumber: "QA76.73.G63 D37 2020",
+	}}
+	callNumber := callNumberFromIllRequest(r)
+	assert.Equal(t, "QA76.73.G63 D37 2020", callNumber)
 }
