@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -15,6 +16,7 @@ import (
 const COMP = "supplier_locator"
 const SUP_PROBLEM = "no-suppliers"
 const ROTA_INFO_KEY = "rotaInfo"
+const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
 	eventBus        events.EventBus
@@ -207,7 +209,13 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if len(suppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
-	locSup := suppliers[0]
+	locSup, err := s.getNextSupplier(ctx, suppliers)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not find supplier peer", err)
+	}
+	if locSup.ID == "" {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
+	}
 	locSup.SupplierStatus = ill_db.SupplierStateSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
@@ -216,6 +224,78 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier},
 	}
+}
+
+func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, error) {
+	for _, sup := range suppliers {
+		if sup.ID != "" {
+			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
+			if err != nil {
+				return ill_db.LocatedSupplier{}, err
+			}
+			timeZone, _ := peer.CustomData["timeZone"].(string)
+			if listMap, ok := peer.CustomData["closures"].([]any); ok && len(listMap) > 0 {
+				skipSup := false
+				for _, c := range listMap {
+					if closuresMap, castOk := c.(map[string]any); castOk {
+						startDateS, startDateOk := closuresMap["startDate"].(string)
+						endDateS, endDateOk := closuresMap["endDate"].(string)
+						if startDateOk && endDateOk {
+							startDate, err := getDateWithTimezone(startDateS, timeZone, false)
+							if err != nil {
+								ctx.Logger().Error("failed to parse closure start date", "error", err)
+								skipSup = true
+								continue
+							}
+							endDate, err := getDateWithTimezone(endDateS, timeZone, true)
+							if err != nil {
+								ctx.Logger().Error("failed to parse closure start date", "error", err)
+								skipSup = true
+								continue
+							}
+							currentTime := time.Now()
+							if startDate.Before(currentTime) && endDate.After(currentTime) {
+								skipSup = true
+							}
+						}
+					}
+				}
+				if skipSup {
+					continue
+				}
+			}
+			return sup, nil
+		}
+	}
+	return ill_db.LocatedSupplier{}, nil
+}
+func getDateWithTimezone(date string, timezone string, endOfDay bool) (time.Time, error) {
+	var loc *time.Location
+	if timezone != "" {
+		timezoneLoc, err := time.LoadLocation(timezone)
+		if err != nil {
+			return time.Time{}, err
+		}
+		loc = timezoneLoc
+	} else {
+		loc = time.Now().Location()
+	}
+	t, err := time.Parse(DATE_LAYOUT, date)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if endOfDay {
+		t = t.Add(24 * time.Hour)
+	}
+	year, month, day := t.Year(), t.Month(), t.Day()
+	returnDate := time.Date(year, month, day,
+		0, 0, 0, 0, // Hour, Minute, Second, Nanosecond (set to midnight)
+		loc,
+	)
+	if endOfDay {
+		returnDate = returnDate.Add(-time.Nanosecond)
+	}
+	return returnDate, nil
 }
 
 func getPeerRatio(peer ill_db.Peer) float32 {
