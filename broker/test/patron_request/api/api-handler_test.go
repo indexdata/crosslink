@@ -216,11 +216,11 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait till action available
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionSendRequest)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.BorrowerActionSendRequest)+"\"]\n"
 	})
 
 	action := proapi.ExecuteAction{
-		Action: string(prservice.ActionSendRequest),
+		Action: string(prservice.BorrowerActionSendRequest),
 	}
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -240,12 +240,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	supplierPrPath := basePath + "/" + supPr.ID
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionWillSupply)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.LenderActionWillSupply)+"\"]\n"
 	})
 
 	// Will supply
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionWillSupply),
+		Action: string(prservice.LenderActionWillSupply),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -255,12 +255,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionShip)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.LenderActionShip)+"\"]\n"
 	})
 
 	// Ship
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionShip),
+		Action: string(prservice.LenderActionShip),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -270,12 +270,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionReceive)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.BorrowerActionReceive)+"\"]\n"
 	})
 
 	// Receive
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionReceive),
+		Action: string(prservice.BorrowerActionReceive),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -285,12 +285,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionCheckOut)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.BorrowerActionCheckOut)+"\"]\n"
 	})
 
 	// Check out
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionCheckOut),
+		Action: string(prservice.BorrowerActionCheckOut),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -300,12 +300,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionCheckIn)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.BorrowerActionCheckIn)+"\"]\n"
 	})
 
 	// Check in
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionCheckIn),
+		Action: string(prservice.BorrowerActionCheckIn),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -315,12 +315,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionShipReturn)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.BorrowerActionShipReturn)+"\"]\n"
 	})
 
 	// Ship return
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionShipReturn),
+		Action: string(prservice.BorrowerActionShipReturn),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
@@ -330,12 +330,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions", []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.ActionMarkReceived)+"\"]\n"
+		return string(respBytes) == "[\""+string(prservice.LenderActionMarkReceived)+"\"]\n"
 	})
 
 	// Ship return
 	action = proapi.ExecuteAction{
-		Action: string(prservice.ActionMarkReceived),
+		Action: string(prservice.LenderActionMarkReceived),
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")

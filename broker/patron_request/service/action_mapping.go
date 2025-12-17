@@ -11,24 +11,24 @@ type ActionMapping interface {
 }
 
 var returnableBorrowerStateActionMapping = map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-	BorrowerStateNew:              {ActionValidate},
-	BorrowerStateValidated:        {ActionSendRequest},
-	BorrowerStateSupplierLocated:  {ActionCancelRequest},
-	BorrowerStateConditionPending: {ActionAcceptCondition, ActionRejectCondition},
-	BorrowerStateWillSupply:       {ActionCancelRequest},
-	BorrowerStateShipped:          {ActionReceive},
-	BorrowerStateReceived:         {ActionCheckOut},
-	BorrowerStateCheckedOut:       {ActionCheckIn},
-	BorrowerStateCheckedIn:        {ActionShipReturn},
+	BorrowerStateNew:              {BorrowerActionValidate},
+	BorrowerStateValidated:        {BorrowerActionSendRequest},
+	BorrowerStateSupplierLocated:  {BorrowerActionCancelRequest},
+	BorrowerStateConditionPending: {BorrowerActionAcceptCondition, BorrowerActionRejectCondition},
+	BorrowerStateWillSupply:       {BorrowerActionCancelRequest},
+	BorrowerStateShipped:          {BorrowerActionReceive},
+	BorrowerStateReceived:         {BorrowerActionCheckOut},
+	BorrowerStateCheckedOut:       {BorrowerActionCheckIn},
+	BorrowerStateCheckedIn:        {BorrowerActionShipReturn},
 }
 var returnableLenderStateActionMapping = map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-	LenderStateNew:               {ActionValidate},
-	LenderStateValidated:         {ActionWillSupply, ActionCannotSupply, ActionAddCondition},
-	LenderStateWillSupply:        {ActionAddCondition, ActionCannotSupply, ActionShip},
-	LenderStateConditionPending:  {ActionCannotSupply},
-	LenderStateConditionAccepted: {ActionShip, ActionCannotSupply},
-	LenderStateShippedReturn:     {ActionMarkReceived},
-	LenderStateCancelRequested:   {ActionMarkCancelled, ActionWillSupply},
+	LenderStateNew:               {LenderActionValidate},
+	LenderStateValidated:         {LenderActionWillSupply, LenderActionCannotSupply, LenderActionAddCondition},
+	LenderStateWillSupply:        {LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip},
+	LenderStateConditionPending:  {LenderActionCannotSupply},
+	LenderStateConditionAccepted: {LenderActionShip, LenderActionCannotSupply},
+	LenderStateShippedReturn:     {LenderActionMarkReceived},
+	LenderStateCancelRequested:   {LenderActionMarkCancelled, LenderActionWillSupply},
 }
 
 type ActionMappingService struct {

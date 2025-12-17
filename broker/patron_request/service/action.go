@@ -48,21 +48,23 @@ const (
 )
 
 const (
-	ActionValidate        pr_db.PatronRequestAction = "validate"
-	ActionSendRequest     pr_db.PatronRequestAction = "send-request"
-	ActionCancelRequest   pr_db.PatronRequestAction = "cancel-request"
-	ActionAcceptCondition pr_db.PatronRequestAction = "accept-condition"
-	ActionRejectCondition pr_db.PatronRequestAction = "reject-condition"
-	ActionReceive         pr_db.PatronRequestAction = "receive"
-	ActionCheckOut        pr_db.PatronRequestAction = "check-out"
-	ActionCheckIn         pr_db.PatronRequestAction = "check-in"
-	ActionShipReturn      pr_db.PatronRequestAction = "ship-return"
-	ActionWillSupply      pr_db.PatronRequestAction = "will-supply"
-	ActionCannotSupply    pr_db.PatronRequestAction = "cannot-supply"
-	ActionAddCondition    pr_db.PatronRequestAction = "add-condition"
-	ActionShip            pr_db.PatronRequestAction = "ship"
-	ActionMarkReceived    pr_db.PatronRequestAction = "mark-received"
-	ActionMarkCancelled   pr_db.PatronRequestAction = "mark-cancelled"
+	BorrowerActionValidate        pr_db.PatronRequestAction = "validate"
+	BorrowerActionSendRequest     pr_db.PatronRequestAction = "send-request"
+	BorrowerActionCancelRequest   pr_db.PatronRequestAction = "cancel-request"
+	BorrowerActionAcceptCondition pr_db.PatronRequestAction = "accept-condition"
+	BorrowerActionRejectCondition pr_db.PatronRequestAction = "reject-condition"
+	BorrowerActionReceive         pr_db.PatronRequestAction = "receive"
+	BorrowerActionCheckOut        pr_db.PatronRequestAction = "check-out"
+	BorrowerActionCheckIn         pr_db.PatronRequestAction = "check-in"
+	BorrowerActionShipReturn      pr_db.PatronRequestAction = "ship-return"
+
+	LenderActionValidate      pr_db.PatronRequestAction = "validate"
+	LenderActionWillSupply    pr_db.PatronRequestAction = "will-supply"
+	LenderActionCannotSupply  pr_db.PatronRequestAction = "cannot-supply"
+	LenderActionAddCondition  pr_db.PatronRequestAction = "add-condition"
+	LenderActionShip          pr_db.PatronRequestAction = "ship"
+	LenderActionMarkReceived  pr_db.PatronRequestAction = "mark-received"
+	LenderActionMarkCancelled pr_db.PatronRequestAction = "mark-cancelled"
 )
 
 type PatronRequestActionService struct {
@@ -112,23 +114,23 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 
 func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	switch action {
-	case ActionValidate:
+	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr)
-	case ActionSendRequest:
+	case BorrowerActionSendRequest:
 		return a.sendBorrowingRequest(ctx, pr)
-	case ActionReceive:
+	case BorrowerActionReceive:
 		return a.receiveBorrowingRequest(ctx, pr)
-	case ActionCheckOut:
+	case BorrowerActionCheckOut:
 		return a.checkoutBorrowingRequest(ctx, pr)
-	case ActionCheckIn:
+	case BorrowerActionCheckIn:
 		return a.checkinBorrowingRequest(ctx, pr)
-	case ActionShipReturn:
+	case BorrowerActionShipReturn:
 		return a.shipReturnBorrowingRequest(ctx, pr)
-	case ActionCancelRequest:
+	case BorrowerActionCancelRequest:
 		return a.cancelBorrowingRequest(ctx, pr)
-	case ActionAcceptCondition:
+	case BorrowerActionAcceptCondition:
 		return a.acceptConditionBorrowingRequest(ctx, pr)
-	case ActionRejectCondition:
+	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
 		return events.LogErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
@@ -137,19 +139,19 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 
 func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
 	switch action {
-	case ActionValidate:
+	case LenderActionValidate:
 		return a.validateLenderRequest(ctx, pr)
-	case ActionWillSupply:
+	case LenderActionWillSupply:
 		return a.willSupplyLenderRequest(ctx, pr)
-	case ActionCannotSupply:
+	case LenderActionCannotSupply:
 		return a.cannotSupplyLenderRequest(ctx, pr)
-	case ActionAddCondition:
+	case LenderActionAddCondition:
 		return a.addConditionsLenderRequest(ctx, pr, actionParams)
-	case ActionShip:
+	case LenderActionShip:
 		return a.shipLenderRequest(ctx, pr)
-	case ActionMarkReceived:
+	case LenderActionMarkReceived:
 		return a.markReceivedLenderRequest(ctx, pr)
-	case ActionMarkCancelled:
+	case LenderActionMarkCancelled:
 		return a.markCancelledLenderRequest(ctx, pr)
 	default:
 		return events.LogErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
@@ -351,7 +353,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			Note:             "#ReShareAddLoanCondition#", // TODO add action params
+			Note:             RESHARE_ADD_LOAN_CONDITION, // TODO add action params
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateConditionPending, &result, status, eventResult, httpStatus)
