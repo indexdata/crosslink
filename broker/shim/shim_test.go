@@ -687,3 +687,72 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Equal(t, "USD", resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text, "OfferedCosts.CurrencyCode should be USD")
 	assert.Equal(t, "other", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text, "LoanCondition should be 'other'")
 }
+
+func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
+	shima := new(Iso18626AlmaShim)
+	sam := iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+				Text: "Cannot find item",
+			},
+			Note: "Sorry cannot send",
+		},
+	}
+	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	assert.Equal(t, "Sorry cannot send, Status: Unfilled, Reason: Cannot find item", sam.MessageInfo.Note)
+
+	// No note
+	sam = iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+				Text: "Cannot find item",
+			},
+		},
+	}
+	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	assert.Equal(t, "Status: Unfilled, Reason: Cannot find item", sam.MessageInfo.Note)
+
+	// No reason
+	sam = iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+		},
+	}
+	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	assert.Equal(t, "Status: Unfilled", sam.MessageInfo.Note)
+
+	// Not unfilled
+	sam = iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusExpectToSupply,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+		},
+	}
+	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+
+	// Not notification
+	sam = iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	}
+	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	assert.Equal(t, "", sam.MessageInfo.Note)
+}
