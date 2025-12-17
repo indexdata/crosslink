@@ -227,12 +227,11 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 }
 
 func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, error) {
-	var locSup ill_db.LocatedSupplier
 	for _, sup := range suppliers {
 		if sup.ID != "" {
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
-				return locSup, err
+				return ill_db.LocatedSupplier{}, err
 			}
 			timeZone, _ := peer.CustomData["timeZone"].(string)
 			if listMap, ok := peer.CustomData["closures"].([]any); ok && len(listMap) > 0 {
@@ -265,11 +264,10 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 					continue
 				}
 			}
-			locSup = sup
-			break
+			return sup, nil
 		}
 	}
-	return locSup, nil
+	return ill_db.LocatedSupplier{}, nil
 }
 func getDateWithTimezone(date string, timezone string, endOfDay bool) (time.Time, error) {
 	var loc *time.Location
