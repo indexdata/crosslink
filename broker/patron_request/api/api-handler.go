@@ -20,16 +20,18 @@ import (
 var waitingReqs = map[string]RequestWait{}
 
 type PatronRequestApiHandler struct {
-	prRepo         pr_db.PrRepo
-	eventBus       events.EventBus
-	tenantToSymbol common.TenantToSymbol
+	prRepo               pr_db.PrRepo
+	eventBus             events.EventBus
+	actionMappingService prservice.ActionMappingService
+	tenantToSymbol       common.TenantToSymbol
 }
 
 func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenantToSymbol common.TenantToSymbol) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
-		prRepo:         prRepo,
-		eventBus:       eventBus,
-		tenantToSymbol: tenantToSymbol,
+		prRepo:               prRepo,
+		eventBus:             eventBus,
+		actionMappingService: prservice.ActionMappingService{},
+		tenantToSymbol:       tenantToSymbol,
 	}
 }
 
@@ -70,8 +72,8 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
-
-	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &prservice.ActionValidate}}, events.EventDomainPatronRequest, nil)
+	action := prservice.BorrowerActionValidate
+	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -135,7 +137,8 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 			return
 		}
 	}
-	writeJsonResponse(w, prservice.GetBorrowerActionsByState(pr.State))
+	actions := a.actionMappingService.GetActionMapping(pr).GetActionsForPatronRequest(pr)
+	writeJsonResponse(w, actions)
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
@@ -158,12 +161,13 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 			return
 		}
 	}
-	if !prservice.IsBorrowerActionAvailable(pr.State, action.Action) {
+
+	if !a.actionMappingService.GetActionMapping(pr).IsActionAvailable(pr, pr_db.PatronRequestAction(action.Action)) {
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}
-
-	data := events.EventData{CommonEventData: events.CommonEventData{Action: &action.Action}}
+	eventAction := pr_db.PatronRequestAction(action.Action)
+	data := events.EventData{CommonEventData: events.CommonEventData{Action: &eventAction}}
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
@@ -234,8 +238,8 @@ func toApiPatronRequest(request pr_db.PatronRequest) proapi.PatronRequest {
 	return proapi.PatronRequest{
 		ID:              request.ID,
 		Timestamp:       request.Timestamp.Time,
-		State:           request.State,
-		Side:            request.Side,
+		State:           string(request.State),
+		Side:            string(request.Side),
 		Patron:          toString(request.Patron),
 		RequesterSymbol: toString(request.RequesterSymbol),
 		SupplierSymbol:  toString(request.SupplierSymbol),

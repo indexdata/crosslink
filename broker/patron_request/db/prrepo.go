@@ -3,6 +3,7 @@ package pr_db
 import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type PrRepo interface {
@@ -11,6 +12,7 @@ type PrRepo interface {
 	ListPatronRequests(ctx common.ExtendedContext) ([]PatronRequest, error)
 	SavePatronRequest(ctx common.ExtendedContext, params SavePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
+	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
 }
 
 type PgPrRepo struct {
@@ -53,4 +55,18 @@ func (r *PgPrRepo) SavePatronRequest(ctx common.ExtendedContext, params SavePatr
 
 func (r *PgPrRepo) DeletePatronRequest(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeletePatronRequest(ctx, r.GetConnOrTx(), id)
+}
+
+func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error) {
+	row, err := r.queries.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, r.GetConnOrTx(), GetPatronRequestBySupplierSymbolAndRequesterReqIdParams{
+		SupplierSymbol: pgtype.Text{
+			String: supplierSymbol,
+			Valid:  true,
+		},
+		RequesterReqID: pgtype.Text{
+			String: requesterReId,
+			Valid:  true,
+		},
+	})
+	return row.PatronRequest, err
 }
