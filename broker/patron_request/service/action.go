@@ -4,14 +4,16 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"net/http"
+	"strings"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
-	"net/http"
-	"strings"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const COMP = "pr_action_service"
@@ -69,18 +71,18 @@ const (
 
 type PatronRequestActionService struct {
 	prRepo               pr_db.PrRepo
-	illRepo              ill_db.IllRepo
 	eventBus             events.EventBus
 	iso18626Handler      handler.Iso18626HandlerInterface
+	lmsCreator           lms.LmsCreator
 	actionMappingService ActionMappingService
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) PatronRequestActionService {
 	return PatronRequestActionService{
 		prRepo:               prRepo,
-		illRepo:              illRepo,
 		eventBus:             eventBus,
 		iso18626Handler:      iso18626Handler,
+		lmsCreator:           lmsCreator,
 		actionMappingService: ActionMappingService{},
 	}
 }
@@ -178,9 +180,21 @@ func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx co
 }
 
 func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	if !pr.Tenant.Valid {
-		return events.LogErrorAndReturnResult(ctx, "missing tenant", nil)
+	patron := ""
+	if pr.Patron.Valid {
+		patron = pr.Patron.String
 	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	userId, err := lmsAdapter.LookupUser(patron)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+	}
+	// change patron to canonical user id
+	// perhaps it would be better to have both original and canonical id stored?
+	pr.Patron = pgtype.Text{String: userId, Valid: true}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateValidated, nil)
 }
 
@@ -225,7 +239,79 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateSent, &result)
 }
 
+// TODO : should be resolved pickup location
+func pickupLocationFromIllRequest(illRequest iso18626.Request) string {
+	pickupLocation := ""
+	if len(illRequest.RequestedDeliveryInfo) > 0 {
+		address := illRequest.RequestedDeliveryInfo[0].Address
+		if address != nil {
+			pa := address.PhysicalAddress
+			if pa != nil {
+				pickupLocation = pa.Line1
+				if pa.Line2 != "" {
+					pickupLocation += " " + pa.Line2
+				}
+				if pa.Locality != "" {
+					pickupLocation += " " + pa.Locality
+				}
+				if pa.PostalCode != "" {
+					pickupLocation += " " + pa.PostalCode
+				}
+				if pa.Region != nil {
+					pickupLocation += " " + pa.Region.Text
+				}
+				if pa.Country != nil {
+					pickupLocation += " " + pa.Country.Text
+				}
+			}
+		}
+	}
+	return pickupLocation
+}
+
+func callNumberFromIllRequest(illRequest iso18626.Request) string {
+	callNumber := ""
+	if len(illRequest.SupplierInfo) > 0 {
+		callNumber = illRequest.SupplierInfo[0].CallNumber
+	}
+	return callNumber
+}
+
+func isbnFromIllRequest(illRequest iso18626.Request) string {
+	isbn := ""
+	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
+		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
+		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
+	}
+	return isbn
+}
+
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	patron := ""
+	if pr.Patron.Valid {
+		patron = pr.Patron.String
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	author := illRequest.BibliographicInfo.Author
+	title := illRequest.BibliographicInfo.Title
+	isbn := isbnFromIllRequest(illRequest)
+	callNumber := callNumberFromIllRequest(illRequest)
+	pickupLocation := pickupLocationFromIllRequest(illRequest)
+	requestedAction := "Hold For Pickup"
+	err = lmsAdapter.AcceptItem(itemId, requestId, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived)
 	if httpStatus == nil {
@@ -239,16 +325,62 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
+	patron := ""
+	if pr.Patron.Valid {
+		patron = pr.Patron.String
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	borrowerBarcode := patron
+	err = lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, "externalReferenceValue")
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedOut, nil)
 }
 
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	err = lmsAdapter.CheckInItem(itemId)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedIn, nil)
 }
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	var illRequest iso18626.Request
+	err = json.Unmarshal(pr.IllRequest, &illRequest)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to unmarshal ILL request", err)
+	}
+	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	err = lmsAdapter.DeleteItem(itemId)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn)
 	if httpStatus == nil {

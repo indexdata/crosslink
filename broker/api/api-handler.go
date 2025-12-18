@@ -41,10 +41,10 @@ type ApiHandler struct {
 	limitDefault   int32
 	eventRepo      events.EventRepo
 	illRepo        ill_db.IllRepo
-	tenantToSymbol string // non-empty if in /broker mode
+	tenantToSymbol common.TenantToSymbol
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol string, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol common.TenantToSymbol, limitDefault int32) ApiHandler {
 	return ApiHandler{
 		eventRepo:      eventRepo,
 		illRepo:        illRepo,
@@ -53,25 +53,17 @@ func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToS
 	}
 }
 
-func (a *ApiHandler) isTenantMode() bool {
-	return a.tenantToSymbol != ""
-}
-
-func (a *ApiHandler) getSymbolFromTenant(tenant string) string {
-	return strings.ReplaceAll(a.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))
-}
-
 func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
 	}
-	if !a.isTenantMode() {
+	if !a.tenantToSymbol.TenantMode() {
 		return true
 	}
 	if tenant == nil {
 		return false
 	}
-	return trans.RequesterSymbol.String == a.getSymbolFromTenant(*tenant)
+	return trans.RequesterSymbol.String == a.tenantToSymbol.GetSymbolFromTenant(*tenant)
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.ResponseWriter,
@@ -176,10 +168,10 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.isTenantMode() {
+	} else if a.tenantToSymbol.TenantMode() {
 		var tenantSymbol string
 		if params.XOkapiTenant != nil {
-			tenantSymbol = a.getSymbolFromTenant(*params.XOkapiTenant)
+			tenantSymbol = a.tenantToSymbol.GetSymbolFromTenant(*params.XOkapiTenant)
 		} else if params.RequesterSymbol != nil {
 			tenantSymbol = *params.RequesterSymbol
 		}
