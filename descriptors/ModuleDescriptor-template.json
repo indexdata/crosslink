@@ -8,27 +8,27 @@
       "handlers": [
         {
           "methods": ["GET"],
-          "pathPattern": "/consortia",
+          "pathPattern": "/rsdir/consortia",
           "permissionsRequired": ["directory.consortia.collection.get"]
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/consortia",
+          "pathPattern": "/rsdir/consortia",
           "permissionsRequired": ["directory.consortia.item.post"]
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/consortia/{id}",
+          "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired": ["directory.consortia.item.get"]
         },
         {
           "methods": ["PATCH"],
-          "pathPattern": "/consortia/{id}",
+          "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired": ["directory.consortia.item.patch"]
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/consortia/{id}",
+          "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired": ["directory.consortia.item.delete"]
         }
       ]
@@ -39,27 +39,27 @@
       "handlers": [
         {
           "methods": ["GET"],
-          "pathPattern": "/entries",
+          "pathPattern": "/rsdir/entries",
           "permissionsRequired": ["directory.entries.collection.get"]
         },
         {
           "methods": ["POST"],
-          "pathPattern": "/entries",
+          "pathPattern": "/rsdir/entries",
           "permissionsRequired": ["directory.entries.item.post"]
         },
         {
           "methods": ["GET"],
-          "pathPattern": "/entries/{key}/{value}",
+          "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired": ["directory.entries.item.get"]
         },
         {
           "methods": ["PATCH"],
-          "pathPattern": "/entries/{key}/{value}",
+          "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired": ["directory.entries.item.patch"]
         },
         {
           "methods": ["DELETE"],
-          "pathPattern": "/entries/{key}/{value}",
+          "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired": ["directory.entries.item.delete"]
         }
       ]
