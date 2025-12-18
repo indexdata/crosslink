@@ -65,8 +65,9 @@ securityContext: {}
   # runAsUser: 1000
 
 service:
-  type: LoadBalancer
-  httpPort: 80
+  type: ClusterIP
+  httpPort: 8086
+  httpTargetPort: 8086
 
 serviceAnnotations: {}
 
