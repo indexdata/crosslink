@@ -106,7 +106,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Mess
 			if suppMsg.StatusInfo.Status == iso18626.TypeStatusLoaned {
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
-			i.prependUnfilledStatusAndReasonUnfilled(suppMsg)
+			i.appendUnfilledStatusAndReasonUnfilled(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -184,16 +184,16 @@ func (i *Iso18626AlmaShim) prependLoanConditionOrCostToNote(suppMsg *iso18626.Su
 	}
 }
 
-func (i *Iso18626AlmaShim) prependUnfilledStatusAndReasonUnfilled(suppMsg *iso18626.SupplyingAgencyMessage) {
+func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso18626.SupplyingAgencyMessage) {
 	if suppMsg.StatusInfo.Status == iso18626.TypeStatusUnfilled &&
 		suppMsg.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification {
 		if suppMsg.MessageInfo.Note == "" {
 			suppMsg.MessageInfo.Note = "Status: Unfilled"
 		} else {
-			suppMsg.MessageInfo.Note += ", Status: Unfilled"
+			suppMsg.MessageInfo.Note += NOTE_FIELD_SEP + "Status: Unfilled"
 		}
 		if suppMsg.MessageInfo.ReasonUnfilled != nil {
-			suppMsg.MessageInfo.Note += ", Reason: " + suppMsg.MessageInfo.ReasonUnfilled.Text
+			suppMsg.MessageInfo.Note += NOTE_FIELD_SEP + "Reason: " + suppMsg.MessageInfo.ReasonUnfilled.Text
 		}
 	}
 }

@@ -688,7 +688,7 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Equal(t, "other", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text, "LoanCondition should be 'other'")
 }
 
-func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
+func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 	shima := new(Iso18626AlmaShim)
 	sam := iso18626.SupplyingAgencyMessage{
 		StatusInfo: iso18626.StatusInfo{
@@ -702,7 +702,7 @@ func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
 			Note: "Sorry cannot send",
 		},
 	}
-	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "Sorry cannot send, Status: Unfilled, Reason: Cannot find item", sam.MessageInfo.Note)
 
 	// No note
@@ -717,7 +717,7 @@ func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
 			},
 		},
 	}
-	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "Status: Unfilled, Reason: Cannot find item", sam.MessageInfo.Note)
 
 	// No reason
@@ -729,7 +729,7 @@ func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
 		},
 	}
-	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "Status: Unfilled", sam.MessageInfo.Note)
 
 	// Not unfilled
@@ -741,7 +741,7 @@ func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
 		},
 	}
-	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	// Not notification
@@ -753,6 +753,6 @@ func TestPrependUnfilledStatusAndReasonUnfilled(t *testing.T) {
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 	}
-	shima.prependUnfilledStatusAndReasonUnfilled(&sam)
+	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 }
