@@ -57,8 +57,9 @@ func TestGetNextSupplierEmptyMap(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -82,8 +83,9 @@ func TestGetNextSupplierClosed(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 1)
 	assert.Equal(t, "", locSup.ID)
 }
 
@@ -93,8 +95,9 @@ func TestGetNextSupplierFailToLoadPeer(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{}, errors.New("db error"))
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.Equal(t, "db error", err.Error())
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "", locSup.ID)
 }
 
@@ -110,8 +113,9 @@ func TestGetNextSupplierNoClosures(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -133,8 +137,9 @@ func TestGetNextSupplierNoStartDate(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -156,8 +161,9 @@ func TestGetNextSupplierNoEndDate(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -181,8 +187,9 @@ func TestGetNextSupplierBothInPast(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -206,8 +213,9 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
 	assert.Equal(t, "1", locSup.ID)
 }
 
@@ -230,8 +238,9 @@ func TestGetNextSupplierCannotParseDate(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 1)
 	assert.Equal(t, "", locSup.ID)
 }
 
@@ -254,8 +263,9 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
 	assert.NoError(t, err)
+	assert.Len(t, skipped, 1)
 	assert.Equal(t, "", locSup.ID)
 }
 
