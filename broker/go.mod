@@ -2,12 +2,6 @@ module github.com/indexdata/crosslink/broker
 
 go 1.25
 
-require (
-	github.com/indexdata/crosslink/httpclient v0.0.0
-	github.com/indexdata/crosslink/illmock v0.0.0
-	github.com/indexdata/crosslink/iso18626 v0.0.0
-)
-
 replace (
 	github.com/indexdata/crosslink/httpclient => ../httpclient
 	github.com/indexdata/crosslink/illmock => ../illmock
