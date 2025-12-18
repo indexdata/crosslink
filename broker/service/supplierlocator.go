@@ -209,7 +209,7 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if len(suppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
-	locSup, err := s.getNextSupplier(ctx, suppliers)
+	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not find supplier peer", err)
 	}
@@ -221,17 +221,20 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	return events.EventStatusSuccess, &events.EventResult{
-		CustomData: map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier},
+	eventData := map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier}
+	if len(skippedSuppliers) > 0 {
+		eventData["skippedSuppliers"] = skippedSuppliers
 	}
+	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
-func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, error) {
+func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, []string, error) {
+	skippedSuppliers := []string{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
-				return ill_db.LocatedSupplier{}, err
+				return ill_db.LocatedSupplier{}, skippedSuppliers, err
 			}
 			timeZone, _ := peer.CustomData["timeZone"].(string)
 			if listMap, ok := peer.CustomData["closures"].([]any); ok && len(listMap) > 0 {
@@ -261,13 +264,19 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 					}
 				}
 				if skipSup {
+					sup.SupplierStatus = ill_db.SupplierStateSkippedPg
+					_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
+					if err != nil {
+						return ill_db.LocatedSupplier{}, skippedSuppliers, err
+					}
+					skippedSuppliers = append(skippedSuppliers, sup.SupplierSymbol)
 					continue
 				}
 			}
-			return sup, nil
+			return sup, skippedSuppliers, nil
 		}
 	}
-	return ill_db.LocatedSupplier{}, nil
+	return ill_db.LocatedSupplier{}, skippedSuppliers, nil
 }
 func getDateWithTimezone(date string, timezone string, endOfDay bool) (time.Time, error) {
 	var loc *time.Location
