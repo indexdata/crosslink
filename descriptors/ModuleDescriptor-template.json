@@ -9,27 +9,52 @@
         {
           "methods": ["GET"],
           "pathPattern": "/rsdir/consortia",
-          "permissionsRequired": ["directory.consortia.collection.get"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["POST"],
           "pathPattern": "/rsdir/consortia",
-          "permissionsRequired": ["directory.consortia.item.post"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["GET"],
           "pathPattern": "/rsdir/consortia/{id}",
-          "permissionsRequired": ["directory.consortia.item.get"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["PATCH"],
           "pathPattern": "/rsdir/consortia/{id}",
-          "permissionsRequired": ["directory.consortia.item.patch"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["DELETE"],
           "pathPattern": "/rsdir/consortia/{id}",
-          "permissionsRequired": ["directory.consortia.item.delete"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         }
       ]
     },
@@ -40,27 +65,52 @@
         {
           "methods": ["GET"],
           "pathPattern": "/rsdir/entries",
-          "permissionsRequired": ["directory.entries.collection.get"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["POST"],
           "pathPattern": "/rsdir/entries",
-          "permissionsRequired": ["directory.entries.item.post"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["GET"],
           "pathPattern": "/rsdir/entries/{key}/{value}",
-          "permissionsRequired": ["directory.entries.item.get"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["PATCH"],
           "pathPattern": "/rsdir/entries/{key}/{value}",
-          "permissionsRequired": ["directory.entries.item.patch"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         },
         {
           "methods": ["DELETE"],
           "pathPattern": "/rsdir/entries/{key}/{value}",
-          "permissionsRequired": ["directory.entries.item.delete"]
+          "permissionsDesired": [ 
+            "directory.consortia.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
         }
       ]
     }
@@ -68,29 +118,27 @@
   "requires": [],
   "permissionSets": [
     {
-      "description": "All directory consortia permissions",
+      "description": "Consortial admin permissions",
       "displayName": "Directory - all consortia permissions",
       "permissionName": "directory.consortia.all",
-      "subPermissions": [
-        "directory.consortia.collection.get",
-        "directory.consortia.item.post",
-        "directory.consortia.item.get",
-        "directory.consortia.item.patch",
-        "directory.consortia.item.delete"
-      ],
       "visible": true
     },
     {
-      "description": "All directory entry permissions",
+      "description": "Institution admin permissions",
       "displayName": "Directory - all entry permissions",
-      "permissionName": "directory.entries.all",
-      "subPermissions": [
-        "directory.entries.collection.get",
-        "directory.entries.item.post",
-        "directory.entries.item.get",
-        "directory.entries.item.patch",
-        "directory.entries.item.delete"
-      ],
+      "permissionName": "directory.institution.all",
+      "visible": true
+    },
+    {
+      "description": "System user permissions",
+      "displayName": "Directory - all entry permissions",
+      "permissionName": "directory.system.all",
+      "visible": true
+    },
+    {
+      "description": "Public user permissions",
+      "displayName": "Directory - all entry permissions",
+      "permissionName": "directory.public.all",
       "visible": true
     },
     {
@@ -99,7 +147,9 @@
       "permissionName": "directory.all",
       "subPermissions": [
         "directory.consortia.all",
-        "directory.entries.all"
+        "directory.institution.all",
+        "directory.system.all",
+        "directory.public.all"
       ],
       "visible": true
     }
