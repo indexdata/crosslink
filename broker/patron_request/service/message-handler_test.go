@@ -2,13 +2,15 @@ package prservice
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
-	"testing"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestGetPatronRequest(t *testing.T) {
@@ -282,6 +284,11 @@ func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, "status change no allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 	assert.Equal(t, "status change no allowed", err.Error())
+}
+
+type MockIllRepo struct {
+	mock.Mock
+	ill_db.PgIllRepo
 }
 
 func TestHandleSupplyingAgencyMessageCancelledFailToSave(t *testing.T) {

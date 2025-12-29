@@ -36,6 +36,8 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/indexdata/crosslink/broker/lms"
 )
 
 var HTTP_PORT = utils.Must(utils.GetEnvInt("HTTP_PORT", 8081))
@@ -157,8 +159,9 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler)
-	prApiHandler := prapi.NewApiHandler(prRepo, eventBus)
+	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
+	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
+	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL))
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)
 	err = StartEventBus(ctx, eventBus)
@@ -196,14 +199,16 @@ func StartServer(ctx Context) error {
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, "", API_PAGE_SIZE)
+	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
-		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, TENANT_TO_SYMBOL, API_PAGE_SIZE)
+		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
 
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
+	// TODO: proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
+
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
 		ServeMux.ServeHTTP(w, r)

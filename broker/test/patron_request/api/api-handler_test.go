@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/indexdata/crosslink/broker/common"
-	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	"github.com/indexdata/crosslink/iso18626"
 	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/common"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/iso18626"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -34,7 +35,7 @@ var illRepo ill_db.IllRepo
 var prRepo pr_db.PrRepo
 
 func TestMain(m *testing.M) {
-	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
+	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
@@ -361,7 +362,7 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
 	assert.NoError(t, err)
-	hreq.Header.Set("X-Okapi-Tenant", "test-lib")
+	hreq.Header.Set("X-Okapi-Tenant", "testlib")
 
 	if method == "POST" || method == "PUT" {
 		hreq.Header.Set("Content-Type", "application/json")
