@@ -68,3 +68,10 @@ sql:
         output_files_suffix: "_gen"
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
+        overrides:
+          - column: "patron_request.state"
+            go_type:
+              type: "PatronRequestState"
+          - column: "patron_request.side"
+            go_type:
+              type: "PatronRequestSide"

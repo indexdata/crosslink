@@ -3,6 +3,7 @@ package apputils
 import (
 	"context"
 	"fmt"
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"os"
 	"strconv"
 	"strings"
@@ -22,14 +23,14 @@ import (
 
 const EventRecordFormat = "%v, %v = %v"
 
-func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo) {
+func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, pr_db.PrRepo) {
 	context, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {
 		err := app.StartServer(context)
 		utils.Expect(err, "failed to start server")
 	}()
-	return context.EventBus, context.IllRepo, context.EventRepo
+	return context.EventBus, context.IllRepo, context.EventRepo, context.PrRepo
 }
 
 func CreatePgText(value string) pgtype.Text {
