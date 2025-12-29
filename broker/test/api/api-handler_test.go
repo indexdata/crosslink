@@ -43,7 +43,7 @@ var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, "", api.LIMIT_DEFAULT)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common.NewTenant(""), api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo = apptest.StartApp(ctx)
+	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()

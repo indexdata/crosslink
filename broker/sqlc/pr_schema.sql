@@ -8,5 +8,6 @@ CREATE TABLE patron_request
     patron            VARCHAR,
     requester_symbol  VARCHAR,
     supplier_symbol   VARCHAR,
-    tenant            VARCHAR
+    tenant            VARCHAR,
+    requester_req_id  VARCHAR
 );
