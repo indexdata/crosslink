@@ -23,15 +23,15 @@ type PatronRequestApiHandler struct {
 	prRepo               pr_db.PrRepo
 	eventBus             events.EventBus
 	actionMappingService prservice.ActionMappingService
-	tenantToSymbol       common.TenantToSymbol
+	tenant               common.Tenant
 }
 
-func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenantToSymbol common.TenantToSymbol) PatronRequestApiHandler {
+func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		actionMappingService: prservice.ActionMappingService{},
-		tenantToSymbol:       tenantToSymbol,
+		tenant:               tenant,
 	}
 }
 
@@ -62,7 +62,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	dbreq, err := toDbPatronRequest(a.tenantToSymbol, newPr, params.XOkapiTenant)
+	dbreq, err := toDbPatronRequest(a.tenant, newPr, params.XOkapiTenant)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -264,12 +264,12 @@ func toStringFromBytes(bytes []byte) *string {
 	return value
 }
 
-func toDbPatronRequest(tenantToSymbol common.TenantToSymbol, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
+func toDbPatronRequest(tenantToSymbol common.Tenant, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
 	if tenant == nil {
 		return pr_db.PatronRequest{}, errors.New("X-Okapi-Tenant header is required")
 	}
-	if tenantToSymbol.TenantMode() {
-		symbol := tenantToSymbol.GetSymbolFromTenant(*tenant)
+	if tenantToSymbol.IsSpecified() {
+		symbol := tenantToSymbol.GetSymbol(*tenant)
 		request.RequesterSymbol = &symbol
 	}
 	var illRequest []byte

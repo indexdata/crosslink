@@ -161,7 +161,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
-	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenantToSymbol(TENANT_TO_SYMBOL))
+	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL))
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)
 	err = StartEventBus(ctx, eventBus)
@@ -199,10 +199,10 @@ func StartServer(ctx Context) error {
 		http.ServeFile(w, r, "handler/open-api.yaml")
 	})
 
-	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenantToSymbol(""), API_PAGE_SIZE)
+	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
-		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenantToSymbol(TENANT_TO_SYMBOL), API_PAGE_SIZE)
+		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 	}
 

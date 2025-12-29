@@ -38,18 +38,18 @@ var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
-	limitDefault   int32
-	eventRepo      events.EventRepo
-	illRepo        ill_db.IllRepo
-	tenantToSymbol common.TenantToSymbol
+	limitDefault int32
+	eventRepo    events.EventRepo
+	illRepo      ill_db.IllRepo
+	tenant       common.Tenant
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenentToSymbol common.TenantToSymbol, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenant common.Tenant, limitDefault int32) ApiHandler {
 	return ApiHandler{
-		eventRepo:      eventRepo,
-		illRepo:        illRepo,
-		tenantToSymbol: tenentToSymbol,
-		limitDefault:   limitDefault,
+		eventRepo:    eventRepo,
+		illRepo:      illRepo,
+		tenant:       tenant,
+		limitDefault: limitDefault,
 	}
 }
 
@@ -57,13 +57,13 @@ func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, reque
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
 	}
-	if !a.tenantToSymbol.TenantMode() {
+	if !a.tenant.IsSpecified() {
 		return true
 	}
 	if tenant == nil {
 		return false
 	}
-	return trans.RequesterSymbol.String == a.tenantToSymbol.GetSymbolFromTenant(*tenant)
+	return trans.RequesterSymbol.String == a.tenant.GetSymbol(*tenant)
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.ResponseWriter,
@@ -168,14 +168,14 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.tenantToSymbol.TenantMode() {
-		var tenantSymbol string
+	} else if a.tenant.IsSpecified() {
+		var symbol string
 		if params.XOkapiTenant != nil {
-			tenantSymbol = a.tenantToSymbol.GetSymbolFromTenant(*params.XOkapiTenant)
+			symbol = a.tenant.GetSymbol(*params.XOkapiTenant)
 		} else if params.RequesterSymbol != nil {
-			tenantSymbol = *params.RequesterSymbol
+			symbol = *params.RequesterSymbol
 		}
-		if tenantSymbol == "" {
+		if symbol == "" {
 			writeJsonResponse(w, resp)
 			return
 		}
@@ -183,7 +183,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			Limit:  limit,
 			Offset: offset,
 			RequesterSymbol: pgtype.Text{
-				String: tenantSymbol,
+				String: symbol,
 				Valid:  true,
 			},
 		}
