@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ncip",
+  "type": "object",
+  "id": "https://github.com/indexdata/crosslink/tree/main/broker/lms/lms_config_schema.json",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the NCIP entity."
+    },
+    "name": {
+      "type": "string",
+      "description": "Name of the NCIP entity."
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the NCIP entity."
+    },
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "Endpoint URL for NCIP service."
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Whether the NCIP entity is active."
+    }
+  },
+  "required": ["id", "name", "endpoint"]
+}

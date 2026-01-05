@@ -1,0 +1,15 @@
+{
+  "id": "https://example.com/testdata/generate/example/foo/bar.json",
+  "description": "Bar contains some info",
+  "properties": {
+    "baz": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{10}$"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 3
+    }
+  },
+  "required": ["baz"]
+}

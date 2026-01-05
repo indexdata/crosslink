@@ -15,7 +15,6 @@ MODULE=broker
 COMMIT_ID=vcs/commit.txt
 COVERAGE=coverage.out
 
-
 # SQLC
 SQLC ?= sqlc
 SQLC_CONFIG = sqlc/sqlc.yaml
@@ -36,14 +35,18 @@ PR_OAPI_CFG = $(PR_OAPI_DIR)/cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
 PR_OAPI_GEN = $(PR_OAPI_DIR)/openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
+# ncip adapter schema
+LMS_SCHEMA_JSON = lms/lms_config_schema.json
+LMS_SCHEMA_GEN = lms/lms_config_gen.go
+
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage generate-lms-schema
 
 all: $(BINARY) archive
 
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc generate-api
+generate: generate-commit-id generate-sqlc generate-api generate-lms-schema
 
 generate-commit-id: $(COMMIT_ID)
 
@@ -59,6 +62,12 @@ $(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC)
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
+
+generate-lms-schema: $(LMS_SCHEMA_GEN)
+
+$(LMS_SCHEMA_GEN): $(LMS_SCHEMA_JSON)
+	../jsonschema2go-cli/jsonschema2go-cli $<
+	mv github.com/indexdata/crosslink/tree/main/broker/lms/values.gen.go $@
 
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
