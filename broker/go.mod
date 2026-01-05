@@ -6,6 +6,8 @@ require (
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/illmock v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
+	github.com/indexdata/crosslink/marcxml v0.0.0
+	github.com/indexdata/crosslink/sru v0.0.0
 )
 
 replace (
