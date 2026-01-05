@@ -463,12 +463,23 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO do validation
-
+	if a.lmsCreator == nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
+	}
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
+	institutionalPatron := "" // TODO get configuration instead
+	_, err = lmsAdapter.LookupUser(institutionalPatron)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+	}
 	return a.updateStateAndReturnResult(ctx, pr, LenderStateValidated, nil)
 }
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	// TODO NCIP RequestItem
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageNotification}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateWillSupply, &result, status, eventResult, httpStatus)
@@ -492,6 +503,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+	// TODO: NCIP CheckOutItem
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateShipped, &result, status, eventResult, httpStatus)
@@ -499,6 +511,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
+	// TODO NCIP CheckInItem
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCompleted, &result, status, eventResult, httpStatus)
 }
