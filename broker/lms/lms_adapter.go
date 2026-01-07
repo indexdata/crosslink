@@ -39,4 +39,6 @@ type LmsAdapter interface {
 	) error
 
 	CreateUserFiscalTransaction(userId string, itemId string) error
+
+	InstitutionalPatron() string
 }

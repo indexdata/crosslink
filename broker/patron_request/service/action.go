@@ -470,7 +470,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
-	institutionalPatron := "" // TODO get configuration instead
+	institutionalPatron := lmsAdapter.InstitutionalPatron()
 	_, err = lmsAdapter.LookupUser(institutionalPatron)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)

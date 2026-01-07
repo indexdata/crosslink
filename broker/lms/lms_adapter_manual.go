@@ -59,3 +59,7 @@ func (l *LmsAdapterManual) CreateUserFiscalTransaction(userId string, itemId str
 func CreateLmsAdapterMockOK() LmsAdapter {
 	return &LmsAdapterManual{}
 }
+
+func (l *LmsAdapterManual) InstitutionalPatron() string {
+	return ""
+}
