@@ -121,7 +121,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	if !pr.RequesterSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 	}
-	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol)
+	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol.String)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
@@ -156,7 +156,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	if !pr.SupplierSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 	}
-	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol)
+	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
