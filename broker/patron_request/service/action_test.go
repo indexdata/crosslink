@@ -79,6 +79,17 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	assert.Equal(t, "state VALIDATED does not support action validate", resultData.EventError.Message)
 }
 
+func TestHandleInvoceActionNoLms(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "LMS creator not configured", resultData.EventError.Message)
+}
+
 func TestHandleInvokeActionValidateOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -122,8 +133,10 @@ func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
 
 func TestHandleInvokeActionSendRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := []byte("{\"request\": {}}")
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 	action := BorrowerActionSendRequest
@@ -136,8 +149,10 @@ func TestHandleInvokeActionSendRequest(t *testing.T) {
 
 func TestHandleInvokeActionSendRequestError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 	action := BorrowerActionSendRequest
 
@@ -350,9 +365,9 @@ func TestHandleInvokeActionShipReturnFailCreator(t *testing.T) {
 
 func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := []byte("{\"request\": {}}")
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateCheckedIn, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
@@ -365,8 +380,10 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 
 func TestHandleInvokeActionCancelRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateWillSupply, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionCancelRequest
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -378,8 +395,10 @@ func TestHandleInvokeActionCancelRequest(t *testing.T) {
 
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionAcceptCondition
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -391,8 +410,10 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 
 func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(createLmsAdapterMockFail(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionRejectCondition
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -412,54 +433,31 @@ func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
 }
 
-func TestSendBorrowingRequestMissingSymbol(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
-
-	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
-}
-
 func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := lms.CreateLmsAdapterMockOK()
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	illRequest := []byte("{\"request\": {}}")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter)
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing supplier symbol", resultData.EventError.Message)
-}
-
-func TestShipReturnBorrowingRequestGetAdapterFailed(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	mockIso18626Handler := new(MockIso18626Handler)
-	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), assert.AnError)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
-
-	illRequest := []byte("{\"request\": {}}")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
-
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
 }
 
 func TestShipReturnBorrowingRequestBadIllRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := lms.CreateLmsAdapterMockOK()
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	illRequest := []byte("{bad")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter)
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to unmarshal ILL request", resultData.EventError.Message)
@@ -469,11 +467,12 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := lms.CreateLmsAdapterMockOK()
+	lmsCreator.On("GetAdapter", pgtype.Text{}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	illRequest := []byte("{\"request\": {}}")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter)
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
@@ -483,11 +482,12 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := lms.CreateLmsAdapterMockOK()
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "ISIL:REC1"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	illRequest := []byte("{\"request\": {}}")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter)
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "invalid supplier symbol", resultData.EventError.Message)
@@ -497,11 +497,12 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "x"}).Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := lms.CreateLmsAdapterMockOK()
+	lmsCreator.On("GetAdapter", pgtype.Text{Valid: true, String: "x"}).Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	illRequest := []byte("{\"request\": {}}")
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}})
+	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter)
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
