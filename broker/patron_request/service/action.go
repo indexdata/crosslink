@@ -140,9 +140,19 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 }
 
 func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+	if a.lmsCreator == nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
+	}
+	if !pr.SupplierSymbol.Valid {
+		return events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+	}
+	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+	}
 	switch action {
 	case LenderActionValidate:
-		return a.validateLenderRequest(ctx, pr)
+		return a.validateLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
 		return a.willSupplyLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
@@ -462,16 +472,9 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, nil)
 }
 
-func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	if a.lmsCreator == nil {
-		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
-	}
-	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
-	}
-	institutionalPatron := lmsAdapter.InstitutionalPatron()
-	_, err = lmsAdapter.LookupUser(institutionalPatron)
+func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+	institutionalPatron := lms.InstitutionalPatron()
+	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 	}
