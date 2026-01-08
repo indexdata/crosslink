@@ -104,6 +104,9 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if !a.actionMappingService.GetActionMapping(pr).IsActionAvailable(pr, action) {
 		return events.LogErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
+	if a.lmsCreator == nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
+	}
 	switch pr.Side {
 	case SideBorrowing:
 		return a.handleBorrowingAction(ctx, action, pr)
@@ -115,9 +118,6 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 }
 
 func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	if a.lmsCreator == nil {
-		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
-	}
 	if !pr.RequesterSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 	}
@@ -150,9 +150,6 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 }
 
 func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
-	if a.lmsCreator == nil {
-		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
-	}
 	if !pr.SupplierSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 	}
@@ -519,7 +516,7 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 		return status, eventResult, nil
 	}
 	if !pr.SupplierSymbol.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol1", nil)
 		return status, eventResult, nil
 	}
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
