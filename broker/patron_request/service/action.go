@@ -161,15 +161,15 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionValidate:
 		return a.validateLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
-		return a.willSupplyLenderRequest(ctx, pr)
+		return a.willSupplyLenderRequest(ctx, pr, lms)
 	case LenderActionCannotSupply:
 		return a.cannotSupplyLenderRequest(ctx, pr)
 	case LenderActionAddCondition:
 		return a.addConditionsLenderRequest(ctx, pr, actionParams)
 	case LenderActionShip:
-		return a.shipLenderRequest(ctx, pr)
+		return a.shipLenderRequest(ctx, pr, lms)
 	case LenderActionMarkReceived:
-		return a.markReceivedLenderRequest(ctx, pr)
+		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionMarkCancelled:
 		return a.markCancelledLenderRequest(ctx, pr)
 	default:
@@ -466,8 +466,17 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	return a.updateStateAndReturnResult(ctx, pr, LenderStateValidated, nil)
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO NCIP RequestItem
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+	// TODO set these values properly
+	requestId := ""
+	itemId := ""
+	borrowerBarCode := ""
+	pickupLocation := ""
+	itemLocation := ""
+	err := lmsAdapter.RequestItem(requestId, itemId, borrowerBarCode, pickupLocation, itemLocation)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageNotification}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateWillSupply, &result, status, eventResult, httpStatus)
@@ -490,16 +499,29 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateConditionPending, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO: NCIP CheckOutItem
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+	// TODO set these values properly
+	requestId := ""
+	itemId := ""
+	borrowerBarcode := ""
+	externalReferenceValue := ""
+	err := lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, externalReferenceValue)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateShipped, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+	// TODO set these values properly
+	itemId := ""
+	err := lmsAdapter.CheckInItem(itemId)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+	}
 	result := events.EventResult{}
-	// TODO NCIP CheckInItem
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCompleted, &result, status, eventResult, httpStatus)
 }
