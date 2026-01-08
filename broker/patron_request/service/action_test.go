@@ -82,7 +82,7 @@ func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {
 	assert.Equal(t, "state VALIDATED does not support action validate", resultData.EventError.Message)
 }
 
-func TestHandleInvoceActionNoLms(t *testing.T) {
+func TestHandleInvokeActionNoLms(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
@@ -314,6 +314,22 @@ func TestHandleInvokeActionShipReturnFails(t *testing.T) {
 	assert.Equal(t, "LMS DeleteItem failed", resultData.EventError.Message)
 }
 
+func TestHandleInvokeActionCancelRequest(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := []byte("{\"request\": {}}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateWillSupply, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	action := BorrowerActionCancelRequest
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
+}
+
 func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -535,7 +551,6 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := []byte("{\"request\": {}}")
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	action := LenderActionShip
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})

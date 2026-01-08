@@ -517,10 +517,7 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
 	}
-	if !pr.SupplierSymbol.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol1", nil)
-		return status, eventResult, nil
-	}
+	// pr.SupplierSymbol is validated earlier in handleLenderAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
 	var illMessage = iso18626.ISO18626Message{
