@@ -22,6 +22,7 @@ import (
 	"indexdata/directory/api"
 	"indexdata/directory/auth"
 	"indexdata/directory/db"
+	"indexdata/directory/enhancedcontext"
 )
 
 var Host = cmp.Or(os.Getenv("HOST"), "localhost")
@@ -70,7 +71,8 @@ func InitHandler(ctx context.Context, dbpool *pgxpool.Pool) http.Handler {
 	})
 	handlerWithValidation := apiValidator.OapiRequestValidator(swagger)
 	handlerWithLogging := httpLoggingMiddleware(handlerWithValidation(h))
-	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithLogging)
+	handlerWithHelper := enhancedcontext.EnhancedContextMiddleware(handlerWithLogging)
+	handlerWithAuth := auth.FolioTokenAwareMiddleware(handlerWithHelper)
 	return handlerWithAuth
 }
 

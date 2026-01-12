@@ -250,6 +250,7 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 	var seeSensitive bool
 
 	authData := auth.GetAuthData(ctx)
+
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole, auth.PublicUserRole}
 	seeSensitiveRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.SystemUserRole}
 	if !authData.HasRoleFromList(validRoles) {
