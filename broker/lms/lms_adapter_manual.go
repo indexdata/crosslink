@@ -63,3 +63,7 @@ func CreateLmsAdapterMockOK() LmsAdapter {
 func (l *LmsAdapterManual) InstitutionalPatron() string {
 	return ""
 }
+
+func (l *LmsAdapterManual) PickupLocation() string {
+	return ""
+}

@@ -25,6 +25,7 @@ const (
 	RequestItemBibIdCode            NcipProperty = "request_item_bib_id_code"
 	RequestItemPickupLocationEnable NcipProperty = "request_item_pickup_location_enable"
 	InstitutionalPatron             NcipProperty = "institutional_patron"
+	SupplierPickupLocation          NcipProperty = "supplier_pickup_location"
 )
 
 type NcipUserElement string
@@ -58,6 +59,7 @@ type LmsAdapterNcip struct {
 	requestItemBibIdCode            string
 	requestItemPickupLocationEnable bool
 	institutionalPatron             string
+	supplierPickupLocation          string
 }
 
 func reqField(m map[string]any, key NcipProperty, dst *string) error {
@@ -98,6 +100,7 @@ func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
 	optField(ncipInfo, RequestItemBibIdCode, &l.requestItemBibIdCode, "SYSNUMBER")
 	optField(ncipInfo, RequestItemPickupLocationEnable, &l.requestItemPickupLocationEnable, true)
 	optField(ncipInfo, InstitutionalPatron, &l.institutionalPatron, "")
+	optField(ncipInfo, SupplierPickupLocation, &l.supplierPickupLocation, "ILL Office")
 	return nil
 }
 
@@ -311,4 +314,8 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 
 func (l *LmsAdapterNcip) InstitutionalPatron() string {
 	return l.institutionalPatron
+}
+
+func (l *LmsAdapterNcip) PickupLocation() string {
+	return l.supplierPickupLocation
 }

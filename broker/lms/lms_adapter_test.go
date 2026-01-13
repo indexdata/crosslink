@@ -21,6 +21,8 @@ func TestParseConfigFull(t *testing.T) {
 		"accept_item_enable":         false,
 		"check_in_item_enable":       false,
 		"check_out_item_enable":      false,
+		"institutional_patron":       "patron1",
+		"supplier_pickup_location":   "ILL Office2",
 	}
 	lmsAdapaterNcip := &LmsAdapterNcip{}
 	err := lmsAdapaterNcip.parseConfig(ncipConfig)
@@ -32,6 +34,11 @@ func TestParseConfigFull(t *testing.T) {
 	assert.False(t, lmsAdapaterNcip.lookupUserEnable)
 	assert.False(t, lmsAdapaterNcip.acceptItemEnable)
 	assert.False(t, lmsAdapaterNcip.checkInItemEnable)
+	assert.False(t, lmsAdapaterNcip.checkOutItemEnable)
+	assert.Equal(t, "patron1", lmsAdapaterNcip.institutionalPatron)
+	assert.Equal(t, "patron1", lmsAdapaterNcip.InstitutionalPatron())
+	assert.Equal(t, "ILL Office2", lmsAdapaterNcip.supplierPickupLocation)
+	assert.Equal(t, "ILL Office2", lmsAdapaterNcip.PickupLocation())
 }
 
 func TestParseConfigOptional(t *testing.T) {
@@ -51,6 +58,8 @@ func TestParseConfigOptional(t *testing.T) {
 	assert.True(t, lmsAdapaterNcip.lookupUserEnable)
 	assert.True(t, lmsAdapaterNcip.acceptItemEnable)
 	assert.True(t, lmsAdapaterNcip.checkInItemEnable)
+	assert.Equal(t, "", lmsAdapaterNcip.institutionalPatron)
+	assert.Equal(t, "ILL Office", lmsAdapaterNcip.supplierPickupLocation)
 }
 
 func TestParseConfigMissing(t *testing.T) {

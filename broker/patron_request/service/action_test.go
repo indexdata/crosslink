@@ -833,6 +833,10 @@ func (l *MockLmsAdapterFail) InstitutionalPatron() string {
 	return ""
 }
 
+func (l *MockLmsAdapterFail) PickupLocation() string {
+	return ""
+}
+
 func TestPickupLocationFromIllRequest(t *testing.T) {
 	var r iso18626.Request
 	r.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{

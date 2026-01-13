@@ -447,10 +447,10 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
-	// TODO set these values properly
 	userId := lmsAdapter.InstitutionalPatron()
-	pickupLocation := "" // "ILL Office" configurable
-	itemLocation := ""   // important
+	pickupLocation := lmsAdapter.PickupLocation()
+	// TODO set this properly
+	itemLocation := ""
 	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
