@@ -18,7 +18,7 @@
                 },
                 "desc": {
                     "type": "string",
-                    "description": "Description of the state model (e.g what workflow is defined)"
+                    "description": "Description of the state model (e.g., what workflow is modelled)"
                 },
                 "version": {
                     "type": "string",
@@ -54,7 +54,7 @@
                 },
                 "desc": {
                     "type": "string",
-                    "description": "Description of the state, e.g what situation is modelled by the state"
+                    "description": "Description of the state, e.g., what situation is modelled by the state"
                 },
                 "side": {
                     "type": "string",
