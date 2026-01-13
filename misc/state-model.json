@@ -1,0 +1,168 @@
+{
+    "$schema": "http://json-schema.org/draft-06/schema#",
+    "$ref": "#/definitions/StateModel",
+    "definitions": {
+        "StateModel": {
+            "title": "StateModel",
+            "description": "ReShare state model definition",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "const": "StateModel"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Name of the state model"
+                },
+                "desc": {
+                    "type": "string",
+                    "description": "Description of the state model (e.g., what workflow is modelled)"
+                },
+                "version": {
+                    "type": "string",
+                    "description": "Version of the state model in SemVer"
+                },
+                "states": {
+                    "type": "array",
+                    "description": "A list of all allowed states",
+                    "items": {
+                        "$ref": "#/definitions/State"
+                    }
+                }
+            },
+            "required": [
+                "desc",
+                "name",
+                "states",
+                "type",
+                "version"
+            ]
+        },
+        "State": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the state, use capital letters with underscores"
+                },
+                "display": {
+                    "type": "string",
+                    "description": "Human-readable name displayed to user"
+                },
+                "desc": {
+                    "type": "string",
+                    "description": "Description of the state, e.g., what situation is modelled by the state"
+                },
+                "side": {
+                    "type": "string",
+                    "description": "Indicates which side of the request the state belongs to",
+                    "enum": [
+                        "REQUESTER",
+                        "SUPPLIER"
+                    ]
+                },
+                "actions": {
+                    "type": "array",
+                    "description": "List of all actions that may be performed on the request when in this state",
+                    "items": {
+                        "$ref": "#/definitions/Action"
+                    }
+                },
+                "events": {
+                    "type": "array",
+                    "description": "List of all events that may be triggered to the request when in this state",
+                    "items": {
+                        "$ref": "#/definitions/Event"
+                    }
+                },
+                "terminal": {
+                    "type": "boolean",
+                    "description": "Indicates if the state is terminal (meaning no actions or events are allowed when in the state)"
+                }
+            },
+            "oneOf": [
+                {
+                    "anyOf": [
+                        {
+                            "required": [
+                                "actions"
+                            ]
+                        },
+                        {
+                            "required": [
+                                "events"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "required": [
+                        "terminal"
+                    ]
+                }
+            ],
+            "required": [
+                "desc",
+                "display",
+                "name",
+                "side"
+            ],
+            "title": "State"
+        },
+        "Action": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the action"
+                },
+                "desc": {
+                    "type": "string",
+                    "description": "Description of the action"
+                },
+                "transitions": {
+                    "type": "array",
+                    "description": "List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": [
+                "desc",
+                "name"
+            ],
+            "title": "Action"
+        },
+        "Event": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the event"
+                },
+                "desc": {
+                    "type": "string",
+                    "description": "Description of the event"
+                },
+                "transitions": {
+                    "type": "array",
+                    "description": "List of all possible state transitions after triggering the event. When no transitions are defined, the event is considered to be non-state-changing.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": [
+                "desc",
+                "name"
+            ],
+            "title": "Event"
+        }
+    }
+}
