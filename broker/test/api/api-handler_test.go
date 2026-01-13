@@ -38,9 +38,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
+var sseBroker *api.SseBroker
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
 var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common.NewTenant(""), api.LIMIT_DEFAULT)
@@ -67,7 +67,10 @@ func TestMain(m *testing.M) {
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	eventBus, illRepo, eventRepo, _ = apptest.StartApp(ctx)
+	appContext := apptest.StartAppReturnContext(ctx)
+	illRepo = appContext.IllRepo
+	eventRepo = appContext.EventRepo
+	sseBroker = appContext.SseBroker
 	test.WaitForServiceUp(app.HTTP_PORT)
 
 	defer cancel()
