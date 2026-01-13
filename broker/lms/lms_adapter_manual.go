@@ -28,7 +28,7 @@ func (l *LmsAdapterManual) DeleteItem(itemId string) error {
 func (l *LmsAdapterManual) RequestItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	pickupLocation string,
 	itemLocation string,
 ) error {
@@ -46,7 +46,7 @@ func (l *LmsAdapterManual) CheckInItem(itemId string) error {
 func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	externalReferenceValue string,
 ) error {
 	return nil

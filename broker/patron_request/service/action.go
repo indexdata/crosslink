@@ -428,12 +428,10 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateWillSupply, nil)
 }
 
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
-	// TODO Make NCIP calls
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, nil)
 }
 
@@ -450,10 +448,10 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	// TODO set these values properly
-	borrowerBarCode := ""
+	userId := lmsAdapter.InstitutionalPatron()
 	pickupLocation := "" // "ILL Office" configurable
 	itemLocation := ""   // important
-	err := lmsAdapter.RequestItem(requestId, itemId, borrowerBarCode, pickupLocation, itemLocation)
+	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
 	}
@@ -482,10 +480,10 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
+	userId := lmsAdapter.InstitutionalPatron()
 	// TODO set these values properly
-	borrowerBarcode := ""
 	externalReferenceValue := ""
-	err := lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, externalReferenceValue)
+	err := lmsAdapter.CheckOutItem(requestId, itemId, userId, externalReferenceValue)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 	}

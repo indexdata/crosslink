@@ -216,7 +216,7 @@ func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
 func (l *LmsAdapterNcip) RequestItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	pickupLocation string,
 	itemLocation string,
 ) error {
@@ -225,8 +225,8 @@ func (l *LmsAdapterNcip) RequestItem(
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
-	if borrowerBarcode != "" {
-		userIdField = &ncip.UserId{UserIdentifierValue: borrowerBarcode}
+	if userId != "" {
+		userIdField = &ncip.UserId{UserIdentifierValue: userId}
 	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
@@ -276,7 +276,7 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	externalReferenceValue string,
 ) error {
 	if !l.checkOutItemEnable {
@@ -293,7 +293,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	}
 	arg := ncip.CheckOutItem{
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
-		UserId:    &ncip.UserId{UserIdentifierValue: borrowerBarcode},
+		UserId:    &ncip.UserId{UserIdentifierValue: userId},
 		ItemId:    ncip.ItemId{ItemIdentifierValue: itemId},
 		Ext:       ext,
 	}

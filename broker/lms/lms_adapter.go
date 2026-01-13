@@ -22,7 +22,7 @@ type LmsAdapter interface {
 	RequestItem(
 		requestId string,
 		itemId string,
-		borrowerBarcode string,
+		userId string,
 		pickupLocation string,
 		itemLocation string,
 	) error
@@ -34,7 +34,7 @@ type LmsAdapter interface {
 	CheckOutItem(
 		requestId string,
 		itemId string,
-		borrowerBarcode string,
+		userId string,
 		externalReferenceValue string,
 	) error
 
