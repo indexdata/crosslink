@@ -23,15 +23,25 @@ const DEFAULT_PATRON_REQUEST_ID = "00000000-0000-0000-0000-000000000002"
 
 type EventBus interface {
 	Start(ctx common.ExtendedContext) error
+	// Create a regular (unicast) task event
 	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
+	// When event (task or notice) is broadcasting, every event bus instance receives all event signals (created, started, completed) and executes registered handlers
 	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
+	// Create a regular (unicast) notice event
 	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
+	// See CreateTaskBroadcast for more details
 	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
+	// Mark task for processing or fail if status is invalid (e.g already started)
 	BeginTask(eventId string) (Event, error)
+	// Mark task as completed or fail if status is invalid (e.g not started)
 	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
+	// Register handler for event (task or notice) created signal
 	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	// Register handler for task started signal
 	HandleTaskStarted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	// Register handler for task completed signal
 	HandleTaskCompleted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
+	// Execute task processing function within an automatic Begin/Complete block.
 	ProcessTask(ctx common.ExtendedContext, event Event, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
@@ -132,7 +142,6 @@ func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 			if err != nil {
 				ctx.Logger().Error("failed to unmarshal notification", "error", err, "payload", notification.Payload)
 			}
-			// TODO We could run this method in separate go routine
 			go p.handleNotify(notifyData)
 		}
 	}()

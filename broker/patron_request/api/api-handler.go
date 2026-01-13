@@ -171,7 +171,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
-	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil)
+	eventId, err := a.eventBus.CreateTaskBroadcast(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
