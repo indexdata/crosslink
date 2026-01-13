@@ -447,12 +447,12 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 }
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
-	// TODO set these values properly
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := ""
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	// TODO set these values properly
 	borrowerBarCode := ""
-	pickupLocation := ""
-	itemLocation := ""
+	pickupLocation := "" // "ILL Office" configurable
+	itemLocation := ""   // important
 	err := lmsAdapter.RequestItem(requestId, itemId, borrowerBarCode, pickupLocation, itemLocation)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
@@ -480,9 +480,9 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
-	// TODO set these values properly
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := ""
+	requestId := illRequest.Header.RequestingAgencyRequestId
+	// TODO set these values properly
 	borrowerBarcode := ""
 	externalReferenceValue := ""
 	err := lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, externalReferenceValue)
@@ -495,7 +495,6 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
-	// TODO set these values properly
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	err := lmsAdapter.CheckInItem(itemId)
 	if err != nil {
