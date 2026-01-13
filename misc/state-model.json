@@ -85,13 +85,17 @@
             },
             "oneOf": [
                 {
-                    "required": [
-                        "actions"
-                    ]
-                },
-                {
-                    "required": [
-                        "events"
+                    "anyOf": [
+                        {
+                            "required": [
+                                "actions"
+                            ]
+                        },
+                        {
+                            "required": [
+                                "events"
+                            ]
+                        }
                     ]
                 },
                 {
