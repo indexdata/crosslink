@@ -40,7 +40,7 @@ type LmsAdapter interface {
 
 	CreateUserFiscalTransaction(userId string, itemId string) error
 
-	InstitutionalPatron() string
+	InstitutionalPatron(requesterSymbol string) string
 
 	PickupLocation() string
 }

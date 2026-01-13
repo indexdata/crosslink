@@ -21,7 +21,7 @@ func TestParseConfigFull(t *testing.T) {
 		"accept_item_enable":         false,
 		"check_in_item_enable":       false,
 		"check_out_item_enable":      false,
-		"institutional_patron":       "patron1",
+		"institutional_patron":       "ill-{symbol}",
 		"supplier_pickup_location":   "ILL Office2",
 	}
 	lmsAdapaterNcip := &LmsAdapterNcip{}
@@ -35,8 +35,8 @@ func TestParseConfigFull(t *testing.T) {
 	assert.False(t, lmsAdapaterNcip.acceptItemEnable)
 	assert.False(t, lmsAdapaterNcip.checkInItemEnable)
 	assert.False(t, lmsAdapaterNcip.checkOutItemEnable)
-	assert.Equal(t, "patron1", lmsAdapaterNcip.institutionalPatron)
-	assert.Equal(t, "patron1", lmsAdapaterNcip.InstitutionalPatron())
+	assert.Equal(t, "ill-{symbol}", lmsAdapaterNcip.institutionalPatron)
+	assert.Equal(t, "ill-ISIL:SUP1", lmsAdapaterNcip.InstitutionalPatron("ISIL:SUP1"))
 	assert.Equal(t, "ILL Office2", lmsAdapaterNcip.supplierPickupLocation)
 	assert.Equal(t, "ILL Office2", lmsAdapaterNcip.PickupLocation())
 }

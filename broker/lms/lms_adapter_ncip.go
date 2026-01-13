@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
 	"github.com/indexdata/crosslink/ncip"
@@ -312,8 +313,8 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 	return err
 }
 
-func (l *LmsAdapterNcip) InstitutionalPatron() string {
-	return l.institutionalPatron
+func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
+	return strings.ReplaceAll(l.institutionalPatron, "{symbol}", strings.ToUpper(requesterSymbol))
 }
 
 func (l *LmsAdapterNcip) PickupLocation() string {

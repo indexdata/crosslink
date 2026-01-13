@@ -829,7 +829,7 @@ func (l *MockLmsAdapterFail) CreateUserFiscalTransaction(userId string, itemId s
 	return errors.New("CreateUserFiscalTransaction failed")
 }
 
-func (l *MockLmsAdapterFail) InstitutionalPatron() string {
+func (l *MockLmsAdapterFail) InstitutionalPatron(requesterSymbol string) string {
 	return ""
 }
 

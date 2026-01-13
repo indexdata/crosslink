@@ -436,7 +436,7 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
-	institutionalPatron := lms.InstitutionalPatron()
+	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
@@ -447,7 +447,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
-	userId := lmsAdapter.InstitutionalPatron()
+	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.PickupLocation()
 	// TODO set this properly
 	itemLocation := ""
@@ -480,7 +480,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
-	userId := lmsAdapter.InstitutionalPatron()
+	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	// TODO set these values properly
 	externalReferenceValue := ""
 	err := lmsAdapter.CheckOutItem(requestId, itemId, userId, externalReferenceValue)

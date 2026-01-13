@@ -60,7 +60,7 @@ func CreateLmsAdapterMockOK() LmsAdapter {
 	return &LmsAdapterManual{}
 }
 
-func (l *LmsAdapterManual) InstitutionalPatron() string {
+func (l *LmsAdapterManual) InstitutionalPatron(requesterSymbol string) string {
 	return ""
 }
 
