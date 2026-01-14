@@ -29,7 +29,7 @@ func NewSseBroker(ctx common.ExtendedContext) (broker *SseBroker) {
 	return broker
 }
 func (b *SseBroker) run() {
-	b.ctx.Logger().Info("SeeBroker running...")
+	b.ctx.Logger().Debug("SseBroker running...")
 	for {
 		// Wait for an event from the application logic
 		event := <-b.input
@@ -49,11 +49,9 @@ func (b *SseBroker) run() {
 }
 
 func (b *SseBroker) removeClient(clientChannel chan string) {
-	b.mu.Lock()
 	delete(b.clients, clientChannel)
 	close(clientChannel)
-	b.mu.Unlock()
-	b.ctx.Logger().Info("Client channel closed and removed.")
+	b.ctx.Logger().Debug("Client channel closed and removed.")
 }
 
 // ServeHTTP implements the http.Handler interface for the SSE endpoint.
@@ -63,7 +61,7 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b.mu.Lock()
 	b.clients[clientChannel] = true
 	b.mu.Unlock()
-	b.ctx.Logger().Info("Client registered. Total clients: " + string(rune(len(b.clients))))
+	b.ctx.Logger().Debug(fmt.Sprintf("Client registered. Total clients: %d", len(b.clients)))
 
 	defer b.removeClient(clientChannel)
 
@@ -100,14 +98,14 @@ func (b *SseBroker) SubmitMessageToChannels(message string) {
 	b.input <- message
 }
 
-type SeeIsoMessageEvent struct {
+type SseIsoMessageEvent struct {
 	Event events.EventName         `json:"event,omitempty"`
 	Data  iso18626.ISO18626Message `json:"data,omitempty"`
 }
 
 func (b *SseBroker) IncomingIsoMessage(ctx common.ExtendedContext, event events.Event) {
 	if event.EventData.IncomingMessage != nil {
-		sseEvent := SeeIsoMessageEvent{
+		sseEvent := SseIsoMessageEvent{
 			Event: event.EventName,
 			Data:  *event.EventData.IncomingMessage,
 		}
