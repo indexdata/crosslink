@@ -301,8 +301,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, sseBroker.IncomingIsoMessage)
-	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
 
 	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
 	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)

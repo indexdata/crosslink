@@ -19,7 +19,7 @@ func TestSeeEndpoint(t *testing.T) {
 	done := make(chan bool)
 	inErr := make(chan error)
 	go func() {
-		resp, err := http.Get(getLocalhostWithPort() + "/sse/events")
+		resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=borrowing&symbol=ISIL:REQ")
 		if err != nil {
 			inErr <- err
 			return
@@ -53,7 +53,7 @@ func TestSeeEndpoint(t *testing.T) {
 				t.Error("Received empty data from SSE")
 			}
 			t.Logf("Successfully received: %s", data)
-			assert.True(t, strings.Contains(data, "{\"data\":{\"supplyingAgencyMessage\":"))
+			assert.True(t, strings.Contains(data, "{\"event\":\"message-requester\",\"data\":{\"supplyingAgencyMessage\":"))
 		case err := <-errChan:
 			inErr <- err
 		}
@@ -91,15 +91,24 @@ func sendMessages() {
 
 func executeTask(t time.Time) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	sseBroker.IncomingIsoMessage(ctx, events.Event{EventData: events.EventData{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					MessageInfo: iso18626.MessageInfo{
-						Note: t.String(),
+	sseBroker.IncomingIsoMessage(ctx, events.Event{EventName: events.EventNameMessageRequester,
+		ResultData: events.EventResult{
+			CommonEventData: events.CommonEventData{
+				OutgoingMessage: &iso18626.ISO18626Message{
+					SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+						Header: iso18626.Header{
+							RequestingAgencyId: iso18626.TypeAgencyId{
+								AgencyIdType: iso18626.TypeSchemeValuePair{
+									Text: "ISIL",
+								},
+								AgencyIdValue: "REQ",
+							},
+						},
+						MessageInfo: iso18626.MessageInfo{
+							Note: t.String(),
+						},
 					},
 				},
 			},
-		},
-	}})
+		}})
 }
