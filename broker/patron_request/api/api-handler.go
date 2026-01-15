@@ -72,6 +72,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
+	//TODO this starts an async action and we need to publish the outcome back to the client
+	// we have two options:
+	// 1) block like we do in the POST /patron-requests/{id}/action endpoint
+	// 2) return 202 Accepted and send the update via the /sse/events endpoint
+	// Option 2 requires that we define SSE events for patron request updates
 	action := prservice.BorrowerActionValidate
 	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
 	if err != nil {
