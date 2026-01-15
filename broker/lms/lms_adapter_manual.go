@@ -28,7 +28,7 @@ func (l *LmsAdapterManual) DeleteItem(itemId string) error {
 func (l *LmsAdapterManual) RequestItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	pickupLocation string,
 	itemLocation string,
 ) error {
@@ -46,7 +46,7 @@ func (l *LmsAdapterManual) CheckInItem(itemId string) error {
 func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	externalReferenceValue string,
 ) error {
 	return nil
@@ -58,4 +58,12 @@ func (l *LmsAdapterManual) CreateUserFiscalTransaction(userId string, itemId str
 
 func CreateLmsAdapterMockOK() LmsAdapter {
 	return &LmsAdapterManual{}
+}
+
+func (l *LmsAdapterManual) InstitutionalPatron(requesterSymbol string) string {
+	return ""
+}
+
+func (l *LmsAdapterManual) PickupLocation() string {
+	return ""
 }

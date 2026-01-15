@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
 	"github.com/indexdata/crosslink/ncip"
@@ -24,6 +25,8 @@ const (
 	RequestItemRequestScopeType     NcipProperty = "request_item_request_scope_type"
 	RequestItemBibIdCode            NcipProperty = "request_item_bib_id_code"
 	RequestItemPickupLocationEnable NcipProperty = "request_item_pickup_location_enable"
+	InstitutionalPatron             NcipProperty = "institutional_patron"
+	SupplierPickupLocation          NcipProperty = "supplier_pickup_location"
 )
 
 type NcipUserElement string
@@ -56,6 +59,8 @@ type LmsAdapterNcip struct {
 	requestItemRequestScopeType     string
 	requestItemBibIdCode            string
 	requestItemPickupLocationEnable bool
+	institutionalPatron             string
+	supplierPickupLocation          string
 }
 
 func reqField(m map[string]any, key NcipProperty, dst *string) error {
@@ -95,6 +100,8 @@ func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
 	optField(ncipInfo, RequestItemRequestScopeType, &l.requestItemRequestScopeType, "Item")
 	optField(ncipInfo, RequestItemBibIdCode, &l.requestItemBibIdCode, "SYSNUMBER")
 	optField(ncipInfo, RequestItemPickupLocationEnable, &l.requestItemPickupLocationEnable, true)
+	optField(ncipInfo, InstitutionalPatron, &l.institutionalPatron, "")
+	optField(ncipInfo, SupplierPickupLocation, &l.supplierPickupLocation, "ILL Office")
 	return nil
 }
 
@@ -213,7 +220,7 @@ func (l *LmsAdapterNcip) DeleteItem(itemId string) error {
 func (l *LmsAdapterNcip) RequestItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	pickupLocation string,
 	itemLocation string,
 ) error {
@@ -222,8 +229,8 @@ func (l *LmsAdapterNcip) RequestItem(
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
-	if borrowerBarcode != "" {
-		userIdField = &ncip.UserId{UserIdentifierValue: borrowerBarcode}
+	if userId != "" {
+		userIdField = &ncip.UserId{UserIdentifierValue: userId}
 	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
@@ -273,7 +280,7 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
 	itemId string,
-	borrowerBarcode string,
+	userId string,
 	externalReferenceValue string,
 ) error {
 	if !l.checkOutItemEnable {
@@ -290,7 +297,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	}
 	arg := ncip.CheckOutItem{
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
-		UserId:    &ncip.UserId{UserIdentifierValue: borrowerBarcode},
+		UserId:    &ncip.UserId{UserIdentifierValue: userId},
 		ItemId:    ncip.ItemId{ItemIdentifierValue: itemId},
 		Ext:       ext,
 	}
@@ -304,4 +311,12 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 	}
 	_, err := l.ncipClient.CreateUserFiscalTransaction(arg)
 	return err
+}
+
+func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
+	return strings.ReplaceAll(l.institutionalPatron, "{symbol}", strings.ToUpper(requesterSymbol))
+}
+
+func (l *LmsAdapterNcip) PickupLocation() string {
+	return l.supplierPickupLocation
 }
