@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/cql-go/cql"
-	"github.com/indexdata/crosslink/illmock/directory"
+	"github.com/indexdata/crosslink/directory"
 )
 
 var _ directory.StrictServerInterface = (*DirectoryMock)(nil)

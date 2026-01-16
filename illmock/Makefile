@@ -10,12 +10,6 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-# OpenAPI
-OAPI_DIR=directory
-OAPI_CFG = $(OAPI_DIR)/directory_config.yaml
-OAPI_SPEC = $(OAPI_DIR)/directory_api.yaml
-OAPI_GEN = $(OAPI_DIR)/directory_gen.go
-
 .PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage
 
 all: $(PROGRAMS)
@@ -23,10 +17,7 @@ all: $(PROGRAMS)
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: $(COMMIT_ID) $(OAPI_GEN)
-
-$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
+generate: $(COMMIT_ID)
 
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
@@ -63,5 +54,4 @@ clean:
 	rm -f $(PROGRAMS)
 	rm -f $(COVERAGE)
 	rm -f $(COMMIT_ID)
-	rm -f $(OAPI_GEN)
 	rm -f README.html

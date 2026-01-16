@@ -8,6 +8,7 @@ require (
 	github.com/indexdata/crosslink/marcxml v0.0.0
 	github.com/indexdata/crosslink/sru v0.0.0
 	github.com/indexdata/crosslink/ncip v0.0.0
+	github.com/indexdata/crosslink/directory v0.0.0
 )
 
 replace (
@@ -16,6 +17,7 @@ replace (
 	github.com/indexdata/crosslink/marcxml => ../marcxml
 	github.com/indexdata/crosslink/sru => ../sru
 	github.com/indexdata/crosslink/ncip => ../ncip
+	github.com/indexdata/crosslink/directory => ../directory
 )
 
 require (
