@@ -85,6 +85,7 @@ type Context struct {
 	DirAdapter   adapter.DirectoryLookupAdapter
 	PrRepo       pr_db.PrRepo
 	PrApiHandler prapi.PatronRequestApiHandler
+	SseBroker    *api.SseBroker
 }
 
 func configLog() slog.Handler {
@@ -163,7 +164,9 @@ func Init(ctx context.Context) (Context, error) {
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL))
 
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, prMessageHandler)
+	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
+
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
@@ -175,6 +178,7 @@ func Init(ctx context.Context) (Context, error) {
 		DirAdapter:   dirAdapter,
 		PrRepo:       prRepo,
 		PrApiHandler: prApiHandler,
+		SseBroker:    sseBroker,
 	}, nil
 }
 
@@ -208,6 +212,9 @@ func StartServer(ctx Context) error {
 
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	// TODO: proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
+
+	// SSE Incoming message handler
+	ServeMux.HandleFunc("/sse/events", ctx.SseBroker.ServeHTTP)
 
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())
@@ -278,7 +285,7 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
 	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
-	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, prMessageHandler prservice.PatronRequestMessageHandler) {
+	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, sseBroker *api.SseBroker) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
@@ -294,6 +301,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
 
 	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
 	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)
