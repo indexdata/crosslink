@@ -24,13 +24,18 @@ import (
 const EventRecordFormat = "%v, %v = %v"
 
 func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.EventRepo, pr_db.PrRepo) {
-	context, err := app.Init(ctx)
+	appContext := StartAppReturnContext(ctx)
+	return appContext.EventBus, appContext.IllRepo, appContext.EventRepo, appContext.PrRepo
+}
+
+func StartAppReturnContext(ctx context.Context) app.Context {
+	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {
-		err := app.StartServer(context)
+		err := app.StartServer(appContext)
 		utils.Expect(err, "failed to start server")
 	}()
-	return context.EventBus, context.IllRepo, context.EventRepo, context.PrRepo
+	return appContext
 }
 
 func CreatePgText(value string) pgtype.Text {
