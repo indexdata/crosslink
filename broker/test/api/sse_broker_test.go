@@ -4,18 +4,21 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/stretchr/testify/assert"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestSeeEndpoint(t *testing.T) {
-	go sendMessages() //Send messages every 5 milliseconds
+func TestSseEndpointSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go sendMessages(ctx) //Send messages every 5 milliseconds
 	done := make(chan bool)
 	inErr := make(chan error)
 	go func() {
@@ -57,6 +60,7 @@ func TestSeeEndpoint(t *testing.T) {
 		case err := <-errChan:
 			inErr <- err
 		}
+		cancel()
 		done <- true
 	}()
 
@@ -75,18 +79,37 @@ func TestSeeEndpoint(t *testing.T) {
 	}
 }
 
-func sendMessages() {
+func sendMessages(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
-	done := make(chan bool)
+
 	for {
 		select {
-		case <-done:
+		case <-ctx.Done():
+			fmt.Println("Shutting down sendMessages...")
 			return
 		case t := <-ticker.C:
 			executeTask(t)
 		}
 	}
+}
+
+func TestSseEndpointNoSide(t *testing.T) {
+	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?symbol=ISIL:REQ")
+	assert.NoError(t, err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, resp.StatusCode)
+	assert.Equal(t, "query parameter 'side' and 'symbol' must be specified\n", string(bodyBytes))
+}
+
+func TestSseEndpointNoSymbol(t *testing.T) {
+	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=borrowing")
+	assert.NoError(t, err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, resp.StatusCode)
+	assert.Equal(t, "query parameter 'side' and 'symbol' must be specified\n", string(bodyBytes))
 }
 
 func executeTask(t time.Time) {

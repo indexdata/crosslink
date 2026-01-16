@@ -164,7 +164,7 @@ func Init(ctx context.Context) (Context, error) {
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL))
 
-	sseBroker := api.NewSseBroker(appCtx)
+	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)

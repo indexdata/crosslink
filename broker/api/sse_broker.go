@@ -14,16 +14,18 @@ import (
 
 type SseBroker struct {
 	input   chan SseMessage
-	clients map[pr_db.PatronRequestSide]map[string]map[chan string]bool
+	clients map[string]map[chan string]bool
 	mu      sync.Mutex
 	ctx     common.ExtendedContext
+	tenant  common.Tenant
 }
 
-func NewSseBroker(ctx common.ExtendedContext) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, tenant common.Tenant) (broker *SseBroker) {
 	broker = &SseBroker{
 		input:   make(chan SseMessage),
-		clients: make(map[pr_db.PatronRequestSide]map[string]map[chan string]bool),
+		clients: make(map[string]map[chan string]bool),
 		ctx:     ctx,
+		tenant:  tenant,
 	}
 
 	// Start the single broadcaster goroutine
@@ -37,45 +39,43 @@ func (b *SseBroker) run() {
 		event := <-b.input
 
 		b.mu.Lock()
-		symbols := b.clients[event.side]
-		if symbols != nil {
-			for clientChannel := range symbols[event.symbol] {
-				select {
-				case clientChannel <- event.message:
-					// Successfully sent
-				default:
-					// Client is slow or disconnected, remove them to prevent memory leak
-					b.removeClient(event.side, event.symbol, clientChannel)
-				}
+		for clientChannel := range b.clients[event.receiver] {
+			select {
+			case clientChannel <- event.message:
+				// Successfully sent
+			default:
+				// Client is slow or disconnected, remove them to prevent memory leak
+				b.removeClient(event.receiver, clientChannel)
 			}
 		}
 		b.mu.Unlock()
 	}
 }
 
-func (b *SseBroker) removeClient(side pr_db.PatronRequestSide, symbol string, clientChannel chan string) {
-	b.mu.Lock()
-	symbols := b.clients[side]
-	if symbols != nil {
-		clients := symbols[symbol]
-		if clients != nil {
-			delete(clients, clientChannel)
-		}
+func (b *SseBroker) removeClient(receiver string, clientChannel chan string) {
+	clients := b.clients[receiver]
+	if clients != nil {
+		delete(clients, clientChannel)
 		if len(clients) == 0 {
-			delete(symbols, symbol)
+			delete(b.clients, receiver)
 		}
 	}
 	close(clientChannel)
 	b.ctx.Logger().Debug("Client channel closed and removed.")
-	b.mu.Unlock()
 }
 
 // ServeHTTP implements the http.Handler interface for the SSE endpoint.
 func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	clientChannel := make(chan string, 10)
+	tenant := r.Header.Get("X-Okapi-Tenant")
+	var symbol string
+	if b.tenant.IsSpecified() && tenant != "" {
+		symbol = b.tenant.GetSymbol(tenant)
+	} else {
+		symbol = r.URL.Query().Get("symbol")
+	}
 
 	side := r.URL.Query().Get("side")
-	symbol := r.URL.Query().Get("symbol")
 	if side == "" || symbol == "" {
 		http.Error(w, "query parameter 'side' and 'symbol' must be specified", http.StatusBadRequest)
 		return
@@ -85,22 +85,21 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.mu.Lock()
-	sideKey := pr_db.PatronRequestSide(side)
-	symbols := b.clients[sideKey]
-	if symbols != nil {
-		clients := symbols[symbol]
-		if clients != nil {
-			clients[clientChannel] = true
-		} else {
-			symbols[symbol] = map[chan string]bool{clientChannel: true}
-		}
+	receiver := side + symbol
+	clients := b.clients[receiver]
+	if clients != nil {
+		clients[clientChannel] = true
 	} else {
-		b.clients[sideKey] = map[string]map[chan string]bool{symbol: {clientChannel: true}}
+		b.clients[receiver] = map[chan string]bool{clientChannel: true}
 	}
 	b.mu.Unlock()
-	b.ctx.Logger().Debug(fmt.Sprintf("Client registered. Total clients: %d", len(b.clients)))
+	b.ctx.Logger().Debug(fmt.Sprintf("new client registered: %s", receiver))
 
-	defer b.removeClient(sideKey, symbol, clientChannel)
+	defer func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		b.removeClient(receiver, clientChannel)
+	}()
 
 	// Set SSE Headers and get Flusher
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -136,9 +135,8 @@ func (b *SseBroker) SubmitMessageToChannels(message SseMessage) {
 }
 
 type SseMessage struct {
-	side    pr_db.PatronRequestSide
-	symbol  string
-	message string
+	receiver string
+	message  string
 }
 
 type SseIsoMessageEvent struct {
@@ -168,7 +166,7 @@ func (b *SseBroker) IncomingIsoMessage(ctx common.ExtendedContext, event events.
 			ctx.Logger().Error("failed to parse event data", "error", err)
 			return
 		}
-		b.SubmitMessageToChannels(SseMessage{side: side, symbol: symbol, message: string(updateMessageBytes)})
+		b.SubmitMessageToChannels(SseMessage{receiver: string(side) + symbol, message: string(updateMessageBytes)})
 	}
 }
 
