@@ -1,5 +1,5 @@
 package: directory
-output: directory/directory_gen.go
+output: directory_gen.go
 output-options:
   nullable-type: true
 generate:

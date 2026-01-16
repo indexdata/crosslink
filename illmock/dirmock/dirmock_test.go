@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/indexdata/cql-go/cql"
-	"github.com/indexdata/crosslink/illmock/directory"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
 )
 

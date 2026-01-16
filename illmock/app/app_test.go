@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/httpclient"
-	"github.com/indexdata/crosslink/illmock/directory"
 	"github.com/indexdata/crosslink/illmock/flows"
 	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/indexdata/crosslink/iso18626"

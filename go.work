@@ -9,4 +9,5 @@ use (
 	./marcxml
 	./ncip
 	./sru
+	./directory
 )
