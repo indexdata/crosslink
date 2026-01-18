@@ -9,6 +9,7 @@ COPY illmock/go.mod ./illmock/go.mod
 
 # copy common sources
 COPY common/ common
+COPY directory/ directory
 COPY httpclient/ httpclient
 COPY marcxml/ marcxml
 COPY sru/ sru

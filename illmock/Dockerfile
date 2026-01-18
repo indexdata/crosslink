@@ -9,6 +9,7 @@ COPY broker/go.mod ./broker/go.mod
 
 # copy common sources
 COPY common/ ./common
+COPY directory/ directory
 COPY httpclient/ ./httpclient
 COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip
