@@ -10,15 +10,24 @@ CrossLink broker manages inter-library loan (ILL) transactions, specifically:
 
 # API
 
-See the [Broker API Specification](./oapi/open-api.yaml) for details.
+The broker exposes two API groups:
 
-The broker's API uses hyperlinks to connect JSON resources.
-If you're using Chrome or another browser to explore the API,
-consider using an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa) which allows easy navigation hyperlinked JSON.
+1. The `ILL Transactions API` is used to monitor ILL transactions and events and to manage transaction-related entities such as peers.
+   ILL transactions are created and managed by external ILL clients via standard ISO18626 messages.
+   See the [Broker API Specification](./oapi/open-api.yaml) for details.
 
-Note that selected read-only API endpoints are accessible with the base path `/broker`
-if env `TENANT_TO_SYMBOL` is defined.
-This allows the broker to be used as a FOLIO/Okapi module,
+2. The `Patron Request API` is used to create and manage ILL borrowing and lending requests directly in the broker.
+   The lifecycle of a _Patron Request_ is governed by a state model—a specification of allowed states, actions, and transitions.
+   This high-level API supports building multi-tenant management UIs on top of the broker.
+   Internally, the broker creates an ILL transaction to back the execution of a _Patron Request_; detailed monitoring is available through the same APIs.
+   See the [Patron Request API Specification](./patron_request/oapi/open-api.yaml) for details.
+
+The broker’s APIs use hyperlinks to connect JSON resources.
+If you use Chrome or another browser to explore the API,
+consider installing an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa), which makes hyperlinked JSON easier to navigate.
+
+Selected API endpoints are available under the base path `/broker` when the `TENANT_TO_SYMBOL` environment variable is set.
+This enables the broker to operate as a FOLIO/Okapi module with authentication/authorization and multi-tenancy support;
 see the [ModuleDescriptor](./descriptors/ModuleDescriptor-template.json) for details.
 
 # Mode of operation
