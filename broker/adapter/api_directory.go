@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -45,7 +46,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
-	var responseList EntriesResponse
+	var responseList directory.EntriesResponse
 	err = json.Unmarshal(body, &responseList)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
@@ -53,46 +54,40 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	childSymbolsById := make(map[string][]string, len(responseList.Items))
 	for _, d := range responseList.Items {
 		var symbols []string
-		if listMap, ok := d["symbols"].([]any); ok && len(listMap) > 0 {
-			for _, s := range listMap {
-				if itemMap, castOk := s.(map[string]any); castOk {
-					auth, authOk := itemMap["authority"].(string)
-					sym, symOk := itemMap["symbol"].(string)
-					if authOk && symOk {
-						symbols = append(symbols, auth+":"+sym)
-					}
-				}
+		if d.Symbols != nil {
+			for _, s := range *d.Symbols {
+				symbols = append(symbols, s.Authority+":"+s.Symbol)
 			}
-			if parent, ok := d["parent"].(string); ok {
-				childSymbolsById[parent] = append(childSymbolsById[parent], symbols...)
+			if d.Parent != nil {
+				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
 		apiUrl := ""
-		if listMap, ok := d["endpoints"].([]any); ok && len(listMap) > 0 {
-			for _, s := range listMap {
-				if itemMap, castOk := s.(map[string]any); castOk {
-					typeS, typeOk := itemMap["type"].(string)
-					add, addOk := itemMap["address"].(string)
-					if typeOk && addOk && typeS == "ISO18626" {
-						apiUrl = add
-					}
+		if d.Endpoints != nil {
+			for _, s := range *d.Endpoints {
+				if s.Type == "ISO18626" && s.Address != "" {
+					apiUrl = s.Address
 				}
 			}
 		}
-		// TODO: populate NCIP info
+		var customData map[string]any
+		dataBytes, err := json.Marshal(d)
+		if err == nil {
+			err = json.Unmarshal(dataBytes, &customData)
+			if err != nil {
+				customData = map[string]any{}
+			}
+		}
+
 		if apiUrl != "" && len(symbols) > 0 {
 			vendor := GetVendorFromUrl(apiUrl)
-			name, ok := d["name"].(string)
-			if !ok {
-				name = ""
-			}
 			entry := DirectoryEntry{
-				Name:       name,
+				Name:       d.Name,
 				Symbols:    symbols,
 				Vendor:     vendor,
 				BrokerMode: GetBrokerMode(vendor),
 				URL:        apiUrl,
-				CustomData: d,
+				CustomData: customData,
 			}
 			dirEntries = append(dirEntries, entry)
 		}
