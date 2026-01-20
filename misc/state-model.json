@@ -33,7 +33,6 @@
                 }
             },
             "required": [
-                "desc",
                 "name",
                 "states",
                 "type",
@@ -105,8 +104,6 @@
                 }
             ],
             "required": [
-                "desc",
-                "display",
                 "name",
                 "side"
             ],
@@ -133,7 +130,6 @@
                 }
             },
             "required": [
-                "desc",
                 "name"
             ],
             "title": "Action"
@@ -159,7 +155,6 @@
                 }
             },
             "required": [
-                "desc",
                 "name"
             ],
             "title": "Event"
