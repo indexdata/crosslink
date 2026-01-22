@@ -101,7 +101,8 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
-        cache-dependency-path: ${{ matrix.modules }}/go.sum
+        #setup go already restores the cache
+        cache: false
 
   build-all:
     if: ${{ always() }}
