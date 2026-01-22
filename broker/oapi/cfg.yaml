@@ -1,5 +1,9 @@
 package: oapi
 output: oapi/openapi_gen.go
+output-options:
+  exclude-tags:
+    - PR
 generate:
   models: true
   std-http-server: true
+

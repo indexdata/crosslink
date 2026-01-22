@@ -9,7 +9,7 @@ import (
 type PrRepo interface {
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
-	ListPatronRequests(ctx common.ExtendedContext) ([]PatronRequest, error)
+	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	SavePatronRequest(ctx common.ExtendedContext, params SavePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
 	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
@@ -37,15 +37,27 @@ func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (
 	return row.PatronRequest, err
 }
 
-func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext) ([]PatronRequest, error) {
-	rows, err := r.queries.ListPatronRequests(ctx, r.GetConnOrTx())
+func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
+	rows, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
 	var list []PatronRequest
+	var fullCount int64
 	if err == nil {
-		for _, r := range rows {
-			list = append(list, r.PatronRequest)
+		if len(rows) > 0 {
+			fullCount = rows[0].FullCount
+			for _, r := range rows {
+				fullCount = r.FullCount
+				list = append(list, r.PatronRequest)
+			}
+		} else {
+			params.Limit = 1
+			params.Offset = 0
+			rows, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
+			if err == nil && len(rows) > 0 {
+				fullCount = rows[0].FullCount
+			}
 		}
 	}
-	return list, err
+	return list, fullCount, err
 }
 
 func (r *PgPrRepo) SavePatronRequest(ctx common.ExtendedContext, params SavePatronRequestParams) (PatronRequest, error) {

@@ -1,0 +1,8 @@
+package: proapi
+output: patron_request/proapi/pr-openapi_gen.go
+output-options:
+  include-tags:
+    - PR
+generate:
+  models: true
+  std-http-server: true
