@@ -7,29 +7,34 @@ COPY go.work go.work.sum ./
 # copy only go.mods so Go doesn't complain on missing workspace modules
 COPY illmock/go.mod ./illmock/go.mod
 
-# copy common sources
-COPY common/ common
-COPY directory/ directory
-COPY httpclient/ httpclient
-COPY marcxml/ marcxml
-COPY sru/ sru
-COPY iso18626/ iso18626
-COPY ncip/ ncip
 
-# Set destination for COPY
+# Copy dependent modules' sources (these change seldom)
+COPY common/ ./common
+COPY directory/ ./directory
+COPY httpclient/ ./httpclient
+COPY marcxml/ ./marcxml
+COPY sru/ ./sru
+COPY iso18626/ ./iso18626
+COPY ncip/ ./ncip
+
+# copy broker manifests before sources to leverage docker cache for mod downloads
+COPY broker/go.mod broker/go.sum ./broker/
+
+# Set workdir for go commands
 WORKDIR /app/broker
+
+# download broker module dependencies, use cached GOMODPATH for local builds
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+  go mod download
 
 # sources are generated before docker build
 # make sure make generate is run
 
+# copy broker sources (changes here won't invalidate deps cache)
 # see .dockerignore for what is getting copied
 COPY broker/ ./
 
-# download go deps, caches GOMODPATH
-RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  go mod download
-
-# Build, caches GOCACHE
+# Build, use cached GOCACHE for local builds
 RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
   CGO_ENABLED=0 \
   GOOS=linux \
