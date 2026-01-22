@@ -449,7 +449,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.PickupLocation()
-	// TODO set this properly
+	// TODO set item location based on supplier ISIL
 	itemLocation := ""
 	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
