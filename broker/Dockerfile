@@ -34,16 +34,18 @@ RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
 # see .dockerignore for what is getting copied
 COPY broker/ ./
 
-# Build, use cached GOCACHE for local builds
-RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-  CGO_ENABLED=0 \
-  GOOS=linux \
-  go build -o /broker ./cmd/broker
+# Build, reuse both module and build caches
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    go build -o /broker ./cmd/broker
 
-RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-  CGO_ENABLED=0 \
-  GOOS=linux \
-  go build -o /archive ./cmd/archive
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    go build -o /archive ./cmd/archive
 
 # create runtime user
 RUN adduser \
