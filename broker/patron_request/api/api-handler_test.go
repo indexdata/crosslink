@@ -261,6 +261,25 @@ func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "unexpected EOF")
 }
 
+func TestGetSymbolForRequest(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant("ISIL:{tenant}"), 10)
+	req, _ := http.NewRequest("GET", "/broker/patron_request", strings.NewReader("{"))
+	req.RequestURI = "/broker/patron_request"
+	tenant := "req"
+	resolved, err := handler.getSymbolForRequest(req, &tenant, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:REQ", resolved)
+
+	resolved, err = handler.getSymbolForRequest(req, nil, nil)
+	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
+	assert.Equal(t, "", resolved)
+
+	handler = NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	resolved, err = handler.getSymbolForRequest(req, &tenant, nil)
+	assert.Equal(t, "tenant mapping must be specified", err.Error())
+	assert.Equal(t, "", resolved)
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
