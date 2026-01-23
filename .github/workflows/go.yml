@@ -75,7 +75,6 @@ jobs:
     - name: Lint module '${{ matrix.modules }}'
       uses: golangci/golangci-lint-action@v9
       with:
-        install-mode: goinstall
         version: ${{ env.GOLANGCI_LINT_VERSION }}
         working-directory: ${{ matrix.modules }}
 
@@ -101,7 +100,8 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
-        cache-dependency-path: ${{ matrix.modules }}/go.sum
+        #setup go already restores the cache
+        cache: false
 
   build-all:
     if: ${{ always() }}

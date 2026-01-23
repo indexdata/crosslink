@@ -16,24 +16,27 @@ COPY ncip/ ./ncip
 COPY marcxml/ ./marcxml
 COPY sru/ ./sru
 
+# copy illmock manifests before sources to leverage docker cache for mod downloads
+COPY illmock/go.mod illmock/go.sum ./illmock/
+
 # Set destination for COPY
 WORKDIR /app/illmock
 
-# sources are generated before docker build
-# make sure make generate is run
-
-# see .dockerignore for what is getting copied
-COPY illmock/ ./
-
 # download go deps
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
-  go mod download
+go mod download
+# see .dockerignore for what is getting copied
+
+# sources are generated before docker build
+# make sure make generate is run
+COPY illmock/ ./
 
 # Build
-RUN --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-  CGO_ENABLED=0 \
-  GOOS=linux \
-  go build -o /illmock ./cmd/illmock
+RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
+    --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    go build -o /illmock ./cmd/illmock
 
 # create runtime user
 RUN adduser \

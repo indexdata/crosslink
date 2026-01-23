@@ -250,7 +250,7 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateSent, &result)
 }
 
-// TODO : should be resolved pickup location
+// TODO pickup location should be resolved to LMS code
 func pickupLocationFromIllRequest(illRequest iso18626.Request) string {
 	pickupLocation := ""
 	if len(illRequest.RequestedDeliveryInfo) > 0 {
@@ -449,7 +449,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.PickupLocation()
-	// TODO set this properly
+	// TODO set item location based on supplier ISIL
 	itemLocation := ""
 	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
