@@ -166,13 +166,8 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 		return repo.DeletePatronRequest(ctx, pr.ID)
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
-			return
-		} else {
-			addInternalError(ctx, w, err)
-			return
-		}
+		addInternalError(ctx, w, err)
+		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -216,7 +211,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	}
 	var illRequest iso18626.Request
 	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}

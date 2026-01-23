@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -46,10 +47,39 @@ func TestGetPatronRequests(t *testing.T) {
 		Symbol: &symbol,
 	}
 	handler.GetPatronRequests(rr, req, params)
-	if status := rr.Code; status != http.StatusInternalServerError {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsNoSymbol(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Side: string(prservice.SideLending),
 	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "symbol must be specified")
+}
+
+func TestGetPatronRequestsWithLimits(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	offset := proapi.Offset(10)
+	limit := proapi.Limit(10)
+	cql := "state = NEW"
+	params := proapi.GetPatronRequestsParams{
+		Side:   string(prservice.SideLending),
+		Symbol: &symbol,
+		Offset: &offset,
+		Limit:  &limit,
+		Cql:    &cql,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 func TestPostPatronRequests(t *testing.T) {
@@ -107,6 +137,15 @@ func TestDeletePatronRequestsIdMissingSymbol(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "symbol must be specified")
 }
 
+func TestDeletePatronRequestsIdError(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.DeletePatronRequestsId(rr, req, "1", proapi.DeletePatronRequestsIdParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
 func TestDeletePatronRequestsId(t *testing.T) {
 	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
 	req, _ := http.NewRequest("POST", "/", nil)
@@ -114,6 +153,14 @@ func TestDeletePatronRequestsId(t *testing.T) {
 	handler.DeletePatronRequestsId(rr, req, "3", proapi.DeletePatronRequestsIdParams{Symbol: &symbol, Side: proapi.Side(prservice.SideBorrowing)})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestDeletePatronRequestsIdDeleted(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.DeletePatronRequestsId(rr, req, "4", proapi.DeletePatronRequestsIdParams{Symbol: &symbol, Side: proapi.Side(prservice.SideBorrowing)})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
 }
 
 func TestGetPatronRequestsIdMissingSymbol(t *testing.T) {
@@ -205,6 +252,15 @@ func TestPostPatronRequestsIdActionNotFoundBecauseOfSide(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "not found")
 }
 
+func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
+	handler := NewApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("GET", "/", strings.NewReader("{"))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Symbol: &symbol, Side: proapi.Side(prservice.SideBorrowing)})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "unexpected EOF")
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
@@ -218,7 +274,7 @@ func (r *PrRepoError) GetPatronRequestById(ctx common.ExtendedContext, id string
 	switch id {
 	case "2":
 		return pr_db.PatronRequest{}, pgx.ErrNoRows
-	case "3":
+	case "3", "4":
 		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNew, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}}, nil
 	default:
 		return pr_db.PatronRequest{}, errors.New("DB error")
@@ -231,6 +287,9 @@ func (r *PrRepoError) SavePatronRequest(ctx common.ExtendedContext, params pr_db
 	return pr_db.PatronRequest{}, errors.New("DB error")
 }
 func (r *PrRepoError) DeletePatronRequest(ctx common.ExtendedContext, id string) error {
+	if id == "4" {
+		return nil
+	}
 	return errors.New("DB error")
 }
 
