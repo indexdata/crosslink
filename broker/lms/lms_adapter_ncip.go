@@ -7,27 +7,11 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/ncipclient"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/ncip"
 )
 
 type NcipProperty string
-
-const (
-	FromAgency                      NcipProperty = "from_agency"
-	FromAgencyAuthentication        NcipProperty = "from_agency_authentication"
-	ToAgency                        NcipProperty = "to_agency"
-	Address                         NcipProperty = "address"
-	LookupUserEnable                NcipProperty = "lookup_user_enable"
-	AcceptItemEnable                NcipProperty = "accept_item_enable"
-	CheckInItemEnable               NcipProperty = "check_in_item_enable"
-	CheckOutItemEnable              NcipProperty = "check_out_item_enable"
-	RequestItemRequestType          NcipProperty = "request_item_request_type"
-	RequestItemRequestScopeType     NcipProperty = "request_item_request_scope_type"
-	RequestItemBibIdCode            NcipProperty = "request_item_bib_id_code"
-	RequestItemPickupLocationEnable NcipProperty = "request_item_pickup_location_enable"
-	InstitutionalPatron             NcipProperty = "institutional_patron"
-	SupplierPickupLocation          NcipProperty = "supplier_pickup_location"
-)
 
 type NcipUserElement string
 
@@ -46,77 +30,29 @@ const (
 // https://github.com/openlibraryenvironment/lib-ncip-client/tree/master/lib-ncip-client/src/main/java/org/olf/rs/circ/client
 
 type LmsAdapterNcip struct {
-	ncipClient                      ncipclient.NcipClient
-	address                         string
-	toAgency                        string
-	fromAgency                      string
-	fromAgencyAuthentication        string
-	lookupUserEnable                bool
-	acceptItemEnable                bool
-	checkInItemEnable               bool
-	checkOutItemEnable              bool
-	requestItemRequestType          string
-	requestItemRequestScopeType     string
-	requestItemBibIdCode            string
-	requestItemPickupLocationEnable bool
-	institutionalPatron             string
-	supplierPickupLocation          string
+	ncipClient ncipclient.NcipClient
+	config     directory.LmsConfig
 }
 
-func reqField(m map[string]any, key NcipProperty, dst *string) error {
-	v, ok := m[string(key)].(string)
-	if !ok || v == "" {
-		return fmt.Errorf("missing required NCIP configuration field: %s", key)
+func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
+	l := &LmsAdapterNcip{config: lmsConfig}
+	toAgency := "default-to-agency"
+	if l.config.ToAgency != nil {
+		toAgency = *l.config.ToAgency
 	}
-	*dst = v
-	return nil
-}
-
-func optField[T any](m map[string]any, key NcipProperty, dst *T, def T) {
-	v, ok := m[string(key)].(T)
-	if !ok {
-		*dst = def
-	} else {
-		*dst = v
+	FromAgencyAuthentication := ""
+	if l.config.FromAgencyAuthentication != nil {
+		FromAgencyAuthentication = *l.config.FromAgencyAuthentication
 	}
-}
-
-func (l *LmsAdapterNcip) parseConfig(ncipInfo map[string]any) error {
-	err := reqField(ncipInfo, Address, &l.address)
-	if err != nil {
-		return err
+	if l.config.Address == "" {
+		return nil, fmt.Errorf("missing NCIP address in LMS configuration")
 	}
-	err = reqField(ncipInfo, FromAgency, &l.fromAgency)
-	if err != nil {
-		return err
-	}
-	optField(ncipInfo, FromAgencyAuthentication, &l.fromAgencyAuthentication, "")
-	optField(ncipInfo, ToAgency, &l.toAgency, "default-to-agency")
-	optField(ncipInfo, LookupUserEnable, &l.lookupUserEnable, true)
-	optField(ncipInfo, AcceptItemEnable, &l.acceptItemEnable, true)
-	optField(ncipInfo, CheckInItemEnable, &l.checkInItemEnable, true)
-	optField(ncipInfo, CheckOutItemEnable, &l.checkOutItemEnable, true)
-	optField(ncipInfo, RequestItemRequestType, &l.requestItemRequestType, "Page")
-	optField(ncipInfo, RequestItemRequestScopeType, &l.requestItemRequestScopeType, "Item")
-	optField(ncipInfo, RequestItemBibIdCode, &l.requestItemBibIdCode, "SYSNUMBER")
-	optField(ncipInfo, RequestItemPickupLocationEnable, &l.requestItemPickupLocationEnable, true)
-	optField(ncipInfo, InstitutionalPatron, &l.institutionalPatron, "")
-	optField(ncipInfo, SupplierPickupLocation, &l.supplierPickupLocation, "ILL Office")
-	return nil
-}
-
-func CreateLmsAdapterNcip(ncipInfo map[string]any) (LmsAdapter, error) {
-	l := &LmsAdapterNcip{}
-	err := l.parseConfig(ncipInfo)
-	if err != nil {
-		return nil, err
-	}
-	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.address, l.fromAgency, l.toAgency, l.fromAgencyAuthentication)
+	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
 	return l, nil
 }
 
 func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
-	if !l.lookupUserEnable {
+	if l.config.LookupUserEnable != nil && !*l.config.LookupUserEnable {
 		return patron, nil // could even be empty
 	}
 	if patron == "" {
@@ -167,7 +103,7 @@ func (l *LmsAdapterNcip) AcceptItem(
 	pickupLocation string,
 	requestedAction string,
 ) error {
-	if !l.acceptItemEnable {
+	if l.config.AcceptItemEnable != nil && !*l.config.AcceptItemEnable {
 		return nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
@@ -225,7 +161,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	itemLocation string,
 ) error {
 	var pickupLocationField *ncip.SchemeValuePair
-	if l.requestItemPickupLocationEnable && pickupLocation != "" {
+	if l.config.RequestItemPickupLocationEnable != nil && *l.config.RequestItemPickupLocationEnable && pickupLocation != "" {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
@@ -235,11 +171,11 @@ func (l *LmsAdapterNcip) RequestItem(
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,
-			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: l.requestItemBibIdCode},
+			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: *l.config.RequestItemBibIdCode},
 		}}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestScopeType}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestScopeType}
 
-	requestTypeField := ncip.SchemeValuePair{Text: l.requestItemRequestType}
+	requestTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestType}
 	arg := ncip.RequestItem{
 		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
 		BibliographicId:  []ncip.BibliographicId{bibIdField},
@@ -262,7 +198,7 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 }
 
 func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
-	if !l.checkInItemEnable {
+	if l.config.CheckInItemEnable != nil && !*l.config.CheckInItemEnable {
 		return nil
 	}
 	itemElements := []ncip.SchemeValuePair{
@@ -283,7 +219,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	userId string,
 	externalReferenceValue string,
 ) error {
-	if !l.checkOutItemEnable {
+	if l.config.CheckOutItemEnable != nil && !*l.config.CheckOutItemEnable {
 		return nil
 	}
 	var ext *ncip.Ext
@@ -314,9 +250,12 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 }
 
 func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
-	return strings.ReplaceAll(l.institutionalPatron, "{symbol}", strings.ToUpper(requesterSymbol))
+	return strings.ReplaceAll(*l.config.InstitutionalPatron, "{symbol}", strings.ToUpper(requesterSymbol))
 }
 
 func (l *LmsAdapterNcip) PickupLocation() string {
-	return l.supplierPickupLocation
+	if l.config.SupplierPickupLocation != nil {
+		return *l.config.SupplierPickupLocation
+	}
+	return ""
 }
