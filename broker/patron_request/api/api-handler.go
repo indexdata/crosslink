@@ -202,7 +202,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 		Other: map[string]string{"method": "GetPatronRequestsId", "id": id, "side": params.Side, "symbol": symbol},
 	})
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
@@ -229,7 +229,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 		Other: map[string]string{"method": "GetPatronRequestsIdActions", "id": id, "side": params.Side, "symbol": symbol},
 	})
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
@@ -251,7 +251,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		Other: map[string]string{"method": "PostPatronRequestsIdAction", "id": id, "side": params.Side, "symbol": symbol},
 	})
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
