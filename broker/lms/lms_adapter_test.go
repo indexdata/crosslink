@@ -51,7 +51,6 @@ func TestLookupUser(t *testing.T) {
 	assert.Equal(t, "user123", userId)
 
 	b = false
-	ad.config.LookupUserEnable = &b
 	userId, err = ad.LookupUser("")
 	assert.NoError(t, err)
 	assert.Equal(t, "", userId)
@@ -98,7 +97,6 @@ func TestAcceptItem(t *testing.T) {
 	assert.Equal(t, "Hold For Pickup", req.RequestedActionType.Text)
 
 	b = false
-	ad.config.AcceptItemEnable = &b
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.AcceptItem("", "", "", "", "", "", "", "", "")
 	assert.NoError(t, err)
@@ -147,7 +145,6 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
 
 	b = false
-	ad.config.RequestItemPickupLocationEnable = &b
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
@@ -184,7 +181,6 @@ func TestCheckInItem(t *testing.T) {
 	assert.Equal(t, "Bibliographic Description", req.ItemElementType[0].Text)
 
 	b = false
-	ad.config.CheckInItemEnable = &b
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.CheckInItem("item1")
 	assert.NoError(t, err)
@@ -211,7 +207,6 @@ func TestCheckOutItem(t *testing.T) {
 	assert.Equal(t, bytes, req.Ext.XMLContent)
 
 	b = false
-	ad.config.CheckOutItemEnable = &b
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.NoError(t, err)
