@@ -11,8 +11,6 @@ import (
 	"github.com/indexdata/crosslink/ncip"
 )
 
-type NcipProperty string
-
 type NcipUserElement string
 
 const (
