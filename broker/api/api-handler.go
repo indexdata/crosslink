@@ -812,9 +812,13 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 		peer.BrokerMode = string(adapter.GetBrokerMode(adapter.GetVendorFromUrl(peer.Url)))
 	}
 
-	bytes, _ := json.Marshal(peer.CustomData)
 	var customData map[string]interface{}
-	_ = json.Unmarshal(bytes, &customData)
+	if peer.CustomData != nil {
+		if bytes, err := json.Marshal(peer.CustomData); err == nil {
+			// If unmarshalling fails, customData remains nil and will not be populated.
+			_ = json.Unmarshal(bytes, &customData)
+		}
+	}
 
 	return oapi.Peer{
 		ID:            peer.ID,
