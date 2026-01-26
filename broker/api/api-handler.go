@@ -14,6 +14,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -321,7 +322,8 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			addInternalError(ctx, w, e)
 			return
 		}
-		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
+		apiPeer := toApiPeer(p, symbols, branchSymbols)
+		resp.Items = append(resp.Items, apiPeer)
 	}
 
 	if dbparams.Offset > 0 {
@@ -406,9 +408,10 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols, branchSymbols))
+	_ = json.NewEncoder(w).Encode(apiPeer)
 }
 
 func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -493,7 +496,8 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
+	writeJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -524,9 +528,18 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		peer.HttpHeaders = make(map[string]string)
 	}
 	if update.CustomData != nil {
-		peer.CustomData = *update.CustomData
+		bytes, err := json.Marshal(update.CustomData)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		err = json.Unmarshal(bytes, &peer.CustomData)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	} else {
-		peer.CustomData = make(map[string]interface{})
+		peer.CustomData = directory.Entry{}
 	}
 	if update.BrokerMode != "" {
 		peer.BrokerMode = string(update.BrokerMode)
@@ -585,7 +598,8 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
+	writeJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
@@ -797,6 +811,11 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 	if peer.BrokerMode == "" {
 		peer.BrokerMode = string(adapter.GetBrokerMode(adapter.GetVendorFromUrl(peer.Url)))
 	}
+
+	bytes, _ := json.Marshal(peer.CustomData)
+	var customData map[string]interface{}
+	_ = json.Unmarshal(bytes, &customData)
+
 	return oapi.Peer{
 		ID:            peer.ID,
 		Symbols:       list,
@@ -807,7 +826,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 		RefreshTime:   &peer.RefreshTime.Time,
 		LoansCount:    &peer.LoansCount,
 		BorrowsCount:  &peer.BorrowsCount,
-		CustomData:    &peer.CustomData,
+		CustomData:    &customData,
 		HttpHeaders:   &peer.HttpHeaders,
 		BrokerMode:    toApiBrokerMode(peer.BrokerMode),
 		BranchSymbols: branchList,
@@ -833,9 +852,15 @@ func toApiBrokerMode(brokerMode string) oapi.PeerBrokerMode {
 }
 
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
-	customData := make(map[string]interface{})
+	var entry directory.Entry
 	if peer.CustomData != nil {
-		customData = *peer.CustomData
+		bytes, err := json.Marshal(*peer.CustomData)
+		if err == nil {
+			err = json.Unmarshal(bytes, &entry)
+		}
+		if err != nil {
+			entry = directory.Entry{}
+		}
 	}
 	httpHeaders := make(map[string]string)
 	if peer.HttpHeaders != nil {
@@ -852,7 +877,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 			Time:  time.Now(),
 			Valid: true,
 		},
-		CustomData:  customData,
+		CustomData:  entry,
 		HttpHeaders: httpHeaders,
 	}
 	if peer.LoansCount != nil {

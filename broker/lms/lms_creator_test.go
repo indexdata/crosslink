@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -33,15 +34,19 @@ func TestGetAdapterNoPeers(t *testing.T) {
 	assert.IsType(t, &LmsAdapterManual{}, LmsAdapter)
 }
 
+func strPtr(s string) *string {
+	return &s
+}
+
 func TestGetAdapterNcipOK(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
-		CustomData: map[string]any{
-			"LmsConfig": map[string]any{
-				"address":                  "http://ncip.example.com",
-				"fromAgency":               "AGENCY1",
-				"toAgency":                 "AGENCY2",
-				"fromAgencyAuthentication": "auth",
+		CustomData: directory.Entry{
+			LmsConfig: &directory.LmsConfig{
+				Address:                  "http://ncip.example.com",
+				FromAgency:               "AGENCY1",
+				ToAgency:                 strPtr("AGENCY2"),
+				FromAgencyAuthentication: strPtr("auth"),
 			},
 		},
 	}
@@ -57,8 +62,8 @@ func TestGetAdapterNcipOK(t *testing.T) {
 func TestGetAdapterNcipFail(t *testing.T) {
 	illRepo := &MockIllRepo{}
 	peer := ill_db.Peer{
-		CustomData: map[string]any{
-			"LmsConfig": map[string]any{},
+		CustomData: directory.Entry{
+			LmsConfig: &directory.LmsConfig{},
 		},
 	}
 	illRepo.On("GetCachedPeersBySymbols", mock.Anything).Return([]ill_db.Peer{peer}, "", nil)

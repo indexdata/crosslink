@@ -236,30 +236,33 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 			if err != nil {
 				return ill_db.LocatedSupplier{}, skippedSuppliers, err
 			}
-			timeZone, _ := peer.CustomData["timeZone"].(string)
-			if listMap, ok := peer.CustomData["closures"].([]any); ok && len(listMap) > 0 {
+			if peer.CustomData.Closures != nil {
+				timezoneLoc := time.Now().Location()
+				timeZone := peer.CustomData.TimeZone
+				if timeZone != nil && *timeZone != "" {
+					timezoneLoc, err = time.LoadLocation(*timeZone)
+					if err != nil {
+						return ill_db.LocatedSupplier{}, skippedSuppliers, err
+					}
+				}
+				currentTime := time.Now().In(timezoneLoc)
 				skipSup := false
-				for _, c := range listMap {
-					if closuresMap, castOk := c.(map[string]any); castOk {
-						startDateS, startDateOk := closuresMap["startDate"].(string)
-						endDateS, endDateOk := closuresMap["endDate"].(string)
-						if startDateOk && endDateOk {
-							startDate, err := getDateWithTimezone(startDateS, timeZone, false)
-							if err != nil {
-								ctx.Logger().Error("failed to parse closure start date", "error", err)
-								skipSup = true
-								continue
-							}
-							endDate, err := getDateWithTimezone(endDateS, timeZone, true)
-							if err != nil {
-								ctx.Logger().Error("failed to parse closure start date", "error", err)
-								skipSup = true
-								continue
-							}
-							currentTime := time.Now()
-							if startDate.Before(currentTime) && endDate.After(currentTime) {
-								skipSup = true
-							}
+				for _, closure := range *peer.CustomData.Closures {
+					if closure.StartDate != nil && closure.EndDate != nil {
+						startDate, err := getDateWithTimezone(*closure.StartDate, timezoneLoc, false)
+						if err != nil {
+							ctx.Logger().Error("failed to parse closure start date", "error", err)
+							skipSup = true
+							continue
+						}
+						endDate, err := getDateWithTimezone(*closure.EndDate, timezoneLoc, true)
+						if err != nil {
+							ctx.Logger().Error("failed to parse closure end date", "error", err)
+							skipSup = true
+							continue
+						}
+						if startDate.Before(currentTime) && endDate.After(currentTime) {
+							skipSup = true
 						}
 					}
 				}
@@ -278,17 +281,8 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 	}
 	return ill_db.LocatedSupplier{}, skippedSuppliers, nil
 }
-func getDateWithTimezone(date string, timezone string, endOfDay bool) (time.Time, error) {
-	var loc *time.Location
-	if timezone != "" {
-		timezoneLoc, err := time.LoadLocation(timezone)
-		if err != nil {
-			return time.Time{}, err
-		}
-		loc = timezoneLoc
-	} else {
-		loc = time.Now().Location()
-	}
+
+func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.Time, error) {
 	t, err := time.Parse(DATE_LAYOUT, date)
 	if err != nil {
 		return time.Time{}, err
