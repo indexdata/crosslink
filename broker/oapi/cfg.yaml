@@ -2,7 +2,7 @@ package: oapi
 output: oapi/openapi_gen.go
 output-options:
   exclude-tags:
-    - PR
+    - patron-request-api
 generate:
   models: true
   std-http-server: true

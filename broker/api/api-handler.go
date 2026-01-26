@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +31,7 @@ var ILL_TRANSACTIONS_PATH = "/ill_transactions"
 var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
-var PATRON_REQUEST_PATH = "/patron_requests"
+var PATRON_REQUESTS_PATH = "/patron_requests"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
@@ -104,7 +103,7 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
 	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")
 	index.Links.PeersLink = toLink(r, PEERS_PATH, "", "")
-	index.Links.PatronRequestLink = toLink(r, PATRON_REQUEST_PATH, "", "")
+	index.Links.PatronRequestsLink = toLink(r, PATRON_REQUESTS_PATH, "", "")
 	writeJsonResponse(w, index)
 }
 
@@ -308,29 +307,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	}
 	resp.About = CollectAboutData(count, dbparams.Offset, dbparams.Limit, r)
 	writeJsonResponse(w, resp)
-}
-
-func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {
-	about := oapi.About{}
-	about.Count = fullCount
-	if offset > 0 {
-		pOffset := offset - limit
-		if pOffset < 0 {
-			pOffset = 0
-		}
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := ToLinkUrlValues(r, urlValues)
-		about.PrevLink = &link
-	}
-	if fullCount > int64(limit+offset) {
-		noffset := offset + limit
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := ToLinkUrlValues(r, urlValues)
-		about.NextLink = &link
-	}
-	return about
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {

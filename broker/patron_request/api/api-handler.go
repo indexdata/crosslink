@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -31,7 +30,7 @@ type PatronRequestApiHandler struct {
 	tenant               common.Tenant
 }
 
-func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
+func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
@@ -42,7 +41,7 @@ func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, params.Symbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	logParams := map[string]string{"method": "GetPatronRequests", "side": params.Side, "symbol": symbol}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: logParams,
@@ -110,7 +109,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, newPr.RequesterSymbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, newPr.RequesterSymbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -145,7 +144,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, params.Symbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeletePatronRequestsId", "id": id, "side": params.Side, "symbol": symbol},
 	})
@@ -192,7 +191,7 @@ func isOwner(pr pr_db.PatronRequest, side string, symbol string) bool {
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, params.Symbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPatronRequestsId", "id": id, "side": params.Side, "symbol": symbol},
 	})
@@ -219,7 +218,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, params.Symbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPatronRequestsIdActions", "id": id, "side": params.Side, "symbol": symbol},
 	})
@@ -241,7 +240,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
-	symbol, err := a.getSymbolForRequest(r, params.XOkapiTenant, params.Symbol)
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostPatronRequestsIdAction", "id": id, "side": params.Side, "symbol": symbol},
 	})
@@ -299,26 +298,6 @@ func (a *PatronRequestApiHandler) ConfirmActionProcess(ctx common.ExtendedContex
 		}
 		writeJsonResponse(*waitingRequest.w, result)
 		waitingRequest.wg.Done()
-	}
-}
-
-func (a *PatronRequestApiHandler) getSymbolForRequest(r *http.Request, tenant *string, symbol *string) (string, error) {
-	if strings.Contains(r.RequestURI, "/broker/") {
-		if a.tenant.IsSpecified() {
-			if tenant == nil {
-				return "", errors.New("X-Okapi-Tenant must be specified")
-			} else {
-				return a.tenant.GetSymbol(*tenant), nil
-			}
-		} else {
-			return "", errors.New("tenant mapping must be specified")
-		}
-	} else {
-		if symbol == nil || *symbol == "" {
-			return "", errors.New("symbol must be specified")
-		} else {
-			return *symbol, nil
-		}
 	}
 }
 
