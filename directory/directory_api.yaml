@@ -295,6 +295,9 @@ components:
           type: string
           description: The pickup location code to use when the entry is acting as the supplying agency
           default: ILL Office
+        institutionalPatron:
+          type: string
+          description: The institutional patron code to use when the entry is acting as the supplying agency. Occurrences of {symbol} will be replaced with the entry's symbol.
     Symbol:
       required:
         - id
