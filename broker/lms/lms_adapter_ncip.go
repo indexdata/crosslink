@@ -186,7 +186,11 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	requestScopeTypeField := ncip.SchemeValuePair{Text: scopeType}
 
-	requestTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestType}
+	requestType := "Page"
+	if l.config.RequestItemRequestType != nil {
+		requestType = *l.config.RequestItemRequestType
+	}
+	requestTypeField := ncip.SchemeValuePair{Text: requestType}
 	arg := ncip.RequestItem{
 		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
 		BibliographicId:  []ncip.BibliographicId{bibIdField},
