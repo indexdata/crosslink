@@ -214,7 +214,11 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 		return events.LogErrorAndReturnResult(ctx, "could not find supplier peer", err)
 	}
 	if locSup.ID == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
+		eventData := map[string]any{}
+		if len(skippedSuppliers) > 0 {
+			eventData["skippedSuppliers"] = skippedSuppliers
+		}
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", eventData)
 	}
 	locSup.SupplierStatus = ill_db.SupplierStateSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
@@ -228,8 +232,8 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
-func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, []string, error) {
-	skippedSuppliers := []string{}
+func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, []SkippedSupplier, error) {
+	skippedSuppliers := []SkippedSupplier{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
@@ -269,7 +273,10 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 					if err != nil {
 						return ill_db.LocatedSupplier{}, skippedSuppliers, err
 					}
-					skippedSuppliers = append(skippedSuppliers, sup.SupplierSymbol)
+					skippedSuppliers = append(skippedSuppliers, SkippedSupplier{
+						Symbol: sup.SupplierSymbol,
+						Reason: fmt.Sprintf("closed on %s", time.Now().Format("2006-01-02")),
+					})
 					continue
 				}
 			}
@@ -323,4 +330,9 @@ func ToInt32(i int) int32 {
 	} else {
 		return int32(i)
 	}
+}
+
+type SkippedSupplier struct {
+	Symbol string `json:"symbol"`
+	Reason string `json:"reason"`
 }
