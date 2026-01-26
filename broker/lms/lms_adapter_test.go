@@ -168,6 +168,21 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Loan", req.RequestType.Text)
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
 
+	ad = &LmsAdapterNcip{
+		config:     directory.LmsConfig{},
+		ncipClient: mock,
+	}
+	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Nil(t, req.PickupLocation)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
+
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
