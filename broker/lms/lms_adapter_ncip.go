@@ -47,6 +47,9 @@ func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
 	if l.config.Address == "" {
 		return nil, fmt.Errorf("missing NCIP address in LMS configuration")
 	}
+	if l.config.FromAgency == "" {
+		return nil, fmt.Errorf("missing From Agency in LMS configuration")
+	}
 	l.ncipClient = ncipclient.NewNcipClient(http.DefaultClient, l.config.Address, l.config.FromAgency, toAgency, FromAgencyAuthentication)
 	return l, nil
 }
@@ -168,10 +171,14 @@ func (l *LmsAdapterNcip) RequestItem(
 	if userId != "" {
 		userIdField = &ncip.UserId{UserIdentifierValue: userId}
 	}
+	code := "SYSNUMBER"
+	if l.config.RequestItemBibIdCode != nil {
+		code = *l.config.RequestItemBibIdCode
+	}
 	bibIdField := ncip.BibliographicId{
 		BibliographicRecordId: &ncip.BibliographicRecordId{
 			BibliographicRecordIdentifier:     itemId,
-			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: *l.config.RequestItemBibIdCode},
+			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
 	requestScopeTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestScopeType}
 
@@ -250,7 +257,11 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 }
 
 func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
-	return strings.ReplaceAll(*l.config.InstitutionalPatron, "{symbol}", strings.ToUpper(requesterSymbol))
+	patron := "INST-${symbol}"
+	if l.config.InstitutionalPatron != nil {
+		patron = *l.config.InstitutionalPatron
+	}
+	return strings.ReplaceAll(patron, "{symbol}", strings.ToUpper(requesterSymbol))
 }
 
 func (l *LmsAdapterNcip) PickupLocation() string {

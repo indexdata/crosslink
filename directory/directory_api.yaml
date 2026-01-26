@@ -249,7 +249,7 @@ components:
       properties:
         address:
           type: string
-          description: Base URL of the the LMS API
+          description: Base URL of the LMS API
         fromAgency:
           type: string
           description: Agency code used when the entry is acting as the supplying agency
@@ -298,6 +298,7 @@ components:
         institutionalPatron:
           type: string
           description: The institutional patron code to use when the entry is acting as the supplying agency. Occurrences of {symbol} will be replaced with the entry's symbol.
+          default: INST-{symbol}
     Symbol:
       required:
         - id

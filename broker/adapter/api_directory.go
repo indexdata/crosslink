@@ -78,7 +78,9 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				customData = map[string]any{}
 			}
 		}
-
+		if err != nil {
+			return []DirectoryEntry{}, query, err
+		}
 		if apiUrl != "" && len(symbols) > 0 {
 			vendor := GetVendorFromUrl(apiUrl)
 			entry := DirectoryEntry{
