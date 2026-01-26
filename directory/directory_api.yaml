@@ -240,6 +240,7 @@ components:
           items:
             $ref: '#/components/schemas/Tier'
         lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
     LmsConfig:
       required:
