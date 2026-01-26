@@ -12,6 +12,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCreateLmsAdapterNcip(t *testing.T) {
+	config := directory.LmsConfig{
+		Address:    "http://ncip.example.com",
+		FromAgency: "MyAgency",
+	}
+	ad, err := CreateLmsAdapterNcip(config)
+	assert.NoError(t, err)
+	assert.NotNil(t, ad)
+
+	config = directory.LmsConfig{
+		FromAgency: "MyAgency",
+	}
+	_, err = CreateLmsAdapterNcip(config)
+	assert.Error(t, err)
+	assert.Equal(t, "missing NCIP address in LMS configuration", err.Error())
+
+	config = directory.LmsConfig{
+		Address: "http://ncip.example.com",
+	}
+	_, err = CreateLmsAdapterNcip(config)
+	assert.Error(t, err)
+	assert.Equal(t, "missing From Agency in LMS configuration", err.Error())
+}
+
 func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
@@ -196,13 +220,22 @@ func TestCheckOutItem(t *testing.T) {
 			CheckOutItemEnable: &b,
 		},
 	}
-	err := ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	ref := "extref"
+	err := ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 	assert.Equal(t, "barcodeid", req.UserId.UserIdentifierValue)
-	bytes, err := xml.Marshal(ncip.RequestId{RequestIdentifierValue: "extref"})
+	bytes, err := xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
+	assert.NoError(t, err)
+	assert.Equal(t, bytes, req.Ext.XMLContent)
+
+	ref = "\x10" // will be replaced with replacement character
+	err = ad.CheckOutItem("req1", "item1", "barcodeid", ref)
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
+	bytes, err = xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
 
@@ -222,6 +255,46 @@ func TestCreateUserFiscalTransaction(t *testing.T) {
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CreateUserFiscalTransaction)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+}
+
+func TestInstitutionalPatron(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	config := directory.LmsConfig{}
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	institutionalPatron := ad.InstitutionalPatron("123456")
+	assert.Equal(t, "INST-123456", institutionalPatron)
+
+	p := "USER-{symbol}-XYZ"
+	config = directory.LmsConfig{InstitutionalPatron: &p}
+	ad = &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	institutionalPatron = ad.InstitutionalPatron("123456")
+	assert.Equal(t, "USER-123456-XYZ", institutionalPatron)
+}
+
+func TestPickupLocation(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	config := directory.LmsConfig{}
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	pickupLocation := ad.PickupLocation()
+	assert.Equal(t, "ILL Office", pickupLocation)
+
+	p := "Office2"
+	config = directory.LmsConfig{SupplierPickupLocation: &p}
+	ad = &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	pickupLocation = ad.PickupLocation()
+	assert.Equal(t, "Office2", pickupLocation)
 }
 
 type ncipClientMock struct {

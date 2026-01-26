@@ -180,7 +180,11 @@ func (l *LmsAdapterNcip) RequestItem(
 			BibliographicRecordIdentifier:     itemId,
 			BibliographicRecordIdentifierCode: &ncip.SchemeValuePair{Text: code},
 		}}
-	requestScopeTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestScopeType}
+	scopeType := "Item"
+	if l.config.RequestItemRequestScopeType != nil {
+		scopeType = *l.config.RequestItemRequestScopeType
+	}
+	requestScopeTypeField := ncip.SchemeValuePair{Text: scopeType}
 
 	requestTypeField := ncip.SchemeValuePair{Text: *l.config.RequestItemRequestType}
 	arg := ncip.RequestItem{
@@ -257,7 +261,7 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 }
 
 func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
-	patron := "INST-${symbol}"
+	patron := "INST-{symbol}"
 	if l.config.InstitutionalPatron != nil {
 		patron = *l.config.InstitutionalPatron
 	}
@@ -268,5 +272,5 @@ func (l *LmsAdapterNcip) PickupLocation() string {
 	if l.config.SupplierPickupLocation != nil {
 		return *l.config.SupplierPickupLocation
 	}
-	return ""
+	return "ILL Office"
 }
