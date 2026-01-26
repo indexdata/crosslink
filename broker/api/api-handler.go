@@ -813,11 +813,9 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 	}
 
 	var customData map[string]interface{}
-	if peer.CustomData != nil {
-		if bytes, err := json.Marshal(peer.CustomData); err == nil {
-			// If unmarshalling fails, customData remains nil and will not be populated.
-			_ = json.Unmarshal(bytes, &customData)
-		}
+	if bytes, err := json.Marshal(peer.CustomData); err == nil {
+		// If unmarshalling fails, customData remains nil
+		_ = json.Unmarshal(bytes, &customData)
 	}
 
 	return oapi.Peer{
