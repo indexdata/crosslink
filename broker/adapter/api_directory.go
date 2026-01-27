@@ -308,7 +308,7 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 				Name:  t.Name,
 				Level: t.Level,
 				Type:  t.Type,
-				Cost:  float64(t.Cost),
+				Cost:  t.Cost,
 			})
 		}
 	}

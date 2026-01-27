@@ -125,6 +125,7 @@ components:
           type: string
         cost:
           type: number
+          format: double
     Network:
       type: object
       required:

@@ -270,8 +270,8 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 	billingInfo := iso18626.BillingInfo{
 		MaximumCosts: &iso18626.TypeCosts{
 			MonetaryValue: utils.XSDDecimal{
-				Base: 34400002,
-				Exp:  6,
+				Base: 3440,
+				Exp:  2,
 			},
 		},
 	}
