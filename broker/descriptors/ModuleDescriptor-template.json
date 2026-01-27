@@ -59,6 +59,60 @@
           "permissionsRequired": [
             "broker.peers.get"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests",
+          "permissionsRequired": [
+            "broker.patron_requests.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/patron_requests",
+          "permissionsRequired": [
+            "broker.patron_requests.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}",
+          "permissionsRequired": [
+            "broker.patron_requests.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "DELETE"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}",
+          "permissionsRequired": [
+            "broker.patron_requests.item.delete"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/actions",
+          "permissionsRequired": [
+            "broker.patron_requests.item.actions.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/action",
+          "permissionsRequired": [
+            "broker.patron_requests.item.action.post"
+          ]
         }
       ]
     }
@@ -108,6 +162,68 @@
       "description": "Read peers",
       "displayName": "Broker - read peers",
       "permissionName": "broker.peers.get"
+    },
+    {
+      "description": "List patron requests",
+      "displayName": "Broker - read patron requests (list)",
+      "permissionName": "broker.patron_requests.get"
+    },
+    {
+      "description": "Create patron request",
+      "displayName": "Broker - create patron request",
+      "permissionName": "broker.patron_requests.post"
+    },
+    {
+      "description": "Read a patron request",
+      "displayName": "Broker - read patron request (item)",
+      "permissionName": "broker.patron_requests.item.get"
+    },
+    {
+      "description": "Delete a patron request",
+      "displayName": "Broker - delete patron request (item)",
+      "permissionName": "broker.patron_requests.item.delete"
+    },
+    {
+      "description": "List actions for a patron request",
+      "displayName": "Broker - read patron request actions",
+      "permissionName": "broker.patron_requests.item.actions.get"
+    },
+    {
+      "description": "Execute action for a patron request",
+      "displayName": "Broker - execute patron request action",
+      "permissionName": "broker.patron_requests.item.action.post"
+    },
+    {
+      "description": "Read-only access to patron requests",
+      "displayName": "Broker - patron requests: read",
+      "permissionName": "broker.patron_requests.read",
+      "visible": true,
+      "subPermissions": [
+        "broker.patron_requests.get",
+        "broker.patron_requests.item.get",
+        "broker.patron_requests.item.actions.get"
+      ]
+    },
+    {
+      "description": "Write access to patron requests",
+      "displayName": "Broker - patron requests: write",
+      "permissionName": "broker.patron_requests.write",
+      "visible": true,
+      "subPermissions": [
+        "broker.patron_requests.post",
+        "broker.patron_requests.item.delete",
+        "broker.patron_requests.item.action.post"
+      ]
+    },
+    {
+      "description": "Read and write access to patron requests",
+      "displayName": "Broker - patron requests: all",
+      "permissionName": "broker.patron_requests.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.patron_requests.read",
+        "broker.patron_requests.write"
+      ]
     }
   ]
 }
