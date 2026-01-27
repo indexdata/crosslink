@@ -46,6 +46,15 @@
           "methods": [
             "GET"
           ],
+          "pathPattern": "/broker/sse/events",
+          "permissionsRequired": [
+            "broker.sse.events.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
           "pathPattern": "/broker/peers/{id}",
           "permissionsRequired": [
             "broker.peers.item.get"
@@ -132,6 +141,11 @@
         "broker.peers.item.get",
         "broker.peers.get"
       ]
+    },
+    {
+      "description": "Read SSE events stream",
+      "displayName": "Broker - read SSE events",
+      "permissionName": "broker.sse.events.get"
     },
     {
       "description": "Read ILL transaction",
