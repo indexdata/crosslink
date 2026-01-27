@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +31,7 @@ var ILL_TRANSACTIONS_PATH = "/ill_transactions"
 var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
+var PATRON_REQUESTS_PATH = "/patron_requests"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
@@ -104,6 +103,7 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
 	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")
 	index.Links.PeersLink = toLink(r, PEERS_PATH, "", "")
+	index.Links.PatronRequestsLink = toLink(r, PATRON_REQUESTS_PATH, "", "")
 	writeJsonResponse(w, index)
 }
 
@@ -213,24 +213,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	}
-	resp.About.Count = fullCount
-	if offset > 0 {
-		pOffset := offset - limit
-		if pOffset < 0 {
-			pOffset = 0
-		}
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.PrevLink = &link
-	}
-	if fullCount > int64(limit+offset) {
-		noffset := offset + limit
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.NextLink = &link
-	}
+	resp.About = CollectAboutData(fullCount, offset, limit, r)
 	writeJsonResponse(w, resp)
 }
 
@@ -309,7 +292,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	}
 	var resp oapi.Peers
 	resp.Items = make([]oapi.Peer, 0)
-	resp.About.Count = count
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
@@ -323,24 +305,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 		}
 		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
 	}
-
-	if dbparams.Offset > 0 {
-		pOffset := dbparams.Offset - dbparams.Limit
-		if pOffset < 0 {
-			pOffset = 0
-		}
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.PrevLink = &link
-	}
-	if count > int64(dbparams.Limit+dbparams.Offset) {
-		noffset := dbparams.Offset + dbparams.Limit
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.NextLink = &link
-	}
+	resp.About = CollectAboutData(count, dbparams.Offset, dbparams.Limit, r)
 	writeJsonResponse(w, resp)
 }
 
@@ -697,9 +662,9 @@ func toApiEvent(event events.Event) oapi.Event {
 		EventStatus:      string(event.EventStatus),
 		ParentID:         toString(event.ParentID),
 	}
-	eventData := utils.Must(structToMap(event.EventData))
+	eventData := utils.Must(common.StructToMap(event.EventData))
 	api.EventData = &eventData
-	resultData := utils.Must(structToMap(event.ResultData))
+	resultData := utils.Must(common.StructToMap(event.ResultData))
 	api.ResultData = &resultData
 	return api
 }
@@ -724,29 +689,6 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 	}
 }
 
-func structToMap(obj interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-	val := reflect.ValueOf(obj)
-	typ := reflect.TypeOf(obj)
-
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-		typ = typ.Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("input is not a struct")
-	}
-
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		fieldName := typ.Field(i).Name
-		result[fieldName] = field.Interface()
-	}
-
-	return result, nil
-}
-
 func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllTransaction {
 	api := oapi.IllTransaction{
 		ID:        trans.ID,
@@ -767,7 +709,7 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	if trans.RequesterID.Valid {
 		api.RequesterPeerLink = toLink(r, PEERS_PATH, trans.RequesterID.String, "")
 	}
-	api.IllTransactionData = utils.Must(structToMap(trans.IllTransactionData))
+	api.IllTransactionData = utils.Must(common.StructToMap(trans.IllTransactionData))
 	return api
 }
 
@@ -883,7 +825,7 @@ func toString(text pgtype.Text) *string {
 	}
 }
 
-func toLinkUrlValues(r *http.Request, urlValues url.Values) string {
+func ToLinkUrlValues(r *http.Request, urlValues url.Values) string {
 	return toLinkPath(r, r.URL.Path, urlValues.Encode())
 }
 

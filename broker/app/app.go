@@ -16,7 +16,7 @@ import (
 
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 
 	"github.com/dustin/go-humanize"
@@ -162,7 +162,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
-	prApiHandler := prapi.NewApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL))
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 
