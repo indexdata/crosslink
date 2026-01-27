@@ -238,6 +238,27 @@
         "broker.patron_requests.read",
         "broker.patron_requests.write"
       ]
+    },
+    {
+      "description": "All broker permissions (read and write)",
+      "displayName": "Broker - all permissions",
+      "permissionName": "broker.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.ill_transactions.item.get",
+        "broker.ill_transactions.get",
+        "broker.located_suppliers.get",
+        "broker.events.get",
+        "broker.peers.item.get",
+        "broker.peers.get",
+        "broker.sse.events.get",
+        "broker.patron_requests.get",
+        "broker.patron_requests.post",
+        "broker.patron_requests.item.get",
+        "broker.patron_requests.item.delete",
+        "broker.patron_requests.item.actions.get",
+        "broker.patron_requests.item.action.post"
+      ]
     }
   ]
 }
