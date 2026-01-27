@@ -3,21 +3,23 @@ module github.com/indexdata/crosslink/broker
 go 1.25
 
 require (
+	github.com/indexdata/crosslink/directory v0.0.0
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/illmock v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
 	github.com/indexdata/crosslink/marcxml v0.0.0
+	github.com/indexdata/crosslink/ncip v0.0.0
 	github.com/indexdata/crosslink/sru v0.0.0
-	github.com/indexdata/crosslink/directory v0.0.0
 )
 
 replace (
+	github.com/indexdata/crosslink/directory => ../directory
 	github.com/indexdata/crosslink/httpclient => ../httpclient
 	github.com/indexdata/crosslink/illmock => ../illmock
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
 	github.com/indexdata/crosslink/marcxml => ../marcxml
+	github.com/indexdata/crosslink/ncip => ../ncip
 	github.com/indexdata/crosslink/sru => ../sru
-	github.com/indexdata/crosslink/directory => ../directory
 )
 
 require (
@@ -31,6 +33,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/lib/pq v1.10.9
 	github.com/oapi-codegen/oapi-codegen/v2 v2.5.1
+	github.com/oapi-codegen/runtime v1.1.2
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
@@ -40,6 +43,7 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
