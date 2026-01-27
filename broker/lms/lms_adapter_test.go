@@ -40,7 +40,7 @@ func TestLookupUser(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
 	config := directory.LmsConfig{
-		LookupUserEnable: &b,
+		LookupUserEnabled: &b,
 	}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
@@ -90,7 +90,7 @@ func TestAcceptItem(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	b := true
 	ad := &LmsAdapterNcip{
-		config:     directory.LmsConfig{AcceptItemEnable: &b},
+		config:     directory.LmsConfig{AcceptItemEnabled: &b},
 		ncipClient: mock,
 	}
 	err := ad.AcceptItem("item1", "req1", "testuser", "author", "title", "isbn", "callnum", "loc", "action")
@@ -150,10 +150,10 @@ func TestRequestItem(t *testing.T) {
 	sysnumber := "SYSNUMBER"
 	ad := &LmsAdapterNcip{
 		config: directory.LmsConfig{
-			RequestItemPickupLocationEnable: &b,
-			RequestItemRequestType:          &loan,
-			RequestItemRequestScopeType:     &title,
-			RequestItemBibIdCode:            &sysnumber,
+			RequestItemPickupLocationEnabled: &b,
+			RequestItemRequestType:           &loan,
+			RequestItemRequestScopeType:      &title,
+			RequestItemBibIdCode:             &sysnumber,
 		},
 		ncipClient: mock,
 	}
@@ -179,11 +179,17 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
-	assert.Nil(t, req.PickupLocation)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
 	b = false
+	ad = &LmsAdapterNcip{
+		config: directory.LmsConfig{
+			RequestItemPickupLocationEnabled: &b,
+		},
+		ncipClient: mock,
+	}
 	mock.(*ncipClientMock).lastRequest = nil
 	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
@@ -209,7 +215,7 @@ func TestCheckInItem(t *testing.T) {
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config: directory.LmsConfig{
-			CheckInItemEnable: &b,
+			CheckInItemEnabled: &b,
 		},
 	}
 	err := ad.CheckInItem("item1")
@@ -232,7 +238,7 @@ func TestCheckOutItem(t *testing.T) {
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config: directory.LmsConfig{
-			CheckOutItemEnable: &b,
+			CheckOutItemEnabled: &b,
 		},
 	}
 	ref := "extref"
@@ -282,8 +288,8 @@ func TestInstitutionalPatron(t *testing.T) {
 	institutionalPatron := ad.InstitutionalPatron("123456")
 	assert.Equal(t, "INST-123456", institutionalPatron)
 
-	p := "USER-{symbol}-XYZ"
-	config = directory.LmsConfig{InstitutionalPatron: &p}
+	p := "USER-{requesterSymbol}-XYZ"
+	config = directory.LmsConfig{RequesterPatronPattern: &p}
 	ad = &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,

@@ -53,7 +53,7 @@ func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
 }
 
 func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
-	if l.config.LookupUserEnable != nil && !*l.config.LookupUserEnable {
+	if l.config.LookupUserEnabled != nil && !*l.config.LookupUserEnabled {
 		return patron, nil // could even be empty
 	}
 	if patron == "" {
@@ -104,7 +104,7 @@ func (l *LmsAdapterNcip) AcceptItem(
 	pickupLocation string,
 	requestedAction string,
 ) error {
-	if l.config.AcceptItemEnable != nil && !*l.config.AcceptItemEnable {
+	if l.config.AcceptItemEnabled != nil && !*l.config.AcceptItemEnabled {
 		return nil
 	}
 	var bibliographicItemId *ncip.BibliographicItemId
@@ -162,7 +162,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	itemLocation string,
 ) error {
 	var pickupLocationField *ncip.SchemeValuePair
-	if l.config.RequestItemPickupLocationEnable != nil && *l.config.RequestItemPickupLocationEnable && pickupLocation != "" {
+	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
 	}
 	var userIdField *ncip.UserId
@@ -211,7 +211,7 @@ func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) erro
 }
 
 func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
-	if l.config.CheckInItemEnable != nil && !*l.config.CheckInItemEnable {
+	if l.config.CheckInItemEnabled != nil && !*l.config.CheckInItemEnabled {
 		return nil
 	}
 	itemElements := []ncip.SchemeValuePair{
@@ -232,7 +232,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	userId string,
 	externalReferenceValue string,
 ) error {
-	if l.config.CheckOutItemEnable != nil && !*l.config.CheckOutItemEnable {
+	if l.config.CheckOutItemEnabled != nil && !*l.config.CheckOutItemEnabled {
 		return nil
 	}
 	var ext *ncip.Ext
@@ -263,11 +263,11 @@ func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId strin
 }
 
 func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
-	patron := "INST-{symbol}"
-	if l.config.InstitutionalPatron != nil {
-		patron = *l.config.InstitutionalPatron
+	patron := "INST-{requesterSymbol}"
+	if l.config.RequesterPatronPattern != nil {
+		patron = *l.config.RequesterPatronPattern
 	}
-	return strings.ReplaceAll(patron, "{symbol}", strings.ToUpper(requesterSymbol))
+	return strings.ReplaceAll(patron, "{requesterSymbol}", strings.ToUpper(requesterSymbol))
 }
 
 func (l *LmsAdapterNcip) PickupLocation() string {
