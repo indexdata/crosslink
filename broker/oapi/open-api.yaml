@@ -857,7 +857,7 @@ paths:
     get:
       summary: Retrieve patron requests
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/RequesterRequestId'
@@ -889,7 +889,7 @@ paths:
     post:
       summary: Create a new patron request
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - $ref: '#/components/parameters/Tenant'
       requestBody:
@@ -921,7 +921,7 @@ paths:
     get:
       summary: Get a patron request by ID
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - in: path
           name: id
@@ -950,7 +950,7 @@ paths:
     delete:
       summary: Delete a patron request
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - in: path
           name: id
@@ -977,7 +977,7 @@ paths:
     get:
       summary: Get valid actions for patron request in current state
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - in: path
           name: id
@@ -1014,7 +1014,7 @@ paths:
     post:
       summary: Execute action for given patron request
       tags:
-        - patron-request-api
+        - patron-requests-api
       parameters:
         - in: path
           name: id
