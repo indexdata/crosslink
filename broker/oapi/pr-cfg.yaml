@@ -1,9 +1,8 @@
-package: oapi
-output: oapi/openapi_gen.go
+package: proapi
+output: patron_request/proapi/pr-openapi_gen.go
 output-options:
-  exclude-tags:
+  include-tags:
     - patron-requests-api
 generate:
   models: true
   std-http-server: true
-

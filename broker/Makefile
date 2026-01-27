@@ -31,10 +31,10 @@ OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
 OAPI_GEN = $(OAPI_DIR)/openapi_gen.go
 
 # Patron request OpenAPI
-PR_OAPI_DIR=patron_request/oapi
-PR_OAPI_CFG = $(PR_OAPI_DIR)/cfg.yaml
+PR_OAPI_DIR=oapi
+PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
-PR_OAPI_GEN = $(PR_OAPI_DIR)/openapi_gen.go
+PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
 .PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
 

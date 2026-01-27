@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,10 +90,12 @@ func TestGetNextSupplierClosed(t *testing.T) {
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId, SupplierSymbol: "ISIL:SUP"}})
 	assert.NoError(t, err)
 	assert.Len(t, skipped, 1)
 	assert.Equal(t, "", locSup.ID)
+	assert.Equal(t, "ISIL:SUP", skipped[0].Symbol)
+	assert.True(t, strings.Contains(skipped[0].Reason, "closed on"))
 }
 
 func TestGetNextSupplierFailToLoadPeer(t *testing.T) {
@@ -275,6 +278,35 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 	assert.Equal(t, "", locSup.ID)
 }
 
+func TestGetNextSupplierClosedEventFailed(t *testing.T) {
+	peerId := "p1"
+	mockIllRepo := new(MockIllRepoRequester)
+	past := time.Now().Add(-48 * time.Hour).Format(DATE_LAYOUT)
+	future := time.Now().Add(48 * time.Hour).Format(DATE_LAYOUT)
+	jsonData := "{\"closures\": " +
+		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2\"," +
+		"\"startDate\": \"" + past + "\"," +
+		"\"endDate\": \"" + future + "\"," +
+		"\"reason\": \"Christmas Day\"" +
+		"}]," +
+		"\"timeZone\": \"Australia/ACT\"" +
+		"}"
+	var data directory.Entry
+	err := json.Unmarshal([]byte(jsonData), &data)
+	assert.NoError(t, err)
+	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
+	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	skipped, ok := result.CustomData["skippedSuppliers"].([]SkippedSupplier)
+	assert.True(t, ok)
+	assert.Len(t, skipped, 1)
+	assert.Equal(t, "no-suppliers", result.Problem.Kind)
+	assert.Equal(t, "no suppliers with new status", result.Problem.Details)
+}
+
 type MockIllRepoRequester struct {
 	mocks.MockIllRepositorySuccess
 }
@@ -282,4 +314,11 @@ type MockIllRepoRequester struct {
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
 	args := r.Called(peerId)
 	return args.Get(0).(ill_db.Peer), args.Error(1)
+}
+
+func (r *MockIllRepoRequester) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) ([]ill_db.LocatedSupplier, error) {
+	if params.SupplierStatus == ill_db.SupplierStateNewPg {
+		return []ill_db.LocatedSupplier{{ID: "1", SupplierID: "p1", SupplierSymbol: "ISIL:SUP"}}, nil
+	}
+	return []ill_db.LocatedSupplier{}, nil
 }

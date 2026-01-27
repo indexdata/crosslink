@@ -5,9 +5,10 @@ WHERE id = $1
 LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT sqlc.embed(patron_request)
+SELECT sqlc.embed(patron_request), COUNT(*) OVER () as full_count
 FROM patron_request
-ORDER BY timestamp;
+ORDER BY timestamp
+LIMIT $1 OFFSET $2;
 
 -- name: SavePatronRequest :one
 INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id)
