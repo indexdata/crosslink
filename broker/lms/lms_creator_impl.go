@@ -24,9 +24,9 @@ func (l *lmsCreatorImpl) GetAdapter(ctx common.ExtendedContext, symbol string) (
 		return nil, err
 	}
 	for _, peer := range peers {
-		ncipInfo, ok := peer.CustomData["ncip"].(map[string]any)
-		if ok {
-			return CreateLmsAdapterNcip(ncipInfo)
+		entry := peer.CustomData
+		if entry.LmsConfig != nil {
+			return CreateLmsAdapterNcip(*entry.LmsConfig)
 		}
 	}
 	return CreateLmsAdapterMockOK(), nil

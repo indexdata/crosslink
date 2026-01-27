@@ -12,13 +12,14 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
 )
 
 var respBody []byte
-var dirEntries adapter.EntriesResponse
+var dirEntries directory.EntriesResponse
 
 func TestMain(m *testing.M) {
 	respBody, _ = os.ReadFile("../testdata/api-directory-response.json")
@@ -76,7 +77,7 @@ func TestLookupInvalidJson(t *testing.T) {
 func TestLookupEmptyList(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
-		resp := adapter.EntriesResponse{}
+		resp := directory.EntriesResponse{}
 		respBytes, _ := json.Marshal(resp)
 		w.Write(respBytes)
 	})

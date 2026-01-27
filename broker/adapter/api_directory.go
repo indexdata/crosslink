@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -45,7 +46,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 		return []DirectoryEntry{}, query, fmt.Errorf("API returned non-OK status: %d, body: %s", response.StatusCode, body)
 	}
 
-	var responseList EntriesResponse
+	var responseList directory.EntriesResponse
 	err = json.Unmarshal(body, &responseList)
 	if err != nil {
 		return []DirectoryEntry{}, query, err
@@ -53,41 +54,26 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	childSymbolsById := make(map[string][]string, len(responseList.Items))
 	for _, d := range responseList.Items {
 		var symbols []string
-		if listMap, ok := d["symbols"].([]any); ok && len(listMap) > 0 {
-			for _, s := range listMap {
-				if itemMap, castOk := s.(map[string]any); castOk {
-					auth, authOk := itemMap["authority"].(string)
-					sym, symOk := itemMap["symbol"].(string)
-					if authOk && symOk {
-						symbols = append(symbols, auth+":"+sym)
-					}
-				}
+		if d.Symbols != nil {
+			for _, s := range *d.Symbols {
+				symbols = append(symbols, s.Authority+":"+s.Symbol)
 			}
-			if parent, ok := d["parent"].(string); ok {
-				childSymbolsById[parent] = append(childSymbolsById[parent], symbols...)
+			if d.Parent != nil {
+				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
 		apiUrl := ""
-		if listMap, ok := d["endpoints"].([]any); ok && len(listMap) > 0 {
-			for _, s := range listMap {
-				if itemMap, castOk := s.(map[string]any); castOk {
-					typeS, typeOk := itemMap["type"].(string)
-					add, addOk := itemMap["address"].(string)
-					if typeOk && addOk && typeS == "ISO18626" {
-						apiUrl = add
-					}
+		if d.Endpoints != nil {
+			for _, s := range *d.Endpoints {
+				if s.Type == "ISO18626" && s.Address != "" {
+					apiUrl = s.Address
 				}
 			}
 		}
-		// TODO: populate NCIP info
 		if apiUrl != "" && len(symbols) > 0 {
 			vendor := GetVendorFromUrl(apiUrl)
-			name, ok := d["name"].(string)
-			if !ok {
-				name = ""
-			}
 			entry := DirectoryEntry{
-				Name:       name,
+				Name:       d.Name,
 				Symbols:    symbols,
 				Vendor:     vendor,
 				BrokerMode: GetBrokerMode(vendor),
@@ -99,7 +85,8 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 	}
 	for i := range dirEntries {
 		de := &dirEntries[i]
-		if id, idOk := de.CustomData["id"].(string); idOk {
+		if de.CustomData.Id != nil {
+			id := (*de.CustomData.Id).String()
 			if childSyms, ok := childSymbolsById[id]; ok {
 				de.BranchSymbols = childSyms
 			}
@@ -122,7 +109,7 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, s
 	return directoryList, query, nil
 }
 
-func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 
 	filtered := []Supplier{}
@@ -298,18 +285,14 @@ func CompareSuppliers(a, b SupplierOrdering) int {
 	return cmp.Compare(a.GetSymbol(), b.GetSymbol())
 }
 
-func getPeerNetworks(peerData map[string]any) map[string]Network {
+func getPeerNetworks(peerData directory.Entry) map[string]Network {
 	networks := map[string]Network{}
-	if listMap, ok := peerData["networks"].([]any); ok && len(listMap) > 0 {
-		for _, s := range listMap {
-			if itemMap, castOk := s.(map[string]any); castOk {
-				name, nameOk := itemMap["name"].(string)
-				priority, priorityOk := itemMap["priority"].(float64)
-				if nameOk && priorityOk {
-					networks[name] = Network{
-						Name:     name,
-						Priority: int(priority),
-					}
+	if peerData.Networks != nil {
+		for _, n := range *peerData.Networks {
+			if n.Priority != nil {
+				networks[n.Name] = Network{
+					Name:     n.Name,
+					Priority: int(*n.Priority),
 				}
 			}
 		}
@@ -317,24 +300,16 @@ func getPeerNetworks(peerData map[string]any) map[string]Network {
 	return networks
 }
 
-func getPeerTiers(peerData map[string]any) []Tier {
+func getPeerTiers(peerData directory.Entry) []Tier {
 	tiers := []Tier{}
-	if listMap, ok := peerData["tiers"].([]any); ok && len(listMap) > 0 {
-		for _, s := range listMap {
-			if itemMap, castOk := s.(map[string]any); castOk {
-				name, nameOk := itemMap["name"].(string)
-				level, levelOk := itemMap["level"].(string)
-				t, tOk := itemMap["type"].(string)
-				cost, costOk := itemMap["cost"].(float64)
-				if nameOk && levelOk && tOk && costOk {
-					tiers = append(tiers, Tier{
-						Name:  name,
-						Level: level,
-						Type:  t,
-						Cost:  cost,
-					})
-				}
-			}
+	if peerData.Tiers != nil {
+		for _, t := range *peerData.Tiers {
+			tiers = append(tiers, Tier{
+				Name:  t.Name,
+				Level: t.Level,
+				Type:  t.Type,
+				Cost:  t.Cost,
+			})
 		}
 	}
 	return tiers
@@ -359,8 +334,4 @@ func GetBrokerMode(vendor common.Vendor) common.BrokerMode {
 	default:
 		return DEFAULT_BROKER_MODE
 	}
-}
-
-type EntriesResponse struct {
-	Items []map[string]any `json:"items"`
 }

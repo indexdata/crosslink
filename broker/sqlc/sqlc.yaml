@@ -21,7 +21,8 @@ sql:
               type: "RefreshPolicy"
           - column: "peer.custom_data"
             go_type:
-              type: "map[string]any"
+              import: "github.com/indexdata/crosslink/directory"
+              type: "Entry"
           - column: "peer.http_headers"
             go_type:
               type: "map[string]string"

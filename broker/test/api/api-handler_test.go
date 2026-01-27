@@ -450,8 +450,9 @@ func TestPeersCRUD(t *testing.T) {
 		"X-Okapi-Url":    "http://localhost:1234",
 	}
 	custom := map[string]interface{}{
-		"k1": "v1",
-		"k2": "v2",
+		"name":  "v1",
+		"email": "v2",
+		"lost":  "value",
 	}
 	// Create peer
 	loanCount := int32(5)
@@ -489,8 +490,9 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "https://url.com", respPeers.Items[0].Url)
 	assert.Equal(t, oapi.Opaque, respPeers.Items[0].BrokerMode)
 	assert.Equal(t, "Unknown", respPeers.Items[0].Vendor)
-	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
-	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
+	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["name"])
+	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["email"])
+	assert.Nil(t, (*respPeers.Items[0].CustomData)["lost"])
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 	assert.Equal(t, int32(5), *respPeers.Items[0].LoansCount)
 	assert.Equal(t, int32(10), *respPeers.Items[0].BorrowsCount)
@@ -561,8 +563,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
-	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["k1"])
-	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["k2"])
+	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["name"])
+	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["email"])
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 
 	// Delete peer

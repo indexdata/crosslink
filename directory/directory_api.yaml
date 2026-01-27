@@ -125,6 +125,7 @@ components:
           type: string
         cost:
           type: number
+          format: double
     Network:
       type: object
       required:
@@ -239,47 +240,66 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Tier'
-        ncip:
-          type: object
-          $ref: '#/components/schemas/Ncip'
-    Ncip:
+        lmsConfig:
+          description: Configuration for LMS (Library Management System) integration via NCIP protocol
+          $ref: '#/components/schemas/LmsConfig'
+    LmsConfig:
       required:
-        - from_agency
-        - from_agency_authentication
-        - to_agency
+        - address
+        - fromAgency
       properties:
-        from_agency:
-          type: string
-        from_agency_authentication:
-          type: string
-        to_agency:
-          type: string
         address:
           type: string
-        lookup_user_mode:
+          description: Base URL of the LMS API
+        fromAgency:
           type: string
-          enum:
-            - disabled
-            - auto
-            - manual
-        request_item_mode:
+          description: Agency code used when the entry is acting as the supplying agency
+        fromAgencyAuthentication:
           type: string
-          enum:
-            - disabled
-            - auto
-            - manual
-        accept_item_mode:
+          description: Authentication token or credentials for the fromAgency
+        toAgency:
           type: string
-          enum:
-            - disabled
-            - auto
-            - manual
-        create_user_fiscal_transaction_mode:
+          description: Agency code used when the entry is acting as the requesting agency
+        lookupUserEnabled:
+          type: boolean
+          description: Whether user lookup is enabled
+          default: true
+        acceptItemEnabled:
+          type: boolean
+          description: Whether item acceptance is enabled
+          default: true
+        checkInItemEnabled:
+          type: boolean
+          description: Whether item check-in is enabled
+          default: true
+        checkOutItemEnabled:
+          type: boolean
+          description: Whether item check-out is enabled
+          default: true
+        requestItemRequestType:
           type: string
-          enum:
-            - disabled
-            - auto
-            - manual
+          description: For Request Item requests, the type of request to create.
+          default: Page
+        requestItemRequestScopeType:
+          type: string
+          description: For Request Item requests, the scope type of request to create.
+          default: Item
+        requestItemBibIdCode:
+          type: string
+          description: For Request Item requests, the code indicating how to interpret the bib id
+          default: SYSNUMBER
+        requestItemPickupLocationEnabled:
+          type: boolean
+          description: Whether to include a pickup location when making Request Item requests
+          default: true
+        supplierPickupLocation:
+          type: string
+          description: The pickup location code to use when the entry is acting as the supplying agency
+          default: ILL Office
+        requesterPatronPattern:
+          type: string
+          description: Occurrences of the {requesterSymbol} will be replaced with the ISIL code of the requesting agency
+          default: INST-{requesterSymbol}
     Symbol:
       required:
         - id

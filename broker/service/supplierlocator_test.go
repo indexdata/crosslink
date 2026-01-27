@@ -13,13 +13,17 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestGetDateWithTimezone(t *testing.T) {
-	date, err := getDateWithTimezone("2026-12-16", "Australia/ACT", false)
+	act, err := time.LoadLocation("Australia/ACT")
+	assert.NoError(t, err)
+
+	date, err := getDateWithTimezone("2026-12-16", act, false)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.UTC().Year())
 	assert.Equal(t, time.December, date.UTC().Month())
@@ -29,7 +33,7 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, 0, date.UTC().Minute())
 	assert.Equal(t, "2026-12-15 13:00:00 +0000 UTC", date.UTC().String())
 
-	date, err = getDateWithTimezone("2026-12-16", "Australia/ACT", true)
+	date, err = getDateWithTimezone("2026-12-16", act, true)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.Year())
 	assert.Equal(t, time.December, date.Month())
@@ -39,13 +43,14 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, 59, date.UTC().Minute())
 	assert.Equal(t, "2026-12-16 12:59:59.999999999 +0000 UTC", date.UTC().String())
 
-	_, err = getDateWithTimezone("2026-12-16", "Unexpected", true)
-	assert.Equal(t, "unknown time zone Unexpected", err.Error())
+	_, err = time.LoadLocation("Unexpected")
+	assert.Error(t, err)
 
-	_, err = getDateWithTimezone("2026-12-36", "Australia/ACT", true)
+	_, err = getDateWithTimezone("2026-12-36", act, true)
 	assert.Equal(t, "parsing time \"2026-12-36\": day out of range", err.Error())
 
-	date, err = getDateWithTimezone("2026-12-16", "", true)
+	auto := time.Now().Location()
+	date, err = getDateWithTimezone("2026-12-16", auto, true)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.Year())
 	assert.Equal(t, time.December, date.Month())
@@ -79,7 +84,7 @@ func TestGetNextSupplierClosed(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -111,7 +116,7 @@ func TestGetNextSupplierNoClosures(t *testing.T) {
 	jsonData := "{" +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -135,7 +140,7 @@ func TestGetNextSupplierNoStartDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -159,7 +164,7 @@ func TestGetNextSupplierNoEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -185,7 +190,7 @@ func TestGetNextSupplierBothInPast(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -211,7 +216,7 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -236,7 +241,7 @@ func TestGetNextSupplierCannotParseDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -261,7 +266,7 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -287,7 +292,7 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
