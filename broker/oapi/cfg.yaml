@@ -3,6 +3,7 @@ output: oapi/openapi_gen.go
 output-options:
   exclude-tags:
     - patron-requests-api
+    - sse-api
 generate:
   models: true
   std-http-server: true

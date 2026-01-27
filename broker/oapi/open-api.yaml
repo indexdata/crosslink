@@ -527,6 +527,19 @@ components:
       required:
         - actionResult
 
+    SseResult:
+      type: object
+      properties:
+        event:
+          type: string
+          description: Event name, for example 'message-supplier'
+        data:
+          type: object
+          description: Data of the event, for example ISO18626 message
+      required:
+        - event
+        - data
+
 paths:
   /:
     get:
@@ -1056,4 +1069,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /sse/events:
+    get:
+      summary: Subscribe to real-time notifications. Notification is send out every time when ISO18626 message is sent out
+      tags:
+        - sse-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Result of subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SseResult'
 
