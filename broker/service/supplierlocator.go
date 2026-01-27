@@ -209,15 +209,15 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if len(suppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
+	eventData := map[string]any{}
 	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
+	if len(skippedSuppliers) > 0 {
+		eventData["skippedSuppliers"] = skippedSuppliers
+	}
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not find supplier peer", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "could not find supplier peer", err, &events.EventResult{CustomData: eventData})
 	}
 	if locSup.ID == "" {
-		eventData := map[string]any{}
-		if len(skippedSuppliers) > 0 {
-			eventData["skippedSuppliers"] = skippedSuppliers
-		}
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", eventData)
 	}
 	locSup.SupplierStatus = ill_db.SupplierStateSelectedPg
@@ -225,10 +225,9 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	eventData := map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier}
-	if len(skippedSuppliers) > 0 {
-		eventData["skippedSuppliers"] = skippedSuppliers
-	}
+	eventData["supplierId"] = locSup.SupplierID
+	eventData["supplierSymbol"] = locSup.SupplierSymbol
+	eventData["localSupplier"] = locSup.LocalSupplier
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
