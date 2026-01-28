@@ -189,13 +189,31 @@ func (l *LmsAdapterNcip) RequestItem(
 		requestType = *l.config.RequestItemRequestType
 	}
 	requestTypeField := ncip.SchemeValuePair{Text: requestType}
+
+	var itemOptionalFields *ncip.ItemOptionalFields
+	if itemLocation != "" {
+		locationNameInstance := ncip.LocationNameInstance{
+			LocationNameLevel: 1,
+			LocationNameValue: itemLocation,
+		}
+		locationName := ncip.LocationName{
+			LocationNameInstance: []ncip.LocationNameInstance{locationNameInstance},
+		}
+		location := ncip.Location{
+			LocationName: locationName,
+		}
+		itemOptionalFields = &ncip.ItemOptionalFields{
+			Location: []ncip.Location{location},
+		}
+	}
 	arg := ncip.RequestItem{
-		RequestId:        &ncip.RequestId{RequestIdentifierValue: requestId},
-		BibliographicId:  []ncip.BibliographicId{bibIdField},
-		UserId:           userIdField,
-		PickupLocation:   pickupLocationField,
-		RequestType:      requestTypeField,
-		RequestScopeType: requestScopeTypeField,
+		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},
+		BibliographicId:    []ncip.BibliographicId{bibIdField},
+		UserId:             userIdField,
+		PickupLocation:     pickupLocationField,
+		RequestType:        requestTypeField,
+		RequestScopeType:   requestScopeTypeField,
+		ItemOptionalFields: itemOptionalFields,
 	}
 	_, err := l.ncipClient.RequestItem(arg)
 	return err
@@ -270,9 +288,23 @@ func (l *LmsAdapterNcip) InstitutionalPatron(requesterSymbol string) string {
 	return strings.ReplaceAll(patron, "{requesterSymbol}", strings.ToUpper(requesterSymbol))
 }
 
-func (l *LmsAdapterNcip) PickupLocation() string {
+func (l *LmsAdapterNcip) SupplierPickupLocation() string {
 	if l.config.SupplierPickupLocation != nil {
 		return *l.config.SupplierPickupLocation
 	}
 	return "ILL Office"
+}
+
+func (l *LmsAdapterNcip) ItemLocation() string {
+	if l.config.ItemLocation != nil {
+		return *l.config.ItemLocation
+	}
+	return ""
+}
+
+func (l *LmsAdapterNcip) RequesterPickupLocation() string {
+	if l.config.RequesterPickupLocation != nil {
+		return *l.config.RequesterPickupLocation
+	}
+	return "Main Library"
 }

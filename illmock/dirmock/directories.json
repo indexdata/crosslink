@@ -17,7 +17,7 @@
       "fromAgency": "NALB",
       "fromAgencyAuthentication": "password",
       "toAgency": "NALB",
-      "lookupUserMode": "disabled",
+      "lookupUserEnabled": true,
       "requestItemEnabled": true,
       "acceptItemEnabled": true
     },

@@ -64,6 +64,14 @@ func (l *LmsAdapterManual) InstitutionalPatron(requesterSymbol string) string {
 	return ""
 }
 
-func (l *LmsAdapterManual) PickupLocation() string {
+func (l *LmsAdapterManual) SupplierPickupLocation() string {
+	return ""
+}
+
+func (l *LmsAdapterManual) ItemLocation() string {
+	return ""
+}
+
+func (l *LmsAdapterManual) RequesterPickupLocation() string {
 	return ""
 }
