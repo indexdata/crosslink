@@ -69,7 +69,11 @@ const (
 	LenderActionMarkCancelled pr_db.PatronRequestAction = "mark-cancelled"
 )
 
-type PatronRequestActionService struct {
+type PatronRequestActionService interface {
+	InvokeAction(common.ExtendedContext, events.Event)
+}
+
+type ReturnablesPatronRequestActionService struct {
 	prRepo               pr_db.PrRepo
 	eventBus             events.EventBus
 	iso18626Handler      handler.Iso18626HandlerInterface
@@ -77,8 +81,8 @@ type PatronRequestActionService struct {
 	actionMappingService ActionMappingService
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) PatronRequestActionService {
-	return PatronRequestActionService{
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *ReturnablesPatronRequestActionService {
+	return &ReturnablesPatronRequestActionService{
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		iso18626Handler:      iso18626Handler,
@@ -87,12 +91,12 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.Event
 	}
 }
 
-func (a *PatronRequestActionService) InvokeAction(ctx common.ExtendedContext, event events.Event) {
+func (a *ReturnablesPatronRequestActionService) InvokeAction(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	_, _ = a.eventBus.ProcessTask(ctx, event, a.handleInvokeAction)
 }
 
-func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) handleInvokeAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	if event.EventData.Action == nil {
 		return events.LogErrorAndReturnResult(ctx, "action not specified", errors.New("action not specified"))
 	}
@@ -122,7 +126,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	if !pr.RequesterSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 	}
@@ -154,7 +158,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	}
 }
 
-func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
 	if !pr.SupplierSymbol.Valid {
 		return events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 	}
@@ -182,7 +186,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult) (events.EventStatus, *events.EventResult) {
 	pr.State = state
 	pr, err := a.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
 	if err != nil {
@@ -190,7 +194,7 @@ func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.Exten
 	}
 	return events.EventStatusSuccess, result
 }
-func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult, status events.EventStatus, eventResult *events.EventResult, httpStatus *int) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult, status events.EventStatus, eventResult *events.EventResult, httpStatus *int) (events.EventStatus, *events.EventResult) {
 	if httpStatus == nil {
 		return status, eventResult
 	}
@@ -201,7 +205,7 @@ func (a *PatronRequestActionService) checkSupplyingResponseAndUpdateState(ctx co
 	return a.updateStateAndReturnResult(ctx, pr, state, nil)
 }
 
-func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
@@ -216,7 +220,7 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateValidated, nil)
 }
 
-func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	// pr.RequesterSymbol is validated earlier in handleBorrowingAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
@@ -297,7 +301,7 @@ func isbnFromIllRequest(illRequest iso18626.Request) string {
 	return isbn
 }
 
-func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
@@ -326,7 +330,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateReceived, &result)
 }
 
-func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
@@ -341,7 +345,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedOut, nil)
 }
 
-func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	err := lmsAdapter.CheckInItem(itemId)
 	if err != nil {
@@ -350,7 +354,7 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCheckedIn, nil)
 }
 
-func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	err := lmsAdapter.DeleteItem(itemId)
 	if err != nil {
@@ -368,7 +372,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateShippedReturned, &result)
 }
 
-func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction) (events.EventStatus, *events.EventResult, *int) {
+func (a *ReturnablesPatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
 		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
@@ -414,7 +418,7 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 	return "", nil, &w.StatusCode
 }
 
-func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel)
 	if httpStatus == nil {
@@ -427,15 +431,15 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, &result)
 }
 
-func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateWillSupply, nil)
 }
 
-func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateCancelPending, nil)
 }
 
-func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) (events.EventStatus, *events.EventResult) {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
@@ -444,7 +448,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	return a.updateStateAndReturnResult(ctx, pr, LenderStateValidated, nil)
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
@@ -460,13 +464,13 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateWillSupply, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateUnfilled, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams map[string]interface{}) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
@@ -477,7 +481,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateConditionPending, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
@@ -492,7 +496,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateShipped, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) (events.EventStatus, *events.EventResult) {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	err := lmsAdapter.CheckInItem(itemId)
 	if err != nil {
@@ -503,13 +507,13 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCompleted, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) markCancelledLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
+func (a *ReturnablesPatronRequestActionService) markCancelledLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) (events.EventStatus, *events.EventResult) {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled})
 	return a.checkSupplyingResponseAndUpdateState(ctx, pr, LenderStateCancelled, &result, status, eventResult, httpStatus)
 }
 
-func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo) (events.EventStatus, *events.EventResult, *int) {
+func (a *ReturnablesPatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
 		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil

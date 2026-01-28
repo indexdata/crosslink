@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"sync"
 
@@ -33,6 +34,54 @@ func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.
 		actionMappingService: prservice.ActionMappingService{},
 		tenant:               tenant,
 	}
+}
+
+func (a *PatronRequestApiHandler) GetStateModelModelsReturnables(w http.ResponseWriter, r *http.Request) {
+	//logParams := map[string]string{"method": "GetStateModelModelsReturnables"}
+	//ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	//	Other: logParams,
+	//})
+	var stateModel proapi.StateModel
+	stateModel.Desc = strPtr("Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events.")
+	stateModel.Name = strPtr("CrossLink Returnables State Model")
+
+	actionMapping := prservice.NewReturnableActionMapping()
+
+	borrowerMap := actionMapping.GetBorrowerActionsMap()
+	lenderMap := actionMapping.GetLenderActionsMap()
+
+	allStates := make([]proapi.State, 0, len(borrowerMap)+len(lenderMap))
+
+	lenderStates := makeStateList(borrowerMap, proapi.SUPPLIER)
+	allStates = append(allStates, lenderStates...)
+
+	borrowerStates := makeStateList(lenderMap, proapi.REQUESTER)
+	allStates = append(allStates, borrowerStates...)
+
+	stateModel.States = &allStates
+
+	writeJsonResponse(w, stateModel)
+}
+
+func makeStateList(stateMap map[pr_db.PatronRequestState][]pr_db.PatronRequestAction, stateSide proapi.StateSide) []proapi.State {
+	stateList := make([]proapi.State, 0, len(stateMap))
+	var state proapi.State
+	for k := range maps.Keys(stateMap) {
+		state.Name = string(k)
+		state.Side = stateSide
+		actionList := make([]proapi.Action, 0, len(stateMap[k]))
+		for _, prAction := range stateMap[k] {
+			var action proapi.Action
+			action.Name = string(prAction)
+			//Where do we get the transitions?
+			actionList = append(actionList, action)
+		}
+	}
+	return stateList
+}
+
+func strPtr(s string) *string {
+	return &s
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request) {

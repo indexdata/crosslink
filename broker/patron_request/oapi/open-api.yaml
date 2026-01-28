@@ -16,6 +16,106 @@ components:
         pattern: '^[_a-z][_a-z0-9]*$'
 
   schemas:
+    StateModel:
+      type: object
+      description: ReShare state model definition
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: StateModel
+        name:
+          type: string
+          description: Name of the state model
+        desc:
+          type: string
+          description: Description of the state model
+        version:
+          type: string
+          description: Version of the state model in SemVer
+        states:
+          type: array
+          description: A list of all allowed states
+          items:
+            $ref: '#/components/schemas/State'
+
+    State:
+      title: State
+      type: object
+      description: Definition of a particular state
+      properties:
+        name:
+          type: string
+          description: Name of the state, in capital letters with underscores
+        display:
+          type: string
+          description: Human-readable state name
+        desc:
+          type: string
+          description: Description of the state, e.g., what situation is modelled by the state
+        side:
+          type: string
+          description: Indicates which side of the request the state belongs to
+          enum: 
+            - REQUESTER
+            - SUPPLIER
+        actions:
+          type: array
+          description: List of all actions that may be performed on the request when in this state
+          items:
+            $ref: '#/components/schemas/Action'
+        events:
+          type: array
+          description: List of all events that may be triggered to the request when in this state
+          items:
+            $ref: '#/components/schemas/Event'
+        terminal:
+          type: boolean
+          description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
+      oneOf:
+        - anyOf:
+          - required:
+            - actions
+          - required:
+            - events
+        - required:
+          - terminal
+      required:
+        - name
+        - side
+
+    Action:
+      type: object
+      title: Action
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the action
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
+
+    Event:
+      type: object
+      title: Event
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the event
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the event. When no transitions are defined, the event is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
+
     PatronRequest:
       type: object
       properties:
@@ -110,6 +210,23 @@ components:
         - actionResult
 
 paths:
+  /state_model/models/returnables:
+    get:
+      summary: Retrieve the returnables state model
+      responses:
+        '200':
+          description: Successful retrieval of state model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateModel'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /patron_requests:
     get:
       summary: Retrieve patron requests

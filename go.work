@@ -3,11 +3,11 @@ go 1.25
 use (
 	./broker
 	./common
+	./directory
 	./httpclient
 	./illmock
 	./iso18626
 	./marcxml
 	./ncip
 	./sru
-	./directory
 )
