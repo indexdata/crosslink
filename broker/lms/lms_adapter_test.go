@@ -147,9 +147,11 @@ func TestRequestItem(t *testing.T) {
 	b := true
 	loan := "Loan"
 	title := "Title"
-	sysnumber := "SYSNUMBER"
+	sysnumber := "NUMBER"
+	itemLocation := "itemloc"
 	ad := &LmsAdapterNcip{
 		config: directory.LmsConfig{
+			ItemLocation:                     &itemLocation,
 			RequestItemPickupLocationEnabled: &b,
 			RequestItemRequestType:           &loan,
 			RequestItemRequestScopeType:      &title,
@@ -157,16 +159,17 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	err := ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "NUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
-	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "pickloc", req.PickupLocation.Text)
 	assert.Equal(t, "Loan", req.RequestType.Text)
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
+	assert.Equal(t, itemLocation, req.ItemOptionalFields.Location[0].LocationName.LocationNameInstance[0].LocationNameValue)
 
 	ad = &LmsAdapterNcip{
 		config:     directory.LmsConfig{},
@@ -191,10 +194,11 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
+	assert.Nil(t, req.ItemOptionalFields)
 }
 
 func TestCancelRequestItem(t *testing.T) {
@@ -298,14 +302,14 @@ func TestInstitutionalPatron(t *testing.T) {
 	assert.Equal(t, "USER-123456-XYZ", institutionalPatron)
 }
 
-func TestPickupLocation(t *testing.T) {
+func TestSupplierPickupLocation(t *testing.T) {
 	var mock ncipclient.NcipClient = new(ncipClientMock)
 	config := directory.LmsConfig{}
 	ad := &LmsAdapterNcip{
 		ncipClient: mock,
 		config:     config,
 	}
-	pickupLocation := ad.PickupLocation()
+	pickupLocation := ad.SupplierPickupLocation()
 	assert.Equal(t, "ILL Office", pickupLocation)
 
 	p := "Office2"
@@ -314,8 +318,48 @@ func TestPickupLocation(t *testing.T) {
 		ncipClient: mock,
 		config:     config,
 	}
-	pickupLocation = ad.PickupLocation()
+	pickupLocation = ad.SupplierPickupLocation()
 	assert.Equal(t, "Office2", pickupLocation)
+}
+
+func TestRequesterPickupLocation(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	config := directory.LmsConfig{}
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	pickupLocation := ad.RequesterPickupLocation()
+	assert.Equal(t, "Main Library", pickupLocation)
+
+	p := "3rd Floor Desk"
+	config = directory.LmsConfig{RequesterPickupLocation: &p}
+	ad = &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	pickupLocation = ad.RequesterPickupLocation()
+	assert.Equal(t, "3rd Floor Desk", pickupLocation)
+}
+
+func TestItemLocation(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	config := directory.LmsConfig{}
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	itemLocation := ad.ItemLocation()
+	assert.Equal(t, "", itemLocation)
+
+	p := "4"
+	config = directory.LmsConfig{ItemLocation: &p}
+	ad = &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	itemLocation = ad.ItemLocation()
+	assert.Equal(t, "4", itemLocation)
 }
 
 type ncipClientMock struct {
