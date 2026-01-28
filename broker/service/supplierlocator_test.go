@@ -278,6 +278,40 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 	assert.Equal(t, "", locSup.ID)
 }
 
+func TestGetNextSupplierBetweenHolidays(t *testing.T) {
+	peerId := "p1"
+	mockIllRepo := new(MockIllRepoRequester)
+	timezoneLoc, err := time.LoadLocation("Australia/Victoria")
+	assert.NoError(t, err)
+	yesterday := time.Now().Add(-24 * time.Hour).In(timezoneLoc).Format(DATE_LAYOUT)
+	tomorrow := time.Now().Add(24 * time.Hour).In(timezoneLoc).Format(DATE_LAYOUT)
+	jsonData := "{\"closures\": " +
+		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2\"," +
+		"\"startDate\": \"" + yesterday + "\"," +
+		"\"endDate\": \"" + yesterday + "\"," +
+		"\"reason\": \"Christmas Day\"" +
+		"}," +
+		"{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda363\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb4\"," +
+		"\"startDate\": \"" + tomorrow + "\"," +
+		"\"endDate\": \"" + tomorrow + "\"," +
+		"\"reason\": \"Christmas Day 2\"" +
+		"}]," +
+		"\"timeZone\": \"Australia/Victoria\"" +
+		"}"
+	var data directory.Entry
+	err = json.Unmarshal([]byte(jsonData), &data)
+	assert.NoError(t, err)
+	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
+
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "l1", SupplierID: peerId}})
+	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
+	assert.Equal(t, "l1", locSup.ID)
+}
+
 func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 	peerId := "p1"
 	mockIllRepo := new(MockIllRepoRequester)
