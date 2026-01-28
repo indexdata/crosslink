@@ -76,6 +76,7 @@ func makeStateList(stateMap map[pr_db.PatronRequestState][]pr_db.PatronRequestAc
 			//Where do we get the transitions?
 			actionList = append(actionList, action)
 		}
+		state.Actions = &actionList
 	}
 	return stateList
 }
