@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	_ "time/tzdata"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
