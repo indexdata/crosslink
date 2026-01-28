@@ -147,7 +147,7 @@ func TestRequestItem(t *testing.T) {
 	b := true
 	loan := "Loan"
 	title := "Title"
-	sysnumber := "SYSNUMBER"
+	sysnumber := "NUMBER"
 	itemLocation := "itemloc"
 	ad := &LmsAdapterNcip{
 		config: directory.LmsConfig{
@@ -164,12 +164,27 @@ func TestRequestItem(t *testing.T) {
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
-	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "NUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "pickloc", req.PickupLocation.Text)
 	assert.Equal(t, "Loan", req.RequestType.Text)
 	assert.Equal(t, "Title", req.RequestScopeType.Text)
 	assert.Equal(t, itemLocation, req.ItemOptionalFields.Location[0].LocationName.LocationNameInstance[0].LocationNameValue)
+
+	ad = &LmsAdapterNcip{
+		config:     directory.LmsConfig{},
+		ncipClient: mock,
+	}
+	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
 	b = false
 	ad = &LmsAdapterNcip{
@@ -325,6 +340,26 @@ func TestRequesterPickupLocation(t *testing.T) {
 	}
 	pickupLocation = ad.RequesterPickupLocation()
 	assert.Equal(t, "3rd Floor Desk", pickupLocation)
+}
+
+func TestItemLocation(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	config := directory.LmsConfig{}
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	itemLocation := ad.ItemLocation()
+	assert.Equal(t, "", itemLocation)
+
+	p := "4"
+	config = directory.LmsConfig{ItemLocation: &p}
+	ad = &LmsAdapterNcip{
+		ncipClient: mock,
+		config:     config,
+	}
+	itemLocation = ad.ItemLocation()
+	assert.Equal(t, "4", itemLocation)
 }
 
 type ncipClientMock struct {
