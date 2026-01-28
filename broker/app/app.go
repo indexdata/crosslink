@@ -205,13 +205,12 @@ func StartServer(ctx Context) error {
 
 	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, ServeMux)
+	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
+		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
 	}
-
-	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
-	// TODO: proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
 
 	// SSE Incoming message handler
 	ServeMux.HandleFunc("/sse/events", ctx.SseBroker.ServeHTTP)
