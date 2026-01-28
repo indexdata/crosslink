@@ -278,7 +278,7 @@ components:
           default: true
         itemLocation:
           type: string
-          description: The location code to use when looking up items
+          description: Location code to include in NCIP RequestItem messages (for example, as an item optional field)
           default: ""
         requestItemRequestType:
           type: string
