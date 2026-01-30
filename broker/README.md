@@ -99,7 +99,6 @@ Configuration is provided via environment variables:
 | `TENANT_TO_SYMBOL`        | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,          | (empty value)                             |
 |                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value                 |                                           |
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
-| `HRID_PREFIX`             | HRID prefix used to create patron request id, exmaple `INDX`                          | (empty value)                             |
 
 # Build
 

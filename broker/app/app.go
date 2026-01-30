@@ -74,7 +74,6 @@ var SHUTDOWN_DELAY, _ = utils.GetEnvAny("SHUTDOWN_DELAY", time.Duration(15*float
 	}
 	return d, nil
 })
-var HRID_PREFIX = utils.GetEnv("HRID_PREFIX", "")
 
 var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
@@ -163,7 +162,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE, HRID_PREFIX)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 

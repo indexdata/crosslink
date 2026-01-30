@@ -90,10 +90,8 @@ func TestCrud(t *testing.T) {
 		},
 	}
 	id := uuid.NewString()
-	creationTime := time.Now()
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
-		Timestamp:       &creationTime,
 		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
@@ -111,7 +109,6 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
-	assert.Equal(t, newPr.Timestamp.YearDay(), foundPr.Timestamp.YearDay())
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
@@ -191,10 +188,8 @@ func TestActionsToCompleteState(t *testing.T) {
 		},
 	}
 	id := uuid.NewString()
-	creationTime := time.Now()
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
-		Timestamp:       &creationTime,
 		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,

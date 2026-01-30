@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,17 +30,15 @@ type PatronRequestApiHandler struct {
 	eventBus             events.EventBus
 	actionMappingService prservice.ActionMappingService
 	tenant               common.Tenant
-	hridPrefix           string
 }
 
-func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant, limitDefault int32, hridPrefix string) PatronRequestApiHandler {
+func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		actionMappingService: prservice.ActionMappingService{},
 		tenant:               tenant,
-		hridPrefix:           hridPrefix,
 	}
 }
 
@@ -370,14 +369,12 @@ func toString(text pgtype.Text) *string {
 
 func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
 	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
-	if request.Timestamp != nil {
-		creationTime.Time = *request.Timestamp
-	}
-	id := uuid.NewString()
+	var id string
 	if request.Id != nil {
 		id = *request.Id
-	} else if a.hridPrefix != "" {
-		hrid, err := a.prRepo.GetNextHrid(ctx, a.hridPrefix)
+	} else {
+		prefix := strings.Split(*request.RequesterSymbol, ":")[1]
+		hrid, err := a.prRepo.GetNextHrid(ctx, prefix)
 		if err != nil {
 			return pr_db.PatronRequest{}, err
 		}

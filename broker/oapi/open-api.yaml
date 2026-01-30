@@ -486,10 +486,6 @@ components:
         id:
           type: string
           description: Unique identifier of the patron request
-        timestamp:
-          type: string
-          format: date-time
-          description: Timestamp of the patron reuqest
         illRequest:
           type: object
           description: JSON of ISO18626 request
