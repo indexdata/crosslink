@@ -2,13 +2,16 @@ package prapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -84,7 +87,7 @@ func TestGetPatronRequestsWithLimits(t *testing.T) {
 
 func TestPostPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
-	toCreate := proapi.PatronRequest{ID: "1", RequesterSymbol: &symbol}
+	toCreate := proapi.PatronRequest{Id: "1", RequesterSymbol: &symbol}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
@@ -98,7 +101,7 @@ func TestPostPatronRequests(t *testing.T) {
 
 func TestPostPatronRequestsMissingSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
-	toCreate := proapi.PatronRequest{ID: "1"}
+	toCreate := proapi.PatronRequest{Id: "1"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
@@ -261,9 +264,26 @@ func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "unexpected EOF")
 }
 
+func TestToDbPatronRequest(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, common.NewTenant(""), 10)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	id := uuid.NewString()
+
+	pr, err := handler.toDbPatronRequest(ctx, proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, id, pr.ID)
+	assert.True(t, pr.Timestamp.Valid)
+
+	pr, err = handler.toDbPatronRequest(ctx, proapi.CreatePatronRequest{RequesterSymbol: &symbol}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "REQ-1", pr.ID)
+	assert.True(t, pr.Timestamp.Valid)
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
+	counter int64
 }
 
 func (r *PrRepoError) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
@@ -291,6 +311,10 @@ func (r *PrRepoError) DeletePatronRequest(ctx common.ExtendedContext, id string)
 		return nil
 	}
 	return errors.New("DB error")
+}
+func (r *PrRepoError) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
+	r.counter++
+	return strings.ToUpper(prefix) + "-" + strconv.FormatInt(r.counter, 10), nil
 }
 
 type MockEventBus struct {
