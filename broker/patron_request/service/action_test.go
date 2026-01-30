@@ -879,3 +879,10 @@ func TestCallNumberFromIllRequest(t *testing.T) {
 	callNumber := callNumberFromIllRequest(r)
 	assert.Equal(t, "QA76.73.G63 D37 2020", callNumber)
 }
+
+func TestLoadReturnableStateModel(t *testing.T) {
+	stateModel, err := LoadReturnablesStateModel()
+	assert.Nil(t, err)
+	assert.NotNil(t, stateModel)
+
+}

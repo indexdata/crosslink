@@ -41,26 +41,9 @@ func (a *PatronRequestApiHandler) GetStateModelModelsReturnables(w http.Response
 	//ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 	//	Other: logParams,
 	//})
-	var stateModel proapi.StateModel
-	stateModel.Desc = strPtr("Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events.")
-	stateModel.Name = strPtr("CrossLink Returnables State Model")
+	stateModel, _ := prservice.LoadReturnablesStateModel()
 
-	actionMapping := prservice.NewReturnableActionMapping()
-
-	borrowerMap := actionMapping.GetBorrowerActionsMap()
-	lenderMap := actionMapping.GetLenderActionsMap()
-
-	allStates := make([]proapi.State, 0, len(borrowerMap)+len(lenderMap))
-
-	lenderStates := makeStateList(borrowerMap, proapi.SUPPLIER)
-	allStates = append(allStates, lenderStates...)
-
-	borrowerStates := makeStateList(lenderMap, proapi.REQUESTER)
-	allStates = append(allStates, borrowerStates...)
-
-	stateModel.States = &allStates
-
-	writeJsonResponse(w, stateModel)
+	writeJsonResponse(w, *stateModel)
 }
 
 func makeStateList(stateMap map[pr_db.PatronRequestState][]pr_db.PatronRequestAction, stateSide proapi.StateSide) []proapi.State {

@@ -166,7 +166,7 @@ func Init(ctx context.Context) (Context, error) {
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, prActionService, prApiHandler, sseBroker)
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
