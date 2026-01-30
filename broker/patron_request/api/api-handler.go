@@ -373,7 +373,7 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 	if request.Id != nil {
 		id = *request.Id
 	} else {
-		prefix := strings.Split(*request.RequesterSymbol, ":")[1]
+		prefix := strings.SplitN(*request.RequesterSymbol, ":", 2)[1]
 		hrid, err := a.prRepo.GetNextHrid(ctx, prefix)
 		if err != nil {
 			return pr_db.PatronRequest{}, err
