@@ -107,7 +107,7 @@ func TestGetEvents(t *testing.T) {
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
 	assert.GreaterOrEqual(t, resp.About.Count, int64(1))
 	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
-	assert.Equal(t, eventId, resp.Items[0].ID)
+	assert.Equal(t, eventId, resp.Items[0].Id)
 
 	body = getResponseBody(t, "/events?ill_transaction_id=not-exists")
 	err = json.Unmarshal(body, &resp)
@@ -255,7 +255,7 @@ func TestGetIllTransactionsId(t *testing.T) {
 	var resp oapi.IllTransaction
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
-	assert.Equal(t, illId, resp.ID)
+	assert.Equal(t, illId, resp.Id)
 	assert.Equal(t, getLocalhostWithPort()+"/events?ill_transaction_id="+url.PathEscape(illId), resp.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/located_suppliers?ill_transaction_id="+url.PathEscape(illId), resp.LocatedSuppliersLink)
 
@@ -274,7 +274,7 @@ func TestGetLocatedSuppliers(t *testing.T) {
 	err := json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(resp.Items), 1)
-	assert.Equal(t, resp.Items[0].ID, locSup.ID)
+	assert.Equal(t, resp.Items[0].Id, locSup.ID)
 	assert.GreaterOrEqual(t, resp.About.Count, int64(len(resp.Items)))
 
 	body = getResponseBody(t, "/located_suppliers?ill_transaction_id=not-exists")
@@ -306,7 +306,7 @@ func TestBrokerCRUD(t *testing.T) {
 	var tran oapi.IllTransaction
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
-	assert.Equal(t, illId, tran.ID)
+	assert.Equal(t, illId, tran.Id)
 	assert.Equal(t, getLocalhostWithPort()+"/broker/events?ill_transaction_id="+url.PathEscape(illId), tran.EventsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/broker/located_suppliers?ill_transaction_id="+url.PathEscape(illId), tran.LocatedSuppliersLink)
 
@@ -318,7 +318,7 @@ func TestBrokerCRUD(t *testing.T) {
 	body = httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
-	assert.Equal(t, illId, tran.ID)
+	assert.Equal(t, illId, tran.Id)
 
 	assert.Equal(t, 1, len(httpGetTrans(t, "/broker/ill_transactions", "diku", http.StatusOK)))
 
@@ -335,7 +335,7 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 1)
-	assert.Equal(t, illId, resp.Items[0].ID)
+	assert.Equal(t, illId, resp.Items[0].Id)
 
 	peer := apptest.CreatePeer(t, illRepo, "ISIL:LOC_OTHER", "")
 	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, peer.ID, "ISIL:LOC_OTHER", string(iso18626.TypeStatusLoaned))
@@ -345,13 +345,13 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &supps)
 	assert.NoError(t, err)
 	assert.Len(t, supps.Items, 1)
-	assert.Equal(t, locSup.ID, supps.Items[0].ID)
+	assert.Equal(t, locSup.ID, supps.Items[0].Id)
 
 	body = httpGet(t, "/broker/located_suppliers?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &supps)
 	assert.NoError(t, err)
 	assert.Len(t, supps.Items, 1)
-	assert.Equal(t, locSup.ID, supps.Items[0].ID)
+	assert.Equal(t, locSup.ID, supps.Items[0].Id)
 
 	body = httpGet(t, "/broker/located_suppliers?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
 	err = json.Unmarshal(body, &supps)
@@ -370,19 +370,19 @@ func TestBrokerCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events.Items, 1)
-	assert.Equal(t, eventId, events.Items[0].ID)
+	assert.Equal(t, eventId, events.Items[0].Id)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events.Items, 1)
-	assert.Equal(t, eventId, events.Items[0].ID)
+	assert.Equal(t, eventId, events.Items[0].Id)
 
 	body = httpGet(t, "/broker/events?ill_transaction_id="+url.QueryEscape(illId), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events.Items, 1)
-	assert.Equal(t, eventId, events.Items[0].ID)
+	assert.Equal(t, eventId, events.Items[0].Id)
 
 	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId), "ruc", http.StatusOK)
 	err = json.Unmarshal(body, &events)
@@ -399,7 +399,7 @@ func TestPeersLinks(t *testing.T) {
 	for i := 0; i < 2*int(api.LIMIT_DEFAULT); i++ {
 		peer := "ISIL:DK-PEER" + strconv.Itoa(i)
 		toCreate := oapi.Peer{
-			ID:            uuid.New().String(),
+			Id:            uuid.New().String(),
 			Name:          peer,
 			Url:           "https://url.com",
 			Symbols:       []string{peer},
@@ -440,8 +440,8 @@ func TestPeersNoHeaders(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Delete peer
-	httpRequest(t, "DELETE", "/peers/"+respPeer.ID, nil, "", http.StatusNoContent)
-	httpRequest(t, "DELETE", "/peers/"+respPeer.ID, nil, "", http.StatusNotFound)
+	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNotFound)
 }
 
 func TestPeersCRUD(t *testing.T) {
@@ -458,7 +458,7 @@ func TestPeersCRUD(t *testing.T) {
 	loanCount := int32(5)
 	borrowCount := int32(10)
 	toCreate := oapi.Peer{
-		ID:            uuid.New().String(),
+		Id:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
 		Symbols:       []string{"ISIL:PEER"},
@@ -475,7 +475,7 @@ func TestPeersCRUD(t *testing.T) {
 	var respPeer oapi.Peer
 	err = json.Unmarshal(body, &respPeer)
 	assert.NoError(t, err)
-	assert.Equal(t, toCreate.ID, respPeer.ID)
+	assert.Equal(t, toCreate.Id, respPeer.Id)
 	assert.Equal(t, "diku", (*toCreate.HttpHeaders)["X-Okapi-Tenant"])
 
 	var respPeers oapi.Peers
@@ -483,7 +483,7 @@ func TestPeersCRUD(t *testing.T) {
 	body = getResponseBody(t, "/peers?cql="+url.QueryEscape("symbol any ISIL:PEER"))
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
-	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
+	assert.Equal(t, toCreate.Id, respPeers.Items[0].Id)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	assert.Equal(t, "Peer", respPeers.Items[0].Name)
 	assert.Equal(t, "ISIL:PEER", respPeers.Items[0].Symbols[0])
@@ -519,11 +519,11 @@ func TestPeersCRUD(t *testing.T) {
 
 	jsonBytes, err = json.Marshal(toCreate)
 	assert.NoError(t, err)
-	body = httpRequest(t, "PUT", "/peers/"+toCreate.ID, jsonBytes, "", http.StatusOK)
+	body = httpRequest(t, "PUT", "/peers/"+toCreate.Id, jsonBytes, "", http.StatusOK)
 
 	err = json.Unmarshal(body, &respPeer)
 	assert.NoError(t, err)
-	assert.Equal(t, toCreate.ID, respPeer.ID)
+	assert.Equal(t, toCreate.Id, respPeer.Id)
 	assert.Equal(t, "Updated", respPeer.Name)
 	assert.Len(t, respPeer.Symbols, 2)
 	assert.Equal(t, 2, len(*respPeer.BranchSymbols))
@@ -533,8 +533,8 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, int32(10), *respPeer.LoansCount)
 	assert.Equal(t, int32(15), *respPeer.BorrowsCount)
 	// Get peer
-	respPeer = getPeerById(t, toCreate.ID)
-	assert.Equal(t, toCreate.ID, respPeer.ID)
+	respPeer = getPeerById(t, toCreate.Id)
+	assert.Equal(t, toCreate.Id, respPeer.Id)
 	assert.Equal(t, "Updated", respPeer.Name)
 	assert.Equal(t, int32(10), *respPeer.LoansCount)
 	assert.Equal(t, int32(15), *respPeer.BorrowsCount)
@@ -561,20 +561,20 @@ func TestPeersCRUD(t *testing.T) {
 	err = json.Unmarshal(body, &respPeers)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
-	assert.Equal(t, toCreate.ID, respPeers.Items[0].ID)
+	assert.Equal(t, toCreate.Id, respPeers.Items[0].Id)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
 	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["name"])
 	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["email"])
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 
 	// Delete peer
-	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNoContent)
-	httpRequest(t, "DELETE", "/peers/"+toCreate.ID, nil, "", http.StatusNotFound)
+	httpRequest(t, "DELETE", "/peers/"+toCreate.Id, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/peers/"+toCreate.Id, nil, "", http.StatusNotFound)
 
 	// Check no peers left
 	respPeers = getPeers(t)
 	for _, p := range respPeers.Items {
-		assert.NotEqual(t, toCreate.ID, p.ID)
+		assert.NotEqual(t, toCreate.Id, p.Id)
 	}
 }
 
@@ -650,7 +650,7 @@ func TestGetPeersDbError(t *testing.T) {
 }
 func TestPostPeersDbError(t *testing.T) {
 	toCreate := oapi.Peer{
-		ID:            uuid.New().String(),
+		Id:            uuid.New().String(),
 		Name:          "Peer",
 		Url:           "https://url.com",
 		Symbols:       []string{"ISIL:PEER"},

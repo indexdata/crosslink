@@ -1,6 +1,8 @@
 package pr_db
 
 import (
+	"strings"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,6 +15,7 @@ type PrRepo interface {
 	SavePatronRequest(ctx common.ExtendedContext, params SavePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
 	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
+	GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error)
 }
 
 type PgPrRepo struct {
@@ -81,4 +84,8 @@ func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.
 		},
 	})
 	return row.PatronRequest, err
+}
+
+func (r *PgPrRepo) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
+	return r.queries.GetNextHrid(ctx, r.GetConnOrTx(), strings.ToUpper(prefix))
 }
