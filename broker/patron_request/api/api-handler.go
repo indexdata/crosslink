@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/api"
@@ -115,7 +117,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	newPr.RequesterSymbol = &symbol
-	dbreq := toDbPatronRequest(newPr, params.XOkapiTenant)
+	dbreq, err := a.toDbPatronRequest(ctx, newPr, params.XOkapiTenant)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
 	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(dbreq))
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -341,14 +347,15 @@ func addNotFoundError(w http.ResponseWriter) {
 
 func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
 	return proapi.PatronRequest{
-		ID:              request.ID,
-		Timestamp:       request.Timestamp.Time,
-		State:           string(request.State),
-		Side:            string(request.Side),
-		Patron:          toString(request.Patron),
-		RequesterSymbol: toString(request.RequesterSymbol),
-		SupplierSymbol:  toString(request.SupplierSymbol),
-		IllRequest:      utils.Must(common.StructToMap(illRequest)),
+		Id:                 request.ID,
+		Timestamp:          request.Timestamp.Time,
+		State:              string(request.State),
+		Side:               string(request.Side),
+		Patron:             toString(request.Patron),
+		RequesterSymbol:    toString(request.RequesterSymbol),
+		SupplierSymbol:     toString(request.SupplierSymbol),
+		IllRequest:         utils.Must(common.StructToMap(illRequest)),
+		RequesterRequestId: toString(request.RequesterReqID),
 	}
 }
 
@@ -360,14 +367,35 @@ func toString(text pgtype.Text) *string {
 	return value
 }
 
-func toDbPatronRequest(request proapi.CreatePatronRequest, tenant *string) pr_db.PatronRequest {
+func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
+	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
+	var id string
+	if request.Id != nil {
+		id = *request.Id
+	} else {
+		prefix := strings.SplitN(*request.RequesterSymbol, ":", 2)[1]
+		hrid, err := a.prRepo.GetNextHrid(ctx, prefix)
+		if err != nil {
+			return pr_db.PatronRequest{}, err
+		}
+		id = hrid
+	}
 	var illRequest []byte
 	if request.IllRequest != nil {
-		illRequest = []byte(*request.IllRequest)
+		illRequest = utils.Must(json.Marshal(request.IllRequest))
+		var isoRequest iso18626.Request
+		err := json.Unmarshal(illRequest, &isoRequest)
+		if err != nil {
+			return pr_db.PatronRequest{}, err
+		}
+		isoRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
+		isoRequest.Header.RequestingAgencyRequestId = id
+		illRequest = utils.Must(json.Marshal(isoRequest))
 	}
+
 	return pr_db.PatronRequest{
-		ID:              getId(request.ID),
-		Timestamp:       pgtype.Timestamp{Valid: true, Time: request.Timestamp},
+		ID:              id,
+		Timestamp:       creationTime,
 		State:           prservice.BorrowerStateNew,
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
@@ -375,7 +403,7 @@ func toDbPatronRequest(request proapi.CreatePatronRequest, tenant *string) pr_db
 		SupplierSymbol:  getDbText(request.SupplierSymbol),
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
-	}
+	}, nil
 }
 
 func getId(id string) string {

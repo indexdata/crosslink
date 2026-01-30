@@ -207,262 +207,265 @@ components:
     Event:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier of the event
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Timestamp of the event
-        IllTransactionID:
+        illTransactionID:
           type: string
           description: ID of the ILL transaction (if applicable)
-        EventType:
+        eventType:
           type: string
           description: Type of the event
-        EventName:
+        eventName:
           type: string
           description: Name of the event
-        EventStatus:
+        eventStatus:
           type: string
           description: Status of the event
-        EventData:
+        eventData:
           type: object
           description: Data associated with the event
           additionalProperties: true
-        ResultData:
+        resultData:
           type: object
           description: Result data of the event
           additionalProperties: true
-        ParentID:
+        parentID:
           type: string
           description: Parent event ID
       required:  # List required fields if any
-        - ID
-        - IllTransactionID
-        - Timestamp
-        - EventType
-        - EventName
-        - EventStatus
+        - id
+        - illTransactionID
+        - timestamp
+        - eventType
+        - eventName
+        - eventStatus
     IllTransaction:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier for the ILL transaction
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Timestamp of the transaction
-        RequesterSymbol:
+        requesterSymbol:
           type: string
           description: Symbol of the requesting institution
-        RequesterID:
+        requesterID:
           type: string
           description: ID of the requesting institution
-        LastRequesterAction:
+        lastRequesterAction:
           type: string
           description: Last action performed by the requester
-        PrevRequesterAction:
+        prevRequesterAction:
           type: string
           description: Previous action performed by the requester
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Symbol of the supplying institution
-        RequesterRequestID:
+        requesterRequestID:
           type: string
           description: ID of the request from the requester's side
-        SupplierRequestID:
+        supplierRequestID:
           type: string
           description: ID of the request from the supplier's side
-        LastSupplierStatus:
+        lastSupplierStatus:
           type: string
           description: Last status update from the supplier
-        PrevSupplierStatus:
+        prevSupplierStatus:
           type: string
           description: Previous status update from the supplier
-        IllTransactionData:
+        illTransactionData:
           type: object
           description: Result data of the event
           additionalProperties: true
-        EventsLink:
+        eventsLink:
           type: string
           description: Link to Ill Transaction events
-        LocatedSuppliersLink:
+        locatedSuppliersLink:
           type: string
           description: Link to located Suppliers
-        RequesterPeerLink:
+        requesterPeerLink:
           type: string
           description: Link to requester Peer
       required:
-        - ID
-        - Timestamp
-        - RequesterSymbol
-        - RequesterID
-        - LastRequesterAction
-        - PrevRequesterAction
-        - SupplierSymbol
-        - RequesterRequestID
-        - SupplierRequestID
-        - LastSupplierStatus
-        - PrevSupplierStatus
-        - IllTransactionData
-        - EventsLink
-        - LocatedSuppliersLink
-        - RequesterPeerLink
+        - id
+        - timestamp
+        - requesterSymbol
+        - requesterID
+        - lastRequesterAction
+        - prevRequesterAction
+        - supplierSymbol
+        - requesterRequestID
+        - supplierRequestID
+        - lastSupplierStatus
+        - prevSupplierStatus
+        - illTransactionData
+        - eventsLink
+        - locatedSuppliersLink
+        - requesterPeerLink
     Peer:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier for the peer
-        Symbols:
+        symbols:
           type: array
           items:
             type: string
           description: Unique symbol representing the peer
-        BranchSymbols:
+        branchSymbols:
           type: array
           items:
             type: string
           description: Symbols of peer branches
-        Name:
+        name:
           type: string
           description: Name of the peer
-        Url:
+        url:
           type: string
           description: Network URL of the peer
-        RefreshPolicy:
+        refreshPolicy:
           type: string
           enum: [never, transaction]
           description: Policy for refreshing peer information (never, transaction)
-        RefreshTime:
+        refreshTime:
           type: string
           format: date-time
           description: Timestamp of refresh
-        LoansCount:
+        loansCount:
           type: integer
           format: int32
           description: Count of loans
-        BorrowsCount:
+        borrowsCount:
           type: integer
           format: int32
           description: Count of borrows
-        Vendor:
+        vendor:
           type: string
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
-        BrokerMode:
+        brokerMode:
           type: string
           enum: [opaque, transparent, translucent]
           description: Broker mode, e.g "opaque", "transparent" or "translucent"
-        CustomData:
+        customData:
           type: object
           description: Custom data of peer
           additionalProperties: true
-        HttpHeaders:
+        httpHeaders:
           type: object
           description: HTTP headers to be sent with requests to the peer
           additionalProperties:
             type: string
       required:
-        - ID
-        - Symbols
-        - Name
-        - Url
-        - RefreshPolicy
-        - Vendor
-        - BrokerMode
+        - id
+        - symbols
+        - name
+        - url
+        - refreshPolicy
+        - vendor
+        - brokerMode
 
     LocatedSupplier:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Generate ID
-        IllTransactionID:
+        illTransactionID:
           type: string
           description: Ill Transaction ID
-        SupplierID:
+        supplierID:
           type: string
           description: Supplier ID from peer table
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Supplier symbol to use for communication
-        Ordinal:
+        ordinal:
           type: integer
           format: int32
           description: Ordinal number for ordering
-        SupplierStatus:
+        supplierStatus:
           type: string
           description: Supplier status, possible values (new, selected, skipped)
-        PrevAction:
+        prevAction:
           type: string
           description: Previous requester action
-        PrevStatus:
+        prevStatus:
           type: string
           description: Previous supplier transaction status
-        LastAction:
+        lastAction:
           type: string
           description: Latest requester action
-        LastStatus:
+        lastStatus:
           type: string
           description: Latest supplier transaction status
-        LocalID:
+        localID:
           type: string
           description: Item local ID
-        PrevReason:
+        prevReason:
           type: string
           description: Previous requester reason
-        LastReason:
+        lastReason:
           type: string
           description: Latest requester reason
-        SupplierRequestID:
+        supplierRequestID:
           type: string
           description: Supplier request ID
-        SupplierPeerLink:
+        supplierPeerLink:
           type: string
           description: Link to supplier Peer
       required:
-        - ID
-        - IllTransactionID
-        - SupplierID
-        - SupplierSymbol
-        - Ordinal
-        - SupplierPeerLink
+        - id
+        - illTransactionID
+        - supplierID
+        - supplierSymbol
+        - ordinal
+        - supplierPeerLink
     PatronRequest:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier of the patron request
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Timestamp of the patron reuqest
-        IllRequest:
+        illRequest:
           type: object
           description: JSON of ISO18626 request
-        State:
+        state:
           type: string
           description: Patron request state
-        Side:
+        side:
           type: string
           description: Patron request side - borrowing or lending
-        Patron:
+        patron:
           type: string
           description: User who requested item
-        RequesterSymbol:
+        requesterSymbol:
           type: string
           description: Requester symbol
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Supplier symbol
+        requesterRequestId:
+          type: string
+          description: Requester patron request ID
       required:
-        - ID
-        - Timestamp
-        - State
-        - Side
-        - IllRequest
+        - id
+        - timestamp
+        - state
+        - side
+        - illRequest
     PatronRequests:
       type: object
       required:
@@ -480,28 +483,23 @@ components:
     CreatePatronRequest:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier of the patron request
-        Timestamp:
-          type: string
-          format: date-time
-          description: Timestamp of the patron reuqest
-        IllRequest:
-          type: string
+        illRequest:
+          type: object
           description: JSON of ISO18626 request
-        Patron:
+        patron:
           type: string
           description: User who requested item
-        RequesterSymbol:
+        requesterSymbol:
           type: string
           description: Requester symbol
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Supplier symbol
       required:
-        - ID
-        - Timestamp
+        - illRequest
 
     ExecuteAction:
       type: object

@@ -36,3 +36,6 @@ SELECT sqlc.embed(patron_request)
 FROM patron_request
 WHERE supplier_symbol = $1 AND requester_req_id = $2
 LIMIT 1;
+
+-- name: GetNextHrid :one
+SELECT get_next_hrid($1)::TEXT AS hrid;

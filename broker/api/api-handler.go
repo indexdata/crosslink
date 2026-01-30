@@ -321,12 +321,12 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
-	_, err = a.illRepo.GetPeerById(ctx, newPeer.ID)
+	_, err = a.illRepo.GetPeerById(ctx, newPeer.Id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
 	} else if err == nil {
-		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.ID))
+		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.Id))
 		return
 	}
 	for _, s := range newPeer.Symbols {
@@ -668,7 +668,7 @@ func addNotFoundError(w http.ResponseWriter) {
 
 func toApiEvent(event events.Event) oapi.Event {
 	api := oapi.Event{
-		ID:               event.ID,
+		Id:               event.ID,
 		Timestamp:        event.Timestamp.Time,
 		IllTransactionID: event.IllTransactionID,
 		EventType:        string(event.EventType),
@@ -685,7 +685,7 @@ func toApiEvent(event events.Event) oapi.Event {
 
 func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 	return oapi.LocatedSupplier{
-		ID:                sup.ID,
+		Id:                sup.ID,
 		IllTransactionID:  sup.IllTransactionID,
 		SupplierID:        sup.SupplierID,
 		SupplierSymbol:    sup.SupplierSymbol,
@@ -705,7 +705,7 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 
 func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllTransaction {
 	api := oapi.IllTransaction{
-		ID:        trans.ID,
+		Id:        trans.ID,
 		Timestamp: trans.Timestamp.Time,
 	}
 	api.RequesterSymbol = getString(trans.RequesterSymbol)
@@ -761,7 +761,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 	}
 
 	return oapi.Peer{
-		ID:            peer.ID,
+		Id:            peer.ID,
 		Symbols:       list,
 		Name:          peer.Name,
 		Url:           peer.Url,
@@ -811,7 +811,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 		httpHeaders = *peer.HttpHeaders
 	}
 	db := ill_db.Peer{
-		ID:            peer.ID,
+		ID:            peer.Id,
 		Name:          peer.Name,
 		Url:           peer.Url,
 		Vendor:        peer.Vendor,
