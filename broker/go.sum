@@ -74,6 +74,8 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.23.0/go.mod h1:igFoXX2ELCW06bol23DW
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/indexdata/cql-go v1.0.1-0.20250722084932-84f3837d6030 h1:RP9TZZTGoBo2Jx04FEWaRmNhCX/Fk8VR04tX0FMRzik=
 github.com/indexdata/cql-go v1.0.1-0.20250722084932-84f3837d6030/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
+github.com/indexdata/cql-go v1.0.1-0.20260202173855-d9fe780396b2 h1:HYBpSNIr26sFXyOfq4pMGk13ygEezb1UA4gtrt9lsm0=
+github.com/indexdata/cql-go v1.0.1-0.20260202173855-d9fe780396b2/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72 h1:/ssOlpKK1EOeWMCOUrxCOCZP+0Z1LD58Xg1nrU01TAQ=
 github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.3.0 h1:LZGBORHnO6olHBtvc6hQEefymdRuiM77FgtW4pCek7g=
