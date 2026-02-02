@@ -72,8 +72,10 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 			return
 		}
 	}
+	var side pr_db.PatronRequestSide
 	switch params.Side {
 	case string(prservice.SideBorrowing), string(prservice.SideLending):
+		side = pr_db.PatronRequestSide(params.Side)
 		_, err = qb.And().Search("side").Term(params.Side).Build()
 		if err != nil {
 			addBadRequestError(ctx, w, err)
@@ -83,7 +85,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		addBadRequestError(ctx, w, errors.New("invalid side parameter, valid values are 'borrowing' and 'lending'"))
 		return
 	}
-	qb, err = addOwnerRestriction(qb, symbol)
+	qb, err = addOwnerRestriction(qb, symbol, side)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -119,17 +121,31 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	writeJsonResponse(w, resp)
 }
 
-func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string) (*cqlbuilder.QueryBuilder, error) {
-	_, err := queryBuilder.And().
-		BeginClause().
-		Search("side").Term(string(prservice.SideLending)).
-		And().Search("supplier_symbol").Term(symbol).
-		EndClause().
-		Or().
-		BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
-		And().Search("requester_symbol").Term(symbol).
-		EndClause().
-		Build()
+func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
+	var err error
+	switch side {
+	case prservice.SideLending:
+		_, err = queryBuilder.And().
+			Search("side").Term(string(prservice.SideLending)).
+			And().Search("supplier_symbol").Term(symbol).
+			Build()
+	case prservice.SideBorrowing:
+		_, err = queryBuilder.And().
+			Search("side").Term(string(prservice.SideBorrowing)).
+			And().Search("requester_symbol").Term(symbol).
+			Build()
+	default:
+		_, err = queryBuilder.And().
+			BeginClause().
+			Search("side").Term(string(prservice.SideLending)).
+			And().Search("supplier_symbol").Term(symbol).
+			EndClause().
+			Or().
+			BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
+			And().Search("requester_symbol").Term(symbol).
+			EndClause().
+			Build()
+	}
 	return queryBuilder, err
 }
 
