@@ -366,7 +366,6 @@ func TestActionsToCompleteState(t *testing.T) {
 }
 
 func TestGetReturnableStateModel(t *testing.T) {
-
 	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
 	var retrievedStateModel proapi.StateModel
 	err := json.Unmarshal(respBytes, &retrievedStateModel)

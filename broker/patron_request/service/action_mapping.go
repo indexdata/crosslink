@@ -7,12 +7,14 @@ import (
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 )
 
+/*
 type ActionMapping interface {
 	IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool
 	GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction
 	GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 	GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 }
+*/
 
 type ActionMappingService struct {
 	SMService StateModelService
@@ -24,19 +26,19 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 	}
 }
 
-func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) ActionMapping {
+func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) *ActionMapping {
 	//At a future point, we will check the PatronRequest loan type to decide what kind of mapping service to return
-	return NewReturnableActionMapping(r.SMService.GetStateModel("returnable"))
+	return NewActionMapping(r.SMService.GetStateModel("returnable"))
 }
 
-type ReturnableActionMapping struct {
+type ActionMapping struct {
 	borrowerStateActionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 }
 
 /* Constructor function to initialize the mappings for the returnables */
-func NewReturnableActionMapping(stateModel *proapi.StateModel) *ReturnableActionMapping {
-	r := new(ReturnableActionMapping)
+func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
+	r := new(ActionMapping)
 
 	borrowerMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
 	lenderMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
@@ -61,15 +63,15 @@ func NewReturnableActionMapping(stateModel *proapi.StateModel) *ReturnableAction
 	return r
 }
 
-func (r *ReturnableActionMapping) GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
+func (r *ActionMapping) GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
 	return r.borrowerStateActionMapping
 }
 
-func (r *ReturnableActionMapping) GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
+func (r *ActionMapping) GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
 	return r.lenderStateActionMapping
 }
 
-func (r *ReturnableActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
+func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
 	if pr.Side == SideBorrowing {
 		return isActionAvailable(pr.State, action, r.borrowerStateActionMapping)
 	} else {
@@ -77,7 +79,7 @@ func (r *ReturnableActionMapping) IsActionAvailable(pr pr_db.PatronRequest, acti
 	}
 }
 
-func (r *ReturnableActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
 	if pr.Side == SideBorrowing {
 		return getActionsByStateFromMapping(pr.State, r.borrowerStateActionMapping)
 	} else {

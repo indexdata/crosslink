@@ -36,13 +36,7 @@ func NewApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
-	/*
-		logParams := map[string]string{"method": "GetStateModelModelsReturnables"}
-		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
-			Other: logParams,
-		})
-	*/
-	stateModel := a.actionMappingService.SMService.GetStateModel(model) //Need to come up with a controlled vocab
+	stateModel := a.actionMappingService.SMService.GetStateModel(model)
 
 	if stateModel == nil {
 		addNotFoundError(w)

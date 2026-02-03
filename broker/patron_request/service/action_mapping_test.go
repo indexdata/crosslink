@@ -33,7 +33,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 
 	stateModel, err := LoadReturnablesStateModel()
 	assert.Nil(t, err)
-	returnableActionMapping := NewReturnableActionMapping(stateModel)
+	returnableActionMapping := NewActionMapping(stateModel)
 
 	assert.NotNil(t, returnableActionMapping)
 
