@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 func StructToMap(obj interface{}) (map[string]interface{}, error) {
@@ -22,6 +23,15 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		fieldName := typ.Field(i).Name
+		jsonTag, ok := typ.Field(i).Tag.Lookup("json")
+		if ok {
+			before, _, found := strings.Cut(jsonTag, ",")
+			if found {
+				fieldName = before
+			} else {
+				fieldName = jsonTag
+			}
+		}
 		result[fieldName] = field.Interface()
 	}
 

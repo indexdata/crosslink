@@ -58,7 +58,7 @@ const (
 
 type EventData struct {
 	CommonEventData
-	CustomData map[string]any
+	CustomData map[string]any `json:"customData,omitempty"`
 }
 
 type CommonEventData struct {
