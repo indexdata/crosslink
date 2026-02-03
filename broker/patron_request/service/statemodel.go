@@ -23,7 +23,7 @@ func (s *StateModelService) GetStateModel(modelName string) *proapi.StateModel {
 	}
 
 	//In the future, this will vary depending on the modelName
-	stateModel, err := LoadReturnablesStateModel()
+	stateModel, err := LoadStateModelByName(modelName)
 	if err == nil {
 		s.stateMap[modelName] = stateModel
 		return stateModel
@@ -34,8 +34,8 @@ func (s *StateModelService) GetStateModel(modelName string) *proapi.StateModel {
 //go:embed statemodels
 var modelFS embed.FS
 
-func LoadReturnablesStateModel() (*proapi.StateModel, error) {
-	path := "statemodels/returnables.json"
+func LoadStateModelByName(modelName string) (*proapi.StateModel, error) {
+	path := "statemodels/" + modelName + ".json"
 	stateModel, err := loadStateModel(path)
 	if err != nil {
 		return nil, err

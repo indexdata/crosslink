@@ -370,7 +370,7 @@ func TestGetReturnableStateModel(t *testing.T) {
 	var retrievedStateModel proapi.StateModel
 	err := json.Unmarshal(respBytes, &retrievedStateModel)
 	assert.NoError(t, err, "failed to unmarshal state model")
-	returnablesStateModel, _ := prservice.LoadReturnablesStateModel()
+	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
 	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
 	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
 	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))

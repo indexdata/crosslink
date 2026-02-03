@@ -31,7 +31,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		LenderStateCancelRequested:   {LenderActionMarkCancelled, LenderActionWillSupply},
 	}
 
-	stateModel, err := LoadReturnablesStateModel()
+	stateModel, err := LoadStateModelByName("returnables")
 	assert.Nil(t, err)
 	returnableActionMapping := NewActionMapping(stateModel)
 

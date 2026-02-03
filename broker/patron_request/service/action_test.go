@@ -881,7 +881,7 @@ func TestCallNumberFromIllRequest(t *testing.T) {
 }
 
 func TestLoadReturnableStateModel(t *testing.T) {
-	stateModel, err := LoadReturnablesStateModel()
+	stateModel, err := LoadStateModelByName("returnables")
 	assert.Nil(t, err)
 	assert.NotNil(t, stateModel)
 }
