@@ -6,10 +6,13 @@ import (
 )
 
 type User struct {
-	ID     int
-	Name   string
+	ID     int     `json:"id"`
+	Name   *string `json:"name,omitempty"`
 	Active bool
 }
+
+var bob = "Bob"
+var alice = "Alice"
 
 func TestStructToMap(t *testing.T) {
 	tests := []struct {
@@ -20,20 +23,20 @@ func TestStructToMap(t *testing.T) {
 	}{
 		{
 			name:  "Basic struct conversion",
-			input: User{ID: 1, Name: "Alice", Active: true},
+			input: User{ID: 1, Name: &alice, Active: true},
 			want: map[string]interface{}{
-				"ID":     1,
-				"Name":   "Alice",
+				"id":     1,
+				"name":   &alice,
 				"Active": true,
 			},
 			wantErr: false,
 		},
 		{
 			name:  "Pointer to struct",
-			input: &User{ID: 2, Name: "Bob", Active: false},
+			input: &User{ID: 2, Name: &bob, Active: false},
 			want: map[string]interface{}{
-				"ID":     2,
-				"Name":   "Bob",
+				"id":     2,
+				"name":   &bob,
 				"Active": false,
 			},
 			wantErr: false,
