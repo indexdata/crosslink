@@ -210,9 +210,17 @@ components:
         - actionResult
 
 paths:
-  /state_model/models/returnables:
+  /state_model/models/{model}:
     get:
-      summary: Retrieve the returnables state model
+      summary: Retrieve a state model by name
+      parameters:
+        - in: path
+          name: model
+          schema: 
+            type: string
+          required: true
+          description: The name of the statemodel to retrieve
+        - $ref: '#/components/parameters/Tenant'
       responses:
         '200':
           description: Successful retrieval of state model
