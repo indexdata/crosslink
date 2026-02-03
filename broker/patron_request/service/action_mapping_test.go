@@ -40,7 +40,6 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	mapCompare(t, returnableActionMapping.borrowerStateActionMapping, borrowerStateActionMapping)
 
 	mapCompare(t, returnableActionMapping.lenderStateActionMapping, lenderStateActionMapping)
-
 }
 
 var actionMappingService = ActionMappingService{}

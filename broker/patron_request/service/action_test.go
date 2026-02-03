@@ -884,5 +884,4 @@ func TestLoadReturnableStateModel(t *testing.T) {
 	stateModel, err := LoadReturnablesStateModel()
 	assert.Nil(t, err)
 	assert.NotNil(t, stateModel)
-
 }

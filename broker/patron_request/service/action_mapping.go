@@ -53,7 +53,6 @@ func NewReturnableActionMapping(stateModel *proapi.StateModel) *ReturnableAction
 				lenderMap[pr_db.PatronRequestState(state.Name)] = nameList
 			}
 		}
-
 	}
 
 	r.borrowerStateActionMapping = borrowerMap
