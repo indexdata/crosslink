@@ -73,17 +73,13 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		}
 	}
 	var side pr_db.PatronRequestSide
-	switch params.Side {
-	case string(prservice.SideBorrowing), string(prservice.SideLending):
+	if isSideParamValid(params.Side) {
 		side = pr_db.PatronRequestSide(params.Side)
 		_, err = qb.And().Search("side").Term(params.Side).Build()
 		if err != nil {
 			addBadRequestError(ctx, w, err)
 			return
 		}
-	default:
-		addBadRequestError(ctx, w, errors.New("invalid side parameter, valid values are 'borrowing' and 'lending'"))
-		return
 	}
 	qb, err = addOwnerRestriction(qb, symbol, side)
 	if err != nil {
@@ -233,10 +229,14 @@ func (a *PatronRequestApiHandler) getPatronRequestById(ctx common.ExtendedContex
 		}
 		return nil, err
 	}
-	if string(pr.Side) == side && isOwner(pr, symbol) {
+	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == side) {
 		return &pr, nil
 	}
 	return nil, nil
+}
+
+func isSideParamValid(side string) bool {
+	return side == string(prservice.SideBorrowing) || side == string(prservice.SideLending)
 }
 
 func isOwner(pr pr_db.PatronRequest, symbol string) bool {
