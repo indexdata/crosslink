@@ -23,7 +23,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20250722084932-84f3837d6030
+	github.com/indexdata/cql-go v1.0.1-0.20260202173855-d9fe780396b2
 	github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72
 	github.com/indexdata/xsd2goxsl v1.3.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438

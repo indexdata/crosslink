@@ -9,8 +9,20 @@ import (
 	"github.com/indexdata/cql-go/pgcql"
 )
 
+type FieldAllRecords struct{}
+
+func (f *FieldAllRecords) GetColumn() string       { return "" }
+func (f *FieldAllRecords) SetColumn(column string) {}
+func (f *FieldAllRecords) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
+	// Accept standard cql.allRecords = 1 (ignore term/relation).
+	return "TRUE", nil, nil
+}
+
 func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
+
+	fa := &FieldAllRecords{}
+	def.AddField("cql.allRecords", fa)
 
 	f := pgcql.NewFieldString().WithExact()
 	def.AddField("state", f)

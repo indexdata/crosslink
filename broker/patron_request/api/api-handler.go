@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -60,9 +61,38 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	if params.Offset != nil {
 		offset = *params.Offset
 	}
-
-	updatedCql := addAccessRestrictions(params.Cql, params.Side, symbol)
-	prs, count, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &updatedCql)
+	var qb *cqlbuilder.QueryBuilder
+	if params.Cql == nil {
+		qb = cqlbuilder.NewQuery()
+		qb.Search("cql.allRecords").Term("1")
+	} else {
+		qb, err = cqlbuilder.NewQueryFromString(*params.Cql)
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
+	}
+	var side pr_db.PatronRequestSide
+	if isSideParamValid(params.Side) {
+		side = pr_db.PatronRequestSide(params.Side)
+		_, err = qb.And().Search("side").Term(params.Side).Build()
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
+	}
+	qb, err = addOwnerRestriction(qb, symbol, side)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	cql, err := qb.Build()
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	cqlStr := cql.String()
+	prs, count, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		addInternalError(ctx, w, err)
 		return
@@ -87,18 +117,32 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	writeJsonResponse(w, resp)
 }
 
-func addAccessRestrictions(cql *string, side string, symbol string) string {
-	var restrict string
-	if side == string(prservice.SideLending) {
-		restrict = "side = " + string(prservice.SideLending) + " AND supplier_symbol = " + symbol
-	} else {
-		restrict = "side = " + string(prservice.SideBorrowing) + " AND requester_symbol = " + symbol
+func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
+	var err error
+	switch side {
+	case prservice.SideLending:
+		_, err = queryBuilder.And().
+			Search("side").Term(string(prservice.SideLending)).
+			And().Search("supplier_symbol").Term(symbol).
+			Build()
+	case prservice.SideBorrowing:
+		_, err = queryBuilder.And().
+			Search("side").Term(string(prservice.SideBorrowing)).
+			And().Search("requester_symbol").Term(symbol).
+			Build()
+	default:
+		_, err = queryBuilder.And().
+			BeginClause().
+			Search("side").Term(string(prservice.SideLending)).
+			And().Search("supplier_symbol").Term(symbol).
+			EndClause().
+			Or().
+			BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
+			And().Search("requester_symbol").Term(symbol).
+			EndClause().
+			Build()
 	}
-	if cql == nil {
-		return restrict
-	} else {
-		return *cql + " AND " + restrict
-	}
+	return queryBuilder, err
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
@@ -185,15 +229,19 @@ func (a *PatronRequestApiHandler) getPatronRequestById(ctx common.ExtendedContex
 		}
 		return nil, err
 	}
-	if isOwner(pr, side, symbol) {
+	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == side) {
 		return &pr, nil
 	}
 	return nil, nil
 }
 
-func isOwner(pr pr_db.PatronRequest, side string, symbol string) bool {
-	return string(pr.Side) == side && ((side == string(prservice.SideBorrowing) && pr.RequesterSymbol.String == symbol) ||
-		(side == string(prservice.SideLending) && pr.SupplierSymbol.String == symbol))
+func isSideParamValid(side string) bool {
+	return side == string(prservice.SideBorrowing) || side == string(prservice.SideLending)
+}
+
+func isOwner(pr pr_db.PatronRequest, symbol string) bool {
+	return (string(pr.Side) == string(prservice.SideBorrowing) && pr.RequesterSymbol.String == symbol) ||
+		(string(pr.Side) == string(prservice.SideLending) && pr.SupplierSymbol.String == symbol)
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
