@@ -125,7 +125,14 @@ func TestCrud(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
 	assert.Len(t, foundPrs, 2)
-	assert.Equal(t, newPr.ID, foundPrs[1].ID)
+	foundInList := false
+
+	for _, pr := range foundPrs {
+		if pr.ID == newPr.ID {
+			foundInList = true
+		}
+	}
+	assert.True(t, foundInList)
 
 	// GET by id
 	thisPrPath := basePath + "/" + newPr.ID

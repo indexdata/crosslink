@@ -15,11 +15,18 @@ type ActionMapping interface {
 }
 
 type ActionMappingService struct {
+	SMService StateModelService
+}
+
+func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
+	return &ActionMappingService{
+		SMService: StateModelService{},
+	}
 }
 
 func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) ActionMapping {
 	//At a future point, we will check the PatronRequest loan type to decide what kind of mapping service to return
-	return NewReturnableActionMapping()
+	return NewReturnableActionMapping(r.SMService.GetStateModel("returnable"))
 }
 
 type ReturnableActionMapping struct {
@@ -28,13 +35,8 @@ type ReturnableActionMapping struct {
 }
 
 /* Constructor function to initialize the mappings for the returnables */
-func NewReturnableActionMapping() *ReturnableActionMapping {
+func NewReturnableActionMapping(stateModel *proapi.StateModel) *ReturnableActionMapping {
 	r := new(ReturnableActionMapping)
-	stateModel, err := LoadReturnablesStateModel()
-
-	if err != nil {
-		return nil
-	}
 
 	borrowerMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
 	lenderMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)

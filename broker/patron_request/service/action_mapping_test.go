@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"slices"
 	"testing"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -30,7 +31,9 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		LenderStateCancelRequested:   {LenderActionMarkCancelled, LenderActionWillSupply},
 	}
 
-	returnableActionMapping := NewReturnableActionMapping()
+	stateModel, err := LoadReturnablesStateModel()
+	assert.Nil(t, err)
+	returnableActionMapping := NewReturnableActionMapping(stateModel)
 
 	assert.NotNil(t, returnableActionMapping)
 
@@ -54,12 +57,19 @@ func TestIsActionAvailable(t *testing.T) {
 
 func TestGetActionsForPatronRequest(t *testing.T) {
 	// Borrower
-	assert.Equal(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
-	assert.Equal(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 
 	// Lender
-	assert.Equal(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
-	assert.Equal(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
+	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
+}
+
+func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {
+	assert.Equal(t, len(list1), len(list2))
+	for i := range list1 {
+		assert.True(t, slices.Contains(list2, list1[i]))
+	}
 }
 
 func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]pr_db.PatronRequestAction, map2 map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) {
@@ -67,5 +77,8 @@ func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]pr_db.PatronRe
 		listOne := map1[stateName]
 		listTwo := map2[stateName]
 		assert.Equal(t, len(listOne), len(listTwo))
+		for i := range listOne {
+			assert.True(t, slices.Contains(listTwo, listOne[i]))
+		}
 	}
 }

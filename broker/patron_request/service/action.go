@@ -1,7 +1,6 @@
 package prservice
 
 import (
-	"embed"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -13,7 +12,6 @@ import (
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -77,30 +75,6 @@ type PatronRequestActionService struct {
 	iso18626Handler      handler.Iso18626HandlerInterface
 	lmsCreator           lms.LmsCreator
 	actionMappingService ActionMappingService
-}
-
-//go:embed statemodels
-var modelFS embed.FS
-
-func LoadReturnablesStateModel() (*proapi.StateModel, error) {
-	path := "statemodels/returnables.json"
-	stateModel, err := loadStateModel(path)
-	if err != nil {
-		return nil, err
-	}
-	return stateModel, nil
-}
-
-func loadStateModel(path string) (*proapi.StateModel, error) {
-	data, err := modelFS.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var stateModel proapi.StateModel
-	err = json.Unmarshal(data, &stateModel)
-
-	return &stateModel, err
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {

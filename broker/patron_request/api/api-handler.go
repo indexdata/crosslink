@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
 	"net/http"
 	"sync"
 
@@ -41,31 +40,8 @@ func (a *PatronRequestApiHandler) GetStateModelModelsReturnables(w http.Response
 	//ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 	//	Other: logParams,
 	//})
-	stateModel, _ := prservice.LoadReturnablesStateModel()
-
+	stateModel := a.actionMappingService.SMService.GetStateModel("returnables") //Need to come up with a controlled vocab
 	writeJsonResponse(w, *stateModel)
-}
-
-func makeStateList(stateMap map[pr_db.PatronRequestState][]pr_db.PatronRequestAction, stateSide proapi.StateSide) []proapi.State {
-	stateList := make([]proapi.State, 0, len(stateMap))
-	var state proapi.State
-	for k := range maps.Keys(stateMap) {
-		state.Name = string(k)
-		state.Side = stateSide
-		actionList := make([]proapi.Action, 0, len(stateMap[k]))
-		for _, prAction := range stateMap[k] {
-			var action proapi.Action
-			action.Name = string(prAction)
-			//Where do we get the transitions?
-			actionList = append(actionList, action)
-		}
-		state.Actions = &actionList
-	}
-	return stateList
-}
-
-func strPtr(s string) *string {
-	return &s
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request) {
