@@ -4,7 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
 type StateModelService struct {

@@ -590,7 +590,7 @@ components:
           type: array
           description: List of all events that may be triggered to the request when in this state
           items:
-            $ref: '#/components/schemas/Event'
+            $ref: '#/components/schemas/SMEvent'
         terminal:
           type: boolean
           description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
@@ -622,7 +622,7 @@ components:
       required:
         - name
 
-    Event:
+    SMEvent:
       type: object
       title: Event
       additionalProperties: false
@@ -1188,6 +1188,8 @@ paths:
   /state_model/models/{model}:
     get:
       summary: Retrieve a state model by name
+      tags:
+        - patron-requests-api
       parameters:
         - in: path
           name: model

@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
-	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
 type ActionMappingService struct {
