@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -44,7 +45,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	return dirs, strings.Join(params.Symbols, ","), nil
 }
 
-func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
+func (m *MockDirectoryLookupAdapter) FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo) {
 	var rotaInfo RotaInfo
 	rotaInfo.Request.Type = "mock"
 	rotaInfo.Suppliers = make([]SupplierMatch, 0, len(entries))

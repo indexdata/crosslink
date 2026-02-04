@@ -250,36 +250,6 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return a.updateStateAndReturnResult(ctx, pr, BorrowerStateSent, &result)
 }
 
-// TODO : should be resolved pickup location
-func pickupLocationFromIllRequest(illRequest iso18626.Request) string {
-	pickupLocation := ""
-	if len(illRequest.RequestedDeliveryInfo) > 0 {
-		address := illRequest.RequestedDeliveryInfo[0].Address
-		if address != nil {
-			pa := address.PhysicalAddress
-			if pa != nil {
-				pickupLocation = pa.Line1
-				if pa.Line2 != "" {
-					pickupLocation += " " + pa.Line2
-				}
-				if pa.Locality != "" {
-					pickupLocation += " " + pa.Locality
-				}
-				if pa.PostalCode != "" {
-					pickupLocation += " " + pa.PostalCode
-				}
-				if pa.Region != nil {
-					pickupLocation += " " + pa.Region.Text
-				}
-				if pa.Country != nil {
-					pickupLocation += " " + pa.Country.Text
-				}
-			}
-		}
-	}
-	return pickupLocation
-}
-
 func callNumberFromIllRequest(illRequest iso18626.Request) string {
 	callNumber := ""
 	if len(illRequest.SupplierInfo) > 0 {
@@ -308,7 +278,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	title := illRequest.BibliographicInfo.Title
 	isbn := isbnFromIllRequest(illRequest)
 	callNumber := callNumberFromIllRequest(illRequest)
-	pickupLocation := pickupLocationFromIllRequest(illRequest)
+	pickupLocation := lmsAdapter.RequesterPickupLocation()
 	requestedAction := "Hold For Pickup"
 	err := lmsAdapter.AcceptItem(itemId, requestId, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 	if err != nil {
@@ -448,9 +418,8 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	pickupLocation := lmsAdapter.PickupLocation()
-	// TODO set this properly
-	itemLocation := ""
+	pickupLocation := lmsAdapter.SupplierPickupLocation()
+	itemLocation := lmsAdapter.ItemLocation()
 	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)

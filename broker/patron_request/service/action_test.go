@@ -833,26 +833,16 @@ func (l *MockLmsAdapterFail) InstitutionalPatron(requesterSymbol string) string 
 	return ""
 }
 
-func (l *MockLmsAdapterFail) PickupLocation() string {
+func (l *MockLmsAdapterFail) SupplierPickupLocation() string {
 	return ""
 }
 
-func TestPickupLocationFromIllRequest(t *testing.T) {
-	var r iso18626.Request
-	r.RequestedDeliveryInfo = []iso18626.RequestedDeliveryInfo{{
-		Address: &iso18626.Address{
-			PhysicalAddress: &iso18626.PhysicalAddress{
-				Line1:      "Main Library",
-				Line2:      "123 Library St",
-				Locality:   "Booktown",
-				PostalCode: "12345",
-				Region:     &iso18626.TypeSchemeValuePair{Text: "State"},
-				Country:    &iso18626.TypeSchemeValuePair{Text: "Country"},
-			},
-		},
-	}}
-	location := pickupLocationFromIllRequest(r)
-	assert.Equal(t, "Main Library 123 Library St Booktown 12345 State Country", location)
+func (l *MockLmsAdapterFail) ItemLocation() string {
+	return ""
+}
+
+func (*MockLmsAdapterFail) RequesterPickupLocation() string {
+	return ""
 }
 
 func TestIsbnFromIllRequest(t *testing.T) {

@@ -6,15 +6,16 @@ require (
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/illmock v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
-	github.com/indexdata/crosslink/marcxml v0.0.0
-	github.com/indexdata/crosslink/sru v0.0.0
+	github.com/indexdata/crosslink/ncip v0.0.0
 )
 
 replace (
+	github.com/indexdata/crosslink/directory => ../directory
 	github.com/indexdata/crosslink/httpclient => ../httpclient
 	github.com/indexdata/crosslink/illmock => ../illmock
 	github.com/indexdata/crosslink/iso18626 => ../iso18626
 	github.com/indexdata/crosslink/marcxml => ../marcxml
+	github.com/indexdata/crosslink/ncip => ../ncip
 	github.com/indexdata/crosslink/sru => ../sru
 )
 
@@ -22,12 +23,12 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20250722084932-84f3837d6030
+	github.com/indexdata/cql-go v1.0.1-0.20260202173855-d9fe780396b2
 	github.com/indexdata/go-utils v0.0.0-20250210100229-d30dbd51df72
 	github.com/indexdata/xsd2goxsl v1.3.0
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/oapi-codegen/oapi-codegen/v2 v2.5.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0

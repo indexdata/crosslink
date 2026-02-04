@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -13,7 +14,7 @@ var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
 	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error)
-	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData map[string]any, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
+	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
 }
 
 type DirectoryLookupParams struct {
@@ -27,8 +28,7 @@ type DirectoryEntry struct {
 	URL           string
 	Vendor        common.Vendor
 	BrokerMode    common.BrokerMode
-	// TODO: add NCIP info here
-	CustomData map[string]any
+	CustomData    directory.Entry
 }
 
 type SupplierOrdering interface {
@@ -42,7 +42,7 @@ type SupplierOrdering interface {
 type Supplier struct {
 	LocalIdentifier string
 	PeerId          string
-	CustomData      map[string]any
+	CustomData      directory.Entry
 	Symbol          string
 	Priority        int
 	Cost            float64

@@ -493,34 +493,24 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	address := iso18626.PhysicalAddress{}
-	if listMap, ok := peer.CustomData["addresses"].([]any); ok && len(listMap) > 0 {
-		for _, s := range listMap {
-			if addressMap, castOk := s.(map[string]any); castOk {
-				typeS, typeOk := addressMap["type"].(string)
-				comp, compOk := addressMap["addressComponents"].([]any)
-				if typeOk && compOk && typeS == "Shipping" {
-					for _, c := range comp {
-						if compMap, cCastOk := c.(map[string]any); cCastOk {
-							part, partOk := compMap["value"].(string)
-							pType, pTypeOk := compMap["type"].(string)
-							if partOk && pTypeOk {
-								switch pType {
-								case "Thoroughfare":
-									address.Line1 = part
-								case "Locality":
-									address.Locality = part
-								case "AdministrativeArea":
-									address.Region = &iso18626.TypeSchemeValuePair{
-										Text: part,
-									}
-								case "PostalCode":
-									address.PostalCode = part
-								case "CountryCode":
-									address.Country = &iso18626.TypeSchemeValuePair{
-										Text: part,
-									}
-								}
-							}
+	if peer.CustomData.Addresses != nil {
+		for _, addr := range *peer.CustomData.Addresses {
+			if addr.AddressComponents != nil && addr.Type == "Shipping" {
+				for _, comp := range *addr.AddressComponents {
+					switch comp.Type {
+					case "Thoroughfare":
+						address.Line1 = comp.Value
+					case "Locality":
+						address.Locality = comp.Value
+					case "AdministrativeArea":
+						address.Region = &iso18626.TypeSchemeValuePair{
+							Text: comp.Value,
+						}
+					case "PostalCode":
+						address.PostalCode = comp.Value
+					case "CountryCode":
+						address.Country = &iso18626.TypeSchemeValuePair{
+							Text: comp.Value,
 						}
 					}
 				}
@@ -528,8 +518,8 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 		}
 	}
 	email := iso18626.ElectronicAddress{}
-	if listMap, ok := peer.CustomData["email"].(string); ok && len(listMap) > 0 {
-		email.ElectronicAddressData = listMap
+	if peer.CustomData.Email != nil {
+		email.ElectronicAddressData = *peer.CustomData.Email
 		email.ElectronicAddressType = iso18626.TypeSchemeValuePair{
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		}

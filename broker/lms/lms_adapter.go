@@ -42,5 +42,9 @@ type LmsAdapter interface {
 
 	InstitutionalPatron(requesterSymbol string) string
 
-	PickupLocation() string
+	SupplierPickupLocation() string
+
+	ItemLocation() string
+
+	RequesterPickupLocation() string
 }

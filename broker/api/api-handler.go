@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/go-utils/utils"
 
@@ -33,6 +32,7 @@ var ILL_TRANSACTIONS_PATH = "/ill_transactions"
 var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
+var PATRON_REQUESTS_PATH = "/patron_requests"
 var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
@@ -104,6 +104,7 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
 	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")
 	index.Links.PeersLink = toLink(r, PEERS_PATH, "", "")
+	index.Links.PatronRequestsLink = toLink(r, PATRON_REQUESTS_PATH, "", "")
 	writeJsonResponse(w, index)
 }
 
@@ -213,24 +214,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	}
-	resp.About.Count = fullCount
-	if offset > 0 {
-		pOffset := offset - limit
-		if pOffset < 0 {
-			pOffset = 0
-		}
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.PrevLink = &link
-	}
-	if fullCount > int64(limit+offset) {
-		noffset := offset + limit
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.NextLink = &link
-	}
+	resp.About = CollectAboutData(fullCount, offset, limit, r)
 	writeJsonResponse(w, resp)
 }
 
@@ -309,7 +293,6 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	}
 	var resp oapi.Peers
 	resp.Items = make([]oapi.Peer, 0)
-	resp.About.Count = count
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
@@ -321,26 +304,10 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 			addInternalError(ctx, w, e)
 			return
 		}
-		resp.Items = append(resp.Items, toApiPeer(p, symbols, branchSymbols))
+		apiPeer := toApiPeer(p, symbols, branchSymbols)
+		resp.Items = append(resp.Items, apiPeer)
 	}
-
-	if dbparams.Offset > 0 {
-		pOffset := dbparams.Offset - dbparams.Limit
-		if pOffset < 0 {
-			pOffset = 0
-		}
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.PrevLink = &link
-	}
-	if count > int64(dbparams.Limit+dbparams.Offset) {
-		noffset := dbparams.Offset + dbparams.Limit
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
-		link := toLinkUrlValues(r, urlValues)
-		resp.About.NextLink = &link
-	}
+	resp.About = CollectAboutData(count, dbparams.Offset, dbparams.Limit, r)
 	writeJsonResponse(w, resp)
 }
 
@@ -354,12 +321,12 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
-	_, err = a.illRepo.GetPeerById(ctx, newPeer.ID)
+	_, err = a.illRepo.GetPeerById(ctx, newPeer.Id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		addInternalError(ctx, w, err)
 		return
 	} else if err == nil {
-		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.ID))
+		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.Id))
 		return
 	}
 	for _, s := range newPeer.Symbols {
@@ -406,9 +373,10 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 		addInternalError(ctx, w, err)
 		return
 	}
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPeer(peer, symbols, branchSymbols))
+	_ = json.NewEncoder(w).Encode(apiPeer)
 }
 
 func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -493,7 +461,8 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
+	writeJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -524,9 +493,18 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		peer.HttpHeaders = make(map[string]string)
 	}
 	if update.CustomData != nil {
-		peer.CustomData = *update.CustomData
+		bytes, err := json.Marshal(update.CustomData)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
+		err = json.Unmarshal(bytes, &peer.CustomData)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	} else {
-		peer.CustomData = make(map[string]interface{})
+		peer.CustomData = directory.Entry{}
 	}
 	if update.BrokerMode != "" {
 		peer.BrokerMode = string(update.BrokerMode)
@@ -585,7 +563,8 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 		addInternalError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, toApiPeer(peer, symbols, branchSymbols))
+	apiPeer := toApiPeer(peer, symbols, branchSymbols)
+	writeJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
@@ -689,7 +668,7 @@ func addNotFoundError(w http.ResponseWriter) {
 
 func toApiEvent(event events.Event) oapi.Event {
 	api := oapi.Event{
-		ID:               event.ID,
+		Id:               event.ID,
 		Timestamp:        event.Timestamp.Time,
 		IllTransactionID: event.IllTransactionID,
 		EventType:        string(event.EventType),
@@ -697,16 +676,16 @@ func toApiEvent(event events.Event) oapi.Event {
 		EventStatus:      string(event.EventStatus),
 		ParentID:         toString(event.ParentID),
 	}
-	eventData := utils.Must(structToMap(event.EventData))
+	eventData := utils.Must(common.StructToMap(event.EventData))
 	api.EventData = &eventData
-	resultData := utils.Must(structToMap(event.ResultData))
+	resultData := utils.Must(common.StructToMap(event.ResultData))
 	api.ResultData = &resultData
 	return api
 }
 
 func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.LocatedSupplier {
 	return oapi.LocatedSupplier{
-		ID:                sup.ID,
+		Id:                sup.ID,
 		IllTransactionID:  sup.IllTransactionID,
 		SupplierID:        sup.SupplierID,
 		SupplierSymbol:    sup.SupplierSymbol,
@@ -724,32 +703,9 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 	}
 }
 
-func structToMap(obj interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
-	val := reflect.ValueOf(obj)
-	typ := reflect.TypeOf(obj)
-
-	if val.Kind() == reflect.Ptr {
-		val = val.Elem()
-		typ = typ.Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("input is not a struct")
-	}
-
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		fieldName := typ.Field(i).Name
-		result[fieldName] = field.Interface()
-	}
-
-	return result, nil
-}
-
 func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllTransaction {
 	api := oapi.IllTransaction{
-		ID:        trans.ID,
+		Id:        trans.ID,
 		Timestamp: trans.Timestamp.Time,
 	}
 	api.RequesterSymbol = getString(trans.RequesterSymbol)
@@ -767,7 +723,7 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	if trans.RequesterID.Valid {
 		api.RequesterPeerLink = toLink(r, PEERS_PATH, trans.RequesterID.String, "")
 	}
-	api.IllTransactionData = utils.Must(structToMap(trans.IllTransactionData))
+	api.IllTransactionData = utils.Must(common.StructToMap(trans.IllTransactionData))
 	return api
 }
 
@@ -797,8 +753,15 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 	if peer.BrokerMode == "" {
 		peer.BrokerMode = string(adapter.GetBrokerMode(adapter.GetVendorFromUrl(peer.Url)))
 	}
+
+	var customData map[string]interface{}
+	if bytes, err := json.Marshal(peer.CustomData); err == nil {
+		// If unmarshalling fails, customData remains nil
+		_ = json.Unmarshal(bytes, &customData)
+	}
+
 	return oapi.Peer{
-		ID:            peer.ID,
+		Id:            peer.ID,
 		Symbols:       list,
 		Name:          peer.Name,
 		Url:           peer.Url,
@@ -807,7 +770,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 		RefreshTime:   &peer.RefreshTime.Time,
 		LoansCount:    &peer.LoansCount,
 		BorrowsCount:  &peer.BorrowsCount,
-		CustomData:    &peer.CustomData,
+		CustomData:    &customData,
 		HttpHeaders:   &peer.HttpHeaders,
 		BrokerMode:    toApiBrokerMode(peer.BrokerMode),
 		BranchSymbols: branchList,
@@ -833,16 +796,22 @@ func toApiBrokerMode(brokerMode string) oapi.PeerBrokerMode {
 }
 
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
-	customData := make(map[string]interface{})
+	var entry directory.Entry
 	if peer.CustomData != nil {
-		customData = *peer.CustomData
+		bytes, err := json.Marshal(*peer.CustomData)
+		if err == nil {
+			err = json.Unmarshal(bytes, &entry)
+		}
+		if err != nil {
+			entry = directory.Entry{}
+		}
 	}
 	httpHeaders := make(map[string]string)
 	if peer.HttpHeaders != nil {
 		httpHeaders = *peer.HttpHeaders
 	}
 	db := ill_db.Peer{
-		ID:            peer.ID,
+		ID:            peer.Id,
 		Name:          peer.Name,
 		Url:           peer.Url,
 		Vendor:        peer.Vendor,
@@ -852,7 +821,7 @@ func toDbPeer(peer oapi.Peer) ill_db.Peer {
 			Time:  time.Now(),
 			Valid: true,
 		},
-		CustomData:  customData,
+		CustomData:  entry,
 		HttpHeaders: httpHeaders,
 	}
 	if peer.LoansCount != nil {
@@ -883,7 +852,7 @@ func toString(text pgtype.Text) *string {
 	}
 }
 
-func toLinkUrlValues(r *http.Request, urlValues url.Values) string {
+func ToLinkUrlValues(r *http.Request, urlValues url.Values) string {
 	return toLinkPath(r, r.URL.Path, urlValues.Encode())
 }
 

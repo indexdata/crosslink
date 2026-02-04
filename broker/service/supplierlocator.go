@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	_ "time/tzdata"
+
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -209,57 +211,63 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	if len(suppliers) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
+	eventData := map[string]any{}
 	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
+	if len(skippedSuppliers) > 0 {
+		eventData["skippedSuppliers"] = skippedSuppliers
+	}
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "could not find supplier peer", err)
+		return events.LogErrorAndReturnExistingResult(ctx, "could not find supplier peer", err, &events.EventResult{CustomData: eventData})
 	}
 	if locSup.ID == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", eventData)
 	}
 	locSup.SupplierStatus = ill_db.SupplierStateSelectedPg
 	locSup, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(locSup))
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update located supplier status", err)
 	}
-	eventData := map[string]any{"supplierId": locSup.SupplierID, "supplierSymbol": locSup.SupplierSymbol, "localSupplier": locSup.LocalSupplier}
-	if len(skippedSuppliers) > 0 {
-		eventData["skippedSuppliers"] = skippedSuppliers
-	}
+	eventData["supplierId"] = locSup.SupplierID
+	eventData["supplierSymbol"] = locSup.SupplierSymbol
+	eventData["localSupplier"] = locSup.LocalSupplier
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
-func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, []string, error) {
-	skippedSuppliers := []string{}
+func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers []ill_db.LocatedSupplier) (ill_db.LocatedSupplier, []SkippedSupplier, error) {
+	skippedSuppliers := []SkippedSupplier{}
 	for _, sup := range suppliers {
 		if sup.ID != "" {
 			peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 			if err != nil {
 				return ill_db.LocatedSupplier{}, skippedSuppliers, err
 			}
-			timeZone, _ := peer.CustomData["timeZone"].(string)
-			if listMap, ok := peer.CustomData["closures"].([]any); ok && len(listMap) > 0 {
+			if peer.CustomData.Closures != nil {
+				timezoneLoc := time.Now().Location()
+				timeZone := peer.CustomData.TimeZone
+				if timeZone != nil && *timeZone != "" {
+					timezoneLoc, err = time.LoadLocation(*timeZone)
+					if err != nil {
+						return ill_db.LocatedSupplier{}, skippedSuppliers, err
+					}
+				}
+				currentTime := time.Now().In(timezoneLoc)
 				skipSup := false
-				for _, c := range listMap {
-					if closuresMap, castOk := c.(map[string]any); castOk {
-						startDateS, startDateOk := closuresMap["startDate"].(string)
-						endDateS, endDateOk := closuresMap["endDate"].(string)
-						if startDateOk && endDateOk {
-							startDate, err := getDateWithTimezone(startDateS, timeZone, false)
-							if err != nil {
-								ctx.Logger().Error("failed to parse closure start date", "error", err)
-								skipSup = true
-								continue
-							}
-							endDate, err := getDateWithTimezone(endDateS, timeZone, true)
-							if err != nil {
-								ctx.Logger().Error("failed to parse closure start date", "error", err)
-								skipSup = true
-								continue
-							}
-							currentTime := time.Now()
-							if startDate.Before(currentTime) && endDate.After(currentTime) {
-								skipSup = true
-							}
+				for _, closure := range *peer.CustomData.Closures {
+					if closure.StartDate != nil && closure.EndDate != nil {
+						startDate, err := getDateWithTimezone(*closure.StartDate, timezoneLoc, false)
+						if err != nil {
+							ctx.Logger().Error("failed to parse closure start date", "error", err)
+							skipSup = true
+							continue
+						}
+						endDate, err := getDateWithTimezone(*closure.EndDate, timezoneLoc, true)
+						if err != nil {
+							ctx.Logger().Error("failed to parse closure end date", "error", err)
+							skipSup = true
+							continue
+						}
+						if startDate.Before(currentTime) && endDate.After(currentTime) {
+							skipSup = true
 						}
 					}
 				}
@@ -269,7 +277,10 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 					if err != nil {
 						return ill_db.LocatedSupplier{}, skippedSuppliers, err
 					}
-					skippedSuppliers = append(skippedSuppliers, sup.SupplierSymbol)
+					skippedSuppliers = append(skippedSuppliers, SkippedSupplier{
+						Symbol: sup.SupplierSymbol,
+						Reason: fmt.Sprintf("closed on %s", time.Now().Format("2006-01-02")),
+					})
 					continue
 				}
 			}
@@ -278,17 +289,8 @@ func (s *SupplierLocator) getNextSupplier(ctx common.ExtendedContext, suppliers 
 	}
 	return ill_db.LocatedSupplier{}, skippedSuppliers, nil
 }
-func getDateWithTimezone(date string, timezone string, endOfDay bool) (time.Time, error) {
-	var loc *time.Location
-	if timezone != "" {
-		timezoneLoc, err := time.LoadLocation(timezone)
-		if err != nil {
-			return time.Time{}, err
-		}
-		loc = timezoneLoc
-	} else {
-		loc = time.Now().Location()
-	}
+
+func getDateWithTimezone(date string, loc *time.Location, endOfDay bool) (time.Time, error) {
 	t, err := time.Parse(DATE_LAYOUT, date)
 	if err != nil {
 		return time.Time{}, err
@@ -323,4 +325,9 @@ func ToInt32(i int) int32 {
 	} else {
 		return int32(i)
 	}
+}
+
+type SkippedSupplier struct {
+	Symbol string `json:"symbol"`
+	Reason string `json:"reason"`
 }

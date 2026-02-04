@@ -4,20 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
 )
 
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestGetDateWithTimezone(t *testing.T) {
-	date, err := getDateWithTimezone("2026-12-16", "Australia/ACT", false)
+	act, err := time.LoadLocation("Australia/ACT")
+	assert.NoError(t, err)
+
+	date, err := getDateWithTimezone("2026-12-16", act, false)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.UTC().Year())
 	assert.Equal(t, time.December, date.UTC().Month())
@@ -27,7 +33,7 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, 0, date.UTC().Minute())
 	assert.Equal(t, "2026-12-15 13:00:00 +0000 UTC", date.UTC().String())
 
-	date, err = getDateWithTimezone("2026-12-16", "Australia/ACT", true)
+	date, err = getDateWithTimezone("2026-12-16", act, true)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.Year())
 	assert.Equal(t, time.December, date.Month())
@@ -37,13 +43,14 @@ func TestGetDateWithTimezone(t *testing.T) {
 	assert.Equal(t, 59, date.UTC().Minute())
 	assert.Equal(t, "2026-12-16 12:59:59.999999999 +0000 UTC", date.UTC().String())
 
-	_, err = getDateWithTimezone("2026-12-16", "Unexpected", true)
-	assert.Equal(t, "unknown time zone Unexpected", err.Error())
+	_, err = time.LoadLocation("Unexpected")
+	assert.Error(t, err)
 
-	_, err = getDateWithTimezone("2026-12-36", "Australia/ACT", true)
+	_, err = getDateWithTimezone("2026-12-36", act, true)
 	assert.Equal(t, "parsing time \"2026-12-36\": day out of range", err.Error())
 
-	date, err = getDateWithTimezone("2026-12-16", "", true)
+	auto := time.Now().Location()
+	date, err = getDateWithTimezone("2026-12-16", auto, true)
 	assert.NoError(t, err)
 	assert.Equal(t, 2026, date.Year())
 	assert.Equal(t, time.December, date.Month())
@@ -77,16 +84,18 @@ func TestGetNextSupplierClosed(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
 	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
 
-	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId}})
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "1", SupplierID: peerId, SupplierSymbol: "ISIL:SUP"}})
 	assert.NoError(t, err)
 	assert.Len(t, skipped, 1)
 	assert.Equal(t, "", locSup.ID)
+	assert.Equal(t, "ISIL:SUP", skipped[0].Symbol)
+	assert.True(t, strings.Contains(skipped[0].Reason, "closed on"))
 }
 
 func TestGetNextSupplierFailToLoadPeer(t *testing.T) {
@@ -107,7 +116,7 @@ func TestGetNextSupplierNoClosures(t *testing.T) {
 	jsonData := "{" +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -131,7 +140,7 @@ func TestGetNextSupplierNoStartDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -155,7 +164,7 @@ func TestGetNextSupplierNoEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -181,7 +190,7 @@ func TestGetNextSupplierBothInPast(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -207,7 +216,7 @@ func TestGetNextSupplierBothInFuture(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -232,7 +241,7 @@ func TestGetNextSupplierCannotParseDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -257,7 +266,7 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 		"}]," +
 		"\"timeZone\": \"Australia/ACT\"" +
 		"}"
-	var data map[string]any
+	var data directory.Entry
 	err := json.Unmarshal([]byte(jsonData), &data)
 	assert.NoError(t, err)
 	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
@@ -269,6 +278,69 @@ func TestGetNextSupplierCannotParseEndDate(t *testing.T) {
 	assert.Equal(t, "", locSup.ID)
 }
 
+func TestGetNextSupplierBetweenHolidays(t *testing.T) {
+	peerId := "p1"
+	mockIllRepo := new(MockIllRepoRequester)
+	timezoneLoc, err := time.LoadLocation("Australia/Victoria")
+	assert.NoError(t, err)
+	yesterday := time.Now().Add(-24 * time.Hour).In(timezoneLoc).Format(DATE_LAYOUT)
+	tomorrow := time.Now().Add(24 * time.Hour).In(timezoneLoc).Format(DATE_LAYOUT)
+	jsonData := "{\"closures\": " +
+		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2\"," +
+		"\"startDate\": \"" + yesterday + "\"," +
+		"\"endDate\": \"" + yesterday + "\"," +
+		"\"reason\": \"Christmas Day\"" +
+		"}," +
+		"{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda363\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb4\"," +
+		"\"startDate\": \"" + tomorrow + "\"," +
+		"\"endDate\": \"" + tomorrow + "\"," +
+		"\"reason\": \"Christmas Day 2\"" +
+		"}]," +
+		"\"timeZone\": \"Australia/Victoria\"" +
+		"}"
+	var data directory.Entry
+	err = json.Unmarshal([]byte(jsonData), &data)
+	assert.NoError(t, err)
+	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
+
+	locSup, skipped, err := locator.getNextSupplier(appCtx, []ill_db.LocatedSupplier{{ID: "l1", SupplierID: peerId}})
+	assert.NoError(t, err)
+	assert.Len(t, skipped, 0)
+	assert.Equal(t, "l1", locSup.ID)
+}
+
+func TestGetNextSupplierClosedEventFailed(t *testing.T) {
+	peerId := "p1"
+	mockIllRepo := new(MockIllRepoRequester)
+	past := time.Now().Add(-48 * time.Hour).Format(DATE_LAYOUT)
+	future := time.Now().Add(48 * time.Hour).Format(DATE_LAYOUT)
+	jsonData := "{\"closures\": " +
+		"[{\"id\": \"00251ffa-d517-5e1a-9a9a-a98033dda361\"," +
+		"\"entry\": \"d4cd7068-a9f4-5f3b-8eea-1a169eb71eb2\"," +
+		"\"startDate\": \"" + past + "\"," +
+		"\"endDate\": \"" + future + "\"," +
+		"\"reason\": \"Christmas Day\"" +
+		"}]," +
+		"\"timeZone\": \"Australia/ACT\"" +
+		"}"
+	var data directory.Entry
+	err := json.Unmarshal([]byte(jsonData), &data)
+	assert.NoError(t, err)
+	mockIllRepo.On("GetPeerById", peerId).Return(ill_db.Peer{CustomData: data}, nil)
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.ApiDirectory), new(adapter.SruHoldingsLookupAdapter))
+	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	skipped, ok := result.CustomData["skippedSuppliers"].([]SkippedSupplier)
+	assert.True(t, ok)
+	assert.Len(t, skipped, 1)
+	assert.Equal(t, "no-suppliers", result.Problem.Kind)
+	assert.Equal(t, "no suppliers with new status", result.Problem.Details)
+}
+
 type MockIllRepoRequester struct {
 	mocks.MockIllRepositorySuccess
 }
@@ -276,4 +348,11 @@ type MockIllRepoRequester struct {
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
 	args := r.Called(peerId)
 	return args.Get(0).(ill_db.Peer), args.Error(1)
+}
+
+func (r *MockIllRepoRequester) GetLocatedSuppliersByIllTransactionAndStatus(ctx common.ExtendedContext, params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) ([]ill_db.LocatedSupplier, error) {
+	if params.SupplierStatus == ill_db.SupplierStateNewPg {
+		return []ill_db.LocatedSupplier{{ID: "1", SupplierID: "p1", SupplierSymbol: "ISIL:SUP"}}, nil
+	}
+	return []ill_db.LocatedSupplier{}, nil
 }

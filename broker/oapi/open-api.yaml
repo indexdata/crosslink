@@ -66,6 +66,25 @@ components:
       description: CQL query for filtering results
       schema:
         type: string
+    Side:
+      name: side
+      in: query
+      description: Patron request side, valid values "borrowing" and "lending"
+      required: true
+      schema:
+        type: string
+    Symbol:
+      name: symbol
+      in: query
+      description: Symbol for access control
+      schema:
+        type: string
+    PatronRequestId:
+      name: pr_id
+      in: query
+      description: Patron request ID
+      schema:
+        type: string
   schemas:
     Index:
       type: object
@@ -91,11 +110,15 @@ components:
             locatedSuppliersLink:
               type: string
               description: Link to located suppliers
+            patronRequestsLink:
+              type: string
+              description: Link to patron request
           required:
             - eventsLink
             - illTransactionsLink
             - peersLink
             - locatedSuppliersLink
+            - patronRequestsLink
       required:
         - revision
         - signature
@@ -184,228 +207,436 @@ components:
     Event:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier of the event
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Timestamp of the event
-        IllTransactionID:
+        illTransactionID:
           type: string
           description: ID of the ILL transaction (if applicable)
-        EventType:
+        eventType:
           type: string
           description: Type of the event
-        EventName:
+        eventName:
           type: string
           description: Name of the event
-        EventStatus:
+        eventStatus:
           type: string
           description: Status of the event
-        EventData:
+        eventData:
           type: object
           description: Data associated with the event
           additionalProperties: true
-        ResultData:
+        resultData:
           type: object
           description: Result data of the event
           additionalProperties: true
-        ParentID:
+        parentID:
           type: string
           description: Parent event ID
       required:  # List required fields if any
-        - ID
-        - IllTransactionID
-        - Timestamp
-        - EventType
-        - EventName
-        - EventStatus
+        - id
+        - illTransactionID
+        - timestamp
+        - eventType
+        - eventName
+        - eventStatus
     IllTransaction:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier for the ILL transaction
-        Timestamp:
+        timestamp:
           type: string
           format: date-time
           description: Timestamp of the transaction
-        RequesterSymbol:
+        requesterSymbol:
           type: string
           description: Symbol of the requesting institution
-        RequesterID:
+        requesterID:
           type: string
           description: ID of the requesting institution
-        LastRequesterAction:
+        lastRequesterAction:
           type: string
           description: Last action performed by the requester
-        PrevRequesterAction:
+        prevRequesterAction:
           type: string
           description: Previous action performed by the requester
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Symbol of the supplying institution
-        RequesterRequestID:
+        requesterRequestID:
           type: string
           description: ID of the request from the requester's side
-        SupplierRequestID:
+        supplierRequestID:
           type: string
           description: ID of the request from the supplier's side
-        LastSupplierStatus:
+        lastSupplierStatus:
           type: string
           description: Last status update from the supplier
-        PrevSupplierStatus:
+        prevSupplierStatus:
           type: string
           description: Previous status update from the supplier
-        IllTransactionData:
+        illTransactionData:
           type: object
           description: Result data of the event
           additionalProperties: true
-        EventsLink:
+        eventsLink:
           type: string
           description: Link to Ill Transaction events
-        LocatedSuppliersLink:
+        locatedSuppliersLink:
           type: string
           description: Link to located Suppliers
-        RequesterPeerLink:
+        requesterPeerLink:
           type: string
           description: Link to requester Peer
       required:
-        - ID
-        - Timestamp
-        - RequesterSymbol
-        - RequesterID
-        - LastRequesterAction
-        - PrevRequesterAction
-        - SupplierSymbol
-        - RequesterRequestID
-        - SupplierRequestID
-        - LastSupplierStatus
-        - PrevSupplierStatus
-        - IllTransactionData
-        - EventsLink
-        - LocatedSuppliersLink
-        - RequesterPeerLink
+        - id
+        - timestamp
+        - requesterSymbol
+        - requesterID
+        - lastRequesterAction
+        - prevRequesterAction
+        - supplierSymbol
+        - requesterRequestID
+        - supplierRequestID
+        - lastSupplierStatus
+        - prevSupplierStatus
+        - illTransactionData
+        - eventsLink
+        - locatedSuppliersLink
+        - requesterPeerLink
     Peer:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Unique identifier for the peer
-        Symbols:
+        symbols:
           type: array
           items:
             type: string
           description: Unique symbol representing the peer
-        BranchSymbols:
+        branchSymbols:
           type: array
           items:
             type: string
           description: Symbols of peer branches
-        Name:
+        name:
           type: string
           description: Name of the peer
-        Url:
+        url:
           type: string
           description: Network URL of the peer
-        RefreshPolicy:
+        refreshPolicy:
           type: string
           enum: [never, transaction]
           description: Policy for refreshing peer information (never, transaction)
-        RefreshTime:
+        refreshTime:
           type: string
           format: date-time
           description: Timestamp of refresh
-        LoansCount:
+        loansCount:
           type: integer
           format: int32
           description: Count of loans
-        BorrowsCount:
+        borrowsCount:
           type: integer
           format: int32
           description: Count of borrows
-        Vendor:
+        vendor:
           type: string
           description: Vendor of the ISO18626 implementation, e.g "Alma", "ReShare"
-        BrokerMode:
+        brokerMode:
           type: string
           enum: [opaque, transparent, translucent]
           description: Broker mode, e.g "opaque", "transparent" or "translucent"
-        CustomData:
+        customData:
           type: object
           description: Custom data of peer
           additionalProperties: true
-        HttpHeaders:
+        httpHeaders:
           type: object
           description: HTTP headers to be sent with requests to the peer
           additionalProperties:
             type: string
       required:
-        - ID
-        - Symbols
-        - Name
-        - Url
-        - RefreshPolicy
-        - Vendor
-        - BrokerMode
+        - id
+        - symbols
+        - name
+        - url
+        - refreshPolicy
+        - vendor
+        - brokerMode
 
     LocatedSupplier:
       type: object
       properties:
-        ID:
+        id:
           type: string
           description: Generate ID
-        IllTransactionID:
+        illTransactionID:
           type: string
           description: Ill Transaction ID
-        SupplierID:
+        supplierID:
           type: string
           description: Supplier ID from peer table
-        SupplierSymbol:
+        supplierSymbol:
           type: string
           description: Supplier symbol to use for communication
-        Ordinal:
+        ordinal:
           type: integer
           format: int32
           description: Ordinal number for ordering
-        SupplierStatus:
+        supplierStatus:
           type: string
           description: Supplier status, possible values (new, selected, skipped)
-        PrevAction:
+        prevAction:
           type: string
           description: Previous requester action
-        PrevStatus:
+        prevStatus:
           type: string
           description: Previous supplier transaction status
-        LastAction:
+        lastAction:
           type: string
           description: Latest requester action
-        LastStatus:
+        lastStatus:
           type: string
           description: Latest supplier transaction status
-        LocalID:
+        localID:
           type: string
           description: Item local ID
-        PrevReason:
+        prevReason:
           type: string
           description: Previous requester reason
-        LastReason:
+        lastReason:
           type: string
           description: Latest requester reason
-        SupplierRequestID:
+        supplierRequestID:
           type: string
           description: Supplier request ID
-        SupplierPeerLink:
+        supplierPeerLink:
           type: string
           description: Link to supplier Peer
       required:
-        - ID
-        - IllTransactionID
-        - SupplierID
-        - SupplierSymbol
-        - Ordinal
-        - SupplierPeerLink
+        - id
+        - illTransactionID
+        - supplierID
+        - supplierSymbol
+        - ordinal
+        - supplierPeerLink
+    PatronRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the patron request
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the patron reuqest
+        illRequest:
+          type: object
+          description: JSON of ISO18626 request
+        state:
+          type: string
+          description: Patron request state
+        side:
+          type: string
+          description: Patron request side - borrowing or lending
+        patron:
+          type: string
+          description: User who requested item
+        requesterSymbol:
+          type: string
+          description: Requester symbol
+        supplierSymbol:
+          type: string
+          description: Supplier symbol
+        requesterRequestId:
+          type: string
+          description: Requester patron request ID
+      required:
+        - id
+        - timestamp
+        - state
+        - side
+        - illRequest
+    PatronRequests:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of patron request
+          items:
+            $ref: '#/components/schemas/PatronRequest'
+
+    CreatePatronRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the patron request
+        illRequest:
+          type: object
+          description: JSON of ISO18626 request
+        patron:
+          type: string
+          description: User who requested item
+        requesterSymbol:
+          type: string
+          description: Requester symbol
+        supplierSymbol:
+          type: string
+          description: Supplier symbol
+      required:
+        - illRequest
+
+    ExecuteAction:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Action to execute
+        actionParams:
+          type: object
+          description: Action parameters
+      required:
+        - action
+
+    ActionResult:
+      type: object
+      properties:
+        actionResult:
+          type: string
+          description: Action result
+        message:
+          type: string
+          description: Action message
+      required:
+        - actionResult
+
+    SseResult:
+      type: object
+      properties:
+        event:
+          type: string
+          description: Event name, for example 'message-supplier'
+        data:
+          type: object
+          description: Data of the event, for example ISO18626 message
+      required:
+        - event
+        - data
+
+    StateModel:
+      type: object
+      description: ReShare state model definition
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          const: StateModel
+        name:
+          type: string
+          description: Name of the state model
+        desc:
+          type: string
+          description: Description of the state model
+        version:
+          type: string
+          description: Version of the state model in SemVer
+        states:
+          type: array
+          description: A list of all allowed states
+          items:
+            $ref: '#/components/schemas/State'
+
+    State:
+      title: State
+      type: object
+      description: Definition of a particular state
+      properties:
+        name:
+          type: string
+          description: Name of the state, in capital letters with underscores
+        display:
+          type: string
+          description: Human-readable state name
+        desc:
+          type: string
+          description: Description of the state, e.g., what situation is modelled by the state
+        side:
+          type: string
+          description: Indicates which side of the request the state belongs to
+          enum: 
+            - REQUESTER
+            - SUPPLIER
+        actions:
+          type: array
+          description: List of all actions that may be performed on the request when in this state
+          items:
+            $ref: '#/components/schemas/Action'
+        events:
+          type: array
+          description: List of all events that may be triggered to the request when in this state
+          items:
+            $ref: '#/components/schemas/Event'
+        terminal:
+          type: boolean
+          description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
+      oneOf:
+        - anyOf:
+          - required:
+            - actions
+          - required:
+            - events
+        - required:
+          - terminal
+      required:
+        - name
+        - side
+
+    Action:
+      type: object
+      title: Action
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the action
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
+
+    Event:
+      type: object
+      title: Event
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the event
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the event. When no transitions are defined, the event is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
 
 paths:
   /:
@@ -727,6 +958,251 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /patron_requests:
+    get:
+      summary: Retrieve patron requests
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/RequesterRequestId'
+        - $ref: '#/components/parameters/RequesterSymbol'
+        - $ref: '#/components/parameters/Cql'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Successful retrieval of events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequests'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatronRequest'
+      responses:
+        '201':
+          description: Patron request created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '400':
+          description: Bad Request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}:
+    get:
+      summary: Get a patron request by ID
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to retrieve
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Successful retrieval of the patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatronRequest'
+        '404':
+          description: Patron request not found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request to delete
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '204':
+          description: Patron request deleted successfully (No Content)
+        '404':
+          description: Patron request not found
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/actions:
+    get:
+      summary: Get valid actions for patron request in current state
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: List of available actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '404':
+          description: Patron request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: There was internal server error looking up patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/action:
+    post:
+      summary: Execute action for given patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteAction'
+      responses:
+        '200':
+          description: List of available actions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: There was internal server error looking up patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sse/events:
+    get:
+      summary: Subscribe to real-time notifications. Notification is send out every time when ISO18626 message is sent out
+      tags:
+        - sse-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Result of subscription
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SseResult'
+  
+  /state_model/models/{model}:
+    get:
+      summary: Retrieve a state model by name
+      parameters:
+        - in: path
+          name: model
+          schema: 
+            type: string
+          required: true
+          description: The name of the statemodel to retrieve
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Successful retrieval of state model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateModel'
         '500':
           description: Internal Server Error
           content:
