@@ -11,7 +11,7 @@
           "pathPattern": "/rsdir/consortia",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -22,7 +22,7 @@
           "pathPattern": "/rsdir/consortia",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -33,7 +33,7 @@
           "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -44,7 +44,7 @@
           "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -55,7 +55,7 @@
           "pathPattern": "/rsdir/consortia/{id}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -72,7 +72,7 @@
           "pathPattern": "/rsdir/entries",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -83,7 +83,7 @@
           "pathPattern": "/rsdir/entries",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -94,7 +94,7 @@
           "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -105,7 +105,7 @@
           "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -116,7 +116,7 @@
           "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired" : [],
           "permissionsDesired": [ 
-            "directory.consortia.all",
+            "directory.consortium.all",
             "directory.institution.all",
             "directory.system.all",
             "directory.public.all" 
@@ -130,7 +130,7 @@
     {
       "description": "Consortial admin permissions",
       "displayName": "Directory - all consortia permissions",
-      "permissionName": "directory.consortia.all",
+      "permissionName": "directory.consortium.all",
       "visible": true
     },
     {
@@ -156,7 +156,7 @@
       "displayName": "Directory - all permissions",
       "permissionName": "directory.all",
       "subPermissions": [
-        "directory.consortia.all",
+        "directory.consortium.all",
         "directory.institution.all",
         "directory.system.all",
         "directory.public.all"
