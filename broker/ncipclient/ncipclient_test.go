@@ -184,6 +184,16 @@ func TestEmptyNcipResponse(t *testing.T) {
 	ncipClient.fromAgencyAuthentication = "pass"
 	ncipClient.toAgency = "ILL-MOCK"
 	ncipClient.address = server.URL
+	var logOutgoing []byte
+	var logIncoming []byte
+	var logError error
+
+	ncipClient.logFunc = func(outgoing []byte, incoming []byte, err error) {
+		logOutgoing = outgoing
+		logIncoming = incoming
+		logError = err
+	}
+
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -192,6 +202,9 @@ func TestEmptyNcipResponse(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid NCIP response: missing LookupUserResponse", err.Error())
+	assert.NotNil(t, logOutgoing)
+	assert.NotNil(t, logIncoming)
+	assert.Nil(t, logError)
 
 	accept := ncip.AcceptItem{
 		RequestId: ncip.RequestId{

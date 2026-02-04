@@ -15,6 +15,7 @@ type NcipClientImpl struct {
 	fromAgency               string
 	toAgency                 string
 	fromAgencyAuthentication string
+	logFunc                  NcipLogFunc
 }
 
 func NewNcipClient(client *http.Client, address string, fromAgency string, toAgency string, fromAgencyAuthentication string) NcipClient {
@@ -25,6 +26,10 @@ func NewNcipClient(client *http.Client, address string, fromAgency string, toAge
 		toAgency:                 toAgency,
 		fromAgencyAuthentication: fromAgencyAuthentication,
 	}
+}
+
+func (n *NcipClientImpl) SetLogFunc(logFunc NcipLogFunc) {
+	n.logFunc = logFunc
 }
 
 func (n *NcipClientImpl) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
@@ -188,8 +193,24 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 	message.Version = ncip.NCIP_V2_02_XSD
 
 	var respMessage ncip.NCIPMessage
+
+	var incoming []byte
+	var outgoing []byte
+
+	marshalFunc := func(v any) ([]byte, error) {
+		var err error
+		outgoing, err = xml.MarshalIndent(v, "", "  ")
+		return outgoing, err
+	}
+	unmarshalFunc := func(data []byte, v any) error {
+		incoming = data
+		return xml.Unmarshal(data, v)
+	}
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
+		n.address, message, &respMessage, marshalFunc, unmarshalFunc)
+	if n.logFunc != nil {
+		n.logFunc(outgoing, incoming, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/lms"
+	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -774,6 +775,9 @@ func createLmsAdapterMockFail() lms.LmsAdapter {
 }
 
 type MockLmsAdapterFail struct {
+}
+
+func (l *MockLmsAdapterFail) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
 func (l *MockLmsAdapterFail) LookupUser(patron string) (string, error) {

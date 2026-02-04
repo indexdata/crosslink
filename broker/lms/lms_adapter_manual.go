@@ -1,6 +1,11 @@
 package lms
 
+import "github.com/indexdata/crosslink/broker/ncipclient"
+
 type LmsAdapterManual struct {
+}
+
+func (l *LmsAdapterManual) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
 }
 
 func (l *LmsAdapterManual) LookupUser(patron string) (string, error) {

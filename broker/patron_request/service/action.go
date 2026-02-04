@@ -130,6 +130,17 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
+	lmsAdapter.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+		status := events.EventStatusSuccess
+		if err != nil {
+			status = events.EventStatusError
+		}
+		var customData = make(map[string]any)
+		customData["lmsOutgoingMessage"] = string(outgoing)
+		customData["lmsIncomingMessage"] = string(incoming)
+		eventData := events.EventData{CustomData: customData}
+		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
+	})
 	switch action {
 	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr, lmsAdapter)
@@ -162,6 +173,17 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 	}
+	lms.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+		status := events.EventStatusSuccess
+		if err != nil {
+			status = events.EventStatusError
+		}
+		var customData = make(map[string]any)
+		customData["lmsOutgoingMessage"] = string(outgoing)
+		customData["lmsIncomingMessage"] = string(incoming)
+		eventData := events.EventData{CustomData: customData}
+		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
+	})
 	switch action {
 	case LenderActionValidate:
 		return a.validateLenderRequest(ctx, pr, lms)

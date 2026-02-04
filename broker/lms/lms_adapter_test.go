@@ -366,6 +366,10 @@ type ncipClientMock struct {
 	lastRequest any
 }
 
+func (n *ncipClientMock) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
+	// no-op
+}
+
 func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
 	n.lastRequest = lookup
 	if lookup.UserId != nil {

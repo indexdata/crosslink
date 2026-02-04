@@ -2,7 +2,11 @@ package ncipclient
 
 import "github.com/indexdata/crosslink/ncip"
 
+type NcipLogFunc func(outgoing []byte, incoming []byte, err error)
+
 type NcipClient interface {
+	SetLogFunc(logFunc NcipLogFunc)
+
 	LookupUser(arg ncip.LookupUser) (*ncip.LookupUserResponse, error)
 
 	AcceptItem(arg ncip.AcceptItem) (*ncip.AcceptItemResponse, error)
