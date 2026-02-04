@@ -77,8 +77,8 @@ type PatronRequestActionService struct {
 	actionMappingService ActionMappingService
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) PatronRequestActionService {
-	return PatronRequestActionService{
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
+	return &PatronRequestActionService{
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		iso18626Handler:      iso18626Handler,

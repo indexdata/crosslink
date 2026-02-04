@@ -353,6 +353,17 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.Equal(t, string(prservice.LenderStateCompleted), foundPr.State)
 }
 
+func TestGetReturnableStateModel(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
+	var retrievedStateModel proapi.StateModel
+	err := json.Unmarshal(respBytes, &retrievedStateModel)
+	assert.NoError(t, err, "failed to unmarshal state model")
+	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
+	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
+	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
+	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))
+}
+
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
