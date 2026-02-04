@@ -27,7 +27,7 @@ type ActionMapping struct {
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 }
 
-/* Constructor function to initialize the mappings for the returnables */
+// Constructor function to initialize the mappings for given StateModel
 func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	r := new(ActionMapping)
 

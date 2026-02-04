@@ -559,9 +559,9 @@ components:
           type: array
           description: A list of all allowed states
           items:
-            $ref: '#/components/schemas/State'
+            $ref: '#/components/schemas/ModelState'
 
-    State:
+    ModelState:
       title: State
       type: object
       description: Definition of a particular state
@@ -585,12 +585,12 @@ components:
           type: array
           description: List of all actions that may be performed on the request when in this state
           items:
-            $ref: '#/components/schemas/Action'
+            $ref: '#/components/schemas/ModelAction'
         events:
           type: array
           description: List of all events that may be triggered to the request when in this state
           items:
-            $ref: '#/components/schemas/SMEvent'
+            $ref: '#/components/schemas/ModelEvent'
         terminal:
           type: boolean
           description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
@@ -606,7 +606,7 @@ components:
         - name
         - side
 
-    Action:
+    ModelAction:
       type: object
       title: Action
       additionalProperties: false
@@ -622,7 +622,7 @@ components:
       required:
         - name
 
-    SMEvent:
+    ModelEvent:
       type: object
       title: Event
       additionalProperties: false
