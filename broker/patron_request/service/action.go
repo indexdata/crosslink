@@ -140,6 +140,9 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		customData["lmsIncomingMessage"] = string(incoming)
 		eventData := events.EventData{CustomData: customData}
 		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
+		if err != nil {
+			ctx.Logger().Error("failed to create LMS log event", "error", err)
+		}
 	})
 	switch action {
 	case BorrowerActionValidate:
@@ -183,6 +186,9 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		customData["lmsIncomingMessage"] = string(incoming)
 		eventData := events.EventData{CustomData: customData}
 		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
+		if err != nil {
+			ctx.Logger().Error("failed to create LMS log event", "error", err)
+		}
 	})
 	switch action {
 	case LenderActionValidate:
