@@ -17,3 +17,6 @@ broker/**/*_test.go
 
 # Include migrations
 !broker/migrations/**
+
+# Include statemodels
+!broker/patron_request/service/statemodels
