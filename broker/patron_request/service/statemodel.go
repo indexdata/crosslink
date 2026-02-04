@@ -22,7 +22,6 @@ func (s *StateModelService) GetStateModel(modelName string) *proapi.StateModel {
 		return stateModel
 	}
 
-	//In the future, this will vary depending on the modelName
 	stateModel, err := LoadStateModelByName(modelName)
 	if err == nil {
 		s.stateMap[modelName] = stateModel

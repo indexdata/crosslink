@@ -7,15 +7,6 @@ import (
 	proapi "github.com/indexdata/crosslink/broker/patron_request/oapi"
 )
 
-/*
-type ActionMapping interface {
-	IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool
-	GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction
-	GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
-	GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
-}
-*/
-
 type ActionMappingService struct {
 	SMService StateModelService
 }
@@ -27,7 +18,7 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 }
 
 func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) *ActionMapping {
-	//At a future point, we will check the PatronRequest loan type to decide what kind of mapping service to return
+	//TODO: check the PatronRequest loan type to decide what kind of state model/mapping to return
 	return NewActionMapping(r.SMService.GetStateModel("returnables"))
 }
 
