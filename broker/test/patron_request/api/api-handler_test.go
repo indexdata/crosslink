@@ -35,6 +35,7 @@ import (
 var basePath = "/patron_requests"
 var illRepo ill_db.IllRepo
 var prRepo pr_db.PrRepo
+var ncipMockUrl string
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
@@ -61,6 +62,7 @@ func TestMain(m *testing.M) {
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
 
 	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	ncipMockUrl = "http://localhost:" + strconv.Itoa(mockPort) + "/ncip"
 
 	apptest.StartMockApp(mockPort)
 
@@ -81,7 +83,7 @@ func TestCrud(t *testing.T) {
 
 	lmsConfig := &directory.LmsConfig{
 		FromAgency: "from-agency",
-		Address:    strings.Replace(adapter.MOCK_CLIENT_URL, "/iso18626", "/ncip", 1),
+		Address:    ncipMockUrl,
 	}
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorReShare,
 		directory.Entry{
@@ -203,7 +205,7 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	lmsConfig := &directory.LmsConfig{
 		FromAgency: "from-agency",
-		Address:    strings.Replace(adapter.MOCK_CLIENT_URL, "/iso18626", "/ncip", 1),
+		Address:    ncipMockUrl,
 	}
 	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorReShare,
 		directory.Entry{
