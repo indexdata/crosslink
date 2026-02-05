@@ -70,7 +70,6 @@ components:
       name: side
       in: query
       description: Patron request side, valid values "borrowing" and "lending"
-      required: true
       schema:
         type: string
     Symbol:

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,9 +124,23 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 
-	// GET by id
+	// GET list with offset in
+	respBytes = httpRequest(t, "GET", basePath+queryParams+"&offset=100000", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+
+	// GET by id with symbol and side
 	thisPrPath := basePath + "/" + *newPr.Id
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+
+	// GET by id with symbol
+	respBytes = httpRequest(t, "GET", thisPrPath+"?symbol="+*foundPr.RequesterSymbol, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
@@ -187,9 +202,7 @@ func TestActionsToCompleteState(t *testing.T) {
 			SupplierUniqueRecordId: "return-" + supplierSymbol + "::WILLSUPPLY_LOANED",
 		},
 	}
-	id := uuid.NewString()
 	newPr := proapi.CreatePatronRequest{
-		Id:              &id,
 		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
@@ -204,8 +217,8 @@ func TestActionsToCompleteState(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
-	assert.Equal(t, *newPr.Id, foundPr.Id)
-	requesterPrPath := basePath + "/" + *newPr.Id
+	assert.Equal(t, strings.ToUpper(strings.Split(requesterSymbol, ":")[1]+"-1"), foundPr.Id)
+	requesterPrPath := basePath + "/" + foundPr.Id
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
 
 	// Wait till action available
@@ -224,10 +237,10 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
-		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, *newPr.Id)
+		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 		return supPr.ID != ""
 	})
-	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, *newPr.Id)
+	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 	assert.NoError(t, err)
 	assert.NotNil(t, supPr.ID)
 
@@ -342,7 +355,6 @@ func TestActionsToCompleteState(t *testing.T) {
 	respBytes = httpRequest(t, "GET", requesterPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
-	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.Equal(t, string(prservice.BorrowerStateCompleted), foundPr.State)
 
 	// Check supplier patron request done
