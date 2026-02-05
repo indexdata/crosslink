@@ -139,9 +139,9 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		customData["lmsOutgoingMessage"] = string(outgoing)
 		customData["lmsIncomingMessage"] = string(incoming)
 		eventData := events.EventData{CustomData: customData}
-		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
-		if err != nil {
-			ctx.Logger().Error("failed to create LMS log event", "error", err)
+		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
+		if createErr != nil {
+			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
 	})
 	switch action {
@@ -185,8 +185,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		customData["lmsOutgoingMessage"] = string(outgoing)
 		customData["lmsIncomingMessage"] = string(incoming)
 		eventData := events.EventData{CustomData: customData}
-		_, err = a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
-		if err != nil {
+		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
+		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", err)
 		}
 	})
