@@ -15,6 +15,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 
 	"github.com/google/uuid"
@@ -78,7 +79,14 @@ func TestCrud(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeer(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL)
+	lmsConfig := &directory.LmsConfig{
+		FromAgency: "from-agency",
+		Address:    strings.Replace(adapter.MOCK_CLIENT_URL, "/iso18626", "/ncip", 1),
+	}
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorReShare,
+		directory.Entry{
+			LmsConfig: lmsConfig,
+		})
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL)
 	assert.NotNil(t, supPeer)
@@ -192,7 +200,15 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	reqPeer := apptest.CreatePeer(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL)
 	assert.NotNil(t, reqPeer)
-	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL)
+
+	lmsConfig := &directory.LmsConfig{
+		FromAgency: "from-agency",
+		Address:    strings.Replace(adapter.MOCK_CLIENT_URL, "/iso18626", "/ncip", 1),
+	}
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorReShare,
+		directory.Entry{
+			LmsConfig: lmsConfig,
+		})
 	assert.NotNil(t, supPeer)
 
 	// POST

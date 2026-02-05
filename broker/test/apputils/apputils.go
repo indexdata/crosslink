@@ -3,12 +3,14 @@ package apputils
 import (
 	"context"
 	"fmt"
-	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
@@ -93,10 +95,10 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
-	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, common.VendorReShare)
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, common.VendorReShare, directory.Entry{})
 }
 
-func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor common.Vendor) ill_db.Peer {
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor common.Vendor, customData directory.Entry) ill_db.Peer {
 	peer, err := illRepo.SavePeer(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          symbol,
@@ -108,6 +110,7 @@ func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol st
 		},
 		BrokerMode: brokerMode,
 		Vendor:     string(vendor),
+		CustomData: customData,
 	})
 	if err != nil {
 		t.Errorf("Failed to create peer: %s", err)

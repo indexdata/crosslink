@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -679,7 +680,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), common.VendorAlma)
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), common.VendorAlma, directory.Entry{})
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
