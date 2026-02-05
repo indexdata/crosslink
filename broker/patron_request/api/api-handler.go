@@ -43,6 +43,16 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant commo
 	}
 }
 
+func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
+	stateModel := a.actionMappingService.SMService.GetStateModel(model)
+
+	if stateModel == nil {
+		addNotFoundError(w)
+		return
+	}
+	writeJsonResponse(w, *stateModel)
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
 	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	logParams := map[string]string{"method": "GetPatronRequests", "side": params.Side, "symbol": symbol}

@@ -704,6 +704,7 @@ github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639 h1:mV02weK
 github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/CoI+jC3w2iA=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
+github.com/indexdata/crosslink v0.0.0-20260121111122-3096ccb3a8ea/go.mod h1:r0ibawAkcS/t9mThAE9T2riuuU+jd9B7qUKOkBDIoGk=
 github.com/indexdata/go-utils v0.0.0-20240626111027-28caddc0fd2b/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/intel/goresctrl v0.3.0 h1:K2D3GOzihV7xSBedGxONSlaw/un1LZgWsc9IfqipN4c=
 github.com/intel/goresctrl v0.3.0/go.mod h1:fdz3mD85cmP9sHD8JUlrNWAxvwM86CrbmVXltEKd7zk=

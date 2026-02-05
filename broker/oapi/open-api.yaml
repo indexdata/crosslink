@@ -538,6 +538,106 @@ components:
         - event
         - data
 
+    StateModel:
+      type: object
+      description: ReShare state model definition
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          description: Self-referential type
+        name:
+          type: string
+          description: Name of the state model
+        desc:
+          type: string
+          description: Description of the state model
+        version:
+          type: string
+          description: Version of the state model in SemVer
+        states:
+          type: array
+          description: A list of all allowed states
+          items:
+            $ref: '#/components/schemas/ModelState'
+
+    ModelState:
+      title: State
+      type: object
+      description: Definition of a particular state
+      properties:
+        name:
+          type: string
+          description: Name of the state, in capital letters with underscores
+        display:
+          type: string
+          description: Human-readable state name
+        desc:
+          type: string
+          description: Description of the state, e.g., what situation is modelled by the state
+        side:
+          type: string
+          description: Indicates which side of the request the state belongs to
+          enum: 
+            - REQUESTER
+            - SUPPLIER
+        actions:
+          type: array
+          description: List of all actions that may be performed on the request when in this state
+          items:
+            $ref: '#/components/schemas/ModelAction'
+        events:
+          type: array
+          description: List of all events that may be triggered to the request when in this state
+          items:
+            $ref: '#/components/schemas/ModelEvent'
+        terminal:
+          type: boolean
+          description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
+      oneOf:
+        - anyOf:
+          - required:
+            - actions
+          - required:
+            - events
+        - required:
+          - terminal
+      required:
+        - name
+        - side
+
+    ModelAction:
+      type: object
+      title: Action
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the action
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
+
+    ModelEvent:
+      type: object
+      title: Event
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Description of the event
+        transitions:
+          type: array
+          description: List of all possible state transitions after performing the event. When no transitions are defined, the event is considered to be non-state-changing
+          items:
+            type: string
+      required:
+        - name
+
 paths:
   /:
     get:
@@ -1084,3 +1184,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SseResult'
+  
+  /state_model/models/{model}:
+    get:
+      summary: Retrieve a state model by name
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: model
+          schema: 
+            type: string
+          required: true
+          description: The name of the statemodel to retrieve
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Successful retrieval of state model
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateModel'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
