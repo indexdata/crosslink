@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"reflect"
 
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/ncip"
@@ -194,21 +195,24 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 
 	var respMessage ncip.NCIPMessage
 
-	var incoming []byte
-	var outgoing []byte
-
-	marshalFunc := func(v any) ([]byte, error) {
-		var err error
-		outgoing, err = xml.MarshalIndent(v, "", "  ")
-		return outgoing, err
-	}
-	unmarshalFunc := func(data []byte, v any) error {
-		incoming = data
-		return xml.Unmarshal(data, v)
-	}
 	err := httpclient.NewClient().RequestResponse(n.client, http.MethodPost, []string{httpclient.ContentTypeApplicationXml},
-		n.address, message, &respMessage, marshalFunc, unmarshalFunc)
+		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
 	if n.logFunc != nil {
+		hideSensitive(message)
+		var outgoing []byte
+		var err1 error
+		outgoing, err1 = xml.MarshalIndent(message, "", "  ")
+
+		hideSensitive(&respMessage)
+		var incoming []byte
+		var err2 error
+		incoming, err2 = xml.MarshalIndent(&respMessage, "", "  ")
+		if err == nil {
+			err = err1
+		}
+		if err == nil {
+			err = err2
+		}
 		n.logFunc(outgoing, incoming, err)
 	}
 	if err != nil {
@@ -221,4 +225,58 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		}
 	}
 	return &respMessage, nil
+}
+
+func hideSensitive(message *ncip.NCIPMessage) {
+	traverse(reflect.ValueOf(message), 0)
+}
+
+// removes values from the FromAgencyAuthentication and FromSystemAuthentication fields
+// as well as AuthenticationInput fields except if type is "username"
+func traverse(v reflect.Value, level int) {
+	if level > 20 {
+		return
+	}
+	level = level + 1
+	if !v.IsValid() {
+		return
+	}
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return
+		}
+		traverse(v.Elem(), level)
+		return
+	}
+	if v.Kind() == reflect.Slice {
+		if v.IsNil() {
+			return
+		}
+		for i := 0; i < v.Len(); i++ {
+			traverse(v.Index(i), level)
+		}
+		return
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+	t := v.Type()
+	if t == reflect.TypeOf(ncip.AuthenticationInput{}) {
+		ncipAuthenticationInput := v.Interface().(ncip.AuthenticationInput)
+		exclude := ncipAuthenticationInput.AuthenticationInputType.Text != "username"
+		if exclude {
+			ncipAuthenticationInput.AuthenticationInputData = "***"
+			v.Set(reflect.ValueOf(ncipAuthenticationInput))
+		}
+		return
+	}
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.Type.Kind() == reflect.String &&
+			(field.Name == "FromAgencyAuthentication" || field.Name == "FromSystemAuthentication") {
+			v.Field(i).SetString("***")
+		} else {
+			traverse(v.Field(i), level)
+		}
+	}
 }
