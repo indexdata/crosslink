@@ -207,13 +207,15 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		var incoming []byte
 		var err2 error
 		incoming, err2 = xml.MarshalIndent(&respMessage, "", "  ")
-		if err == nil {
-			err = err1
+
+		logErr := err
+		if logErr == nil {
+			logErr = err1
 		}
-		if err == nil {
-			err = err2
+		if logErr == nil {
+			logErr = err2
 		}
-		n.logFunc(outgoing, incoming, err)
+		n.logFunc(outgoing, incoming, logErr)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("NCIP message exchange failed: %s", err.Error())
