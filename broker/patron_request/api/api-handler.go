@@ -245,7 +245,7 @@ func (a *PatronRequestApiHandler) getPatronRequestById(ctx common.ExtendedContex
 		}
 		return nil, err
 	}
-	if isOwner(pr, symbol) && (!isSideParamValid(side) || (side != nil && string(pr.Side) == *side)) {
+	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == *side) {
 		return &pr, nil
 	}
 	return nil, nil
