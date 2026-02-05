@@ -362,12 +362,24 @@ func TestItemLocation(t *testing.T) {
 	assert.Equal(t, "4", itemLocation)
 }
 
+func TestSetLogFunc(t *testing.T) {
+	var mock ncipclient.NcipClient = new(ncipClientMock)
+	ad := &LmsAdapterNcip{
+		ncipClient: mock,
+	}
+	assert.Nil(t, mock.(*ncipClientMock).lastLogFunc)
+	logFunc1 := func(outgoing []byte, incoming []byte, err error) {}
+	ad.SetLogFunc(logFunc1)
+	assert.NotNil(t, mock.(*ncipClientMock).lastLogFunc)
+}
+
 type ncipClientMock struct {
 	lastRequest any
+	lastLogFunc ncipclient.NcipLogFunc
 }
 
 func (n *ncipClientMock) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
-	// no-op
+	n.lastLogFunc = logFunc
 }
 
 func (n *ncipClientMock) LookupUser(lookup ncip.LookupUser) (*ncip.LookupUserResponse, error) {
