@@ -1,8 +1,12 @@
 package lms
 
+import "github.com/indexdata/crosslink/broker/ncipclient"
+
 // LmsAdapter is an interface defining methods for interacting with a Library Management System (LMS)
 // https://github.com/openlibraryenvironment/mod-rs/blob/master/service/src/main/groovy/org/olf/rs/lms/HostLMSActions.groovy
 type LmsAdapter interface {
+	SetLogFunc(logFunc ncipclient.NcipLogFunc)
+
 	LookupUser(patron string) (string, error)
 
 	AcceptItem(

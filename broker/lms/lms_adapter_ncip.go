@@ -52,6 +52,10 @@ func CreateLmsAdapterNcip(lmsConfig directory.LmsConfig) (LmsAdapter, error) {
 	return l, nil
 }
 
+func (l *LmsAdapterNcip) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
+	l.ncipClient.SetLogFunc(logFunc)
+}
+
 func (l *LmsAdapterNcip) LookupUser(patron string) (string, error) {
 	if l.config.LookupUserEnabled != nil && !*l.config.LookupUserEnabled {
 		return patron, nil // could even be empty

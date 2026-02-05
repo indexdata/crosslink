@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -184,6 +185,16 @@ func TestEmptyNcipResponse(t *testing.T) {
 	ncipClient.fromAgencyAuthentication = "pass"
 	ncipClient.toAgency = "ILL-MOCK"
 	ncipClient.address = server.URL
+	var logOutgoing []byte
+	var logIncoming []byte
+	var logError error
+
+	ncipClient.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+		logOutgoing = outgoing
+		logIncoming = incoming
+		logError = err
+	})
+
 	lookup := ncip.LookupUser{
 		UserId: &ncip.UserId{
 			UserIdentifierValue: "validuser",
@@ -192,6 +203,9 @@ func TestEmptyNcipResponse(t *testing.T) {
 	_, err := ncipClient.LookupUser(lookup)
 	assert.Error(t, err)
 	assert.Equal(t, "invalid NCIP response: missing LookupUserResponse", err.Error())
+	assert.NotNil(t, logOutgoing)
+	assert.NotNil(t, logIncoming)
+	assert.Nil(t, logError)
 
 	accept := ncip.AcceptItem{
 		RequestId: ncip.RequestId{
@@ -441,4 +455,73 @@ func TestCreateUserFiscalTransactionOK(t *testing.T) {
 	res, err := ncipClient.CreateUserFiscalTransaction(lookup)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
+}
+
+func TestHideSensitive(t *testing.T) {
+	sampleMessage := &ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		LookupUser: &ncip.LookupUser{
+			InitiationHeader: &ncip.InitiationHeader{
+				ToAgencyId:               ncip.ToAgencyId{AgencyId: ncip.SchemeValuePair{Text: "ILL-MOCK"}},
+				FromAgencyAuthentication: "supersecret",
+				FromSystemAuthentication: "othersecret",
+			},
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "validuser",
+			},
+			AuthenticationInput: []ncip.AuthenticationInput{
+				{
+					AuthenticationInputType: ncip.SchemeValuePair{Text: "PIN"},
+					AuthenticationInputData: "1234",
+				},
+				{
+					AuthenticationInputType: ncip.SchemeValuePair{Text: "username"},
+					AuthenticationInputData: "myuser",
+				},
+			},
+		},
+	}
+	hideSensitive(sampleMessage)
+	assert.Equal(t, "ILL-MOCK", sampleMessage.LookupUser.InitiationHeader.ToAgencyId.AgencyId.Text)
+	assert.Equal(t, "***", sampleMessage.LookupUser.InitiationHeader.FromAgencyAuthentication)
+	assert.Equal(t, "***", sampleMessage.LookupUser.InitiationHeader.FromSystemAuthentication)
+	assert.Equal(t, "validuser", sampleMessage.LookupUser.UserId.UserIdentifierValue)
+	assert.Equal(t, "***", sampleMessage.LookupUser.AuthenticationInput[0].AuthenticationInputData)
+	assert.Equal(t, "myuser", sampleMessage.LookupUser.AuthenticationInput[1].AuthenticationInputData)
+}
+
+func TestHideSensitiveLevel(t *testing.T) {
+	sampleMessage := &ncip.NCIPMessage{}
+	traverse(reflect.ValueOf(sampleMessage), 30)
+}
+
+func TestHideSensitiveInvalid(t *testing.T) {
+	invalid := reflect.Value{}
+	traverse(invalid, 0)
+}
+
+func TestSetLogFunc(t *testing.T) {
+	ncipClient := createTestClient()
+	var logOutgoing []byte
+	var logIncoming []byte
+
+	ncipClient.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+		logOutgoing = outgoing
+		logIncoming = incoming
+	})
+
+	userMessage := ncip.LookupUser{
+		InitiationHeader: &ncip.InitiationHeader{
+			FromAgencyAuthentication: "supersecret",
+		},
+		UserId: &ncip.UserId{
+			UserIdentifierValue: "validuser",
+		},
+	}
+
+	_, err := ncipClient.LookupUser(userMessage)
+	assert.NoError(t, err)
+	assert.NotNil(t, logOutgoing)
+	assert.NotNil(t, logIncoming)
+	assert.Contains(t, string(logOutgoing), "***")
 }
