@@ -11,7 +11,7 @@ import (
 )
 
 func GetConnectionString(typ, user, pass, host, port, db string) string {
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable", typ, user, pass, host, port, db)
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable&search_path=crosslink_broker", typ, user, pass, host, port, db)
 }
 
 func InitDbPool(connStr string) (*pgxpool.Pool, error) {
