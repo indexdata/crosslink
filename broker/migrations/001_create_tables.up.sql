@@ -1,4 +1,11 @@
-CREATE ROLE crosslink_broker PASSWORD 'tenant' NOSUPERUSER NOCREATEDB INHERIT LOGIN;
+DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'crosslink_broker') THEN
+            CREATE ROLE crosslink_broker PASSWORD 'tenant' NOSUPERUSER NOCREATEDB INHERIT LOGIN;
+        END IF;
+    END
+$$;
+
 CREATE SCHEMA IF NOT EXISTS crosslink_broker;
 
 SET search_path TO crosslink_broker;
