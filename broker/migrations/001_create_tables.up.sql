@@ -1,3 +1,5 @@
+CREATE SCHEMA IF NOT EXISTS crosslink_broker;
+
 CREATE TABLE peer
 (
     id             VARCHAR PRIMARY KEY,
