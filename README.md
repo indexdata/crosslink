@@ -61,3 +61,5 @@ Charts use the `LoadBalancer` service type by default, you can change this durin
 ```
 --set service.type=ClusterIP
 ```
+
+For any installation DB schema `crosslink_broker` must be created and application DB user must have privileges to use this schema
