@@ -1,4 +1,5 @@
-CREATE SCHEMA IF NOT EXISTS crosslink_broker AUTHORIZATION crosslink_broker;
+CREATE ROLE crosslink_broker PASSWORD 'tenant' NOSUPERUSER NOCREATEDB INHERIT LOGIN;
+CREATE SCHEMA IF NOT EXISTS crosslink_broker;
 
 SET search_path TO crosslink_broker;
 
