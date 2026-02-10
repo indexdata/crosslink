@@ -162,7 +162,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 

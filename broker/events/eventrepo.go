@@ -19,6 +19,7 @@ type EventRepo interface {
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
+	GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]Event, error)
 }
 
 type PgEventRepo struct {
@@ -89,6 +90,17 @@ func (r *PgEventRepo) GetIllTransactionEvents(ctx common.ExtendedContext, id str
 		}
 	}
 	return events, fullCount, err
+}
+
+func (r *PgEventRepo) GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]Event, error) {
+	rows, err := r.queries.GetPatronRequestEvents(ctx, r.GetConnOrTx(), id)
+	var events []Event
+	if err == nil {
+		for _, r := range rows {
+			events = append(events, r.Event)
+		}
+	}
+	return events, err
 }
 
 func (r *PgEventRepo) DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error {

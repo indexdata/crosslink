@@ -216,6 +216,9 @@ components:
         illTransactionID:
           type: string
           description: ID of the ILL transaction (if applicable)
+        patronRequestID:
+          type: string
+          description: ID of the Patron request (if applicable)
         eventType:
           type: string
           description: Type of the event
@@ -1162,6 +1165,43 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: There was internal server error looking up patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/events:
+    get:
+      summary: Retrieve patron request related events
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      responses:
+        '200':
+          description: Successful retrieval of patron request events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                   $ref: '#/components/schemas/Event'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
           content:
             application/json:
               schema:
