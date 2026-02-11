@@ -6,7 +6,7 @@ DO $$
     END
 $$;
 
-CREATE SCHEMA IF NOT EXISTS crosslink_broker;
+CREATE SCHEMA IF NOT EXISTS crosslink_broker AUTHORIZATION crosslink_broker;
 
 SET search_path TO crosslink_broker;
 
