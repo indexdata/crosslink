@@ -1,16 +1,19 @@
 package dbutil
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"strings"
+	"text/template"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lib/pq"
 )
 
 var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
@@ -62,17 +65,36 @@ func initDBSchema(connStr string) error {
 	}
 	defer db.Close()
 
-	script := "DO $$ " +
-		"BEGIN " +
-		"  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'crosslink_broker') THEN " +
-		"  CREATE ROLE crosslink_broker PASSWORD 'tenant' NOSUPERUSER NOCREATEDB INHERIT LOGIN; " +
-		"  END IF; " +
-		"END " +
-		"$$; " +
-		"CREATE SCHEMA IF NOT EXISTS crosslink_broker AUTHORIZATION crosslink_broker; " +
-		"SET search_path TO crosslink_broker;"
+	const setupSQL = `
+        DO $$ 
+        BEGIN 
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {{.Literal}}) THEN 
+                CREATE ROLE {{.Identifier}} WITH PASSWORD 'tenant' LOGIN; 
+            END IF; 
+        END 
+        $$; 
+        CREATE SCHEMA IF NOT EXISTS {{.Identifier}} AUTHORIZATION {{.Identifier}};
+        SET search_path TO {{.Identifier}};`
 
-	_, err = db.Exec(script)
+	tmpl, err := template.New("setup").Parse(setupSQL)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	data := struct {
+		Literal    string
+		Identifier string
+	}{
+		Literal:    pq.QuoteLiteral(DB_SCHEMA),
+		Identifier: pq.QuoteIdentifier(DB_SCHEMA),
+	}
+
+	if err = tmpl.Execute(&buf, data); err != nil {
+		return err
+	}
+
+	_, err = db.Exec(buf.String())
 	if err != nil {
 		return fmt.Errorf("error executing script: %w", err)
 	}
