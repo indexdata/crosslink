@@ -75,6 +75,7 @@ Configuration is provided via environment variables:
 | `DB_HOST`                 | Database host                                                                         | `localhost`                               |
 | `DB_DATABASE`             | Database name                                                                         | `crosslink`                               |
 | `DB_PORT`                 | Database port                                                                         | `25432`                                   |
+| `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
 | `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
 | `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
 | `BROKER_MODE`             | Default broker mode if not configured for a peer: `opaque` or `transparent`           | `opaque`                                  |
