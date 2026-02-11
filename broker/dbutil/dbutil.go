@@ -9,10 +9,12 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const SchemaParam = "&search_path=crosslink_broker"
+var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
+var SchemaParam = "&search_path=" + DB_SCHEMA
 
 func GetConnectionString(typ, user, pass, host, port, db string) string {
 	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable"+SchemaParam, typ, user, pass, host, port, db)
