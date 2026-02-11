@@ -29,6 +29,7 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 
 func TestMain(m *testing.M) {
 	ctx, pgc, connStr, err := test.StartPGContainer()
+	connStr = connStr + dbutil.SchemaParam
 	test.Expect(err, "failed to start db container")
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)

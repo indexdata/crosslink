@@ -61,3 +61,8 @@ Charts use the `LoadBalancer` service type by default, you can change this durin
 ```
 --set service.type=ClusterIP
 ```
+
+For any installation, the application database user must have privileges to create schemas in the database
+(for example, the `CREATE` privilege on the database or the ability to run `CREATE SCHEMA`).
+Database migrations will create and update all required tables and other objects in the `crosslink_broker` schema,
+which is selected via the PostgreSQL `search_path`.
