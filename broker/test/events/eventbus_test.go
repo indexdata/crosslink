@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	err = app.RunMigrateScripts()
 	test.Expect(err, "failed to run migrations")
 
-	dbPool, err := dbutil.InitDbPool(connStr)
+	dbPool, err := dbutil.InitDbPool(connStr + app.ConnectionStringSchema)
 	test.Expect(err, "failed to init db pool")
 
 	eventRepo = app.CreateEventRepo(dbPool)
@@ -73,7 +73,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	receivedAr := make([][]events.Event, noPools)
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
-		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString + app.ConnectionStringSchema)
 		assert.NoError(t, err, "failed to init db pool")
 		defer dbPool.Close()
 
@@ -130,7 +130,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	receivedAr := make([][]events.Event, noPools)
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
-		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString + app.ConnectionStringSchema)
 		assert.NoError(t, err, "failed to init db pool")
 		defer dbPool.Close()
 

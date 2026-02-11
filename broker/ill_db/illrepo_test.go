@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 	ctx, pgc, connStr, err := test.StartPGContainer()
 	test.Expect(err, "failed to start db container")
 	pgIllRepo := new(PgIllRepo)
-	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
+	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr + "&search_path=crosslink_broker")
 	test.Expect(err, "failed to create ill repo")
 	defer pgIllRepo.Pool.Close()
 	_, _, _, err = dbutil.RunMigrateScripts("file://../migrations", connStr)

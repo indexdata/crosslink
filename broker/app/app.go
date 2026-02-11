@@ -48,6 +48,7 @@ var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var ConnectionStringSchema = "&search_path=crosslink_broker"
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
@@ -264,7 +265,7 @@ func RunMigrateScripts() error {
 }
 
 func InitDbPool() (*pgxpool.Pool, error) {
-	dbPool, err := dbutil.InitDbPool(ConnectionString)
+	dbPool, err := dbutil.InitDbPool(ConnectionString + ConnectionStringSchema)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create pool to database: %w", err)
 	}
@@ -278,7 +279,7 @@ func CreateEventRepo(dbPool *pgxpool.Pool) events.EventRepo {
 }
 
 func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
-	eventBus := events.NewPostgresEventBus(eventRepo, ConnectionString)
+	eventBus := events.NewPostgresEventBus(eventRepo, ConnectionString+ConnectionStringSchema)
 	return eventBus
 }
 
