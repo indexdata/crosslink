@@ -66,15 +66,16 @@ func initDBSchema(connStr string) error {
 	defer db.Close()
 
 	const setupSQL = `
-        DO $$ 
-        BEGIN 
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {{.Literal}}) THEN 
-                CREATE ROLE {{.Identifier}} WITH PASSWORD 'tenant' LOGIN; 
-            END IF; 
-        END 
-        $$; 
-        CREATE SCHEMA IF NOT EXISTS {{.Identifier}} AUTHORIZATION {{.Identifier}};
-        SET search_path TO {{.Identifier}};`
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {{.Literal}}) THEN
+                CREATE ROLE {{.Identifier}} WITH PASSWORD 'tenant' LOGIN;
+                ALTER ROLE {{.Identifier}} SET search_path = {{.Identifier}};
+                GRANT {{.Identifier}} TO CURRENT_USER;
+            END IF;
+        END
+        $$;
+        CREATE SCHEMA IF NOT EXISTS {{.Identifier}} AUTHORIZATION {{.Identifier}};`
 
 	tmpl, err := template.New("setup").Parse(setupSQL)
 	if err != nil {
