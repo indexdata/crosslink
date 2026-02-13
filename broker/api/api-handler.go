@@ -136,7 +136,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	}
 	resp.About.Count = fullCount
 	for _, event := range eventList {
-		resp.Items = append(resp.Items, toApiEvent(event))
+		resp.Items = append(resp.Items, ToApiEvent(event, event.IllTransactionID, nil))
 	}
 	writeJsonResponse(w, resp)
 }
@@ -666,15 +666,16 @@ func addNotFoundError(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func toApiEvent(event events.Event) oapi.Event {
+func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {
 	api := oapi.Event{
 		Id:               event.ID,
 		Timestamp:        event.Timestamp.Time,
-		IllTransactionID: event.IllTransactionID,
+		IllTransactionID: illId,
 		EventType:        string(event.EventType),
 		EventName:        string(event.EventName),
 		EventStatus:      string(event.EventStatus),
 		ParentID:         toString(event.ParentID),
+		PatronRequestID:  prId,
 	}
 	eventData := utils.Must(common.StructToMap(event.EventData))
 	api.EventData = &eventData

@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
@@ -29,15 +30,18 @@ type PatronRequestApiHandler struct {
 	limitDefault         int32
 	prRepo               pr_db.PrRepo
 	eventBus             events.EventBus
+	eventRepo            events.EventRepo
 	actionMappingService prservice.ActionMappingService
 	tenant               common.Tenant
 }
 
-func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
+func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
+	eventRepo events.EventRepo, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
+		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{},
 		tenant:               tenant,
 	}
@@ -378,6 +382,40 @@ func (a *PatronRequestApiHandler) ConfirmActionProcess(ctx common.ExtendedContex
 		writeJsonResponse(*waitingRequest.w, result)
 		waitingRequest.wg.Done()
 	}
+}
+
+func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id, "symbol": symbol}
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	if pr == nil {
+		addNotFoundError(w)
+		return
+	}
+	events, err := a.eventRepo.GetPatronRequestEvents(ctx, pr.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+
+	var responseItems []oapi.Event
+	for _, event := range events {
+		responseItems = append(responseItems, api.ToApiEvent(event, "", &event.PatronRequestID))
+	}
+	writeJsonResponse(w, responseItems)
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {

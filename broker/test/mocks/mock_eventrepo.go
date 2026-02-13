@@ -88,6 +88,13 @@ func (r *MockEventRepositorySuccess) GetLatestRequestEventByAction(ctx common.Ex
 	}, nil
 }
 
+func (r *MockEventRepositorySuccess) GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]events.Event, error) {
+	return []events.Event{{
+		ID:              uuid.New().String(),
+		PatronRequestID: id,
+	}}, nil
+}
+
 type MockEventRepositoryError struct {
 	mock.Mock
 }
@@ -130,4 +137,8 @@ func (r *MockEventRepositoryError) DeleteEventsByIllTransaction(ctx common.Exten
 
 func (r *MockEventRepositoryError) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
+}
+
+func (r *MockEventRepositoryError) GetPatronRequestEvents(ctx common.ExtendedContext, id string) ([]events.Event, error) {
+	return []events.Event{}, errors.New("DB error")
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/directory"
@@ -375,12 +376,25 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, string(prservice.BorrowerStateCompleted), foundPr.State)
 
+	// Check requester patron request event count
+	respBytes = httpRequest(t, "GET", requesterPrPath+"/events"+queryParams, []byte{}, 200)
+	var events []oapi.Event
+	err = json.Unmarshal(respBytes, &events)
+	assert.NoError(t, err, "failed to unmarshal patron request events")
+	assert.True(t, len(events) > 5)
+
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath+supQueryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, supPr.ID, foundPr.Id)
 	assert.Equal(t, string(prservice.LenderStateCompleted), foundPr.State)
+
+	// Check supplier patron request event count
+	respBytes = httpRequest(t, "GET", supplierPrPath+"/events"+supQueryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &events)
+	assert.NoError(t, err, "failed to unmarshal patron request events")
+	assert.True(t, len(events) > 5)
 }
 
 func TestGetReturnableStateModel(t *testing.T) {
