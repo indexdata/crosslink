@@ -413,7 +413,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 
 	var responseItems []oapi.Event
 	for _, event := range events {
-		responseItems = append(responseItems, toApiEvent(event))
+		responseItems = append(responseItems, api.ToApiEvent(event, "", &event.PatronRequestID))
 	}
 	writeJsonResponse(w, responseItems)
 }
@@ -537,21 +537,4 @@ func getDbText(value *string) pgtype.Text {
 type RequestWait struct {
 	w  *http.ResponseWriter
 	wg *sync.WaitGroup
-}
-
-func toApiEvent(event events.Event) oapi.Event {
-	api := oapi.Event{
-		Id:              event.ID,
-		Timestamp:       event.Timestamp.Time,
-		PatronRequestID: &event.PatronRequestID,
-		EventType:       string(event.EventType),
-		EventName:       string(event.EventName),
-		EventStatus:     string(event.EventStatus),
-		ParentID:        toString(event.ParentID),
-	}
-	eventData := utils.Must(common.StructToMap(event.EventData))
-	api.EventData = &eventData
-	resultData := utils.Must(common.StructToMap(event.ResultData))
-	api.ResultData = &resultData
-	return api
 }
