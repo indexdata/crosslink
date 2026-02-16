@@ -1,0 +1,34 @@
+meta {
+  name: Lending side ship
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "ship"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,49 @@
+meta {
+  name: Create borrowing side PR
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/patron_requests
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "illRequest": {"bibliographicInfo":{ "supplierUniqueRecordId": "return-{{supplierSymbol}}"}},
+      "id": "{{prId}}",
+      "patron": "patron1234",
+      "side": "borrowing",
+      "state": "NEW",
+      "simestamp": "{{currentTimestamp}}",
+      "requesterSymbol": "ISIL:REQ"
+  }
+}
+
+script:pre-request {
+  const now = new Date();
+  let isoTimestamp = now.toISOString();
+  let formattedTimestamp = isoTimestamp.substring(0, isoTimestamp.indexOf('.')) + 'Z';
+  bru.setEnvVar("currentTimestamp", formattedTimestamp);
+}
+
+script:post-response {
+  var jsonData = JSON.parse(JSON.stringify(res.getBody()));
+  bru.setEnvVar("prId", jsonData.ID);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

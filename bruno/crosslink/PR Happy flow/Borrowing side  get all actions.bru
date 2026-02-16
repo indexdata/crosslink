@@ -1,0 +1,28 @@
+meta {
+  name: Borrowing side  get all actions
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{host}}/patron_requests/{{prId}}/actions?side=borrowing
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+settings {
+  encodeUrl: true
+}

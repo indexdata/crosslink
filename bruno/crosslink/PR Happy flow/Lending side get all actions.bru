@@ -1,0 +1,28 @@
+meta {
+  name: Lending side get all actions
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}/actions?side=lending
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+settings {
+  encodeUrl: true
+}
