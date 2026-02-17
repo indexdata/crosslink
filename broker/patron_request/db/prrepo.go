@@ -16,6 +16,12 @@ type PrRepo interface {
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
 	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
 	GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error)
+	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
+	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
+	GetItemByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
+	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
+	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
+	GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error)
 }
 
 type PgPrRepo struct {
@@ -88,4 +94,42 @@ func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.
 
 func (r *PgPrRepo) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
 	return r.queries.GetNextHrid(ctx, r.GetConnOrTx(), strings.ToUpper(prefix))
+}
+
+func (r *PgPrRepo) SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error) {
+	row, err := r.queries.SaveItem(ctx, r.GetConnOrTx(), params)
+	return row.Item, err
+}
+
+func (r *PgPrRepo) GetItemById(ctx common.ExtendedContext, id string) (Item, error) {
+	row, err := r.queries.GetItemById(ctx, r.GetConnOrTx(), id)
+	return row.Item, err
+}
+
+func (r *PgPrRepo) GetItemByPrId(ctx common.ExtendedContext, prId string) ([]Item, error) {
+	rows, err := r.queries.GetItemsByPrId(ctx, r.GetConnOrTx(), prId)
+	var list []Item
+	for _, row := range rows {
+		list = append(list, row.Item)
+	}
+	return list, err
+}
+
+func (r *PgPrRepo) SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error) {
+	row, err := r.queries.SaveNotification(ctx, r.GetConnOrTx(), params)
+	return row.Notification, err
+}
+
+func (r *PgPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error) {
+	row, err := r.queries.GetNotificationById(ctx, r.GetConnOrTx(), id)
+	return row.Notification, err
+}
+
+func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error) {
+	rows, err := r.queries.GetNotificationsByPrId(ctx, r.GetConnOrTx(), prId)
+	var list []Notification
+	for _, row := range rows {
+		list = append(list, row.Notification)
+	}
+	return list, err
 }
