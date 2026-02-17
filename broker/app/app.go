@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"log/slog"
 	"math"
@@ -200,7 +199,7 @@ func StartServer(ctx Context) error {
 	ServeMux.HandleFunc("DELETE /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
 	ServeMux.HandleFunc("GET /v3/open-api.yaml", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-yaml")
-		http.ServeFile(w, r, "oapi/open-api.yaml")
+		_, _ = w.Write(oapi.OpenAPISpecYAML)
 	})
 
 	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
