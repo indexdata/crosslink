@@ -296,7 +296,10 @@ func writeResponse(ctx common.ExtendedContext, resmsg *iso18626.ISO18626Message,
 	}
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
-	w.Write(output)
+	// #nosec G705 -- response is serialized with encoding/xml, which escapes unsafe content.
+	if _, err = w.Write(output); err != nil {
+		ctx.Logger().Warn("failed to write response", "error", err)
+	}
 }
 
 func handleRequestError(ctx common.ExtendedContext, w http.ResponseWriter, request *iso18626.Request, errorType iso18626.TypeErrorType, errorValue ErrorValue) {
