@@ -3,7 +3,7 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 COVERAGE=coverage.out
-.PHONY: all generate lint check clean
+.PHONY: all generate lint check clean deps-update
 
 all:
 
@@ -18,6 +18,10 @@ lint: generate
 
 check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy
 
 clean:
 	rm -f $(COVERAGE)

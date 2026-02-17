@@ -8,7 +8,7 @@ OAPI_SPEC = directory_api.yaml
 OAPI_GEN = directory_gen.go
 COVERAGE=coverage.out
 
-.PHONY: all generate lint check clean
+.PHONY: all generate lint check clean deps-update
 
 all: generate
 
@@ -25,3 +25,7 @@ check: generate
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy
