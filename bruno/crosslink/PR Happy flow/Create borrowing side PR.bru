@@ -41,9 +41,10 @@ script:pre-request {
 
 script:post-response {
   const json = res.getBody()
-  bru.setVar("prId", json['id'])
+  bru.setVar("prId", json.id)
 }
 
 settings {
   encodeUrl: true
+  timeout: 0
 }
