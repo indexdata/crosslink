@@ -31,9 +31,9 @@ func TestBadUrlChar(t *testing.T) {
 
 func TestBadConnectionRefused(t *testing.T) {
 	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	l, err := net.ListenTCP("tcp", addr)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	port := strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
 	err = l.Close()
 	assert.NoError(t, err, "failed to close listener")
@@ -62,7 +62,7 @@ func TestServerBadContentType(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		var output []byte
 		_, err := w.Write(output)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -77,27 +77,27 @@ func TestPostXml(t *testing.T) {
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "application/xml", r.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(r.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, buf)
 		var request myType
 		err = xml.Unmarshal(buf, &request)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, "hello", request.Msg)
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		var response myType
 		response.Msg = "world"
 		output, err := xml.Marshal(response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		_, err = w.Write(output)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var request, response myType
 	request.Msg = "hello"
 	err := NewClient().PostXml(http.DefaultClient, server.URL, request, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
 
@@ -110,15 +110,15 @@ func TestServerApplicationXml(t *testing.T) {
 		var response myType
 		response.Msg = "world"
 		output, err := xml.Marshal(response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		_, err = w.Write(output)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
 	err := NewClient().GetXml(http.DefaultClient, server.URL, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
 
@@ -131,15 +131,15 @@ func TestServerTextXml(t *testing.T) {
 		var response myType
 		response.Msg = "world"
 		output, err := xml.Marshal(response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		_, err = w.Write(output)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
 	err := NewClient().GetXml(http.DefaultClient, server.URL, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "world", response.Msg)
 }
 
@@ -151,7 +151,7 @@ func TestServerBrokenPipe(t *testing.T) {
 	url := "http://localhost:" + strconv.Itoa(port)
 	go func() {
 		conn, err := ln.Accept()
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		conn = conn.(*net.TCPConn)
 		defer func() {
 			dErr := conn.Close()
@@ -159,16 +159,15 @@ func TestServerBrokenPipe(t *testing.T) {
 		}()
 		var buf [100]byte
 		n, err := conn.Read(buf[:])
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Greater(t, n, 10)
 		// length is 2 but only 1 byte sent
 		n, err = conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: text/xml\r\n\r\nX"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Greater(t, n, 20)
 	}()
 	var request, response myType
 	err = NewClient().PostXml(http.DefaultClient, url, request, &response)
-	assert.Error(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
 }
 
@@ -195,18 +194,18 @@ func TestCustomHeader(t *testing.T) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
 	err := NewClient().WithHeaders(headerName, "tenant", "empty", "", "novalue").
 		GetXml(http.DefaultClient, server.URL, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "OK", response.Msg)
 	err = (&HttpClient{}).WithHeaders(headerName, "tenant", "empty", "", "", "").
 		GetXml(http.DefaultClient, server.URL, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "OK", response.Msg)
 }
 
@@ -215,13 +214,12 @@ func TestMaxSize(t *testing.T) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte("<myType><msg>OK</msg></myType>"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	var response myType
 	err := NewClient().WithMaxSize(1).
 		GetXml(http.DefaultClient, server.URL, &response)
-	assert.NotNil(t, err)
 	assert.ErrorContains(t, err, "response body too large")
 }
