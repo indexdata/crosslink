@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/indexdata/crosslink/illmock/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -145,10 +144,13 @@ func TestServerTextXml(t *testing.T) {
 }
 
 func TestServerBrokenPipe(t *testing.T) {
-	l := testutil.GetFreeListener(t)
-	url := "http://localhost:" + strconv.Itoa(l.Addr().(*net.TCPAddr).Port)
+	ln, err := net.Listen("tcp", ":0")
+	assert.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	url := "http://localhost:" + strconv.Itoa(port)
 	go func() {
-		conn, err := l.Accept()
+		conn, err := ln.Accept()
 		assert.Nil(t, err)
 		conn = conn.(*net.TCPConn)
 		defer func() {
@@ -165,8 +167,8 @@ func TestServerBrokenPipe(t *testing.T) {
 		assert.Greater(t, n, 20)
 	}()
 	var request, response myType
-	err := NewClient().PostXml(http.DefaultClient, url, request, &response)
-	assert.NotNil(t, err)
+	err = NewClient().PostXml(http.DefaultClient, url, request, &response)
+	assert.Error(t, err)
 	assert.ErrorContains(t, err, "read: connection reset by peer")
 }
 
