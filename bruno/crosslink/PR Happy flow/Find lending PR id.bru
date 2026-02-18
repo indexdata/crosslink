@@ -28,8 +28,8 @@ script:post-response {
   const responseData = res.getBody();
   const targetPrId = bru.getVar("prId");
   const withReqId = responseData.items.filter(pr => {
-      const ill = pr.IllRequest;
-      const header = ill && ill.Header;
+      const ill = pr.illRequest;
+      const header = ill && ill.header;
       const requestingId = header && header.requestingAgencyRequestId;
   
       return requestingId === targetPrId;
