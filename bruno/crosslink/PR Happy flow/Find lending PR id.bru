@@ -1,0 +1,47 @@
+meta {
+  name: Find lending PR id
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/patron_requests?side=lending&limit=100
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+  limit: 100
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  const responseData = res.getBody();
+  const targetPrId = bru.getVar("prId");
+  const withReqId = responseData.items.filter(pr => {
+      const ill = pr.illRequest;
+      const header = ill && ill.header;
+      const requestingId = header && header.requestingAgencyRequestId;
+  
+      return requestingId === targetPrId;
+  });
+  test("Check if found lending PR", () => {
+      expect(withReqId.length).to.be.at.least(1);
+  });
+  
+  bru.setEnvVar("lendingPrId", withReqId[0].id);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "PR Happy flow",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

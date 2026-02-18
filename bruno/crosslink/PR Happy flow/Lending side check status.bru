@@ -1,0 +1,34 @@
+meta {
+  name: Lending side check status
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  test("Check if found lending PR", () => {
+      expect(res.getBody().State).to.eql("COMPLETED");
+  });
+}
+
+settings {
+  encodeUrl: true
+}
