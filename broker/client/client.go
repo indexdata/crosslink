@@ -243,7 +243,9 @@ func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626
 }
 
 func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
-	if len(message.Request.SupplierInfo) == 0 {
+	if len(message.Request.SupplierInfo) == 0 ||
+		//also if supplier empty, replace it
+		len(message.Request.SupplierInfo) == 1 && message.Request.SupplierInfo[0].SupplierCode == nil && message.Request.SupplierInfo[0].SupplierDescription == "" {
 		var sb strings.Builder
 		shim.MarshalReturnLabel(&sb, name, &address)
 		suppInfo := iso18626.SupplierInfo{

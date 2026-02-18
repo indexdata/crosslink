@@ -244,7 +244,11 @@ func TestPopulateSupplierAddress(t *testing.T) {
 
 func TestPopulateSupplierInfo(t *testing.T) {
 	message := iso18626.ISO18626Message{
-		Request: &iso18626.Request{},
+		Request: &iso18626.Request{
+			SupplierInfo: []iso18626.SupplierInfo{
+				{},
+			},
+		},
 	}
 	name := "Supplier 1"
 	address := iso18626.PhysicalAddress{
