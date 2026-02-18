@@ -829,7 +829,7 @@ func TestHandleIllMessage(t *testing.T) {
 	}
 
 	// To local peer
-	_, err := client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(common.VendorCrosslink)}, &sam)
+	_, err := client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(common.VendorCrossLink)}, &sam)
 	assert.Equal(t, "searching pr with id=req-1", err.Error())
 
 	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, &sam)

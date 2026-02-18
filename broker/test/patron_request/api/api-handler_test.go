@@ -86,7 +86,7 @@ func TestCrud(t *testing.T) {
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrosslink,
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})
@@ -201,14 +201,14 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrosslink, directory.Entry{})
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink, directory.Entry{})
 	assert.NotNil(t, reqPeer)
 
 	lmsConfig := &directory.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrosslink,
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})

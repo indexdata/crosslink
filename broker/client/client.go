@@ -446,7 +446,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
-	if strings.EqualFold(peer.Vendor, string(common.VendorCrosslink)) {
+	if strings.EqualFold(peer.Vendor, string(common.VendorCrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg)
 	}
 	return c.SendHttpPost(peer, msg)
