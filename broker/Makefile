@@ -36,7 +36,7 @@ PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
 PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage deps-update
 
 all: $(BINARY) archive
 
@@ -89,6 +89,10 @@ view-coverage: check
 
 check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy
 
 clean:
 	$(GO) clean -testcache

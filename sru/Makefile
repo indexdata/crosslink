@@ -10,7 +10,7 @@ GEN_FILES = sru_gen.go \
 	xcql/xcql_gen.go \
 	scan/scan_gen.go
 
-.PHONY: all generate generate-schema lint check clean
+.PHONY: all generate generate-schema lint check clean deps-update
 XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
 
 define nsImports
@@ -64,3 +64,7 @@ check: generate
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy

@@ -12,3 +12,28 @@ services:
       - "25432:5432"
     volumes:
       - ./pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crosslink -d crosslink"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  broker:
+    build:
+      context: ..
+      dockerfile: broker/Dockerfile
+    container_name: crosslink_broker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_PORT: 8081
+      DB_TYPE: postgres
+      DB_USER: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+    ports:
+      - "8081:8081"

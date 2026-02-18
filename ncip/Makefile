@@ -7,7 +7,7 @@ GEN_SCHEMA_IN=xsd/ncip_v2_02.xsd
 GEN_SCHEMA_OUT=ncip_gen.go
 COVERAGE=coverage.out
 
-.PHONY: all generate generate-schema lint check clean
+.PHONY: all generate generate-schema lint check clean deps-update
 XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
 
 all: generate
@@ -31,3 +31,7 @@ check: generate
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy

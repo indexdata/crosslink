@@ -18,5 +18,8 @@ broker/**/*_test.go
 # Include migrations
 !broker/migrations/**
 
+# Include OpenAPI specs
+!broker/oapi/*.yaml
+
 # Include statemodels
 !broker/patron_request/service/statemodels

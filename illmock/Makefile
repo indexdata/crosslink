@@ -10,7 +10,7 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage
+.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update
 
 all: $(PROGRAMS)
 
@@ -47,6 +47,10 @@ doc: README.html
 
 README.html: README.md
 	pandoc $< -o $@
+
+deps-update:
+	$(GO) get -u ./...
+	$(GO) mod tidy
 
 clean:
 	$(GO) clean -testcache
