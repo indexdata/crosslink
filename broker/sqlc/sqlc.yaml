@@ -76,3 +76,9 @@ sql:
           - column: "patron_request.side"
             go_type:
               type: "PatronRequestSide"
+          - column: "notification.side"
+            go_type:
+              type: "PatronRequestSide"
+          - column: "notification.receipt"
+            go_type:
+              type: "NotificationReceipt"
