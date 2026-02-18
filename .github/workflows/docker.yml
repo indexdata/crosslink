@@ -1,5 +1,9 @@
 name: publish-image
 
+concurrency:
+  group: publish-image-${{ github.event.workflow_run.head_branch || github.ref_name || 'manual' }}
+  cancel-in-progress: true
+
 
 on:
   workflow_dispatch:
@@ -35,6 +39,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          # For workflow_run, build exactly the commit that completed build-test.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
