@@ -26,16 +26,11 @@ body:json {
       "patron": "patron1234",
       "side": "borrowing",
       "state": "NEW",
-      "simestamp": "{{currentTimestamp}}",
       "requesterSymbol": "ISIL:REQ"
   }
 }
 
 script:pre-request {
-  const now = new Date();
-  let isoTimestamp = now.toISOString();
-  let formattedTimestamp = isoTimestamp.substring(0, isoTimestamp.indexOf('.')) + 'Z';
-  bru.setEnvVar("currentTimestamp", formattedTimestamp);
   bru.setVar("prId", "{{$randomUUID}}")
 }
 
