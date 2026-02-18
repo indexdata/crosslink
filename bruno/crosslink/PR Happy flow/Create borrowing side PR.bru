@@ -36,14 +36,14 @@ script:pre-request {
   let isoTimestamp = now.toISOString();
   let formattedTimestamp = isoTimestamp.substring(0, isoTimestamp.indexOf('.')) + 'Z';
   bru.setEnvVar("currentTimestamp", formattedTimestamp);
+  bru.setVar("prId", "{{$randomUUID}}")
 }
 
 script:post-response {
-  var jsonData = JSON.parse(JSON.stringify(res.getBody()));
-  bru.setEnvVar("prId", jsonData.ID);
+  const json = res.getBody()
+  bru.setVar("prId", json['id'])
 }
 
 settings {
   encodeUrl: true
-  timeout: 0
 }

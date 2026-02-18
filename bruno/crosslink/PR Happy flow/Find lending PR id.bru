@@ -26,7 +26,7 @@ auth:basic {
 
 script:post-response {
   const responseData = res.getBody();
-  const targetPrId = bru.getEnvVar("prId");
+  const targetPrId = bru.getVar("prId");
   const withReqId = responseData.items.filter(pr => {
       const ill = pr.IllRequest;
       const header = ill && ill.Header;
@@ -38,9 +38,10 @@ script:post-response {
       expect(withReqId.length).to.be.at.least(1);
   });
   
-  bru.setEnvVar("lendingPrId", withReqId[0].ID);
+  bru.setEnvVar("lendingPrId", withReqId[0].id);
 }
 
 settings {
   encodeUrl: true
+  timeout: 0
 }
