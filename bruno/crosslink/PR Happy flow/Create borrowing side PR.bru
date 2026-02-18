@@ -21,7 +21,11 @@ auth:basic {
 
 body:json {
   {
-      "illRequest": {"bibliographicInfo":{ "supplierUniqueRecordId": "return-{{supplierSymbol}}"}},
+      "illRequest": {
+        "bibliographicInfo": {
+          "supplierUniqueRecordId": "return-{{supplierSymbol}}"
+        }
+      },
       "id": "{{prId}}",
       "patron": "patron1234",
       "side": "borrowing",
