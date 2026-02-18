@@ -828,12 +828,15 @@ func TestHandleIllMessage(t *testing.T) {
 		},
 	}
 
-	// To local peer
-	_, err := client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(common.VendorCrossLink)}, &sam)
-	assert.Equal(t, "searching pr with id=req-1", err.Error())
+	_, err := client.HandleIllMessage(appCtx, nil, &sam)
+	assert.EqualError(t, err, "peer is nil")
+
+	// To internal peer
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(common.VendorCrossLink)}, &sam)
+	assert.EqualError(t, err, "searching pr with id=req-1")
 
 	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, &sam)
-	assert.Equal(t, "Post \"\": unsupported protocol scheme \"\"", err.Error())
+	assert.EqualError(t, err, "Post \"\": unsupported protocol scheme \"\"")
 }
 
 type MockPrRepo struct {
