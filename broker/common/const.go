@@ -12,7 +12,7 @@ type Vendor string
 const (
 	VendorAlma      Vendor = "Alma"
 	VendorReShare   Vendor = "ReShare"
-	VendorCrosslink Vendor = "Crosslink"
+	VendorCrosslink Vendor = "CrossLink"
 	VendorUnknown   Vendor = "Unknown"
 )
 
