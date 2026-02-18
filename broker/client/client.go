@@ -443,11 +443,13 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 }
 
 func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
-	if strings.Contains(peer.Name, "local") { // TODO Implement real check of local peer
-		return c.prMessageHandler.HandleMessage(ctx, msg)
-	} else {
-		return c.SendHttpPost(peer, msg)
+	if peer == nil {
+		return nil, fmt.Errorf("peer is nil")
 	}
+	if strings.EqualFold(peer.Vendor, string(common.VendorCrossLink)) {
+		return c.prMessageHandler.HandleMessage(ctx, msg)
+	}
+	return c.SendHttpPost(peer, msg)
 }
 
 func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {

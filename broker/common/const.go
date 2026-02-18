@@ -10,9 +10,10 @@ const (
 type Vendor string
 
 const (
-	VendorAlma    Vendor = "Alma"
-	VendorReShare Vendor = "ReShare"
-	VendorUnknown Vendor = "Unknown"
+	VendorAlma      Vendor = "Alma"
+	VendorReShare   Vendor = "ReShare"
+	VendorCrossLink Vendor = "CrossLink"
+	VendorUnknown   Vendor = "Unknown"
 )
 
 const DO_NOT_SEND = "doNotSend"
