@@ -680,7 +680,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), common.VendorAlma, directory.Entry{})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{})
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,

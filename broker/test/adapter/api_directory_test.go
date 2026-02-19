@@ -151,6 +151,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Equal(t, entries[0].Vendor, directory.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
@@ -165,6 +166,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Equal(t, entries[0].Vendor, directory.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 }
 

@@ -71,7 +71,12 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 			}
 		}
 		if apiUrl != "" && len(symbols) > 0 {
-			vendor := GetVendorFromUrl(apiUrl)
+			var vendor directory.EntryVendor
+			if d.Vendor != nil {
+				vendor = directory.EntryVendor(*d.Vendor)
+			} else {
+				vendor = GetVendorFromUrl(apiUrl)
+			}
 			entry := DirectoryEntry{
 				Name:       d.Name,
 				Symbols:    symbols,
@@ -315,21 +320,21 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 	return tiers
 }
 
-func GetVendorFromUrl(url string) common.Vendor {
+func GetVendorFromUrl(url string) directory.EntryVendor {
 	if strings.Contains(url, "alma.exlibrisgroup.com") {
-		return common.VendorAlma
+		return directory.Alma
 	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
-		return common.VendorReShare
+		return directory.ReShare
 	} else {
-		return common.VendorUnknown
+		return directory.Unknown
 	}
 }
 
-func GetBrokerMode(vendor common.Vendor) common.BrokerMode {
+func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
 	switch vendor {
-	case common.VendorAlma:
+	case directory.Alma:
 		return common.BrokerModeOpaque
-	case common.VendorReShare:
+	case directory.ReShare:
 		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE

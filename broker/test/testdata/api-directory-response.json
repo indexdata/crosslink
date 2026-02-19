@@ -3,6 +3,7 @@
     {
       "description": "nalb",
       "email": "interlibrary@alburycity.nsw.gov.au",
+      "vendor": "ReShare",
       "endpoints": [
         {
           "address": "http://localhost:8083/iso18626",
