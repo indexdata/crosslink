@@ -243,7 +243,7 @@ func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626
 }
 
 func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
-	if len(message.Request.SupplierInfo) == 0 {
+	if isEmptySupplierInfo(message.Request.SupplierInfo) {
 		var sb strings.Builder
 		shim.MarshalReturnLabel(&sb, name, &address)
 		suppInfo := iso18626.SupplierInfo{
@@ -252,6 +252,17 @@ func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agency
 		}
 		message.Request.SupplierInfo = []iso18626.SupplierInfo{suppInfo}
 	}
+}
+
+func isEmptySupplierInfo(suppInfoList []iso18626.SupplierInfo) bool {
+	for _, info := range suppInfoList {
+		zero := iso18626.SupplierInfo{}
+		zero.XMLName = info.XMLName
+		if info != zero {
+			return false
+		}
+	}
+	return true
 }
 
 func isDoNotSend(event events.Event) bool {
