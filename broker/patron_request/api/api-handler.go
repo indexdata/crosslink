@@ -189,7 +189,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
-			addBadRequestError(ctx, w, errors.New("a patron request with the same requester_request_id already exists for this requester"))
+			addBadRequestError(ctx, w, errors.New("a patron request with this ID already exists"))
 			return
 		}
 		addInternalError(ctx, w, err)

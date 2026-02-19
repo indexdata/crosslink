@@ -130,7 +130,7 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
-	assert.Contains(t, string(respBytes), "a patron request with the same requester_request_id already exists for this requester")
+	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
 
 	// GET list
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
