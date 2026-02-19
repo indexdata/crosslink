@@ -212,6 +212,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = "http"
+	}
+	w.Header().Set("Location", scheme+"://"+r.Host+r.URL.Path+"/"+pr.ID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, illRequest))
