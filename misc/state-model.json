@@ -112,6 +112,7 @@
         "Action": {
             "type": "object",
             "additionalProperties": false,
+            "description": "Declares an action available while in this state.",
             "properties": {
                 "name": {
                     "type": "string",
@@ -121,11 +122,28 @@
                     "type": "string",
                     "description": "Description of the action"
                 },
+                "trigger": {
+                    "type": "string",
+                    "description": "Trigger for the action",
+                    "enum": [
+                        "auto",
+                        "manual"
+                    ],
+                    "default": "manual"
+                },
                 "transitions": {
-                    "type": "array",
-                    "description": "List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing.",
-                    "items": {
-                        "type": "string"
+                    "type": "object",
+                    "description": "Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.",
+                    "additionalProperties": false,
+                    "properties": {
+                        "success": {
+                            "type": "string",
+                            "description": "Target state when the action succeeds."
+                        },
+                        "failure": {
+                            "type": "string",
+                            "description": "Target state when the action fails."
+                        }
                     }
                 }
             },
@@ -137,6 +155,7 @@
         "Event": {
             "type": "object",
             "additionalProperties": false,
+            "description": "Declares an event considered for transition while in this state.",
             "properties": {
                 "name": {
                     "type": "string",
@@ -146,12 +165,9 @@
                     "type": "string",
                     "description": "Description of the event"
                 },
-                "transitions": {
-                    "type": "array",
-                    "description": "List of all possible state transitions after triggering the event. When no transitions are defined, the event is considered to be non-state-changing.",
-                    "items": {
-                        "type": "string"
-                    }
+                "transition": {
+                    "type": "string",
+                    "description": "State transition after event has occurred. When no transition is defined, the event is considered to be non-state-changing."
                 }
             },
             "required": [
