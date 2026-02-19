@@ -70,10 +70,10 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				}
 			}
 		}
-		if apiUrl != "" && len(symbols) > 0 {
+		if (apiUrl != "" || d.LmsConfig != nil) && len(symbols) > 0 {
 			var vendor directory.EntryVendor
 			if d.Vendor != nil {
-				vendor = directory.EntryVendor(*d.Vendor)
+				vendor = *d.Vendor
 			} else {
 				vendor = GetVendorFromUrl(apiUrl)
 			}
