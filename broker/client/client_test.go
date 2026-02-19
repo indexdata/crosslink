@@ -246,7 +246,7 @@ func TestPopulateSupplierInfo(t *testing.T) {
 	message := iso18626.ISO18626Message{
 		Request: &iso18626.Request{
 			SupplierInfo: []iso18626.SupplierInfo{
-				{},
+				{XMLName: xml.Name{Local: "supplierInfo"}},
 			},
 		},
 	}
@@ -286,6 +286,21 @@ func TestPopulateSupplierInfo(t *testing.T) {
 	assert.Equal(t, "ISIL", message.Request.SupplierInfo[0].SupplierCode.AgencyIdType.Text)
 	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, name)
 	assert.Contains(t, message.Request.SupplierInfo[0].SupplierDescription, address.Line1)
+}
+
+func TestIsEmptySupplierInfo(t *testing.T) {
+	assert.True(t, isEmptySupplierInfo(nil))
+	assert.True(t, isEmptySupplierInfo([]iso18626.SupplierInfo{
+		{XMLName: xml.Name{Local: "supplierInfo"}},
+		{XMLName: xml.Name{Local: "supplierInfo"}},
+	}))
+	assert.False(t, isEmptySupplierInfo([]iso18626.SupplierInfo{
+		{XMLName: xml.Name{Local: "supplierInfo"}},
+		{
+			XMLName:              xml.Name{Local: "supplierInfo"},
+			SupplierDescription:  "not empty",
+		},
+	}))
 }
 
 func TestValidateReason(t *testing.T) {
