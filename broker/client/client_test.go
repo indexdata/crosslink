@@ -297,8 +297,8 @@ func TestIsEmptySupplierInfo(t *testing.T) {
 	assert.False(t, isEmptySupplierInfo([]iso18626.SupplierInfo{
 		{XMLName: xml.Name{Local: "supplierInfo"}},
 		{
-			XMLName:              xml.Name{Local: "supplierInfo"},
-			SupplierDescription:  "not empty",
+			XMLName:             xml.Name{Local: "supplierInfo"},
+			SupplierDescription: "not empty",
 		},
 	}))
 }
