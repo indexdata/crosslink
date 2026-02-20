@@ -62,6 +62,9 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
+		if len(symbols) == 0 {
+			continue
+		}
 		apiUrl := ""
 		if d.Endpoints != nil {
 			for _, s := range *d.Endpoints {
@@ -70,23 +73,21 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				}
 			}
 		}
-		if (apiUrl != "" || d.LmsConfig != nil) && len(symbols) > 0 {
-			var vendor directory.EntryVendor
-			if d.Vendor != nil {
-				vendor = *d.Vendor
-			} else {
-				vendor = GetVendorFromUrl(apiUrl)
-			}
-			entry := DirectoryEntry{
-				Name:       d.Name,
-				Symbols:    symbols,
-				Vendor:     vendor,
-				BrokerMode: GetBrokerMode(vendor),
-				URL:        apiUrl,
-				CustomData: d,
-			}
-			dirEntries = append(dirEntries, entry)
+		vendor := directory.Unknown
+		if d.Vendor != nil {
+			vendor = *d.Vendor
+		} else if apiUrl != "" {
+			vendor = GetVendorFromUrl(apiUrl)
 		}
+		entry := DirectoryEntry{
+			Name:       d.Name,
+			Symbols:    symbols,
+			Vendor:     vendor,
+			BrokerMode: GetBrokerMode(vendor),
+			URL:        apiUrl,
+			CustomData: d,
+		}
+		dirEntries = append(dirEntries, entry)
 	}
 	for i := range dirEntries {
 		de := &dirEntries[i]
