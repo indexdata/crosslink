@@ -116,7 +116,7 @@ func TestCrud(t *testing.T) {
 	// Check Location header
 	location := hres.Header.Get("Location")
 	assert.NotEmpty(t, location, "Location header should be set")
-	assert.True(t, strings.HasSuffix(location, "/patron_requests/"+id), "Location header should end with /patron_requests/{id}")
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+id, location)
 
 	var foundPr proapi.PatronRequest
 	err = json.Unmarshal(respBytes, &foundPr)

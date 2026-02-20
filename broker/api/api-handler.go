@@ -854,7 +854,7 @@ func toString(text pgtype.Text) *string {
 }
 
 func ToLinkUrlValues(r *http.Request, urlValues url.Values) string {
-	return toLinkPath(r, r.URL.Path, urlValues.Encode())
+	return ToLinkPath(r, r.URL.Path, urlValues.Encode())
 }
 
 func toLink(r *http.Request, path string, id string, query string) string {
@@ -864,10 +864,10 @@ func toLink(r *http.Request, path string, id string, query string) string {
 	if id != "" {
 		path = path + "/" + id
 	}
-	return toLinkPath(r, path, query)
+	return ToLinkPath(r, path, query)
 }
 
-func toLinkPath(r *http.Request, path string, query string) string {
+func ToLinkPath(r *http.Request, path string, query string) string {
 	if query != "" {
 		path = path + "?" + query
 	}
