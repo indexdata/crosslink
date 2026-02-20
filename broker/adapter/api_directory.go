@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,7 +63,9 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
+		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 		if len(symbols) == 0 {
+			ctx.Logger().Warn("Directory entry has no symbols", "entryName", d.Name)
 			continue
 		}
 		apiUrl := ""
