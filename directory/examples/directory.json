@@ -8,6 +8,7 @@
       "type": "institution",
       "email": "test@example.com",
       "hrid": "TTTZ",
+      "vendor": "ReShare",
       "symbols": [
         {
           "id": "a804c1db-de17-5bbc-a165-8fd9cd4d8704",
