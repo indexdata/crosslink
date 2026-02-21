@@ -18,7 +18,6 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -35,7 +34,7 @@ import (
 func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
 	ctx := context.Background()
-	dbutil.DB_PROVISION = true
+	app.DB_PROVISION = true
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
 		postgres.WithUsername("crosslink"),

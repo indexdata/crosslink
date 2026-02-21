@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/app"
-	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/stretchr/testify/assert"
@@ -18,7 +17,7 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	dbutil.DB_PROVISION = true
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

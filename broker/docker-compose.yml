@@ -19,6 +19,26 @@ services:
       retries: 20
       start_period: 5s
 
+  db-up:
+    profiles: ["db-up"]
+    build:
+      context: ..
+      dockerfile: broker/Dockerfile
+    container_name: crosslink_db_up
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/broker", "db-up"]
+    environment:
+      DB_TYPE: postgres
+      DB_USER: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+      DB_PROVISION: "true"
+      DB_MIGRATE: "true"
+
   broker:
     build:
       context: ..
@@ -36,5 +56,6 @@ services:
       DB_DATABASE: crosslink
       DB_PORT: 5432
       DB_PROVISION: "true"
+      DB_MIGRATE: "true"
     ports:
       - "8081:8081"

@@ -35,14 +35,16 @@ spec:
           env:
             - name: HTTP_PORT
               value: "{{ .Values.containerPort }}"
+            - name: DB_MIGRATE
+              value: "{{ .Values.migrations.runOnStartup }}"
             {{- range $k, $v := .Values.env }}
-            {{- if ne $k "HTTP_PORT" }}
+            {{- if and (ne $k "HTTP_PORT") (ne $k "DB_MIGRATE") }}
             - name: {{ $k }}
               value: "{{ $v }}"
             {{- end }}
             {{- end }}
             {{- range $k, $v := .Values.envSecrets }}
-            {{- if ne $k "HTTP_PORT" }}
+            {{- if and (ne $k "HTTP_PORT") (ne $k "DB_MIGRATE") }}
             - name: {{ $k }}
               valueFrom:
                 secretKeyRef:
@@ -51,7 +53,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- range $k, $v := .Values.envConfigMaps }}
-            {{- if ne $k "HTTP_PORT" }}
+            {{- if and (ne $k "HTTP_PORT") (ne $k "DB_MIGRATE") }}
             - name: {{ $k }}
               valueFrom:
                 configMapKeyRef:

@@ -32,7 +32,7 @@ var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	dbutil.DB_PROVISION = true
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 
 	fmt.Print("Postgres connection string: ", connStr)
 	app.MigrationsFolder = "file://../../migrations"
-	err = app.RunMigrateScripts()
+	err = app.RunDbUp()
 	test.Expect(err, "failed to run migrations")
 
 	dbPool, err := dbutil.InitDbPool(connStr)

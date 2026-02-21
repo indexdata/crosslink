@@ -46,9 +46,12 @@ var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "crosslink")
 var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
-var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
+var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
+var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE, DB_SCHEMA)
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
+var DB_PROVISION, _ = utils.GetEnvBool("DB_PROVISION", false)
+var DB_MIGRATE, _ = utils.GetEnvBool("DB_MIGRATE", true)
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
@@ -139,7 +142,7 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	err = RunMigrateScripts()
+	err = RunDbUp()
 	if err != nil {
 		return Context{}, err
 	}
@@ -253,8 +256,23 @@ func StartServer(ctx Context) error {
 	}
 }
 
-func RunMigrateScripts() error {
-	verFrom, verTo, dirty, err := dbutil.RunMigrateScripts(MigrationsFolder, ConnectionString)
+func RunDbUp() error {
+	if !DB_PROVISION && !DB_MIGRATE {
+		appCtx.Logger().Info("DB up skipped", "dbProvision", DB_PROVISION, "dbMigrate", DB_MIGRATE)
+		return nil
+	}
+	if DB_PROVISION {
+		err := dbutil.RunDbProvision(ConnectionString, DB_SCHEMA)
+		if err != nil {
+			return fmt.Errorf("DB provision failed: err=%w", err)
+		}
+		appCtx.Logger().Info("DB provision success", "dbProvision", DB_PROVISION)
+	}
+	if !DB_MIGRATE {
+		appCtx.Logger().Info("DB migration skipped", "dbMigrate", DB_MIGRATE)
+		return nil
+	}
+	verFrom, verTo, dirty, err := dbutil.RunDbMigrations(MigrationsFolder, ConnectionString)
 	if err != nil {
 		return fmt.Errorf("DB migration failed: err=%w versionFrom=%d versionTo=%d dirty=%t", err, verFrom, verTo, dirty)
 	}

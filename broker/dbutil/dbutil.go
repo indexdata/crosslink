@@ -5,38 +5,42 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"text/template"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq"
 )
 
-var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
-var DB_PROVISION, _ = utils.GetEnvBool("DB_PROVISION", false)
-var SchemaParam = "&search_path=" + DB_SCHEMA
+func SearchPath(dbSchema string) string {
+	if dbSchema == "" {
+		return ""
+	}
+	return "&search_path=" + dbSchema
+}
 
-func GetConnectionString(typ, user, pass, host, port, db string) string {
-	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable"+SchemaParam, typ, user, pass, host, port, db)
+func GetConnectionString(typ, user, pass, host, port, db, dbSchema string) string {
+	return fmt.Sprintf("%s://%s:%s@%s:%s/%s?sslmode=disable"+SearchPath(dbSchema), typ, user, pass, host, port, db)
 }
 
 func InitDbPool(connStr string) (*pgxpool.Pool, error) {
 	return pgxpool.New(context.Background(), connStr)
 }
 
-func RunMigrateScripts(migrateDir, connStr string) (uint, uint, bool, error) {
+func RunDbProvision(connStr, dbSchema string) error {
+	if err := initDBSchema(connStr, dbSchema); err != nil {
+		return fmt.Errorf("failed to initiate schema: %w", err)
+	}
+	return nil
+}
+
+func RunDbMigrations(migrateDir, connStr string) (uint, uint, bool, error) {
 	var versionFrom, versionTo uint
 	var dirty bool
-	if DB_PROVISION {
-		err := initDBSchema(connStr)
-		if err != nil {
-			return versionFrom, versionTo, dirty, fmt.Errorf("failed to initiate schema: %w", err)
-		}
-	}
 	m, err := migrate.New(migrateDir, connStr)
 	if err != nil {
 		return versionFrom, versionTo, dirty, fmt.Errorf("failed to initiate migration: %w", err)
@@ -60,8 +64,14 @@ func RunMigrateScripts(migrateDir, connStr string) (uint, uint, bool, error) {
 	return versionFrom, versionTo, dirty, nil
 }
 
-func initDBSchema(connStr string) error {
-	connStr = strings.Replace(connStr, SchemaParam, "", 1)
+func initDBSchema(connStr, dbSchema string) error {
+	if strings.TrimSpace(dbSchema) == "" {
+		return fmt.Errorf("db schema must not be empty")
+	}
+	connStr, err := removeSearchPath(connStr)
+	if err != nil {
+		return fmt.Errorf("error removing search_path from connection string: %w", err)
+	}
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return fmt.Errorf("error opening database: : %w", err)
@@ -90,8 +100,8 @@ func initDBSchema(connStr string) error {
 		Literal    string
 		Identifier string
 	}{
-		Literal:    pq.QuoteLiteral(DB_SCHEMA),
-		Identifier: pq.QuoteIdentifier(DB_SCHEMA),
+		Literal:    pq.QuoteLiteral(dbSchema),
+		Identifier: pq.QuoteIdentifier(dbSchema),
 	}
 
 	if err = tmpl.Execute(&buf, data); err != nil {
@@ -104,4 +114,15 @@ func initDBSchema(connStr string) error {
 	}
 
 	return nil
+}
+
+func removeSearchPath(connStr string) (string, error) {
+	parsed, err := url.Parse(connStr)
+	if err != nil {
+		return "", err
+	}
+	query := parsed.Query()
+	query.Del("search_path")
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
