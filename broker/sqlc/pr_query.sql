@@ -10,19 +10,23 @@ FROM patron_request
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
 
--- name: SavePatronRequest :one
+-- name: UpdatePatronRequest :one
+UPDATE patron_request
+SET timestamp         = $2,
+    ill_request       = $3,
+    state             = $4,
+    side              = $5,
+    patron            = $6,
+    requester_symbol  = $7,
+    supplier_symbol   = $8,
+    tenant            = $9,
+    requester_req_id  = $10
+WHERE id = $1
+RETURNING sqlc.embed(patron_request);
+
+-- name: CreatePatronRequest :one
 INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (id) DO UPDATE
-    SET timestamp         = EXCLUDED.timestamp,
-        ill_request       = EXCLUDED.ill_request,
-        state             = EXCLUDED.state,
-        side              = EXCLUDED.side,
-        patron            = EXCLUDED.patron,
-        requester_symbol  = EXCLUDED.requester_symbol,
-        supplier_symbol   = EXCLUDED.supplier_symbol,
-        tenant            = EXCLUDED.tenant,
-        requester_req_id  = EXCLUDED.requester_req_id
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec
