@@ -17,6 +17,7 @@ import (
 )
 
 var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
+var DB_PROVISION, _ = utils.GetEnvBool("DB_PROVISION", false)
 var SchemaParam = "&search_path=" + DB_SCHEMA
 
 func GetConnectionString(typ, user, pass, host, port, db string) string {
@@ -30,9 +31,11 @@ func InitDbPool(connStr string) (*pgxpool.Pool, error) {
 func RunMigrateScripts(migrateDir, connStr string) (uint, uint, bool, error) {
 	var versionFrom, versionTo uint
 	var dirty bool
-	err := initDBSchema(connStr)
-	if err != nil {
-		return versionFrom, versionTo, dirty, fmt.Errorf("failed to initiate schema: %w", err)
+	if DB_PROVISION {
+		err := initDBSchema(connStr)
+		if err != nil {
+			return versionFrom, versionTo, dirty, fmt.Errorf("failed to initiate schema: %w", err)
+		}
 	}
 	m, err := migrate.New(migrateDir, connStr)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/utils"
@@ -31,6 +32,7 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 }
 
 func StartAppReturnContext(ctx context.Context) app.Context {
+	dbutil.DB_PROVISION = true
 	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {

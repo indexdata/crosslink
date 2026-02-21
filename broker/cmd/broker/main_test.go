@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	test "github.com/indexdata/crosslink/broker/test/utils"
 	"github.com/indexdata/go-utils/utils"
 	_ "github.com/lib/pq" // PostgreSQL driver
@@ -23,6 +24,7 @@ import (
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

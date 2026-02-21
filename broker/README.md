@@ -82,6 +82,7 @@ Configuration is provided via environment variables:
 | `DB_DATABASE`             | Database name                                                                         | `crosslink`                               |
 | `DB_PORT`                 | Database port                                                                         | `25432`                                   |
 | `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
+| `DB_PROVISION`            | Should app create DB role/schema before migrations (`true`/`false`)                  | `false`                                   |
 | `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
 | `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
 | `BROKER_MODE`             | Default broker mode if not configured for a peer: `opaque` or `transparent`           | `opaque`                                  |
@@ -140,8 +141,26 @@ You can run the `broker` program locally with:
 make run
 ```
 
-The application needs a Postgres DB.
-There is a `docker-compose.yml` file prepared to start the DB with default user credentials and a default port:
+The application needs a Postgres DB and will use hard-coded default DB connection params unless configured differently via env vars.
+
+If `DB_PROVISION=true`, the application database user must have privileges to create roles and schemas in the database (for example, the `CREATE` privilege on the database or the ability to run `CREATE SCHEMA`).
+
+If `DB_PROVISION=false`, schema and role provisioning must be done before startup.
+Database migrations will still create and update all required tables and other objects in the schema
+configured via `DB_SCHEMA`.
+
+For production use it's recommended to disable `DB_PROVISION` and provision a dedicated login role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_schema`), with public privileges locked down.
+See the example [DB provisioning script](../misc/db-provision.sql)
+
+There is a `docker-compose.yml` file prepared with both the app and the DB.
+
+To start just the DB container with default connection params:
+
+```
+docker compose up -d postgres
+```
+
+Or start both the broker and DB container:
 
 ```
 docker compose up
