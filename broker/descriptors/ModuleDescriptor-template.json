@@ -122,6 +122,15 @@
           "permissionsRequired": [
             "broker.patron_requests.item.action.post"
           ]
+        },
+        {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/models/{id}",
+          "permissionsRequired" : [
+            "broker.state_model.item.get"
+          ]
         }
       ]
     }
@@ -240,6 +249,12 @@
       ]
     },
     {
+      "description": "Read state model data",
+      "displayName": "Broker - state model: read",
+      "permissionName": "broker.state_model.item.get",
+      "visible": true
+    },
+    {
       "description": "All broker permissions (read and write)",
       "displayName": "Broker - all permissions",
       "permissionName": "broker.all",
@@ -257,7 +272,8 @@
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.actions.get",
-        "broker.patron_requests.item.action.post"
+        "broker.patron_requests.item.action.post",
+        "broker.state_model.item.get"
       ]
     }
   ]
