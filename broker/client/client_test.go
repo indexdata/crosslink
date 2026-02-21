@@ -624,7 +624,7 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
@@ -649,7 +649,7 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
@@ -687,7 +687,7 @@ func TestCreateRequestMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	trCtx := createTransactionContext(events.Event{}, sup, supPeer, common.BrokerModeTransparent)
 
@@ -705,7 +705,7 @@ func TestCreateRequestingAgencyMessage(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	event := events.Event{
 		EventData: events.EventData{
@@ -735,7 +735,7 @@ func TestCreateRequestingAgencyMessage_error(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	event := events.Event{}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
@@ -754,7 +754,7 @@ func TestSendAndUpdateSupplier_DontSend(t *testing.T) {
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1", LocalID: getPgText("id1")}
 	supPeer := &ill_db.Peer{
 		Name:   "isil:sup1",
-		Vendor: string(common.VendorAlma),
+		Vendor: string(directory.Alma),
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
@@ -851,7 +851,7 @@ func TestHandleIllMessage(t *testing.T) {
 	assert.EqualError(t, err, "peer is nil")
 
 	// To internal peer
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(common.VendorCrossLink)}, &sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(directory.CrossLink)}, &sam)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
 	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, &sam)

@@ -2,11 +2,11 @@ package shim
 
 import (
 	"encoding/xml"
-	"github.com/indexdata/crosslink/broker/ill_db"
 	"regexp"
 	"strings"
 
-	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 )
@@ -44,9 +44,9 @@ type Iso18626Shim interface {
 func GetShim(vendor string) Iso18626Shim {
 	var shim Iso18626Shim
 	switch vendor {
-	case string(common.VendorAlma):
+	case string(directory.Alma):
 		shim = new(Iso18626AlmaShim)
-	case string(common.VendorReShare):
+	case string(directory.ReShare):
 		shim = new(Iso18626ReShareShim)
 	default:
 		shim = new(Iso18626DefaultShim)
