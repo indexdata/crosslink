@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/indexdata/crosslink/broker/app"
@@ -14,7 +14,7 @@ func main() {
 	defer cancel()
 	err := run(ctx, os.Args[1:])
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		log.Printf("broker startup failed: %v", err)
 		os.Exit(1)
 	}
 }
