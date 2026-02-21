@@ -114,7 +114,11 @@ func TestCrud(t *testing.T) {
 	newPrBytes, err := json.Marshal(newPr)
 	assert.NoError(t, err, "failed to marshal patron request")
 
-	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+	hres, respBytes := httpRequest2(t, "POST", basePath, newPrBytes, 201)
+	// Check Location header
+	location := hres.Header.Get("Location")
+	assert.NotEmpty(t, location, "Location header should be set")
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+id, location)
 
 	var foundPr proapi.PatronRequest
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -126,6 +130,9 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+
+	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
+	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
 
 	// GET list
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
@@ -410,7 +417,7 @@ func TestGetReturnableStateModel(t *testing.T) {
 	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))
 }
 
-func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {
+func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
 	assert.NoError(t, err)
@@ -425,7 +432,12 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 	body, err := io.ReadAll(hres.Body)
 	assert.Equal(t, expectStatus, hres.StatusCode, string(body))
 	assert.NoError(t, err)
-	return body
+	return hres, body
+}
+
+func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {
+	_, respBytes := httpRequest2(t, method, uriPath, reqbytes, expectStatus)
+	return respBytes
 }
 
 func getLocalhostWithPort() string {
