@@ -149,7 +149,7 @@ If `DB_PROVISION=false`, schema and role provisioning must be done before startu
 Database migrations will still create and update all required tables and other objects in the schema
 configured via `DB_SCHEMA`.
 
-For production use it's recommended to disable `DB_PROVISION` and provision a dedicated login role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_schema`), with public privileges locked down.
+For production use it's recommended to disable `DB_PROVISION` and provision a dedicated login role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_broker`), with public privileges locked down.
 See the example [DB provisioning script](../misc/db-provision.sql)
 
 There is a `docker-compose.yml` file prepared with both the app and the DB.
