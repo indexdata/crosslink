@@ -31,6 +31,7 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 }
 
 func StartAppReturnContext(ctx context.Context) app.Context {
+	app.DB_PROVISION = true
 	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {

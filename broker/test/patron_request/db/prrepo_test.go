@@ -30,6 +30,7 @@ var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

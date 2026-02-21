@@ -40,6 +40,7 @@ var eventRepo events.EventRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

@@ -48,6 +48,7 @@ var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

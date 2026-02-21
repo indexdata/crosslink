@@ -35,6 +35,20 @@ envSecrets: {}
 #   key: config-map-key
 envConfigMaps: {}
 
+migrations:
+  # Set to false when migration job is enabled to avoid running migrations in the main container.
+  runOnStartup: true
+  job:
+    # Enable separate migration job that runs before the main broker deployment.
+    enabled: false
+    backoffLimit: 1
+    ttlSecondsAfterFinished: 300
+    # Optional migration job env overrides, defaults to .Values.env* when empty.
+    # Use these when migration DB credentials differ from runtime DB credentials.
+    env: {}
+    envSecrets: {}
+    envConfigMaps: {}
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

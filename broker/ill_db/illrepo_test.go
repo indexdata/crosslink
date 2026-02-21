@@ -29,13 +29,15 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 
 func TestMain(m *testing.M) {
 	ctx, pgc, connStr, err := test.StartPGContainer()
-	connStr = connStr + dbutil.SchemaParam
+	connStr = connStr + dbutil.SearchPath("crosslink_broker")
 	test.Expect(err, "failed to start db container")
 	pgIllRepo := new(PgIllRepo)
 	pgIllRepo.Pool, err = dbutil.InitDbPool(connStr)
 	test.Expect(err, "failed to create ill repo")
 	defer pgIllRepo.Pool.Close()
-	_, _, _, err = dbutil.RunMigrateScripts("file://../migrations", connStr)
+	err = dbutil.RunDbProvision(connStr, "crosslink_broker")
+	test.Expect(err, "failed to provision db schema")
+	_, _, _, err = dbutil.RunDbMigrations("file://../migrations", connStr)
 	test.Expect(err, "failed to run migration scripts")
 	illRepo = pgIllRepo
 	respBody, err = os.ReadFile("../test/testdata/api-directory-response.json")
