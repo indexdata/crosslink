@@ -20,7 +20,7 @@ func SearchPath(dbSchema string) string {
 	if dbSchema == "" {
 		return ""
 	}
-	return "&search_path=" + dbSchema
+	return "&search_path=" + url.QueryEscape(dbSchema)
 }
 
 func GetConnectionString(typ, user, pass, host, port, db, dbSchema string) string {
