@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -84,6 +85,7 @@ func WaitForServiceUp(port int) {
 
 func StartPGContainer() (context.Context, *postgres.PostgresContainer, string, error) {
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
 		postgres.WithUsername("crosslink"),

@@ -18,6 +18,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -48,6 +49,7 @@ var illRepo ill_db.IllRepo
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
 		postgres.WithUsername("crosslink"),

@@ -35,5 +35,6 @@ services:
       DB_HOST: postgres
       DB_DATABASE: crosslink
       DB_PORT: 5432
+      DB_PROVISION: "true"
     ports:
       - "8081:8081"

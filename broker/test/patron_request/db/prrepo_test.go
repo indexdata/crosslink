@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -30,6 +31,7 @@ var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
