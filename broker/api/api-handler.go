@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -851,42 +850,4 @@ func toString(text pgtype.Text) *string {
 	} else {
 		return nil
 	}
-}
-
-func ToLinkUrlValues(r *http.Request, urlValues url.Values) string {
-	return ToLinkPath(r, r.URL.Path, urlValues.Encode())
-}
-
-func toLink(r *http.Request, path string, id string, query string) string {
-	if strings.Contains(r.RequestURI, "/broker/") {
-		path = "/broker" + path
-	}
-	if id != "" {
-		path = path + "/" + id
-	}
-	return ToLinkPath(r, path, query)
-}
-
-func ToLinkPath(r *http.Request, path string, query string) string {
-	if query != "" {
-		path = path + "?" + query
-	}
-	urlScheme := r.Header.Get("X-Forwarded-Proto")
-	if len(urlScheme) == 0 {
-		urlScheme = r.URL.Scheme
-	}
-	if len(urlScheme) == 0 {
-		urlScheme = "https"
-	}
-	urlHost := r.Header.Get("X-Forwarded-Host")
-	if len(urlHost) == 0 {
-		urlHost = r.URL.Host
-	}
-	if len(urlHost) == 0 {
-		urlHost = r.Host
-	}
-	if strings.Contains(urlHost, "localhost") {
-		urlScheme = "http"
-	}
-	return urlScheme + "://" + urlHost + path
 }
