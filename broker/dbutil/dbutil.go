@@ -74,7 +74,7 @@ func initDBSchema(connStr, dbSchema string) error {
 	}
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return fmt.Errorf("error opening database: : %w", err)
+		return fmt.Errorf("error opening database: %w", err)
 	}
 	defer db.Close()
 
