@@ -8,6 +8,7 @@ import (
 	"time"
 
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/broker/vcs"
@@ -457,7 +458,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
-	if strings.EqualFold(peer.Vendor, string(common.VendorCrossLink)) {
+	if strings.EqualFold(peer.Vendor, string(directory.CrossLink)) {
 		return c.prMessageHandler.HandleMessage(ctx, msg)
 	}
 	return c.SendHttpPost(peer, msg)

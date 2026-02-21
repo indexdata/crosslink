@@ -95,10 +95,10 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
-	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, common.VendorReShare, directory.Entry{})
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, directory.ReShare, directory.Entry{})
 }
 
-func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor common.Vendor, customData directory.Entry) ill_db.Peer {
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor directory.EntryVendor, customData directory.Entry) ill_db.Peer {
 	peer, err := illRepo.SavePeer(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          symbol,

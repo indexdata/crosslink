@@ -26,7 +26,7 @@ type DirectoryEntry struct {
 	BranchSymbols []string
 	Name          string
 	URL           string
-	Vendor        common.Vendor
+	Vendor        directory.EntryVendor
 	BrokerMode    common.BrokerMode
 	CustomData    directory.Entry
 }

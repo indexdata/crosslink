@@ -243,6 +243,14 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
+        vendor:
+          type: string
+          description: ISO18626 vendor type
+          enum:
+            - Alma
+            - ReShare
+            - CrossLink
+            - Unknown
     LmsConfig:
       required:
         - address

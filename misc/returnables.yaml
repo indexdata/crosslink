@@ -12,7 +12,8 @@ states:
     actions:
       - name: validate
         desc: Validate the request (e.g. check patron via NCIP LookupUser, if enabled)
-        transitions: [VALIDATED]
+        transitions:
+          success: VALIDATED
 
   - name: VALIDATED
     display: Validated
@@ -21,7 +22,8 @@ states:
     actions:
       - name: send-request
         desc: Send ISO18626 request to the supplier or broker
-        transitions: [SENT]
+        transitions:
+          success: SENT
 
   - name: SENT
     display: Sent
@@ -30,19 +32,19 @@ states:
     events:
       - name: expect-to-supply
         desc: Supplier indicates an intention to supply (ISO18626 ExpectToSupply)
-        transitions: [SUPPLIER_LOCATED]
+        transition: SUPPLIER_LOCATED
       - name: will-supply
         desc: Supplier will supply without conditions (ISO18626 WillSupply)
-        transitions: [WILL_SUPPLY]
+        transition: WILL_SUPPLY
       - name: will-supply-conditional
         desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
-        transitions: [CONDITION_PENDING]
+        transition: CONDITION_PENDING
       - name: loaned
         desc: Supplier shipped the item (ISO18626 Loaned)
-        transitions: [SHIPPED]
+        transition: SHIPPED
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
-        transitions: [UNFILLED]
+        transition: UNFILLED
 
   - name: SUPPLIER_LOCATED
     display: Supplier Located
@@ -51,17 +53,18 @@ states:
     actions:
       - name: cancel-request
         desc: Send ISO18626 Cancel request to supplier
-        transitions: [CANCEL_PENDING]
+        transitions:
+          success: CANCEL_PENDING
     events:
       - name: will-supply
         desc: Supplier will supply without conditions (ISO18626 WillSupply)
-        transitions: [WILL_SUPPLY]
+        transition: WILL_SUPPLY
       - name: will-supply-conditional
         desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
-        transitions: [CONDITION_PENDING]
+        transition: CONDITION_PENDING
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
-        transitions: [UNFILLED]
+        transition: UNFILLED
 
   - name: CONDITION_PENDING
     display: Condition Pending
@@ -70,10 +73,12 @@ states:
     actions:
       - name: accept-condition
         desc: Accept supplier conditions (ISO18626 Notification)
-        transitions: [WILL_SUPPLY]
+        transitions:
+          success: WILL_SUPPLY
       - name: reject-condition
         desc: Reject supplier conditions (ISO18626 Cancel)
-        transitions: [CANCEL_PENDING]
+        transitions:
+          success: CANCEL_PENDING
 
   - name: WILL_SUPPLY
     display: Will Supply
@@ -82,14 +87,15 @@ states:
     actions:
       - name: cancel-request
         desc: Send ISO18626 Cancel to supplier
-        transitions: [CANCEL_PENDING]
+        transitions:
+          success: CANCEL_PENDING
     events:
       - name: loaned
         desc: Supplier shipped the item (ISO18626 Loaned)
-        transitions: [SHIPPED]
+        transition: SHIPPED
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
-        transitions: [UNFILLED]
+        transition: UNFILLED
 
   - name: SHIPPED
     display: Shipped
@@ -98,7 +104,8 @@ states:
     actions:
       - name: receive
         desc: Receive and accept item in local ILS (via NCIP AcceptItem if enabled); send ISO18626 Received
-        transitions: [RECEIVED]
+        transitions:
+          success: RECEIVED
 
   - name: RECEIVED
     display: Received
@@ -107,7 +114,8 @@ states:
     actions:
       - name: check-out
         desc: Check out item to patron (NCIP CheckOutItem)
-        transitions: [CHECKED_OUT]
+        transitions:
+          success: CHECKED_OUT
 
   - name: CHECKED_OUT
     display: Checked Out
@@ -116,7 +124,8 @@ states:
     actions:
       - name: check-in
         desc: Check the item back-in (NCIP CheckInItem)
-        transitions: [CHECKED_IN]
+        transitions:
+          success: CHECKED_IN
 
   - name: CHECKED_IN
     display: Checked In
@@ -125,7 +134,8 @@ states:
     actions:
       - name: ship-return
         desc: Send ISO18626 ShippedReturn and delete the temporary item (NCIP DeleteItem)
-        transitions: [SHIPPED_RETURNED]
+        transitions:
+          success: SHIPPED_RETURNED
 
   - name: SHIPPED_RETURNED
     display: Shipped Returned
@@ -134,7 +144,7 @@ states:
     events:
       - name: completed
         desc: Supplier/broker signals loan/copy completion
-        transitions: [COMPLETED]
+        transition: COMPLETED
 
   - name: CANCEL_PENDING
     display: Cancel Pending
@@ -143,7 +153,7 @@ states:
     events:
       - name: cancel-accepted
         desc: Supplier accepts cancellation
-        transitions: [CANCELLED]
+        transition: CANCELLED
 
   - name: COMPLETED
     display: Completed
@@ -171,7 +181,8 @@ states:
     actions:
       - name: validate
         desc: Validate the request, e.g institutional patron via NCIP LookupUser, if enabled
-        transitions: [VALIDATED]
+        transitions:
+          success: VALIDATED
 
   - name: VALIDATED
     display: Validated
@@ -180,17 +191,20 @@ states:
     actions:
       - name: will-supply
         desc: Indicate supplier will supply and send ISO18626 WillSupply
-        transitions: [WILL_SUPPLY]
+        transitions:
+          success: WILL_SUPPLY
       - name: cannot-supply
         desc: Indicate cannot supply and send ISO18626 Unfilled
-        transitions: [UNFILLED]
+        transitions:
+          success: UNFILLED
       - name: add-condition
         desc: Indicate will supply with conditions and send ISO18626 WillSupply
-        transitions: [CONDITION_PENDING]
+        transitions:
+          success: CONDITION_PENDING
     events:
       - name: cancel-request
         desc: Requester sent ISO18626 Cancel
-        transitions: [CANCEL_REQUESTED]
+        transition: CANCEL_REQUESTED
 
   - name: WILL_SUPPLY
     display: Will Supply
@@ -199,17 +213,20 @@ states:
     actions:
       - name: add-condition
         desc: Add conditions and notify requester
-        transitions: [CONDITION_PENDING]
+        transitions:
+          success: CONDITION_PENDING
       - name: ship
         desc: Mark shipped; send ISO Loaned; NCIP CheckOutItem
-        transitions: [SHIPPED]
+        transitions:
+          success: SHIPPED
       - name: cannot-supply
         desc: Indicate cannot supply
-        transitions: [UNFILLED]
+        transitions:
+          success: UNFILLED
     events:
       - name: cancel-request
         desc: Requester sends ISO Cancel
-        transitions: [CANCEL_REQUESTED]
+        transition: CANCEL_REQUESTED
 
   - name: CONDITION_PENDING
     display: Condition Pending
@@ -218,17 +235,18 @@ states:
     actions:
       - name: cannot-supply
         desc: Indicate cannot supply
-        transitions: [UNFILLED]
+        transitions:
+          success: UNFILLED
     events:
       - name: conditions-accepted
         desc: Requester accepts conditions
-        transitions: [CONDITION_ACCEPTED]
+        transition: CONDITION_ACCEPTED
       - name: condition-rejected
         desc: Requester rejects conditions (auto-responder may mark unfilled)
-        transitions: [UNFILLED]
+        transition: UNFILLED
       - name: cancel-request
         desc: Requester sends ISO Cancel
-        transitions: [CANCEL_REQUESTED]
+        transition: CANCEL_REQUESTED
 
   - name: CONDITION_ACCEPTED
     display: Condition Accepted
@@ -237,14 +255,16 @@ states:
     actions:
       - name: ship
         desc: Mark shipped; send ISO Loaned; NCIP CheckOutItem
-        transitions: [SHIPPED]
+        transitions:
+          success: SHIPPED
       - name: cannot-supply
         desc: Indicate cannot supply
-        transitions: [UNFILLED]
+        transitions:
+          success: UNFILLED
     events:
       - name: cancel-request
         desc: Requester sends ISO Cancel
-        transitions: [CANCEL_REQUESTED]
+        transition: CANCEL_REQUESTED
 
   - name: SHIPPED
     display: Shipped
@@ -253,7 +273,7 @@ states:
     events:
       - name: shipped-return
         desc: Requester sends ISO ShippedReturn
-        transitions: [SHIPPED_RETURN]
+        transition: SHIPPED_RETURN
 
   - name: SHIPPED_RETURN
     display: Shipped Return
@@ -262,7 +282,8 @@ states:
     actions:
       - name: mark-received
         desc: Mark returned item received and complete (CheckInItem if configured)
-        transitions: [COMPLETED]
+        transitions:
+          success: COMPLETED
 
   - name: CANCEL_REQUESTED
     display: Cancel Requested
@@ -271,10 +292,12 @@ states:
     actions:
       - name: mark-cancelled
         desc: Confirm cancellation
-        transitions: [CANCELLED]
+        transitions:
+          success: CANCELLED
       - name: will-supply
         desc: Resume supplying despite cancel request
-        transitions: [WILL_SUPPLY]
+        transitions:
+          success: WILL_SUPPLY
 
   - name: COMPLETED
     display: Completed
