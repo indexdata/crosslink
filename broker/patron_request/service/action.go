@@ -212,7 +212,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 
 func (a *PatronRequestActionService) updateStateAndReturnResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, state pr_db.PatronRequestState, result *events.EventResult) (events.EventStatus, *events.EventResult) {
 	pr.State = state
-	pr, err := a.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
+	pr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}

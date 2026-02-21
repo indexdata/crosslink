@@ -20,7 +20,9 @@ import (
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -183,8 +185,13 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
-	pr, err := a.prRepo.SavePatronRequest(ctx, (pr_db.SavePatronRequestParams)(dbreq))
+	pr, err := a.prRepo.CreatePatronRequest(ctx, (pr_db.CreatePatronRequestParams)(dbreq))
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
+			addBadRequestError(ctx, w, errors.New("a patron request with this ID already exists"))
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
@@ -205,6 +212,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
+	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, illRequest))

@@ -677,7 +677,15 @@ func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
 
-func (r *MockPrRepo) SavePatronRequest(ctx common.ExtendedContext, params pr_db.SavePatronRequestParams) (pr_db.PatronRequest, error) {
+func (r *MockPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
+	if strings.Contains(params.ID, "error") || strings.Contains(params.RequesterReqID.String, "error") {
+		return pr_db.PatronRequest{}, errors.New("db error")
+	}
+	r.savedPr = pr_db.PatronRequest(params)
+	return pr_db.PatronRequest(params), nil
+}
+
+func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
 	if strings.Contains(params.ID, "error") || strings.Contains(params.RequesterReqID.String, "error") {
 		return pr_db.PatronRequest{}, errors.New("db error")
 	}

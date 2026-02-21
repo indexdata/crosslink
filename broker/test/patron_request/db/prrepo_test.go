@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 
 func TestItem(t *testing.T) {
 	prId := uuid.NewString()
-	_, err := prRepo.SavePatronRequest(appCtx, pr_db.SavePatronRequestParams{
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
 		Timestamp: pgtype.Timestamp{
 			Time:  time.Now(),
@@ -157,7 +157,7 @@ func TestItem(t *testing.T) {
 
 func TestNotification(t *testing.T) {
 	prId := uuid.NewString()
-	_, err := prRepo.SavePatronRequest(appCtx, pr_db.SavePatronRequestParams{
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
 		Timestamp: pgtype.Timestamp{
 			Time:  time.Now(),

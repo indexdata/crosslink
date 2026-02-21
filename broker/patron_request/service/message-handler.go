@@ -134,7 +134,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 }
 
 func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	_, err := m.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
+	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -214,7 +214,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	pr, err := m.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams{
+	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: time.Now()},
 		State:           LenderStateNew,
@@ -293,7 +293,7 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 }
 
 func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	_, err := m.prRepo.SavePatronRequest(ctx, pr_db.SavePatronRequestParams(pr))
+	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,

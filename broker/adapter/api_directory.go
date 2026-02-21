@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
+		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+		if len(symbols) == 0 {
+			ctx.Logger().Warn("Directory entry has no symbols", "entryName", d.Name)
+			continue
+		}
 		apiUrl := ""
 		if d.Endpoints != nil {
 			for _, s := range *d.Endpoints {
@@ -70,18 +76,21 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 				}
 			}
 		}
-		if apiUrl != "" && len(symbols) > 0 {
-			vendor := GetVendorFromUrl(apiUrl)
-			entry := DirectoryEntry{
-				Name:       d.Name,
-				Symbols:    symbols,
-				Vendor:     vendor,
-				BrokerMode: GetBrokerMode(vendor),
-				URL:        apiUrl,
-				CustomData: d,
-			}
-			dirEntries = append(dirEntries, entry)
+		vendor := directory.Unknown
+		if d.Vendor != nil {
+			vendor = *d.Vendor
+		} else if apiUrl != "" {
+			vendor = GetVendorFromUrl(apiUrl)
 		}
+		entry := DirectoryEntry{
+			Name:       d.Name,
+			Symbols:    symbols,
+			Vendor:     vendor,
+			BrokerMode: GetBrokerMode(vendor),
+			URL:        apiUrl,
+			CustomData: d,
+		}
+		dirEntries = append(dirEntries, entry)
 	}
 	for i := range dirEntries {
 		de := &dirEntries[i]
@@ -315,21 +324,21 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 	return tiers
 }
 
-func GetVendorFromUrl(url string) common.Vendor {
+func GetVendorFromUrl(url string) directory.EntryVendor {
 	if strings.Contains(url, "alma.exlibrisgroup.com") {
-		return common.VendorAlma
+		return directory.Alma
 	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
-		return common.VendorReShare
+		return directory.ReShare
 	} else {
-		return common.VendorUnknown
+		return directory.Unknown
 	}
 }
 
-func GetBrokerMode(vendor common.Vendor) common.BrokerMode {
+func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
 	switch vendor {
-	case common.VendorAlma:
+	case directory.Alma:
 		return common.BrokerModeOpaque
-	case common.VendorReShare:
+	case directory.ReShare:
 		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE

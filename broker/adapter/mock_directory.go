@@ -28,7 +28,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:NOCHANGE"},
 			URL:        MOCK_CLIENT_URL,
-			Vendor:     common.VendorUnknown,
+			Vendor:     directory.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, strings.Join(params.Symbols, ","), nil
 	}
@@ -38,7 +38,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		dirs = append(dirs, DirectoryEntry{
 			Symbols:    []string{value},
 			URL:        MOCK_CLIENT_URL,
-			Vendor:     common.VendorUnknown,
+			Vendor:     directory.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		})
 	}
