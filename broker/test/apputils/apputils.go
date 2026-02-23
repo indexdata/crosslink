@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/utils"
@@ -31,6 +32,7 @@ func StartApp(ctx context.Context) (events.EventBus, ill_db.IllRepo, events.Even
 }
 
 func StartAppReturnContext(ctx context.Context) app.Context {
+	dbutil.DB_PROVISION = true
 	appContext, err := app.Init(ctx)
 	utils.Expect(err, "failed to init app")
 	go func() {
@@ -95,10 +97,10 @@ func CreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string)
 }
 
 func CreatePeerWithMode(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string) ill_db.Peer {
-	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, common.VendorReShare, directory.Entry{})
+	return CreatePeerWithModeAndVendor(t, illRepo, symbol, url, brokerMode, directory.ReShare, directory.Entry{})
 }
 
-func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor common.Vendor, customData directory.Entry) ill_db.Peer {
+func CreatePeerWithModeAndVendor(t *testing.T, illRepo ill_db.IllRepo, symbol string, url string, brokerMode string, vendor directory.EntryVendor, customData directory.Entry) ill_db.Peer {
 	peer, err := illRepo.SavePeer(common.CreateExtCtxWithArgs(context.Background(), nil), ill_db.SavePeerParams{
 		ID:            uuid.New().String(),
 		Name:          symbol,

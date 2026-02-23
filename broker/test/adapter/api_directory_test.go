@@ -93,7 +93,7 @@ func TestLookupEmptyList(t *testing.T) {
 	assert.Len(t, entries, 0)
 }
 
-func TestLookupMissingUrl(t *testing.T) {
+func TestLookupNoVendor(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		respBody := "{\"items\":[{" +
@@ -110,7 +110,31 @@ func TestLookupMissingUrl(t *testing.T) {
 	}
 	entries, _, err := ad.Lookup(p)
 	assert.Nil(t, err)
-	assert.Len(t, entries, 0)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, directory.Unknown, entries[0].Vendor)
+	assert.Equal(t, common.BrokerMode(""), entries[0].BrokerMode)
+}
+
+func TestLookupWithVendor(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		respBody := "{\"items\":[{" +
+			"\"name\":\"Peer\",\"vendor\":\"ReShare\",\"symbols\":[{\"authority\":\"ISIL\",\"symbol\":\"PEER\"}]}]," +
+			"\"resultInfo\":{\"totalRecords\":1}}"
+		w.Write([]byte(respBody))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+	}
+	entries, _, err := ad.Lookup(p)
+	assert.Nil(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, directory.ReShare, entries[0].Vendor)
+	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 }
 
 func TestLookupMissingSymbols(t *testing.T) {
@@ -151,6 +175,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Equal(t, entries[0].Vendor, directory.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 	assert.Equal(t, common.BrokerModeTransparent, entries[0].BrokerMode)
 	assert.Equal(t, entries[3].Name, "University of Melbourne")
@@ -165,6 +190,7 @@ func TestLookup(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
+	assert.Equal(t, entries[0].Vendor, directory.ReShare)
 	assert.Len(t, entries[0].Symbols, 1)
 }
 

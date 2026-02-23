@@ -341,18 +341,26 @@ func (r *PrRepoError) GetPatronRequestById(ctx common.ExtendedContext, id string
 		return pr_db.PatronRequest{}, errors.New("DB error")
 	}
 }
+
 func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
 	return []pr_db.PatronRequest{}, 0, errors.New("DB error")
 }
-func (r *PrRepoError) SavePatronRequest(ctx common.ExtendedContext, params pr_db.SavePatronRequestParams) (pr_db.PatronRequest, error) {
+
+func (r *PrRepoError) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("DB error")
 }
+
+func (r *PrRepoError) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{}, errors.New("DB error")
+}
+
 func (r *PrRepoError) DeletePatronRequest(ctx common.ExtendedContext, id string) error {
 	if id == "4" {
 		return nil
 	}
 	return errors.New("DB error")
 }
+
 func (r *PrRepoError) GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error) {
 	r.counter++
 	return strings.ToUpper(prefix) + "-" + strconv.FormatInt(r.counter, 10), nil

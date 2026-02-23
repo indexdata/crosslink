@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
@@ -48,6 +49,7 @@ var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),

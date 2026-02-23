@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
@@ -41,6 +42,7 @@ var ncipMockUrl string
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
+	dbutil.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
@@ -86,7 +88,7 @@ func TestCrud(t *testing.T) {
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink,
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})
@@ -112,7 +114,11 @@ func TestCrud(t *testing.T) {
 	newPrBytes, err := json.Marshal(newPr)
 	assert.NoError(t, err, "failed to marshal patron request")
 
-	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+	hres, respBytes := httpRequest2(t, "POST", basePath, newPrBytes, 201)
+	// Check Location header
+	location := hres.Header.Get("Location")
+	assert.NotEmpty(t, location, "Location header should be set")
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+id, location)
 
 	var foundPr proapi.PatronRequest
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -124,6 +130,9 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+
+	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
+	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
 
 	// GET list
 	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
@@ -201,14 +210,14 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink, directory.Entry{})
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
 	assert.NotNil(t, reqPeer)
 
 	lmsConfig := &directory.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, common.VendorCrossLink,
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})
@@ -408,7 +417,7 @@ func TestGetReturnableStateModel(t *testing.T) {
 	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))
 }
 
-func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {
+func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
 	assert.NoError(t, err)
@@ -423,7 +432,12 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 	body, err := io.ReadAll(hres.Body)
 	assert.Equal(t, expectStatus, hres.StatusCode, string(body))
 	assert.NoError(t, err)
-	return body
+	return hres, body
+}
+
+func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) []byte {
+	_, respBytes := httpRequest2(t, method, uriPath, reqbytes, expectStatus)
+	return respBytes
 }
 
 func getLocalhostWithPort() string {
