@@ -854,6 +854,10 @@ func TestHandleIllMessage(t *testing.T) {
 	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(directory.CrossLink)}, &sam)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
+	// Internal, case insensitive
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: "crosslinK"}, &sam)
+	assert.EqualError(t, err, "searching pr with id=req-1")
+
 	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, &sam)
 	assert.EqualError(t, err, "Post \"\": unsupported protocol scheme \"\"")
 }
