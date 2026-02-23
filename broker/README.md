@@ -57,7 +57,7 @@ The broker mode can be configured for each peer individually by setting the `Bro
 
 * vendor `Alma` -> external peer in `opaque` mode
 * vendor `ReShare` -> external peer in `transparent` mode
-* vendor `CrossLink` -> internal peer, ILl requests are managed via the Patron Requests API, no outgoing ISO18626
+* vendor `CrossLink` -> internal peer, ILL requests are managed via the Patron Requests API, no outgoing ISO18626
 * vendor `Unknown` -> mode set via the fallback `BROKER_MODE` env var, `opaque` by default
 
 Additionally, the broker includes a _shim_ layer to modify the ISO18626 messages using vendor-specific logic.
@@ -82,7 +82,8 @@ Configuration is provided via environment variables:
 | `DB_DATABASE`             | Database name                                                                         | `crosslink`                               |
 | `DB_PORT`                 | Database port                                                                         | `25432`                                   |
 | `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
-| `DB_PROVISION`            | Should app create DB role/schema before migrations (`true`/`false`)                  | `false`                                   |
+| `DB_PROVISION`            | Should app create DB role/schema (`true`/`false`)                                    | `false`                                   |
+| `DB_MIGRATE`              | Should app run DB migrations (`true`/`false`)                                         | `true`                                    |
 | `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
 | `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
 | `BROKER_MODE`             | Default broker mode if not configured for a peer: `opaque` or `transparent`           | `opaque`                                  |
@@ -141,18 +142,23 @@ You can run the `broker` program locally with:
 make run
 ```
 
-The application needs a Postgres DB and will use hard-coded default DB connection params unless configured differently via env vars.
+The application requires a Postgres DB and will use hard-coded default DB connection params unless configured, see `DB_*` env vars above.
 
-If `DB_PROVISION=true`, the application database user must have privileges to create roles and schemas in the database (for example, the `CREATE` privilege on the database or the ability to run `CREATE SCHEMA`).
-
+If `DB_PROVISION=true`, default `false`, the configured database user must have privileges to create roles and schemas in the database (the `CREATE` privilege on the database and the ability to run `CREATE SCHEMA`). The `DB_SCHEMA` env must be non-empty when provisioning (default).
 If `DB_PROVISION=false`, schema and role provisioning must be done before startup.
-Database migrations will still create and update all required tables and other objects in the schema
-configured via `DB_SCHEMA`.
 
-For production use it's recommended to disable `DB_PROVISION` and provision a dedicated login role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_broker`), with public privileges locked down.
-See the example [DB provisioning script](../misc/db-provision.sql)
+If `DB_MIGRATE=true`, default, the app runs migrations on startup. Migrations will create and update all required tables and other objects in the schema. Empty `DB_SCHEMA` means default user
+schema is used (usually `public`).
 
-There is a `docker-compose.yml` file prepared with both the app and the DB.
+You can execute provisioning- or migration-only via `/broker db-up`, after which the app will terminate.
+
+NOTE: For production use it's recommended to disable `DB_PROVISION` and separately provision a login
+role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_broker`), with public privileges locked down.
+See the example [DB provisioning script](../misc/db-provision.sql).
+Optionally, with `DB_MIGRATE` off, migrations can be performed separately and the runtime user does
+not require `CREATE` privileges.
+
+To run locally in a container, there is a `docker-compose.yml` file prepared with both the app and the DB.
 
 To start just the DB container with default connection params:
 
@@ -160,7 +166,13 @@ To start just the DB container with default connection params:
 docker compose up -d postgres
 ```
 
-Or start both the broker and DB container:
+To run db-up only (and exit):
+
+```
+docker compose --profile db-up run --rm db-up
+```
+
+Start the default stack (DB + broker; broker runs provision and migrations on startup):
 
 ```
 docker compose up
