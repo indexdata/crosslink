@@ -52,6 +52,13 @@ func ToLinkPath(r *http.Request, path string, query string) string {
 func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {
 	about := oapi.About{}
 	about.Count = fullCount
+	if limit > 0 && fullCount > int64(limit) {
+		lastOffset := int32(((fullCount - 1) / int64(limit)) * int64(limit))
+		urlValues := r.URL.Query()
+		urlValues["offset"] = []string{strconv.Itoa(int(lastOffset))}
+		link := ToLinkUrlValues(r, urlValues)
+		about.LastLink = &link
+	}
 	if offset > 0 {
 		pOffset := offset - limit
 		if pOffset < 0 {
