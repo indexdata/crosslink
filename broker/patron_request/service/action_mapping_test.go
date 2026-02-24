@@ -10,7 +10,6 @@ import (
 
 func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		BorrowerStateNew:              {BorrowerActionValidate},
 		BorrowerStateValidated:        {BorrowerActionSendRequest},
 		BorrowerStateSupplierLocated:  {BorrowerActionCancelRequest},
 		BorrowerStateConditionPending: {BorrowerActionAcceptCondition, BorrowerActionRejectCondition},
@@ -22,7 +21,6 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		LenderStateNew:               {LenderActionValidate},
 		LenderStateValidated:         {LenderActionWillSupply, LenderActionCannotSupply, LenderActionAddCondition},
 		LenderStateWillSupply:        {LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip},
 		LenderStateConditionPending:  {LenderActionCannotSupply},
@@ -46,7 +44,7 @@ var actionMappingService = ActionMappingService{}
 
 func TestIsActionAvailable(t *testing.T) {
 	// Borrower
-	assert.True(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidate))
+	assert.False(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidate))
 	assert.False(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionReceive))
 
 	// Lender
@@ -56,7 +54,7 @@ func TestIsActionAvailable(t *testing.T) {
 
 func TestGetActionsForPatronRequest(t *testing.T) {
 	// Borrower
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
 	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 
 	// Lender

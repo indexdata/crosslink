@@ -203,7 +203,7 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Contains(t, rr.Body.String(), "validate")
+	assert.Equal(t, "[]\n", rr.Body.String())
 }
 
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {

@@ -544,6 +544,7 @@ components:
         - data
 
     StateModel:
+      title: StateModel
       type: object
       description: ReShare state model definition
       additionalProperties: false
@@ -551,6 +552,8 @@ components:
         type:
           type: string
           description: Self-referential type
+          enum:
+            - StateModel
         name:
           type: string
           description: Name of the state model
@@ -565,11 +568,17 @@ components:
           description: A list of all allowed states
           items:
             $ref: '#/components/schemas/ModelState'
+      required:
+        - name
+        - states
+        - type
+        - version
 
     ModelState:
       title: State
       type: object
       description: Definition of a particular state
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -583,7 +592,7 @@ components:
         side:
           type: string
           description: Indicates which side of the request the state belongs to
-          enum: 
+          enum:
             - REQUESTER
             - SUPPLIER
         actions:
@@ -615,15 +624,32 @@ components:
       type: object
       title: Action
       additionalProperties: false
+      description: Declares an action available while in this state.
       properties:
         name:
           type: string
+          description: Name of the action
+        desc:
+          type: string
           description: Description of the action
+        trigger:
+          type: string
+          description: Trigger for the action
+          enum:
+            - auto
+            - manual
+          default: manual
         transitions:
-          type: array
-          description: List of all possible state transitions after performing the action. When no transitions are defined, the action is considered to be non-state-changing
-          items:
-            type: string
+          type: object
+          description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
+          additionalProperties: false
+          properties:
+            success:
+              type: string
+              description: Target state when the action succeeds.
+            failure:
+              type: string
+              description: Target state when the action fails.
       required:
         - name
 
@@ -631,15 +657,17 @@ components:
       type: object
       title: Event
       additionalProperties: false
+      description: Declares an event considered for transition while in this state.
       properties:
         name:
           type: string
+          description: Name of the event
+        desc:
+          type: string
           description: Description of the event
-        transitions:
-          type: array
-          description: List of all possible state transitions after performing the event. When no transitions are defined, the event is considered to be non-state-changing
-          items:
-            type: string
+        transition:
+          type: string
+          description: State transition after event has occurred. When no transition is defined, the event is considered to be non-state-changing.
       required:
         - name
 

@@ -24,19 +24,49 @@ const COMP_MESSAGE = "pr_massage_handler"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 
 type PatronRequestMessageHandler struct {
-	prRepo    pr_db.PrRepo
-	eventRepo events.EventRepo
-	illRepo   ill_db.IllRepo
-	eventBus  events.EventBus
+	prRepo               pr_db.PrRepo
+	eventRepo            events.EventRepo
+	illRepo              ill_db.IllRepo
+	eventBus             events.EventBus
+	actionMappingService ActionMappingService
+	autoActionRunner     AutoActionRunner
+}
+
+type AutoActionRunner interface {
+	RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error
 }
 
 func CreatePatronRequestMessageHandler(prRepo pr_db.PrRepo, eventRepo events.EventRepo, illRepo ill_db.IllRepo, eventBus events.EventBus) PatronRequestMessageHandler {
 	return PatronRequestMessageHandler{
-		prRepo:    prRepo,
-		eventRepo: eventRepo,
-		illRepo:   illRepo,
-		eventBus:  eventBus,
+		prRepo:               prRepo,
+		eventRepo:            eventRepo,
+		illRepo:              illRepo,
+		eventBus:             eventBus,
+		actionMappingService: ActionMappingService{},
 	}
+}
+
+func (m *PatronRequestMessageHandler) SetAutoActionRunner(autoActionRunner AutoActionRunner) {
+	m.autoActionRunner = autoActionRunner
+}
+
+func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	if m.autoActionRunner == nil {
+		return nil
+	}
+	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+}
+
+func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName string) (pr_db.PatronRequest, bool, bool) {
+	transitionState, hasTransition, eventDefined := m.actionMappingService.GetActionMapping(pr).GetEventTransition(pr, eventName)
+	if !eventDefined {
+		return pr, false, false
+	}
+	if hasTransition && transitionState != pr.State {
+		pr.State = transitionState
+		return pr, true, true
+	}
+	return pr, false, true
 }
 
 func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
@@ -95,51 +125,61 @@ func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContex
 }
 
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	// TODO handle notifications
+	eventName := ""
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
-		pr.State = BorrowerStateSupplierLocated
+		eventName = "expect-to-supply"
 		supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
 		pr.SupplierSymbol = pgtype.Text{
 			String: supSymbol,
 			Valid:  true,
 		}
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusWillSupply:
 		if strings.Contains(sam.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
-			pr.State = BorrowerStateConditionPending
-			// TODO Save conditions
+			eventName = "will-supply-conditional"
 		} else {
-			pr.State = BorrowerStateWillSupply
+			eventName = "will-supply"
 		}
-		// TODO should we check if supplier is set ? and search if not
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoaned:
-		pr.State = BorrowerStateShipped
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = "loaned"
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
-		pr.State = BorrowerStateCompleted
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = "completed"
 	case iso18626.TypeStatusUnfilled:
-		pr.State = BorrowerStateUnfilled
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = "unfilled"
 	case iso18626.TypeStatusCancelled:
-		pr.State = BorrowerStateCancelled
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = "cancel-accepted"
 	}
-	return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-		ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-		ErrorValue: "status change no allowed",
-	}, errors.New("status change no allowed"))
+
+	if eventName == "" {
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
+			ErrorValue: "status change no allowed",
+		}, errors.New("status change no allowed"))
+	}
+
+	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
+	if !eventDefined {
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
+			ErrorValue: "status change no allowed",
+		}, errors.New("status change no allowed"))
+	}
+	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged)
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	if stateChanged {
+		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		if err != nil {
+			ctx.Logger().Error("failed to run auto actions on state entry", "error", err, "patronRequestId", pr.ID)
+		}
 	}
 	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 }
@@ -231,8 +271,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	action := LenderActionValidate
-	_, err = m.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
+	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
 		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -257,13 +296,27 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 		iso18626.TypeActionRenew,
 		iso18626.TypeActionShippedForward,
 		iso18626.TypeActionReceived:
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
+		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action, false)
 	case iso18626.TypeActionCancel:
-		pr.State = LenderStateCancelRequested
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
+		updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, "cancel-request")
+		if !eventDefined {
+			err := errors.New("unknown action: " + string(ram.Action))
+			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
+		return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged)
 	case iso18626.TypeActionShippedReturn:
-		pr.State = LenderStateShippedReturn
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
+		updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, "shipped-return")
+		if !eventDefined {
+			err := errors.New("unknown action: " + string(ram.Action))
+			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
+		return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged)
 	}
 	err := errors.New("unknown action: " + string(ram.Action))
 	return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
@@ -292,13 +345,19 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 		err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	if stateChanged {
+		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		if err != nil {
+			ctx.Logger().Error("failed to run auto actions on state entry", "error", err, "patronRequestId", pr.ID)
+		}
 	}
 	return createRAMResponse(ram, iso18626.TypeMessageStatusOK, action, nil, nil)
 }

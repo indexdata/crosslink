@@ -369,10 +369,10 @@ func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
 	var request iso18626.Request
-	status, resultData := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}}, request)
+	result := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}}, request)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "invalid requester symbol", result.result.EventError.Message)
 }
 
 func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
@@ -385,10 +385,10 @@ func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 
 	illRequest := []byte("{\"request\": {}}")
 	var request iso18626.Request
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateValidated, Side: SideBorrowing, Patron: pgtype.Text{Valid: true, String: "patron1"}, ID: "1", RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, lmsAdapter, request)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing supplier symbol", resultData.EventError.Message)
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "missing supplier symbol", result.result.EventError.Message)
 }
 
 func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
@@ -400,10 +400,10 @@ func TestShipReturnBorrowingRequestMissingRequesterSymbol(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	var request iso18626.Request
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "missing requester symbol", result.result.EventError.Message)
 }
 
 func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
@@ -415,10 +415,10 @@ func TestShipReturnBorrowingRequestInvalidSupplierSymbol(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	var request iso18626.Request
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "x"}}, lmsAdapter, request)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "invalid supplier symbol", resultData.EventError.Message)
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "invalid supplier symbol", result.result.EventError.Message)
 }
 
 func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
@@ -430,10 +430,10 @@ func TestShipReturnBorrowingRequestInvalidRequesterSymbol(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 
 	var request iso18626.Request
-	status, resultData := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
+	result := prAction.shipReturnBorrowingRequest(appCtx, pr_db.PatronRequest{ID: "1", State: BorrowerStateValidated, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "x"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, lmsAdapter, request)
 
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
+	assert.Equal(t, events.EventStatusError, result.status)
+	assert.Equal(t, "invalid requester symbol", result.result.EventError.Message)
 }
 
 func TestHandleInvokeLenderActionNoSupplierSymbol(t *testing.T) {
@@ -645,6 +645,7 @@ func TestHandleInvokeLenderActionMarkCancelledMissingRequesterSymbol(t *testing.
 type MockEventBus struct {
 	mock.Mock
 	events.EventBus
+	createdTaskData []events.EventData
 }
 
 func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
@@ -653,6 +654,7 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 }
 
 func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
+	m.createdTaskData = append(m.createdTaskData, data)
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}

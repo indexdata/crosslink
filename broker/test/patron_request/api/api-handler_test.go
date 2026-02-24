@@ -414,7 +414,7 @@ func TestGetReturnableStateModel(t *testing.T) {
 	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
 	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
 	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
-	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))
+	assert.Equal(t, len(returnablesStateModel.States), len(retrievedStateModel.States))
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {

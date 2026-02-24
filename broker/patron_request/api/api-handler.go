@@ -34,6 +34,7 @@ type PatronRequestApiHandler struct {
 	eventBus             events.EventBus
 	eventRepo            events.EventRepo
 	actionMappingService prservice.ActionMappingService
+	autoActionRunner     prservice.AutoActionRunner
 	tenant               common.Tenant
 }
 
@@ -47,6 +48,10 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		actionMappingService: prservice.ActionMappingService{},
 		tenant:               tenant,
 	}
+}
+
+func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
+	a.autoActionRunner = autoActionRunner
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
@@ -195,16 +200,12 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
-	//TODO this starts an async action and we need to publish the outcome back to the client
-	// we have two options:
-	// 1) block like we do in the POST /patron-requests/{id}/action endpoint
-	// 2) return 202 Accepted and send the update via the /sse/events endpoint
-	// Option 2 requires that we define SSE events for patron request updates
-	action := prservice.BorrowerActionValidate
-	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
+	if a.autoActionRunner != nil {
+		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	var illRequest iso18626.Request
 	err = json.Unmarshal(pr.IllRequest, &illRequest)
