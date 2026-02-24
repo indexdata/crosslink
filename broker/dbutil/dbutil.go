@@ -82,12 +82,14 @@ func initDBSchema(connStr, dbSchema string) error {
         DO $$
         BEGIN
             IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {{.Literal}}) THEN
-                CREATE ROLE {{.Identifier}} WITH PASSWORD 'tenant' LOGIN;
-                ALTER ROLE {{.Identifier}} SET search_path = {{.Identifier}};
-                GRANT {{.Identifier}} TO CURRENT_USER;
+                -- Create a non-login role used for schema ownership/privileges.
+                CREATE ROLE {{.Identifier}} NOLOGIN;
             END IF;
         END
         $$;
+        -- Ensure the connected user can use the role even when it already exists.
+        GRANT {{.Identifier}} TO CURRENT_USER;
+        -- Create the schema owned by that role if it does not exist.
         CREATE SCHEMA IF NOT EXISTS {{.Identifier}} AUTHORIZATION {{.Identifier}};`
 
 	tmpl, err := template.New("setup").Parse(setupSQL)
