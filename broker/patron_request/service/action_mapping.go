@@ -72,10 +72,11 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 			}
 		}
 
-		if state.Side == proapi.REQUESTER {
+		switch state.Side {
+		case proapi.REQUESTER:
 			borrowerMap[stateName] = manualActions
 			borrowerConfig[stateName] = currentStateConfig
-		} else if state.Side == proapi.SUPPLIER {
+		case proapi.SUPPLIER:
 			lenderMap[stateName] = manualActions
 			lenderConfig[stateName] = currentStateConfig
 		}
