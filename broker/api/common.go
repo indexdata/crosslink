@@ -52,27 +52,32 @@ func ToLinkPath(r *http.Request, path string, query string) string {
 func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {
 	about := oapi.About{}
 	about.Count = fullCount
-	if limit > 0 && fullCount > int64(limit) {
-		lastOffset := int32(((fullCount - 1) / int64(limit)) * int64(limit))
+	if limit <= 0 {
+		return about
+	}
+	limit64 := int64(limit)
+	offset64 := int64(offset)
+	if fullCount > limit64 {
+		lastOffset := ((fullCount - 1) / limit64) * limit64
 		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(lastOffset))}
+		urlValues["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
 		link := ToLinkUrlValues(r, urlValues)
 		about.LastLink = &link
 	}
-	if offset > 0 {
-		pOffset := offset - limit
+	if offset64 > 0 {
+		pOffset := offset64 - limit64
 		if pOffset < 0 {
 			pOffset = 0
 		}
 		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(pOffset))}
+		urlValues["offset"] = []string{strconv.FormatInt(pOffset, 10)}
 		link := ToLinkUrlValues(r, urlValues)
 		about.PrevLink = &link
 	}
-	if fullCount > int64(limit+offset) {
-		noffset := offset + limit
+	if fullCount > offset64+limit64 {
+		noffset := offset64 + limit64
 		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.Itoa(int(noffset))}
+		urlValues["offset"] = []string{strconv.FormatInt(noffset, 10)}
 		link := ToLinkUrlValues(r, urlValues)
 		about.NextLink = &link
 	}
