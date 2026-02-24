@@ -178,7 +178,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
 		if err != nil {
-			ctx.Logger().Error("failed to run auto actions on state entry", "error", err, "patronRequestId", pr.ID)
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
 		}
 	}
 	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
@@ -356,7 +359,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
 		if err != nil {
-			ctx.Logger().Error("failed to run auto actions on state entry", "error", err, "patronRequestId", pr.ID)
+			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
 		}
 	}
 	return createRAMResponse(ram, iso18626.TypeMessageStatusOK, action, nil, nil)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -192,18 +193,31 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		if err != nil {
 			return err
 		}
+		if completedEvent.EventStatus != events.EventStatusSuccess {
+			return fmt.Errorf("auto action %s failed with status %s%s", action, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent))
+		}
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
 		if err != nil {
 			return err
 		}
 		stateChanged := updatedPr.State != currentState
-		if completedEvent.EventStatus != events.EventStatusSuccess || stateChanged {
+		if stateChanged {
 			return nil
 		}
 	}
 
 	return nil
+}
+
+func autoActionErrorSuffix(event events.Event) string {
+	if event.ResultData.EventError != nil && event.ResultData.EventError.Message != "" {
+		return ": " + event.ResultData.EventError.Message
+	}
+	if event.ResultData.Problem != nil && event.ResultData.Problem.Details != "" {
+		return ": " + event.ResultData.Problem.Details
+	}
+	return ""
 }
 
 func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
