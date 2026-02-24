@@ -189,6 +189,26 @@ func TestHandleSupplyingAgencyMessageWillSupply(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestHandleSupplyingAgencyMessageTriggersAutoActionOnStateTransition(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockAutoActionRunner := &MockAutoActionRunner{}
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	handler.SetAutoActionRunner(mockAutoActionRunner)
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateSent, Side: SideBorrowing})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Equal(t, BorrowerStateWillSupply, mockAutoActionRunner.lastPr.State)
+	assert.NoError(t, err)
+}
+
 func TestHandleSupplyingAgencyMessageWillSupplyCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
