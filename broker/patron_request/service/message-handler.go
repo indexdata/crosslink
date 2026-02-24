@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -115,6 +116,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 		// TODO should we check if supplier is set ? and search if not
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoaned:
+		err := m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 		pr.State = BorrowerStateShipped
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
@@ -301,4 +309,61 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 		}, err)
 	}
 	return createRAMResponse(ram, iso18626.TypeMessageStatusOK, action, nil, nil)
+}
+
+func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
+	if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" &&
+		(sam.DeliveryInfo.SentVia == nil || sam.DeliveryInfo.SentVia.Text != "URL") {
+		if strings.Contains(sam.DeliveryInfo.ItemId, "multivol:") {
+			list := strings.Split(sam.DeliveryInfo.ItemId, ",multivol:")
+			for _, item := range list {
+				item = strings.Replace(item, "multivol:", "", 1)
+				err := m.saveItem(ctx, pr.ID, item)
+				if err != nil {
+					return err
+				}
+			}
+		} else {
+			return m.saveItem(ctx, pr.ID, sam.DeliveryInfo.ItemId)
+		}
+	}
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, item string) error {
+	id, name, callNumber := getItemValues(item)
+	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       prId,
+		ItemID:     getDbText(id),
+		Title:      getDbText(name),
+		CallNumber: callNumber,
+		Barcode:    id, //TODO barcode generation. How to do that?
+	})
+	return err
+}
+
+func getItemValues(itemId string) (string, string, pgtype.Text) {
+	re := regexp.MustCompile(`(.*),(.*),(.*)`)
+	match := re.FindStringSubmatch(itemId)
+	id := itemId
+	name := itemId
+	var iidCallNumber *string
+	callNumber := pgtype.Text{
+		Valid:  false,
+		String: "",
+	}
+	if len(match) > 0 {
+		name = match[1]
+		iidCallNumber = &match[2]
+		id = match[3]
+	}
+	if iidCallNumber != nil {
+		callNumber = pgtype.Text{
+			Valid:  true,
+			String: *iidCallNumber,
+		}
+	}
+	return id, name, callNumber
 }

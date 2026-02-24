@@ -19,7 +19,7 @@ type PrRepo interface {
 	GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error)
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
-	GetItemByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
+	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error)
@@ -111,7 +111,7 @@ func (r *PgPrRepo) GetItemById(ctx common.ExtendedContext, id string) (Item, err
 	return row.Item, err
 }
 
-func (r *PgPrRepo) GetItemByPrId(ctx common.ExtendedContext, prId string) ([]Item, error) {
+func (r *PgPrRepo) GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error) {
 	rows, err := r.queries.GetItemsByPrId(ctx, r.GetConnOrTx(), prId)
 	var list []Item
 	for _, row := range rows {
