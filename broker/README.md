@@ -152,11 +152,11 @@ schema is used (usually `public`).
 
 You can execute provisioning- or migration-only via `/broker db-up`, after which the app will terminate.
 
-NOTE: For production use it's recommended to disable `DB_PROVISION` and separately provision a login
-role (e.g. `crosslink`) with `CONNECT` to the target database and full object privileges on the dedicated schema owned by the role (e.g. `crosslink_broker`), with public privileges locked down.
+NOTE: For production use it's recommended to disable `DB_PROVISION` and separately provision a runtime user (e.g. `crosslink`)
+with `CONNECT` to the target database and public privileges locked down and an owner role (e.g `crosslink_broker`)
+with full privileges on the dedicated schema granted to the user.
 See the example [DB provisioning script](../misc/db-provision.sql).
-Optionally, with `DB_MIGRATE` off, migrations can be performed separately and the runtime user does
-not require `CREATE` privileges.
+Optionally, with `DB_MIGRATE` off, migrations can be performed separately and the runtime user won't require any `CREATE` privileges.
 
 To run locally in a container, there is a `docker-compose.yml` file prepared with both the app and the DB.
 
