@@ -142,6 +142,7 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
+	assert.Nil(t, foundPrs.About.LastLink)
 
 	// GET list with offset in
 	respBytes = httpRequest(t, "GET", basePath+queryParams+"&offset=100000", []byte{}, 200)
