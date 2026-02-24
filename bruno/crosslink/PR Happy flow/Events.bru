@@ -1,0 +1,29 @@
+meta {
+  name: Events
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{host}}/events?requester_req_id={{prId}}
+  body: none
+  auth: basic
+}
+
+params:query {
+  requester_req_id: {{prId}}
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

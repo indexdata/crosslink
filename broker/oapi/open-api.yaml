@@ -203,6 +203,9 @@ components:
         prevLink:
           type: string
           description: Link to the previous page of results
+        lastLink:
+          type: string
+          description: Link to the last page of results
     Event:
       type: object
       properties:

@@ -26,7 +26,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/app"
-	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
@@ -49,7 +48,7 @@ var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
 	ctx := context.Background()
-	dbutil.DB_PROVISION = true
+	app.DB_PROVISION = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
@@ -178,7 +177,9 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.LessOrEqual(t, count, int64(3*api.LIMIT_DEFAULT))
 	assert.Nil(t, resp.About.PrevLink)
 	assert.NotNil(t, resp.About.NextLink)
+	assert.NotNil(t, resp.About.LastLink)
 	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=10", *resp.About.NextLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?offset=20", *resp.About.LastLink)
 
 	body = getResponseBody(t, "/ill_transactions?offset=1000")
 	err = json.Unmarshal(body, &resp)
@@ -186,9 +187,11 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.Equal(t, count, resp.About.Count)
 
 	body = getResponseBody(t, "/ill_transactions?limit=0")
+	resp.About.LastLink = nil
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Equal(t, count, resp.About.Count)
+	assert.Nil(t, resp.About.LastLink)
 
 	body = getResponseBody(t, "/ill_transactions?offset=3&limit="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
 	err = json.Unmarshal(body, &resp)
@@ -209,9 +212,14 @@ func TestGetIllTransactions(t *testing.T) {
 
 	assert.Nil(t, resp.About.PrevLink)
 	assert.NotNil(t, resp.About.NextLink)
+	assert.NotNil(t, resp.About.LastLink)
 	nextLink := *resp.About.NextLink
+	lastLink := *resp.About.LastLink
 	assert.True(t, strings.HasPrefix(nextLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, nextLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	assert.True(t, strings.HasPrefix(lastLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
+	assert.Contains(t, lastLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	assert.Contains(t, lastLink, "offset=10")
 	// we have estblished that the next link is correct, now we will check if it works
 	hres, err := http.Get(nextLink) // nolint:gosec
 	assert.NoError(t, err)
@@ -413,8 +421,11 @@ func TestPeersLinks(t *testing.T) {
 	assert.Len(t, resp.Items, int(api.LIMIT_DEFAULT))
 	assert.GreaterOrEqual(t, int(resp.About.Count), int(2*api.LIMIT_DEFAULT))
 	assert.NotNil(t, resp.About.NextLink)
+	assert.NotNil(t, resp.About.LastLink)
 	assert.True(t, strings.HasPrefix(*resp.About.NextLink, getLocalhostWithPort()+"/peers?"))
 	assert.Contains(t, *resp.About.NextLink, "offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)))
+	expectedLastOffset := int(((resp.About.Count - 1) / int64(api.LIMIT_DEFAULT)) * int64(api.LIMIT_DEFAULT))
+	assert.Contains(t, *resp.About.LastLink, "offset="+strconv.Itoa(expectedLastOffset))
 	assert.Nil(t, resp.About.PrevLink)
 
 	body := getResponseBody(t, "/peers?offset="+strconv.Itoa(int(api.LIMIT_DEFAULT)-1))
