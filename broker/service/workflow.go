@@ -154,7 +154,7 @@ func (w *WorkflowManager) shouldForwardSAM(ctx common.ExtendedContext, sam iso18
 		return true
 	}
 	if lastEvent.EventData.IncomingMessage == nil || lastEvent.EventData.IncomingMessage.RequestingAgencyMessage == nil {
-		ctx.Logger().Error("last cancel event is missing requesting agency message", "error", err)
+		ctx.Logger().Error("last cancel event is missing requesting agency message")
 		return true
 	}
 	if getSupplierSymbol(*lastEvent.EventData.IncomingMessage.RequestingAgencyMessage) == brokerSymbol {
