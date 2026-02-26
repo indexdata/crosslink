@@ -672,6 +672,54 @@ components:
         - barcode
         - createdAt
 
+    PrNotification:
+      type: object
+      title: Notification 
+      description: Patron request notification
+      properties:
+        id:
+          type: string
+          description: Notification id
+        fromSymbol:
+          type: string
+          description: Symbol of notification sender 
+        toSymbol:
+          type: string
+          description: Symbol of notification receiver
+        side:
+          type: string
+          description: Patron request side
+        note:
+          type: string
+          description: Note of notification
+        cost:
+          type: number
+          format: double
+          description: Cost amount
+        currency:
+          type: string
+          description: Currency symbol
+        condition:
+          type: string
+          description: Condition of notification
+        receipt:
+          type: string
+          description: Receipt of notification
+        createdAt:
+          type: string
+          format: date-time
+          description: Notification creation date time
+        acknowledgedAt:
+          type: string
+          format: date-time
+          description: Notification acknowledged at date time
+      required:
+        - id
+        - fromSymbol
+        - toSymbol
+        - side
+        - createdAt
+
 paths:
   /:
     get:
@@ -1263,6 +1311,43 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PrItem'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/notifications:
+    get:
+      summary: Retrieve patron request related notifications
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      responses:
+        '200':
+          description: Successful retrieval of patron request notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrNotification'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
