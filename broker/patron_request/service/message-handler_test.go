@@ -216,11 +216,15 @@ func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
+		},
 	}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateShipped, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
+	assert.Len(t, mockPrRepo.savedItems, 1)
 }
 
 func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
@@ -525,4 +529,44 @@ func TestHandleRequestMessageSaveError(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, "db error", resp.RequestConfirmation.ErrorData.ErrorValue)
 	assert.Equal(t, "db error", err.Error())
+}
+
+func TestSaveItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+
+	// Empty message
+	sam := iso18626.SupplyingAgencyMessage{}
+	err := handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(mockPrRepo.savedItems))
+
+	// One Item
+	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#"
+	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(mockPrRepo.savedItems))
+	assert.Equal(t, "1", mockPrRepo.savedItems[0].Title.String)
+	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
+	assert.Equal(t, "3", mockPrRepo.savedItems[0].ItemID.String)
+	assert.Equal(t, "3", mockPrRepo.savedItems[0].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].PrID)
+
+	// Two Items
+	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n4,5|6|7\n#MultipleItemsEnd#"
+	mockPrRepo.savedItems = nil
+	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(mockPrRepo.savedItems))
+	assert.Equal(t, "1", mockPrRepo.savedItems[0].Title.String)
+	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
+	assert.Equal(t, "3", mockPrRepo.savedItems[0].ItemID.String)
+	assert.Equal(t, "3", mockPrRepo.savedItems[0].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].PrID)
+	assert.Equal(t, "4,5", mockPrRepo.savedItems[1].Title.String)
+	assert.Equal(t, "6", mockPrRepo.savedItems[1].CallNumber.String)
+	assert.Equal(t, "7", mockPrRepo.savedItems[1].ItemID.String)
+	assert.Equal(t, "7", mockPrRepo.savedItems[1].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[1].PrID)
 }

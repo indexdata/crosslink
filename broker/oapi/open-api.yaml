@@ -643,6 +643,35 @@ components:
       required:
         - name
 
+    PrItem:
+      type: object
+      title: Item
+      description: Patron request item
+      properties:
+        id:
+          type: string
+          description: Item system id
+        barcode:
+          type: string
+          description: Item barcode
+        title:
+          type: string
+          description: Item title
+        callNumber:
+          type: string
+          description: Item call number
+        itemId:
+          type: string
+          description: Item item id
+        createdAt:
+          type: string
+          format: date-time
+          description: Item creation date time
+      required:
+        - id
+        - barcode
+        - createdAt
+
 paths:
   /:
     get:
@@ -1197,6 +1226,43 @@ paths:
                 type: array
                 items:
                    $ref: '#/components/schemas/Event'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/items:
+    get:
+      summary: Retrieve patron request related items
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      responses:
+        '200':
+          description: Successful retrieval of patron request items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrItem'
         '400':
           description: Bad Request. Invalid query parameters.
           content:

@@ -669,7 +669,8 @@ func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data 
 type MockPrRepo struct {
 	mock.Mock
 	pr_db.PgPrRepo
-	savedPr pr_db.PatronRequest
+	savedPr    pr_db.PatronRequest
+	savedItems []pr_db.Item
 }
 
 func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
@@ -696,6 +697,14 @@ func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_d
 func (r *MockPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, symbol string, requesterReqId string) (pr_db.PatronRequest, error) {
 	args := r.Called(symbol, requesterReqId)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+}
+
+func (r *MockPrRepo) SaveItem(ctx common.ExtendedContext, params pr_db.SaveItemParams) (pr_db.Item, error) {
+	if r.savedItems == nil {
+		r.savedItems = []pr_db.Item{}
+	}
+	r.savedItems = append(r.savedItems, pr_db.Item(params))
+	return pr_db.Item(params), nil
 }
 
 type MockIso18626Handler struct {

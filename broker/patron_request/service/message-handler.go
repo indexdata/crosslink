@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,6 +116,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 		// TODO should we check if supplier is set ? and search if not
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoaned:
+		err := m.saveItems(ctx, pr, sam)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 		pr.State = BorrowerStateShipped
 		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
@@ -301,4 +309,41 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 		}, err)
 	}
 	return createRAMResponse(ram, iso18626.TypeMessageStatusOK, action, nil, nil)
+}
+
+func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
+	if common.SamHasItems(sam) {
+		result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
+		for _, item := range result {
+			var loopErr error
+			if len(item) == 1 {
+				loopErr = m.saveItem(ctx, pr.ID, item[0], item[0], nil)
+			} else if len(item) == 3 {
+				loopErr = m.saveItem(ctx, pr.ID, item[2], item[0], &item[1])
+			} else {
+				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
+			}
+			if loopErr != nil {
+				return loopErr
+			}
+		}
+	}
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, name string, callNumber *string) error {
+	dbCallNumber := pgtype.Text{Valid: false, String: ""}
+	if callNumber != nil {
+		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}
+	}
+	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       prId,
+		ItemID:     getDbText(id),
+		Title:      getDbText(name),
+		CallNumber: dbCallNumber,
+		Barcode:    id, //TODO barcode generation. How to do that?
+	})
+	return err
 }

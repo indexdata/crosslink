@@ -230,13 +230,8 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
-		addNotFoundError(w)
 		return
 	}
 	err = a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
@@ -249,18 +244,23 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *PatronRequestApiHandler) getPatronRequestById(ctx common.ExtendedContext, id string, side *string, symbol string) (*pr_db.PatronRequest, error) {
+func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, symbol string) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
+			addNotFoundError(w)
+			return nil
 		}
-		return nil, err
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return nil
+		}
 	}
 	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == *side) {
-		return &pr, nil
+		return &pr
 	}
-	return nil, nil
+	addNotFoundError(w)
+	return nil
 }
 
 func isSideParamValid(side *string) bool {
@@ -284,13 +284,8 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
-		addNotFoundError(w)
 		return
 	}
 	var illRequest iso18626.Request
@@ -314,13 +309,8 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
-		addNotFoundError(w)
 		return
 	}
 	actions := a.actionMappingService.GetActionMapping(*pr).GetActionsForPatronRequest(*pr)
@@ -339,13 +329,8 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
-		addNotFoundError(w)
 		return
 	}
 	var action proapi.ExecuteAction
@@ -395,6 +380,7 @@ func (a *PatronRequestApiHandler) ConfirmActionProcess(ctx common.ExtendedContex
 func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
 	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id, "symbol": symbol}
+
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
@@ -404,24 +390,49 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	pr, err := a.getPatronRequestById(ctx, id, params.Side, symbol)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
-		addNotFoundError(w)
 		return
 	}
-	events, err := a.eventRepo.GetPatronRequestEvents(ctx, pr.ID)
+	eventsList, err := a.eventRepo.GetPatronRequestEvents(ctx, pr.ID)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
 
 	var responseItems []oapi.Event
-	for _, event := range events {
+	for _, event := range eventsList {
 		responseItems = append(responseItems, api.ToApiEvent(event, "", &event.PatronRequestID))
+	}
+	writeJsonResponse(w, responseItems)
+}
+
+func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdItemsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "GetPatronRequestsIdItems", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+	itemsList, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+
+	var responseItems []proapi.PrItem
+	for _, item := range itemsList {
+		responseItems = append(responseItems, toApiItem(item))
 	}
 	writeJsonResponse(w, responseItems)
 }
@@ -539,6 +550,17 @@ func getDbText(value *string) pgtype.Text {
 	return pgtype.Text{
 		Valid:  true,
 		String: *value,
+	}
+}
+
+func toApiItem(item pr_db.Item) proapi.PrItem {
+	return proapi.PrItem{
+		Id:         item.ID,
+		Barcode:    item.Barcode,
+		CallNumber: toString(item.CallNumber),
+		ItemId:     toString(item.ItemID),
+		Title:      toString(item.Title),
+		CreatedAt:  item.CreatedAt.Time,
 	}
 }
 

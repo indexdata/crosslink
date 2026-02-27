@@ -149,7 +149,7 @@ func TestItem(t *testing.T) {
 	assert.Equal(t, itemId, item.ID)
 
 	// Get by pr id
-	items, err := prRepo.GetItemByPrId(appCtx, prId)
+	items, err := prRepo.GetItemsByPrId(appCtx, prId)
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, itemId, items[0].ID)
