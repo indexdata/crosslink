@@ -47,9 +47,7 @@ func loadStateModel(path string) (*proapi.StateModel, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	var stateModel proapi.StateModel
 	err = json.Unmarshal(data, &stateModel)
-
 	return &stateModel, err
 }
