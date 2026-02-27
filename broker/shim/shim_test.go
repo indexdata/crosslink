@@ -757,3 +757,159 @@ func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 	shima.appendUnfilledStatusAndReasonUnfilled(&sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 }
+
+func TestProcessItemIdOneItemSimpleReShare(t *testing.T) {
+	shimR := new(Iso18626ReShareShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "1|23\\",
+			},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "send one item",
+			},
+		},
+	}
+
+	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "1|23\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item\n#MultipleItems#\n1\\|23\\\\\n#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestProcessItemIdOneItemReShare(t *testing.T) {
+	shimR := new(Iso18626ReShareShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "name1|2,3\\,c|123,id|123",
+			},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "send one item",
+			},
+		},
+	}
+
+	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "name1|2,3\\,c|123,id|123", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item\n"+
+		"#MultipleItems#\n"+
+		"name1\\|2,3\\\\|c\\|123|id\\|123\n"+
+		"#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "name1|2,3\\,c|123,id|123", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestProcessItemIdMultipleItemsReShare(t *testing.T) {
+	shimR := new(Iso18626ReShareShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
+			},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "send multiple items",
+			},
+		},
+	}
+
+	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send multiple items\n"+
+		"#MultipleItems#\n"+
+		"name1\\|2,3\\\\|c\\|123|id\\|123\n"+
+		"name1\\|2,4\\\\|c\\|124|id\\|124\n"+
+		"name1\\|2,5\\\\|c\\|125|id\\|125\n"+
+		"#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send multiple items", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestProcessItemIdOneItemAlma(t *testing.T) {
+	shimA := new(Iso18626AlmaShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "1|23\\",
+			},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "send one item",
+			},
+		},
+	}
+
+	result := shimA.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "1|23\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item\n"+
+		"#MultipleItems#\n"+
+		"1\\|23\\\\\n"+
+		"#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimA.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestProcessItemIdMultipleItemsAlma(t *testing.T) {
+	shimA := new(Iso18626AlmaShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "1|23\\,1|24\\,1|25\\",
+			},
+			MessageInfo: iso18626.MessageInfo{
+				Note: "send multiple items",
+			},
+		},
+	}
+
+	result := shimA.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "1|23\\,1|24\\,1|25\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send multiple items\n"+
+		"#MultipleItems#\n"+
+		"1\\|23\\\\\n"+
+		"1\\|24\\\\\n"+
+		"1\\|25\\\\\n"+
+		"#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimA.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "1|23\\,1|24\\,1|25\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send multiple items", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
