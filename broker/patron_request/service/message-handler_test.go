@@ -149,8 +149,8 @@ func TestHandlePatronRequestMessage(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("db error"))
 	status, resp, err = handler.handlePatronRequestMessage(appCtx, &iso18626.ISO18626Message{SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: patronRequestId}}}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, "status change no allowed", err.Error())
-	assert.Equal(t, "status change no allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, "status change not allowed", err.Error())
+	assert.Equal(t, "status change not allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
 }
 
 func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
@@ -322,8 +322,8 @@ func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {
 	}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, "status change no allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
-	assert.Equal(t, "status change no allowed", err.Error())
+	assert.Equal(t, "status change not allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, "status change not allowed", err.Error())
 }
 
 type MockIllRepo struct {

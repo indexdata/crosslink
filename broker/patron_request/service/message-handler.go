@@ -153,17 +153,17 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 
 	if eventName == "" {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-			ErrorValue: "status change no allowed",
-		}, errors.New("status change no allowed"))
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: "status change not allowed",
+		}, errors.New("status change not allowed"))
 	}
 
 	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
 	if !eventDefined {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-			ErrorValue: "status change no allowed",
-		}, errors.New("status change no allowed"))
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: "status change not allowed",
+		}, errors.New("status change not allowed"))
 	}
 	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged)
 }
