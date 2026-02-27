@@ -283,7 +283,8 @@
           "desc": "Indicate supplier will supply and send ISO18626 WillSupply",
           "transitions": {
             "success": "WILL_SUPPLY"
-          }
+          },
+          "trigger": "auto"
         },
         {
           "name": "cannot-supply",

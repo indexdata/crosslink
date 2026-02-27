@@ -21,7 +21,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		LenderStateValidated:         {LenderActionWillSupply, LenderActionCannotSupply, LenderActionAddCondition},
+		LenderStateValidated:         {LenderActionCannotSupply, LenderActionAddCondition},
 		LenderStateWillSupply:        {LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip},
 		LenderStateConditionPending:  {LenderActionCannotSupply},
 		LenderStateConditionAccepted: {LenderActionShip, LenderActionCannotSupply},
