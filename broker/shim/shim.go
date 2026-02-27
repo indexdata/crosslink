@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
@@ -88,6 +89,11 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]
 		}
 	}
+	if message.SupplyingAgencyMessage != nil {
+		copySam := *message.SupplyingAgencyMessage
+		copyMessage.SupplyingAgencyMessage = &copySam
+		i.unifyItem(copyMessage.SupplyingAgencyMessage)
+	}
 	return &copyMessage
 }
 
@@ -107,6 +113,7 @@ func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Mess
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
 			i.appendUnfilledStatusAndReasonUnfilled(suppMsg)
+			i.setItemId(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
@@ -195,6 +202,20 @@ func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso186
 		if suppMsg.MessageInfo.ReasonUnfilled != nil {
 			suppMsg.MessageInfo.Note += NOTE_FIELD_SEP + "Reason: " + suppMsg.MessageInfo.ReasonUnfilled.Text
 		}
+	}
+}
+
+func (i *Iso18626AlmaShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
+	if common.SamHasItems(*sam) {
+		result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
+		var items []string
+		for _, item := range result {
+			items = append(items, item[0])
+		}
+		sam.DeliveryInfo.ItemId = strings.Join(items, ",")
+
+		sam.MessageInfo.Note = sam.MessageInfo.Note[0:startIdx-1] + // -1 because we remove new line symbol
+			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
 	}
 }
 
@@ -516,6 +537,26 @@ func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *is
 	}
 }
 
+func (i *Iso18626AlmaShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
+	if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+		var sb strings.Builder
+		//retain original note
+		if sam.MessageInfo.Note != "" {
+			sb.WriteString(sam.MessageInfo.Note)
+			sb.WriteString("\n")
+		}
+		sb.WriteString(common.MULTIPLE_ITEMS)
+		sb.WriteString("\n")
+		list := strings.Split(sam.DeliveryInfo.ItemId, ",")
+		for _, item := range list {
+			sb.WriteString(common.PackItemsNote([]string{item}))
+			sb.WriteString("\n")
+		}
+		sb.WriteString(common.MULTIPLE_ITEMS_END)
+		sam.MessageInfo.Note = sb.String()
+	}
+}
+
 type Iso18626ReShareShim struct {
 	Iso18626DefaultShim
 }
@@ -523,6 +564,7 @@ type Iso18626ReShareShim struct {
 func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
 	if message.SupplyingAgencyMessage != nil {
 		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
+		i.setItemId(message.SupplyingAgencyMessage)
 	}
 	return xml.Marshal(message)
 }
@@ -542,4 +584,73 @@ func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18
 			}
 		}
 	}
+}
+
+func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	if message == nil {
+		return message
+	}
+	copyMessage := *message
+	if message.SupplyingAgencyMessage != nil {
+		copySam := *message.SupplyingAgencyMessage
+		copyMessage.SupplyingAgencyMessage = &copySam
+		i.unifyItem(copyMessage.SupplyingAgencyMessage)
+	}
+	return &copyMessage
+}
+
+func (i *Iso18626ReShareShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
+	if common.SamHasItems(*sam) {
+		result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
+		if len(result) == 1 {
+			sam.DeliveryInfo.ItemId = strings.Join(result[0], ",")
+		} else {
+			var items []string
+			for _, item := range result {
+				items = append(items, strings.Join(item, ","))
+			}
+			sam.DeliveryInfo.ItemId = "multivol:" + strings.Join(items, ",multivol:")
+		}
+
+		sam.MessageInfo.Note = sam.MessageInfo.Note[0:startIdx-1] + // -1 because we remove new line symbol
+			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
+	}
+}
+
+func (i *Iso18626ReShareShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
+	if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+		var sb strings.Builder
+		//retain original note
+		if sam.MessageInfo.Note != "" {
+			sb.WriteString(sam.MessageInfo.Note)
+			sb.WriteString("\n")
+		}
+		sb.WriteString(common.MULTIPLE_ITEMS)
+		sb.WriteString("\n")
+		if strings.Contains(sam.DeliveryInfo.ItemId, "multivol:") {
+			list := strings.Split(sam.DeliveryInfo.ItemId, ",multivol:")
+			for _, item := range list {
+				item = strings.Replace(item, "multivol:", "", 1)
+				writeItemValues(&sb, item)
+				sb.WriteString("\n")
+			}
+		} else {
+			writeItemValues(&sb, sam.DeliveryInfo.ItemId)
+			sb.WriteString("\n")
+		}
+		sb.WriteString(common.MULTIPLE_ITEMS_END)
+		sam.MessageInfo.Note = sb.String()
+	}
+}
+
+func writeItemValues(sb *strings.Builder, itemId string) {
+	re := regexp.MustCompile(`(.*),(.*),(.*)`)
+	match := re.FindStringSubmatch(itemId)
+	var row string
+	if len(match) > 0 {
+		row = common.PackItemsNote([]string{match[1], match[2], match[3]})
+	} else {
+		row = common.PackItemsNote([]string{itemId})
+	}
+	sb.WriteString(row)
 }

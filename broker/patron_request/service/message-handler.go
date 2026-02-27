@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -312,58 +312,38 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" &&
-		(sam.DeliveryInfo.SentVia == nil || sam.DeliveryInfo.SentVia.Text != "URL") {
-		if strings.Contains(sam.DeliveryInfo.ItemId, "multivol:") {
-			list := strings.Split(sam.DeliveryInfo.ItemId, ",multivol:")
-			for _, item := range list {
-				item = strings.Replace(item, "multivol:", "", 1)
-				err := m.saveItem(ctx, pr.ID, item)
-				if err != nil {
-					return err
-				}
+	if common.SamHasItems(sam) {
+		result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
+		for _, item := range result {
+			var loopErr error
+			if len(item) == 1 {
+				loopErr = m.saveItem(ctx, pr.ID, item[0], item[0], nil)
+			} else if len(item) == 3 {
+				loopErr = m.saveItem(ctx, pr.ID, item[2], item[0], &item[1])
+			} else {
+				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
 			}
-		} else {
-			return m.saveItem(ctx, pr.ID, sam.DeliveryInfo.ItemId)
+			if loopErr != nil {
+				return loopErr
+			}
 		}
 	}
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, item string) error {
-	id, name, callNumber := getItemValues(item)
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, name string, callNumber *string) error {
+	dbCallNumber := pgtype.Text{Valid: false, String: ""}
+	if callNumber != nil {
+		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}
+	}
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       prId,
 		ItemID:     getDbText(id),
 		Title:      getDbText(name),
-		CallNumber: callNumber,
+		CallNumber: dbCallNumber,
 		Barcode:    id, //TODO barcode generation. How to do that?
 	})
 	return err
-}
-
-func getItemValues(itemId string) (string, string, pgtype.Text) {
-	re := regexp.MustCompile(`(.*),(.*),(.*)`)
-	match := re.FindStringSubmatch(itemId)
-	id := itemId
-	name := itemId
-	var iidCallNumber *string
-	callNumber := pgtype.Text{
-		Valid:  false,
-		String: "",
-	}
-	if len(match) > 0 {
-		name = match[1]
-		iidCallNumber = &match[2]
-		id = match[3]
-	}
-	if iidCallNumber != nil {
-		callNumber = pgtype.Text{
-			Valid:  true,
-			String: *iidCallNumber,
-		}
-	}
-	return id, name, callNumber
 }

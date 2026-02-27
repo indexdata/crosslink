@@ -216,8 +216,8 @@ func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
-		DeliveryInfo: &iso18626.DeliveryInfo{
-			ItemId: "1,2,3",
+		MessageInfo: iso18626.MessageInfo{
+			Note: "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
 		},
 	}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -531,43 +531,19 @@ func TestHandleRequestMessageSaveError(t *testing.T) {
 	assert.Equal(t, "db error", err.Error())
 }
 
-func TestGetItemValues(t *testing.T) {
-	id, name, callNumber := getItemValues("1,2,3")
-	assert.Equal(t, "1", name)
-	assert.Equal(t, "2", callNumber.String)
-	assert.Equal(t, "3", id)
-
-	id, name, callNumber = getItemValues("1")
-	assert.Equal(t, "1", name)
-	assert.Equal(t, "", callNumber.String)
-	assert.False(t, callNumber.Valid)
-	assert.Equal(t, "1", id)
-
-	id, name, callNumber = getItemValues("1,2,3,4,5")
-	assert.Equal(t, "1,2,3", name)
-	assert.Equal(t, "4", callNumber.String)
-	assert.Equal(t, "5", id)
-}
-
 func TestSaveItems(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
-	// No delivery
+	// Empty message
 	sam := iso18626.SupplyingAgencyMessage{}
 	err := handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, len(mockPrRepo.savedItems))
 
-	// No ItemId
-	sam.DeliveryInfo = &iso18626.DeliveryInfo{}
-	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
-	assert.NoError(t, err)
-	assert.Equal(t, 0, len(mockPrRepo.savedItems))
-
 	// One Item
-	sam.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "1,2,3"}
+	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#"
 	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedItems))
@@ -578,7 +554,7 @@ func TestSaveItems(t *testing.T) {
 	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].PrID)
 
 	// Two Items
-	sam.DeliveryInfo = &iso18626.DeliveryInfo{ItemId: "multivol:1,2,3,multivol:4,5,6,7"}
+	sam.MessageInfo.Note = "#MultipleItems#\n1|2|3\n4,5|6|7\n#MultipleItemsEnd#"
 	mockPrRepo.savedItems = nil
 	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
 	assert.NoError(t, err)
@@ -593,11 +569,4 @@ func TestSaveItems(t *testing.T) {
 	assert.Equal(t, "7", mockPrRepo.savedItems[1].ItemID.String)
 	assert.Equal(t, "7", mockPrRepo.savedItems[1].Barcode)
 	assert.Equal(t, "pr1", mockPrRepo.savedItems[1].PrID)
-
-	// Don't create items for URL delivery
-	sam.DeliveryInfo.SentVia = &iso18626.TypeSchemeValuePair{Text: "URL"}
-	mockPrRepo.savedItems = nil
-	err = handler.saveItems(appCtx, pr_db.PatronRequest{ID: "pr1"}, sam)
-	assert.NoError(t, err)
-	assert.Equal(t, 0, len(mockPrRepo.savedItems))
 }
