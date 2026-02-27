@@ -167,6 +167,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
+	prApiHandler.SetActionTaskProcessor(prActionService)
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 
@@ -322,8 +323,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
 
-	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
-	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)
+	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
+	// It is processed inline by patron-request services and API handlers.
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))

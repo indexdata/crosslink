@@ -54,6 +54,7 @@ func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.Exte
 	if m.autoActionRunner == nil {
 		return nil
 	}
+	// Auto actions run inline so incoming-message confirmations can include their outcomes.
 	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
 }
 

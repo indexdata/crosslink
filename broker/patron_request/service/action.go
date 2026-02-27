@@ -105,6 +105,11 @@ func (a *PatronRequestActionService) InvokeAction(ctx common.ExtendedContext, ev
 	_, _ = a.processInvokeActionTask(ctx, event)
 }
 
+func (a *PatronRequestActionService) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	// Invoke-action tasks are currently processed inline by their callers.
+	return a.processInvokeActionTask(ctx, event)
+}
+
 func (a *PatronRequestActionService) processInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
 	return a.eventBus.ProcessTask(ctx, event, a.handleInvokeAction)
 }
@@ -189,6 +194,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 			PatronRequestID: pr.ID,
 			EventData:       data,
 		}
+		// Auto actions execute inline here to preserve synchronous state-transition semantics.
 		completedEvent, err := a.processInvokeActionTask(ctx, autoEvent)
 		if err != nil {
 			return err
