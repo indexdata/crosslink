@@ -149,8 +149,8 @@ func TestHandlePatronRequestMessage(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("db error"))
 	status, resp, err = handler.handlePatronRequestMessage(appCtx, &iso18626.ISO18626Message{SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: patronRequestId}}}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, "status change not allowed", err.Error())
-	assert.Equal(t, "status change not allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.Contains(t, err.Error(), "unsupported reason for message:")
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "unsupported reason for message:")
 }
 
 func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
@@ -164,6 +164,9 @@ func TestHandleSupplyingAgencyMessageExpectToSupply(t *testing.T) {
 				AgencyIdValue: "SUP1",
 			},
 			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusExpectToSupply},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
@@ -181,11 +184,34 @@ func TestHandleSupplyingAgencyMessageWillSupply(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageNotificationAlwaysConfirmsOK(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateSent, Side: SideBorrowing})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, "", mockPrRepo.savedPr.ID)
 	assert.NoError(t, err)
 }
 
@@ -198,6 +224,9 @@ func TestHandleSupplyingAgencyMessageTriggersAutoActionOnStateTransition(t *test
 	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateSent, Side: SideBorrowing})
@@ -219,6 +248,9 @@ func TestHandleSupplyingAgencyMessageReturnsErrorWhenAutoActionFails(t *testing.
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 	}, pr_db.PatronRequest{ID: patronRequestId, State: BorrowerStateSent, Side: SideBorrowing})
 
@@ -238,6 +270,7 @@ func TestHandleSupplyingAgencyMessageWillSupplyCondition(t *testing.T) {
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note: RESHARE_ADD_LOAN_CONDITION + " some comment",
 		},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
@@ -255,6 +288,9 @@ func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
 	}, pr_db.PatronRequest{State: BorrowerStateWillSupply, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -270,6 +306,9 @@ func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted},
 	}, pr_db.PatronRequest{State: BorrowerStateShippedReturned, Side: SideBorrowing})
@@ -287,6 +326,9 @@ func TestHandleSupplyingAgencyMessageUnfilled(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -303,12 +345,70 @@ func TestHandleSupplyingAgencyMessageCancelled(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateCancelled, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageCancelledStatusChangeRejected(t *testing.T) {
+	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+	}, pr_db.PatronRequest{})
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "status change not allowed:")
+	assert.Contains(t, err.Error(), "status change not allowed:")
+}
+
+func TestHandleSupplyingAgencyMessageCancelResponseCancelled(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateCancelled, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageCancelResponseRejectsNonCancelledStatus(t *testing.T) {
+	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, pr_db.PatronRequest{})
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "status change not allowed:")
+	assert.Contains(t, err.Error(), "status change not allowed:")
 }
 
 func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {
@@ -318,12 +418,15 @@ func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusEmpty},
 	}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, "status change not allowed", resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
-	assert.Equal(t, "status change not allowed", err.Error())
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "status change not allowed:")
+	assert.Contains(t, err.Error(), "status change not allowed:")
 }
 
 type MockIllRepo struct {
@@ -350,6 +453,9 @@ func TestHandleSupplyingAgencyMessageCancelledFailToSave(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 	}, pr_db.PatronRequest{ID: "error", State: BorrowerStateCancelPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusProblem, status)
@@ -369,7 +475,7 @@ func TestHandleRequestingAgencyMessageNotification(t *testing.T) {
 	}, pr_db.PatronRequest{State: LenderStateShipped, Side: SideLending})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
+	assert.Equal(t, "", mockPrRepo.savedPr.ID)
 	assert.NoError(t, err)
 }
 
@@ -437,6 +543,21 @@ func TestHandleRequestingAgencyMessageBadAction(t *testing.T) {
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, "unsupported action: bad-action", err.Error())
+}
+
+func TestHandleRequestingAgencyMessageRenewUnsupported(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleRequestingAgencyMessage(appCtx, iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		Action: iso18626.TypeActionRenew,
+	}, pr_db.PatronRequest{State: LenderStateWillSupply, Side: SideLending})
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, "unsupported action: Renew", err.Error())
 }
 
 func TestHandleRequestingAgencyMessageFailToSave(t *testing.T) {
