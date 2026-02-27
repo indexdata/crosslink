@@ -24,8 +24,11 @@ const (
 )
 
 const (
-	SideBorrowing                 pr_db.PatronRequestSide  = "borrowing"
-	SideLending                   pr_db.PatronRequestSide  = "lending"
+	SideBorrowing pr_db.PatronRequestSide = "borrowing"
+	SideLending   pr_db.PatronRequestSide = "lending"
+)
+
+const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
