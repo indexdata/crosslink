@@ -26,15 +26,15 @@ const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 type MessageEvent string
 
 const (
-	SupplierExpectToSupply   MessageEvent = "expect-to-supply"
-	SupplierWillSupply       MessageEvent = "will-supply"
-	SupplierWillSupplyCond   MessageEvent = "will-supply-conditional"
-	SupplierLoaned           MessageEvent = "loaned"
-	SupplierCompleted        MessageEvent = "completed"
-	SupplierUnfilled         MessageEvent = "unfilled"
-	SupplierCancelAccepted   MessageEvent = "cancel-accepted"
-	RequesterCancelRequest   MessageEvent = "cancel-request"
-	RequesterShippedReturn   MessageEvent = "shipped-return"
+	SupplierExpectToSupply MessageEvent = "expect-to-supply"
+	SupplierWillSupply     MessageEvent = "will-supply"
+	SupplierWillSupplyCond MessageEvent = "will-supply-conditional"
+	SupplierLoaned         MessageEvent = "loaned"
+	SupplierCompleted      MessageEvent = "completed"
+	SupplierUnfilled       MessageEvent = "unfilled"
+	SupplierCancelAccepted MessageEvent = "cancel-accepted"
+	RequesterCancelRequest MessageEvent = "cancel-request"
+	RequesterShippedReturn MessageEvent = "shipped-return"
 )
 
 type PatronRequestMessageHandler struct {

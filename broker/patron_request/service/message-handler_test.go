@@ -271,7 +271,7 @@ func TestHandleSupplyingAgencyMessageWillSupplyCondition(t *testing.T) {
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			Note: RESHARE_ADD_LOAN_CONDITION + " some comment",
+			Note:             RESHARE_ADD_LOAN_CONDITION + " some comment",
 		},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
