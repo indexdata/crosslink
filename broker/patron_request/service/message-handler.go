@@ -304,9 +304,9 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 	case iso18626.TypeActionCancel:
 		updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, "cancel-request")
 		if !eventDefined {
-			err := errors.New("unknown action: " + string(ram.Action))
+			err := errors.New("unsupported action: " + string(ram.Action))
 			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorType:  iso18626.TypeErrorTypeUnsupportedActionType,
 				ErrorValue: err.Error(),
 			}, err)
 		}
@@ -314,17 +314,17 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 	case iso18626.TypeActionShippedReturn:
 		updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, "shipped-return")
 		if !eventDefined {
-			err := errors.New("unknown action: " + string(ram.Action))
+			err := errors.New("unsupported action: " + string(ram.Action))
 			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorType:  iso18626.TypeErrorTypeUnsupportedActionType,
 				ErrorValue: err.Error(),
 			}, err)
 		}
 		return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged)
 	}
-	err := errors.New("unknown action: " + string(ram.Action))
+	err := errors.New("unsupported action: " + string(ram.Action))
 	return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
-		ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+		ErrorType:  iso18626.TypeErrorTypeUnsupportedActionType,
 		ErrorValue: err.Error(),
 	}, err)
 }

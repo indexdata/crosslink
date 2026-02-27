@@ -143,8 +143,8 @@ func TestHandlePatronRequestMessage(t *testing.T) {
 
 	status, resp, err = handler.handlePatronRequestMessage(appCtx, &iso18626.ISO18626Message{RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{}}, pr_db.PatronRequest{})
 	assert.Equal(t, events.EventStatusProblem, status)
-	assert.Equal(t, "unknown action: ", resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue)
-	assert.Equal(t, "unknown action: ", err.Error())
+	assert.Equal(t, "unsupported action: ", resp.RequestingAgencyMessageConfirmation.ErrorData.ErrorValue)
+	assert.Equal(t, "unsupported action: ", err.Error())
 
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("db error"))
 	status, resp, err = handler.handlePatronRequestMessage(appCtx, &iso18626.ISO18626Message{SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{Header: iso18626.Header{RequestingAgencyRequestId: patronRequestId}}}, pr_db.PatronRequest{})
@@ -424,7 +424,7 @@ func TestHandleRequestingAgencyMessageShippedReturn(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestHandleRequestingAgencyMessageUnknown(t *testing.T) {
+func TestHandleRequestingAgencyMessageBadAction(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
@@ -432,11 +432,11 @@ func TestHandleRequestingAgencyMessageUnknown(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
-		Action: "unknown",
+		Action: "bad-action",
 	}, pr_db.PatronRequest{State: LenderStateWillSupply, Side: SideLending})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Equal(t, "unknown action: unknown", err.Error())
+	assert.Equal(t, "unsupported action: bad-action", err.Error())
 }
 
 func TestHandleRequestingAgencyMessageFailToSave(t *testing.T) {
