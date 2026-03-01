@@ -62,6 +62,34 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
 }
 
+func TestGetActionTransitionMissingCases(t *testing.T) {
+	mapping := actionMappingService.GetActionMapping(pr_db.PatronRequest{})
+
+	// Supported action, but failure transition is not defined in state model.
+	_, ok := mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew},
+		BorrowerActionValidate,
+		ActionOutcomeFailure,
+	)
+	assert.False(t, ok)
+
+	// Unsupported outcome key should not resolve any transition.
+	_, ok = mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew},
+		BorrowerActionValidate,
+		"unknown-outcome",
+	)
+	assert.False(t, ok)
+
+	// Action not configured for state should not resolve transition.
+	_, ok = mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated},
+		BorrowerActionValidate,
+		ActionOutcomeSuccess,
+	)
+	assert.False(t, ok)
+}
+
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {
 	assert.Equal(t, len(list1), len(list2))
 	for i := range list1 {
