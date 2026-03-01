@@ -23,20 +23,6 @@ var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
 const COMP_MESSAGE = "pr_massage_handler"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 
-type MessageEvent string
-
-const (
-	SupplierExpectToSupply MessageEvent = "expect-to-supply"
-	SupplierWillSupply     MessageEvent = "will-supply"
-	SupplierWillSupplyCond MessageEvent = "will-supply-conditional"
-	SupplierLoaned         MessageEvent = "loaned"
-	SupplierCompleted      MessageEvent = "completed"
-	SupplierUnfilled       MessageEvent = "unfilled"
-	SupplierCancelAccepted MessageEvent = "cancel-accepted"
-	RequesterCancelRequest MessageEvent = "cancel-request"
-	RequesterShippedReturn MessageEvent = "shipped-return"
-)
-
 type PatronRequestMessageHandler struct {
 	prRepo               pr_db.PrRepo
 	eventRepo            events.EventRepo

@@ -70,6 +70,10 @@ func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter
 	writeJsonResponse(w, *stateModel)
 }
 
+func (a *PatronRequestApiHandler) GetStateModelCapabilities(w http.ResponseWriter, r *http.Request, params proapi.GetStateModelCapabilitiesParams) {
+	writeJsonResponse(w, prservice.BuiltInStateModelCapabilities())
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
 	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
 	logParams := map[string]string{"method": "GetPatronRequests", "symbol": symbol}

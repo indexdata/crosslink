@@ -574,6 +574,39 @@ components:
         - type
         - version
 
+    StateModelCapabilities:
+      title: StateModelCapabilities
+      type: object
+      description: Built-in states, actions and message events supported by the broker
+      additionalProperties: false
+      properties:
+        requesterStates:
+          type: array
+          items:
+            type: string
+        supplierStates:
+          type: array
+          items:
+            type: string
+        requesterActions:
+          type: array
+          items:
+            type: string
+        supplierActions:
+          type: array
+          items:
+            type: string
+        messageEvents:
+          type: array
+          items:
+            type: string
+      required:
+        - requesterStates
+        - supplierStates
+        - requesterActions
+        - supplierActions
+        - messageEvents
+
     ModelState:
       title: State
       type: object
@@ -1275,6 +1308,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StateModel'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /state_model/capabilities:
+    get:
+      summary: Retrieve built-in state model capabilities
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Successful retrieval of state model capabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StateModelCapabilities'
         '500':
           description: Internal Server Error
           content:

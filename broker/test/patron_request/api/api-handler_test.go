@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -400,6 +401,16 @@ func TestGetReturnableStateModel(t *testing.T) {
 	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
 	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
 	assert.Equal(t, len(returnablesStateModel.States), len(retrievedStateModel.States))
+}
+
+func TestGetStateModelCapabilities(t *testing.T) {
+	respBytes := httpRequest(t, "GET", "/state_model/capabilities", []byte{}, 200)
+	var capabilities proapi.StateModelCapabilities
+	err := json.Unmarshal(respBytes, &capabilities)
+	assert.NoError(t, err, "failed to unmarshal state model capabilities")
+	assert.True(t, slices.Contains(capabilities.RequesterStates, string(prservice.BorrowerStateValidated)))
+	assert.True(t, slices.Contains(capabilities.SupplierActions, string(prservice.LenderActionWillSupply)))
+	assert.True(t, slices.Contains(capabilities.MessageEvents, string(prservice.SupplierWillSupply)))
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
