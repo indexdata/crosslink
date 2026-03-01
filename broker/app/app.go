@@ -158,13 +158,16 @@ func Init(ctx context.Context) (Context, error) {
 	prRepo := CreatePrRepo(pool)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
-	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
-	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
+	prMessageHandler.SetAutoActionRunner(prActionService)
+	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
+	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
+	prApiHandler.SetAutoActionRunner(prActionService)
+	prApiHandler.SetActionTaskProcessor(prActionService)
 
 	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
 
@@ -320,8 +323,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
 
-	eventBus.HandleEventCreated(events.EventNameInvokeAction, prActionService.InvokeAction)
-	eventBus.HandleTaskCompleted(events.EventNameInvokeAction, prApiHandler.ConfirmActionProcess)
+	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
+	// It is processed inline by patron-request services and API handlers.
 }
 func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))

@@ -10,7 +10,6 @@ import (
 
 func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		BorrowerStateNew:              {BorrowerActionValidate},
 		BorrowerStateValidated:        {BorrowerActionSendRequest},
 		BorrowerStateSupplierLocated:  {BorrowerActionCancelRequest},
 		BorrowerStateConditionPending: {BorrowerActionAcceptCondition, BorrowerActionRejectCondition},
@@ -22,8 +21,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		LenderStateNew:               {LenderActionValidate},
-		LenderStateValidated:         {LenderActionWillSupply, LenderActionCannotSupply, LenderActionAddCondition},
+		LenderStateValidated:         {LenderActionCannotSupply, LenderActionAddCondition},
 		LenderStateWillSupply:        {LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip},
 		LenderStateConditionPending:  {LenderActionCannotSupply},
 		LenderStateConditionAccepted: {LenderActionShip, LenderActionCannotSupply},
@@ -46,7 +44,7 @@ var actionMappingService = ActionMappingService{}
 
 func TestIsActionAvailable(t *testing.T) {
 	// Borrower
-	assert.True(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidate))
+	assert.False(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidate))
 	assert.False(t, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionReceive))
 
 	// Lender
@@ -56,12 +54,40 @@ func TestIsActionAvailable(t *testing.T) {
 
 func TestGetActionsForPatronRequest(t *testing.T) {
 	// Borrower
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
 	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 
 	// Lender
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
 	listCompare(t, []pr_db.PatronRequestAction{}, actionMappingService.GetActionMapping(pr_db.PatronRequest{}).GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
+}
+
+func TestGetActionTransitionMissingCases(t *testing.T) {
+	mapping := actionMappingService.GetActionMapping(pr_db.PatronRequest{})
+
+	// Supported action, but failure transition is not defined in state model.
+	_, ok := mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew},
+		BorrowerActionValidate,
+		ActionOutcomeFailure,
+	)
+	assert.False(t, ok)
+
+	// Unsupported outcome key should not resolve any transition.
+	_, ok = mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew},
+		BorrowerActionValidate,
+		"unknown-outcome",
+	)
+	assert.False(t, ok)
+
+	// Action not configured for state should not resolve transition.
+	_, ok = mapping.GetActionTransition(
+		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated},
+		BorrowerActionValidate,
+		ActionOutcomeSuccess,
+	)
+	assert.False(t, ok)
 }
 
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {

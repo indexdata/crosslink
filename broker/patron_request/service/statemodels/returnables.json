@@ -1,516 +1,481 @@
 {
-    "type": "StateModel",
-    "name": "CrossLink Returnables State Model",
-    "desc": "Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events.",
-    "version": "1.0.0",
-    "states": [
+  "type": "StateModel",
+  "name": "CrossLink Returnables State Model",
+  "desc": "Requester/Supplier workflow per ISO18626, including NCIP integration and ISO status events.",
+  "version": "1.0.0",
+  "states": [
+    {
+      "name": "NEW",
+      "display": "New",
+      "desc": "Initial state after Patron Request is created (POST)",
+      "side": "REQUESTER",
+      "actions": [
         {
-            "name": "NEW",
-            "display": "New",
-            "desc": "Initial state after Patron Request is created (POST)",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "validate",
-                    "desc": "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)",
-                    "transitions": [
-                        "VALIDATED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "VALIDATED",
-            "display": "Validated",
-            "desc": "Patron Request is valid",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "send-request",
-                    "desc": "Send ISO18626 request to the supplier or broker",
-                    "transitions": [
-                        "SENT"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SENT",
-            "display": "Sent",
-            "desc": "Request is sent",
-            "side": "REQUESTER",
-            "events": [
-                {
-                    "name": "expect-to-supply",
-                    "desc": "Supplier indicates an intention to supply (ISO18626 ExpectToSupply)",
-                    "transitions": [
-                        "SUPPLIER_LOCATED"
-                    ]
-                },
-                {
-                    "name": "will-supply",
-                    "desc": "Supplier will supply without conditions (ISO18626 WillSupply)",
-                    "transitions": [
-                        "WILL_SUPPLY"
-                    ]
-                },
-                {
-                    "name": "will-supply-conditional",
-                    "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
-                    "transitions": [
-                        "CONDITION_PENDING"
-                    ]
-                },
-                {
-                    "name": "loaned",
-                    "desc": "Supplier shipped the item (ISO18626 Loaned)",
-                    "transitions": [
-                        "SHIPPED"
-                    ]
-                },
-                {
-                    "name": "unfilled",
-                    "desc": "Supplier cannot supply (ISO18626 Unfilled)",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SUPPLIER_LOCATED",
-            "display": "Supplier Located",
-            "desc": "After receiving ISO ExpectToSupply",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "cancel-request",
-                    "desc": "Send ISO18626 Cancel request to supplier",
-                    "transitions": [
-                        "CANCEL_PENDING"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "will-supply",
-                    "desc": "Supplier will supply without conditions (ISO18626 WillSupply)",
-                    "transitions": [
-                        "WILL_SUPPLY"
-                    ]
-                },
-                {
-                    "name": "will-supply-conditional",
-                    "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
-                    "transitions": [
-                        "CONDITION_PENDING"
-                    ]
-                },
-                {
-                    "name": "unfilled",
-                    "desc": "Supplier cannot supply (ISO18626 Unfilled)",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CONDITION_PENDING",
-            "display": "Condition Pending",
-            "desc": "Received supply conditions",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "accept-condition",
-                    "desc": "Accept supplier conditions (ISO18626 Notification)",
-                    "transitions": [
-                        "WILL_SUPPLY"
-                    ]
-                },
-                {
-                    "name": "reject-condition",
-                    "desc": "Reject supplier conditions (ISO18626 Cancel)",
-                    "transitions": [
-                        "CANCEL_PENDING"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "WILL_SUPPLY",
-            "display": "Will Supply",
-            "desc": "Received ISO18626 WillSupply (without condition)",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "cancel-request",
-                    "desc": "Send ISO18626 Cancel to supplier",
-                    "transitions": [
-                        "CANCEL_PENDING"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "loaned",
-                    "desc": "Supplier shipped the item (ISO18626 Loaned)",
-                    "transitions": [
-                        "SHIPPED"
-                    ]
-                },
-                {
-                    "name": "unfilled",
-                    "desc": "Supplier cannot supply (ISO18626 Unfilled)",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SHIPPED",
-            "display": "Shipped",
-            "desc": "After receiving ISO18626 Loaned",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "receive",
-                    "desc": "Receive and accept item in local ILS (via NCIP AcceptItem if enabled); send ISO18626 Received",
-                    "transitions": [
-                        "RECEIVED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "RECEIVED",
-            "display": "Received",
-            "desc": "Item received and accepted into local ILS.",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "check-out",
-                    "desc": "Check out item to patron (NCIP CheckOutItem)",
-                    "transitions": [
-                        "CHECKED_OUT"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CHECKED_OUT",
-            "display": "Checked Out",
-            "desc": "Item is checked out to patron",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "check-in",
-                    "desc": "Check the item back-in (NCIP CheckInItem)",
-                    "transitions": [
-                        "CHECKED_IN"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CHECKED_IN",
-            "display": "Checked In",
-            "desc": "Item is checked back in to the local ILS",
-            "side": "REQUESTER",
-            "actions": [
-                {
-                    "name": "ship-return",
-                    "desc": "Send ISO18626 ShippedReturn and delete the temporary item (NCIP DeleteItem)",
-                    "transitions": [
-                        "SHIPPED_RETURNED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SHIPPED_RETURNED",
-            "display": "Shipped Returned",
-            "desc": "Item is in return shipment",
-            "side": "REQUESTER",
-            "events": [
-                {
-                    "name": "completed",
-                    "desc": "Supplier/broker signals loan/copy completion",
-                    "transitions": [
-                        "COMPLETED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CANCEL_PENDING",
-            "display": "Cancel Pending",
-            "desc": "ISO18626 Cancel action is sent to supplier/broker",
-            "side": "REQUESTER",
-            "events": [
-                {
-                    "name": "cancel-accepted",
-                    "desc": "Supplier accepts cancellation",
-                    "transitions": [
-                        "CANCELLED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "COMPLETED",
-            "display": "Completed",
-            "desc": "Received LoanCompleted or CopyCompleted from the supplier/broker",
-            "side": "REQUESTER",
-            "terminal": true
-        },
-        {
-            "name": "CANCELLED",
-            "display": "Cancelled",
-            "desc": "Cancel response is received",
-            "side": "REQUESTER",
-            "terminal": true
-        },
-        {
-            "name": "UNFILLED",
-            "display": "Unfilled",
-            "desc": "Unfilled response is received",
-            "side": "REQUESTER",
-            "terminal": true
-        },
-        {
-            "name": "NEW",
-            "display": "New",
-            "desc": "Item is created on the supplier side for local fulfillment",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "validate",
-                    "desc": "Validate the request, e.g institutional patron via NCIP LookupUser, if enabled",
-                    "transitions": [
-                        "VALIDATED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "VALIDATED",
-            "display": "Validated",
-            "desc": "Request is valid",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "will-supply",
-                    "desc": "Indicate supplier will supply and send ISO18626 WillSupply",
-                    "transitions": [
-                        "WILL_SUPPLY"
-                    ]
-                },
-                {
-                    "name": "cannot-supply",
-                    "desc": "Indicate cannot supply and send ISO18626 Unfilled",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                },
-                {
-                    "name": "add-condition",
-                    "desc": "Indicate will supply with conditions and send ISO18626 WillSupply",
-                    "transitions": [
-                        "CONDITION_PENDING"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "cancel-request",
-                    "desc": "Requester sent ISO18626 Cancel",
-                    "transitions": [
-                        "CANCEL_REQUESTED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "WILL_SUPPLY",
-            "display": "Will Supply",
-            "desc": "After manual will-supply or successful auto-responder",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "add-condition",
-                    "desc": "Add conditions and notify requester",
-                    "transitions": [
-                        "CONDITION_PENDING"
-                    ]
-                },
-                {
-                    "name": "ship",
-                    "desc": "Mark shipped; send ISO Loaned; NCIP CheckOutItem",
-                    "transitions": [
-                        "SHIPPED"
-                    ]
-                },
-                {
-                    "name": "cannot-supply",
-                    "desc": "Indicate cannot supply",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "cancel-request",
-                    "desc": "Requester sends ISO Cancel",
-                    "transitions": [
-                        "CANCEL_REQUESTED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CONDITION_PENDING",
-            "display": "Condition Pending",
-            "desc": "Conditions are sent with a special ISO WillSupply",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "cannot-supply",
-                    "desc": "Indicate cannot supply",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "conditions-accepted",
-                    "desc": "Requester accepts conditions",
-                    "transitions": [
-                        "CONDITION_ACCEPTED"
-                    ]
-                },
-                {
-                    "name": "condition-rejected",
-                    "desc": "Requester rejects conditions (auto-responder may mark unfilled)",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                },
-                {
-                    "name": "cancel-request",
-                    "desc": "Requester sends ISO Cancel",
-                    "transitions": [
-                        "CANCEL_REQUESTED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CONDITION_ACCEPTED",
-            "display": "Condition Accepted",
-            "desc": "After receiving conditions accepted notification",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "ship",
-                    "desc": "Mark shipped; send ISO Loaned; NCIP CheckOutItem",
-                    "transitions": [
-                        "SHIPPED"
-                    ]
-                },
-                {
-                    "name": "cannot-supply",
-                    "desc": "Indicate cannot supply",
-                    "transitions": [
-                        "UNFILLED"
-                    ]
-                }
-            ],
-            "events": [
-                {
-                    "name": "cancel-request",
-                    "desc": "Requester sends ISO Cancel",
-                    "transitions": [
-                        "CANCEL_REQUESTED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SHIPPED",
-            "display": "Shipped",
-            "desc": "After marking shipped and sending ISO Loaned; NCIP CheckOutItem",
-            "side": "SUPPLIER",
-            "events": [
-                {
-                    "name": "shipped-return",
-                    "desc": "Requester sends ISO ShippedReturn",
-                    "transitions": [
-                        "SHIPPED_RETURN"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "SHIPPED_RETURN",
-            "display": "Shipped Return",
-            "desc": "After receiving ISO ShippedReturn message",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "mark-received",
-                    "desc": "Mark returned item received and complete (CheckInItem if configured)",
-                    "transitions": [
-                        "COMPLETED"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "CANCEL_REQUESTED",
-            "display": "Cancel Requested",
-            "desc": "After receiving ISO18626 Cancel from requester",
-            "side": "SUPPLIER",
-            "actions": [
-                {
-                    "name": "mark-cancelled",
-                    "desc": "Confirm cancellation",
-                    "transitions": [
-                        "CANCELLED"
-                    ]
-                },
-                {
-                    "name": "will-supply",
-                    "desc": "Resume supplying despite cancel request",
-                    "transitions": [
-                        "WILL_SUPPLY"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "COMPLETED",
-            "display": "Completed",
-            "desc": "After marking received and successful NCIP CheckInItem (if configured)",
-            "side": "SUPPLIER",
-            "terminal": true
-        },
-        {
-            "name": "CANCELLED",
-            "display": "Cancelled",
-            "desc": "After marking cancelled or automatically if auto-cancellation is on",
-            "side": "SUPPLIER",
-            "terminal": true
-        },
-        {
-            "name": "UNFILLED",
-            "display": "Unfilled",
-            "desc": "After manual cannot-supply or automatically if auto-responder is on",
-            "side": "SUPPLIER",
-            "terminal": true
+          "name": "validate",
+          "desc": "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)",
+          "transitions": {
+            "success": "VALIDATED"
+          },
+          "trigger": "auto"
         }
-    ]
+      ]
+    },
+    {
+      "name": "VALIDATED",
+      "display": "Validated",
+      "desc": "Patron Request is valid",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "send-request",
+          "desc": "Send ISO18626 request to the supplier or broker",
+          "transitions": {
+            "success": "SENT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SENT",
+      "display": "Sent",
+      "desc": "Request is sent",
+      "side": "REQUESTER",
+      "events": [
+        {
+          "name": "expect-to-supply",
+          "desc": "Supplier indicates an intention to supply (ISO18626 ExpectToSupply)",
+          "transition": "SUPPLIER_LOCATED"
+        },
+        {
+          "name": "will-supply",
+          "desc": "Supplier will supply without conditions (ISO18626 WillSupply)",
+          "transition": "WILL_SUPPLY"
+        },
+        {
+          "name": "will-supply-conditional",
+          "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
+          "transition": "CONDITION_PENDING"
+        },
+        {
+          "name": "loaned",
+          "desc": "Supplier shipped the item (ISO18626 Loaned)",
+          "transition": "SHIPPED"
+        },
+        {
+          "name": "unfilled",
+          "desc": "Supplier cannot supply (ISO18626 Unfilled)",
+          "transition": "UNFILLED"
+        }
+      ]
+    },
+    {
+      "name": "SUPPLIER_LOCATED",
+      "display": "Supplier Located",
+      "desc": "After receiving ISO ExpectToSupply",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "cancel-request",
+          "desc": "Send ISO18626 Cancel request to supplier",
+          "transitions": {
+            "success": "CANCEL_PENDING"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "will-supply",
+          "desc": "Supplier will supply without conditions (ISO18626 WillSupply)",
+          "transition": "WILL_SUPPLY"
+        },
+        {
+          "name": "will-supply-conditional",
+          "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
+          "transition": "CONDITION_PENDING"
+        },
+        {
+          "name": "unfilled",
+          "desc": "Supplier cannot supply (ISO18626 Unfilled)",
+          "transition": "UNFILLED"
+        }
+      ]
+    },
+    {
+      "name": "CONDITION_PENDING",
+      "display": "Condition Pending",
+      "desc": "Received supply conditions",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "accept-condition",
+          "desc": "Accept supplier conditions (ISO18626 Notification)",
+          "transitions": {
+            "success": "WILL_SUPPLY"
+          }
+        },
+        {
+          "name": "reject-condition",
+          "desc": "Reject supplier conditions (ISO18626 Cancel)",
+          "transitions": {
+            "success": "CANCEL_PENDING"
+          }
+        }
+      ]
+    },
+    {
+      "name": "WILL_SUPPLY",
+      "display": "Will Supply",
+      "desc": "Received ISO18626 WillSupply (without condition)",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "cancel-request",
+          "desc": "Send ISO18626 Cancel to supplier",
+          "transitions": {
+            "success": "CANCEL_PENDING"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "loaned",
+          "desc": "Supplier shipped the item (ISO18626 Loaned)",
+          "transition": "SHIPPED"
+        },
+        {
+          "name": "unfilled",
+          "desc": "Supplier cannot supply (ISO18626 Unfilled)",
+          "transition": "UNFILLED"
+        }
+      ]
+    },
+    {
+      "name": "SHIPPED",
+      "display": "Shipped",
+      "desc": "After receiving ISO18626 Loaned",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "receive",
+          "desc": "Receive and accept item in local ILS (via NCIP AcceptItem if enabled); send ISO18626 Received",
+          "transitions": {
+            "success": "RECEIVED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RECEIVED",
+      "display": "Received",
+      "desc": "Item received and accepted into local ILS.",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "check-out",
+          "desc": "Check out item to patron (NCIP CheckOutItem)",
+          "transitions": {
+            "success": "CHECKED_OUT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHECKED_OUT",
+      "display": "Checked Out",
+      "desc": "Item is checked out to patron",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "check-in",
+          "desc": "Check the item back-in (NCIP CheckInItem)",
+          "transitions": {
+            "success": "CHECKED_IN"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CHECKED_IN",
+      "display": "Checked In",
+      "desc": "Item is checked back in to the local ILS",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "ship-return",
+          "desc": "Send ISO18626 ShippedReturn and delete the temporary item (NCIP DeleteItem)",
+          "transitions": {
+            "success": "SHIPPED_RETURNED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SHIPPED_RETURNED",
+      "display": "Shipped Returned",
+      "desc": "Item is in return shipment",
+      "side": "REQUESTER",
+      "events": [
+        {
+          "name": "completed",
+          "desc": "Supplier/broker signals loan/copy completion",
+          "transition": "COMPLETED"
+        }
+      ]
+    },
+    {
+      "name": "CANCEL_PENDING",
+      "display": "Cancel Pending",
+      "desc": "ISO18626 Cancel action is sent to supplier/broker",
+      "side": "REQUESTER",
+      "events": [
+        {
+          "name": "cancel-accepted",
+          "desc": "Supplier accepts cancellation",
+          "transition": "CANCELLED"
+        }
+      ]
+    },
+    {
+      "name": "COMPLETED",
+      "display": "Completed",
+      "desc": "Received LoanCompleted or CopyCompleted from the supplier/broker",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "CANCELLED",
+      "display": "Cancelled",
+      "desc": "Cancel response is received",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "UNFILLED",
+      "display": "Unfilled",
+      "desc": "Unfilled response is received",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "NEW",
+      "display": "New",
+      "desc": "Item is created on the supplier side for local fulfillment",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "validate",
+          "desc": "Validate the request, e.g institutional patron via NCIP LookupUser, if enabled",
+          "transitions": {
+            "success": "VALIDATED"
+          },
+          "trigger": "auto"
+        }
+      ]
+    },
+    {
+      "name": "VALIDATED",
+      "display": "Validated",
+      "desc": "Request is valid",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "will-supply",
+          "desc": "Indicate supplier will supply and send ISO18626 WillSupply",
+          "transitions": {
+            "success": "WILL_SUPPLY"
+          },
+          "trigger": "auto"
+        },
+        {
+          "name": "cannot-supply",
+          "desc": "Indicate cannot supply and send ISO18626 Unfilled",
+          "transitions": {
+            "success": "UNFILLED"
+          }
+        },
+        {
+          "name": "add-condition",
+          "desc": "Indicate will supply with conditions and send ISO18626 WillSupply",
+          "transitions": {
+            "success": "CONDITION_PENDING"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "cancel-request",
+          "desc": "Requester sent ISO18626 Cancel",
+          "transition": "CANCEL_REQUESTED"
+        }
+      ]
+    },
+    {
+      "name": "WILL_SUPPLY",
+      "display": "Will Supply",
+      "desc": "After manual will-supply or successful auto-responder",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "add-condition",
+          "desc": "Add conditions and notify requester",
+          "transitions": {
+            "success": "CONDITION_PENDING"
+          }
+        },
+        {
+          "name": "ship",
+          "desc": "Mark shipped; send ISO Loaned; NCIP CheckOutItem",
+          "transitions": {
+            "success": "SHIPPED"
+          }
+        },
+        {
+          "name": "cannot-supply",
+          "desc": "Indicate cannot supply",
+          "transitions": {
+            "success": "UNFILLED"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "cancel-request",
+          "desc": "Requester sends ISO Cancel",
+          "transition": "CANCEL_REQUESTED"
+        }
+      ]
+    },
+    {
+      "name": "CONDITION_PENDING",
+      "display": "Condition Pending",
+      "desc": "Conditions are sent with a special ISO WillSupply",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "cannot-supply",
+          "desc": "Indicate cannot supply",
+          "transitions": {
+            "success": "UNFILLED"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "conditions-accepted",
+          "desc": "Requester accepts conditions",
+          "transition": "CONDITION_ACCEPTED"
+        },
+        {
+          "name": "condition-rejected",
+          "desc": "Requester rejects conditions (auto-responder may mark unfilled)",
+          "transition": "UNFILLED"
+        },
+        {
+          "name": "cancel-request",
+          "desc": "Requester sends ISO Cancel",
+          "transition": "CANCEL_REQUESTED"
+        }
+      ]
+    },
+    {
+      "name": "CONDITION_ACCEPTED",
+      "display": "Condition Accepted",
+      "desc": "After receiving conditions accepted notification",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "ship",
+          "desc": "Mark shipped; send ISO Loaned; NCIP CheckOutItem",
+          "transitions": {
+            "success": "SHIPPED"
+          }
+        },
+        {
+          "name": "cannot-supply",
+          "desc": "Indicate cannot supply",
+          "transitions": {
+            "success": "UNFILLED"
+          }
+        }
+      ],
+      "events": [
+        {
+          "name": "cancel-request",
+          "desc": "Requester sends ISO Cancel",
+          "transition": "CANCEL_REQUESTED"
+        }
+      ]
+    },
+    {
+      "name": "SHIPPED",
+      "display": "Shipped",
+      "desc": "After marking shipped and sending ISO Loaned; NCIP CheckOutItem",
+      "side": "SUPPLIER",
+      "events": [
+        {
+          "name": "shipped-return",
+          "desc": "Requester sends ISO ShippedReturn",
+          "transition": "SHIPPED_RETURN"
+        }
+      ]
+    },
+    {
+      "name": "SHIPPED_RETURN",
+      "display": "Shipped Return",
+      "desc": "After receiving ISO ShippedReturn message",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "mark-received",
+          "desc": "Mark returned item received and complete (CheckInItem if configured)",
+          "transitions": {
+            "success": "COMPLETED"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CANCEL_REQUESTED",
+      "display": "Cancel Requested",
+      "desc": "After receiving ISO18626 Cancel from requester",
+      "side": "SUPPLIER",
+      "actions": [
+        {
+          "name": "mark-cancelled",
+          "desc": "Confirm cancellation",
+          "transitions": {
+            "success": "CANCELLED"
+          }
+        },
+        {
+          "name": "will-supply",
+          "desc": "Resume supplying despite cancel request",
+          "transitions": {
+            "success": "WILL_SUPPLY"
+          }
+        }
+      ]
+    },
+    {
+      "name": "COMPLETED",
+      "display": "Completed",
+      "desc": "After marking received and successful NCIP CheckInItem (if configured)",
+      "side": "SUPPLIER",
+      "terminal": true
+    },
+    {
+      "name": "CANCELLED",
+      "display": "Cancelled",
+      "desc": "After marking cancelled or automatically if auto-cancellation is on",
+      "side": "SUPPLIER",
+      "terminal": true
+    },
+    {
+      "name": "UNFILLED",
+      "display": "Unfilled",
+      "desc": "After manual cannot-supply or automatically if auto-responder is on",
+      "side": "SUPPLIER",
+      "terminal": true
+    }
+  ]
 }

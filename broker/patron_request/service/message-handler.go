@@ -23,20 +23,65 @@ var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
 const COMP_MESSAGE = "pr_massage_handler"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 
+type MessageEvent string
+
+const (
+	SupplierExpectToSupply MessageEvent = "expect-to-supply"
+	SupplierWillSupply     MessageEvent = "will-supply"
+	SupplierWillSupplyCond MessageEvent = "will-supply-conditional"
+	SupplierLoaned         MessageEvent = "loaned"
+	SupplierCompleted      MessageEvent = "completed"
+	SupplierUnfilled       MessageEvent = "unfilled"
+	SupplierCancelAccepted MessageEvent = "cancel-accepted"
+	RequesterCancelRequest MessageEvent = "cancel-request"
+	RequesterShippedReturn MessageEvent = "shipped-return"
+)
+
 type PatronRequestMessageHandler struct {
-	prRepo    pr_db.PrRepo
-	eventRepo events.EventRepo
-	illRepo   ill_db.IllRepo
-	eventBus  events.EventBus
+	prRepo               pr_db.PrRepo
+	eventRepo            events.EventRepo
+	illRepo              ill_db.IllRepo
+	eventBus             events.EventBus
+	actionMappingService ActionMappingService
+	autoActionRunner     AutoActionRunner
+}
+
+type AutoActionRunner interface {
+	RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error
 }
 
 func CreatePatronRequestMessageHandler(prRepo pr_db.PrRepo, eventRepo events.EventRepo, illRepo ill_db.IllRepo, eventBus events.EventBus) PatronRequestMessageHandler {
 	return PatronRequestMessageHandler{
-		prRepo:    prRepo,
-		eventRepo: eventRepo,
-		illRepo:   illRepo,
-		eventBus:  eventBus,
+		prRepo:               prRepo,
+		eventRepo:            eventRepo,
+		illRepo:              illRepo,
+		eventBus:             eventBus,
+		actionMappingService: ActionMappingService{},
 	}
+}
+
+func (m *PatronRequestMessageHandler) SetAutoActionRunner(autoActionRunner AutoActionRunner) {
+	m.autoActionRunner = autoActionRunner
+}
+
+func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+	if m.autoActionRunner == nil {
+		return nil
+	}
+	// Auto actions run inline so incoming-message confirmations can include their outcomes.
+	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+}
+
+func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool) {
+	transitionState, hasTransition, eventDefined := m.actionMappingService.GetActionMapping(pr).GetEventTransition(pr, string(eventName))
+	if !eventDefined {
+		return pr, false, false
+	}
+	if hasTransition && transitionState != pr.State {
+		pr.State = transitionState
+		return pr, true, true
+	}
+	return pr, false, true
 }
 
 func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
@@ -95,51 +140,91 @@ func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContex
 }
 
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	// TODO handle notifications
-	switch sam.StatusInfo.Status {
-	case iso18626.TypeStatusExpectToSupply:
-		pr.State = BorrowerStateSupplierLocated
-		supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
+	unsupportedReason := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+		err := fmt.Errorf("unsupported reason for message: %s", sam.MessageInfo.ReasonForMessage)
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnsupportedReasonForMessageType,
+			ErrorValue: err.Error(),
+		}, err)
+	}
+	statusChangeNotAllowed := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+		err := fmt.Errorf("status change not allowed: %s", sam.StatusInfo.Status)
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+	}
+
+	switch sam.MessageInfo.ReasonForMessage {
+	case iso18626.TypeReasonForMessageNotification:
+		// Notifications are acknowledged but must not drive state transitions.
+		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
+	case iso18626.TypeReasonForMessageStatusChange,
+		iso18626.TypeReasonForMessageRequestResponse,
+		iso18626.TypeReasonForMessageCancelResponse:
+		// continue to status mapping
+	default:
+		return unsupportedReason()
+	}
+
+	supSymbol := sam.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + sam.Header.SupplyingAgencyId.AgencyIdValue
+	if supSymbol != ":" {
 		pr.SupplierSymbol = pgtype.Text{
 			String: supSymbol,
 			Valid:  true,
 		}
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+	}
+
+	eventName := MessageEvent("")
+	switch sam.StatusInfo.Status {
+	case iso18626.TypeStatusExpectToSupply:
+		eventName = SupplierExpectToSupply
 	case iso18626.TypeStatusWillSupply:
 		if strings.Contains(sam.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
-			pr.State = BorrowerStateConditionPending
-			// TODO Save conditions
+			eventName = SupplierWillSupplyCond
 		} else {
-			pr.State = BorrowerStateWillSupply
+			eventName = SupplierWillSupply
 		}
-		// TODO should we check if supplier is set ? and search if not
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
 	case iso18626.TypeStatusLoaned:
-		pr.State = BorrowerStateShipped
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
-		pr.State = BorrowerStateCompleted
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = SupplierCompleted
 	case iso18626.TypeStatusUnfilled:
-		pr.State = BorrowerStateUnfilled
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		eventName = SupplierUnfilled
 	case iso18626.TypeStatusCancelled:
-		pr.State = BorrowerStateCancelled
-		return m.updatePatronRequestAndCreateSamResponse(ctx, pr, sam)
+		// Cancellation transition is accepted only for cancel-response messages.
+		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+			eventName = SupplierCancelAccepted
+		}
 	}
-	return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-		ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-		ErrorValue: "status change no allowed",
-	}, errors.New("status change no allowed"))
+
+	if eventName == "" {
+		return statusChangeNotAllowed()
+	}
+
+	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
+	if !eventDefined {
+		return statusChangeNotAllowed()
+	}
+	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged)
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	if stateChanged {
+		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		if err != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 	}
 	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 }
@@ -231,8 +316,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	action := LenderActionValidate
-	_, err = m.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
+	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
 		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -251,25 +335,37 @@ func getDbText(value string) pgtype.Text {
 }
 
 func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	switch ram.Action {
-	case iso18626.TypeActionNotification,
-		iso18626.TypeActionStatusRequest,
-		iso18626.TypeActionRenew,
-		iso18626.TypeActionShippedForward,
-		iso18626.TypeActionReceived:
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
-	case iso18626.TypeActionCancel:
-		pr.State = LenderStateCancelRequested
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
-	case iso18626.TypeActionShippedReturn:
-		pr.State = LenderStateShippedReturn
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action)
+	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+		err := errors.New("unsupported action: " + string(ram.Action))
+		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnsupportedActionType,
+			ErrorValue: err.Error(),
+		}, err)
 	}
-	err := errors.New("unknown action: " + string(ram.Action))
-	return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
-		ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-		ErrorValue: err.Error(),
-	}, err)
+
+	if ram.Action == iso18626.TypeActionNotification {
+		// Notifications are acknowledged but must not drive state transitions.
+		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
+	}
+
+	eventName := MessageEvent("")
+	switch ram.Action {
+	case iso18626.TypeActionCancel:
+		eventName = RequesterCancelRequest
+	case iso18626.TypeActionShippedReturn:
+		eventName = RequesterShippedReturn
+	case iso18626.TypeActionReceived:
+		// TODO add event here
+		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action, false)
+	default:
+		return unsupported()
+	}
+
+	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
+	if !eventDefined {
+		return unsupported()
+	}
+	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged)
 }
 
 func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
@@ -292,13 +388,22 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 		err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	if stateChanged {
+		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		if err != nil {
+			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: err.Error(),
+			}, err)
+		}
 	}
 	return createRAMResponse(ram, iso18626.TypeMessageStatusOK, action, nil, nil)
 }

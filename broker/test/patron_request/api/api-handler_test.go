@@ -277,21 +277,6 @@ func TestActionsToCompleteState(t *testing.T) {
 	supQueryParams := "?side=lending&symbol=" + *foundPr.SupplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.LenderActionWillSupply)+"\"]\n"
-	})
-
-	// Will supply
-	action = proapi.ExecuteAction{
-		Action: string(prservice.LenderActionWillSupply),
-	}
-	actionBytes, err = json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
-
-	// Wait for action
-	test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
 		return string(respBytes) == "[\""+string(prservice.LenderActionShip)+"\"]\n"
 	})
 
@@ -414,7 +399,7 @@ func TestGetReturnableStateModel(t *testing.T) {
 	returnablesStateModel, _ := prservice.LoadStateModelByName("returnables")
 	assert.Equal(t, returnablesStateModel.Name, retrievedStateModel.Name)
 	assert.Equal(t, returnablesStateModel.Desc, retrievedStateModel.Desc)
-	assert.Equal(t, len(*returnablesStateModel.States), len(*retrievedStateModel.States))
+	assert.Equal(t, len(returnablesStateModel.States), len(retrievedStateModel.States))
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {

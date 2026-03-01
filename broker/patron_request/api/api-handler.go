@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +25,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var waitingReqs = map[string]RequestWait{}
+type ActionTaskProcessor interface {
+	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
+}
 
 type PatronRequestApiHandler struct {
 	limitDefault         int32
@@ -34,6 +35,8 @@ type PatronRequestApiHandler struct {
 	eventBus             events.EventBus
 	eventRepo            events.EventRepo
 	actionMappingService prservice.ActionMappingService
+	autoActionRunner     prservice.AutoActionRunner
+	actionTaskProcessor  ActionTaskProcessor
 	tenant               common.Tenant
 }
 
@@ -47,6 +50,14 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		actionMappingService: prservice.ActionMappingService{},
 		tenant:               tenant,
 	}
+}
+
+func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice.AutoActionRunner) {
+	a.autoActionRunner = autoActionRunner
+}
+
+func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
+	a.actionTaskProcessor = actionTaskProcessor
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
@@ -195,16 +206,12 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addInternalError(ctx, w, err)
 		return
 	}
-	//TODO this starts an async action and we need to publish the outcome back to the client
-	// we have two options:
-	// 1) block like we do in the POST /patron-requests/{id}/action endpoint
-	// 2) return 202 Accepted and send the update via the /sse/events endpoint
-	// Option 2 requires that we define SSE events for patron request updates
-	action := prservice.BorrowerActionValidate
-	_, err = a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, events.EventData{CommonEventData: events.CommonEventData{Action: &action}}, events.EventDomainPatronRequest, nil)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
+	if a.autoActionRunner != nil {
+		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	var illRequest iso18626.Request
 	err = json.Unmarshal(pr.IllRequest, &illRequest)
@@ -364,32 +371,32 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
-	eventId, err := a.eventBus.CreateTaskBroadcast(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil)
+	if a.actionTaskProcessor == nil {
+		addInternalError(ctx, w, errors.New("action task processor not configured"))
+		return
+	}
+	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
 	}
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	waitingReqs[eventId] = RequestWait{
-		w:  &w,
-		wg: &wg,
+	completedEvent, err := a.actionTaskProcessor.ProcessInvokeActionTask(ctx, events.Event{
+		ID:              eventId,
+		PatronRequestID: pr.ID,
+		EventData:       data,
+	})
+	// Manual invoke-action requests are handled inline and return the completed task result.
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
 	}
-	wg.Wait()
-}
-
-func (a *PatronRequestApiHandler) ConfirmActionProcess(ctx common.ExtendedContext, event events.Event) {
-	if waitingRequest, ok := waitingReqs[event.ID]; ok {
-		result := proapi.ActionResult{
-			ActionResult: string(event.EventStatus),
-		}
-		if event.ResultData.Note != "" {
-			result.Message = &event.ResultData.Note
-		}
-		writeJsonResponse(*waitingRequest.w, result)
-		waitingRequest.wg.Done()
+	result := proapi.ActionResult{
+		ActionResult: string(completedEvent.EventStatus),
 	}
+	if completedEvent.ResultData.Note != "" {
+		result.Message = &completedEvent.ResultData.Note
+	}
+	writeJsonResponse(w, result)
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
@@ -540,9 +547,4 @@ func getDbText(value *string) pgtype.Text {
 		Valid:  true,
 		String: *value,
 	}
-}
-
-type RequestWait struct {
-	w  *http.ResponseWriter
-	wg *sync.WaitGroup
 }
