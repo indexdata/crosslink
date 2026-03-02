@@ -288,12 +288,10 @@ func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: patronRequestId,
 		},
-		MessageInfo: iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
 		MessageInfo: iso18626.MessageInfo{
-			Note: "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
 		},
 	}, pr_db.PatronRequest{State: BorrowerStateWillSupply, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)

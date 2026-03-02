@@ -590,4 +590,3 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 		CreatedAt:  item.CreatedAt.Time,
 	}
 }
-
