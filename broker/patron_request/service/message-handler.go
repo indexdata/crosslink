@@ -499,7 +499,11 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	}
 	if sam.MessageInfo.OfferedCosts != nil {
 		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		cost, err := safeConvertInt32(sam.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
 			ID:         uuid.NewString(),
 			PrID:       pr.ID,
 			FromSymbol: supSymbol,
@@ -510,7 +514,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 			Cost: pgtype.Numeric{
 				Valid: true,
 				Int:   big.NewInt(int64(sam.MessageInfo.OfferedCosts.MonetaryValue.Base)),
-				Exp:   utils.Must(safeConvertInt32(sam.MessageInfo.OfferedCosts.MonetaryValue.Exp)),
+				Exp:   cost,
 			},
 			CreatedAt: pgtype.Timestamp{
 				Valid: true,
@@ -524,7 +528,11 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 	if sam.DeliveryInfo != nil {
 		if sam.DeliveryInfo.DeliveryCosts != nil {
 			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-			_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			cost, err := safeConvertInt32(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp)
+			if err != nil {
+				return err
+			}
+			_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
 				ID:         uuid.NewString(),
 				PrID:       pr.ID,
 				FromSymbol: supSymbol,
@@ -535,7 +543,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 				Cost: pgtype.Numeric{
 					Valid: true,
 					Int:   big.NewInt(int64(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Base)),
-					Exp:   utils.Must(safeConvertInt32(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp)),
+					Exp:   cost,
 				},
 				CreatedAt: pgtype.Timestamp{
 					Valid: true,
@@ -611,7 +619,11 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 	}
 	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
 		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
-		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		cost, err := safeConvertInt32(request.BillingInfo.MaximumCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
 			ID:         uuid.NewString(),
 			PrID:       pr.ID,
 			Note:       getDbText("Maximum costs"),
@@ -622,7 +634,7 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 			Cost: pgtype.Numeric{
 				Valid: true,
 				Int:   big.NewInt(int64(request.BillingInfo.MaximumCosts.MonetaryValue.Base)),
-				Exp:   utils.Must(safeConvertInt32(request.BillingInfo.MaximumCosts.MonetaryValue.Exp)),
+				Exp:   cost,
 			},
 			CreatedAt: pgtype.Timestamp{
 				Valid: true,

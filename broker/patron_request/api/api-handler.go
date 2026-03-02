@@ -487,7 +487,12 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 
 	var responseList []proapi.PrNotification
 	for _, n := range list {
-		responseList = append(responseList, toApiNotification(n))
+		apiN, inErr := toApiNotification(n)
+		if inErr != nil {
+			addInternalError(ctx, w, inErr)
+			return
+		}
+		responseList = append(responseList, apiN)
 	}
 	writeJsonResponse(w, responseList)
 }
@@ -619,7 +624,7 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 	}
 }
 
-func toApiNotification(notification pr_db.Notification) proapi.PrNotification {
+func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, error) {
 	var ackAt *time.Time
 	if notification.AcknowledgedAt.Valid {
 		t := notification.AcknowledgedAt.Time
@@ -627,9 +632,16 @@ func toApiNotification(notification pr_db.Notification) proapi.PrNotification {
 	}
 	var cost *float64
 	if notification.Cost.Valid {
-		f, _ := notification.Cost.Float64Value()
+		f, err := notification.Cost.Float64Value()
+		if err != nil {
+			return proapi.PrNotification{}, err
+		}
 		val := f.Float64
 		cost = &val
+	}
+	var receipt string
+	if notification.Receipt != "" {
+		receipt = string(notification.Receipt)
 	}
 	return proapi.PrNotification{
 		Id:             notification.ID,
@@ -639,7 +651,9 @@ func toApiNotification(notification pr_db.Notification) proapi.PrNotification {
 		Note:           toString(notification.Note),
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
+		Condition:      toString(notification.Condition),
+		Receipt:        &receipt,
 		CreatedAt:      notification.CreatedAt.Time,
 		AcknowledgedAt: ackAt,
-	}
+	}, nil
 }
