@@ -1,17 +1,18 @@
 meta {
-  name: Events
+  name: Patron Events
   type: http
-  seq: 16
+  seq: 17
 }
 
 get {
-  url: {{host}}/events?requester_req_id={{prId}}
+  url: {{host}}/patron_requests/{{prId}}/events?side=borrowing&symbol={{requesterSymbol}}
   body: none
   auth: basic
 }
 
 params:query {
-  requester_req_id: {{prId}}
+  side: borrowing
+  symbol: {{requesterSymbol}}
 }
 
 headers {
@@ -21,6 +22,10 @@ headers {
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
+}
+
+vars:pre-request {
+  prId: {{prId}}
 }
 
 settings {
