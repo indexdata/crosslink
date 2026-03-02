@@ -3,6 +3,8 @@ package common
 import (
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type User struct {
@@ -67,4 +69,27 @@ func TestStructToMap(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetItemParams(t *testing.T) {
+	// Just ID
+	note := MULTIPLE_ITEMS + "\n1\n" + MULTIPLE_ITEMS_END
+	result, startIdx, endIdx := GetItemParams(note)
+	assert.Equal(t, 0, startIdx)
+	assert.Equal(t, 18, endIdx)
+	assert.Equal(t, [][]string{{"1"}}, result)
+
+	// All params
+	note = MULTIPLE_ITEMS + "\n1|2\\||3\\\\\n" + MULTIPLE_ITEMS_END
+	result, startIdx, endIdx = GetItemParams(note)
+	assert.Equal(t, 0, startIdx)
+	assert.Equal(t, 26, endIdx)
+	assert.Equal(t, [][]string{{"1", "2|", "3\\"}}, result)
+
+	// Incorrect tag order
+	note = MULTIPLE_ITEMS_END + "\n1\n" + MULTIPLE_ITEMS
+	result, startIdx, endIdx = GetItemParams(note)
+	assert.Equal(t, 21, startIdx)
+	assert.Equal(t, 0, endIdx)
+	assert.Nil(t, result)
 }
