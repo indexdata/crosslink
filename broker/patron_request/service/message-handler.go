@@ -23,20 +23,6 @@ var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
 const COMP_MESSAGE = "pr_massage_handler"
 const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 
-type MessageEvent string
-
-const (
-	SupplierExpectToSupply MessageEvent = "expect-to-supply"
-	SupplierWillSupply     MessageEvent = "will-supply"
-	SupplierWillSupplyCond MessageEvent = "will-supply-conditional"
-	SupplierLoaned         MessageEvent = "loaned"
-	SupplierCompleted      MessageEvent = "completed"
-	SupplierUnfilled       MessageEvent = "unfilled"
-	SupplierCancelAccepted MessageEvent = "cancel-accepted"
-	RequesterCancelRequest MessageEvent = "cancel-request"
-	RequesterShippedReturn MessageEvent = "shipped-return"
-)
-
 type PatronRequestMessageHandler struct {
 	prRepo               pr_db.PrRepo
 	eventRepo            events.EventRepo
@@ -56,7 +42,7 @@ func CreatePatronRequestMessageHandler(prRepo pr_db.PrRepo, eventRepo events.Eve
 		eventRepo:            eventRepo,
 		illRepo:              illRepo,
 		eventBus:             eventBus,
-		actionMappingService: ActionMappingService{},
+		actionMappingService: ActionMappingService{SMService: &StateModelService{}},
 	}
 }
 
@@ -72,16 +58,20 @@ func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.Exte
 	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
 }
 
-func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool) {
-	transitionState, hasTransition, eventDefined := m.actionMappingService.GetActionMapping(pr).GetEventTransition(pr, string(eventName))
+func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool, error) {
+	actionMapping, err := m.actionMappingService.GetActionMapping(pr)
+	if err != nil {
+		return pr, false, false, err
+	}
+	transitionState, hasTransition, eventDefined := actionMapping.GetEventTransition(pr, string(eventName))
 	if !eventDefined {
-		return pr, false, false
+		return pr, false, false, nil
 	}
 	if hasTransition && transitionState != pr.State {
 		pr.State = transitionState
-		return pr, true, true
+		return pr, true, true, nil
 	}
-	return pr, false, true
+	return pr, false, true, nil
 }
 
 func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
@@ -202,7 +192,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 		return statusChangeNotAllowed()
 	}
 
-	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
+	updatedPr, stateChanged, eventDefined, err := m.applyEventTransition(pr, eventName)
+	if err != nil {
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
 	}
@@ -361,7 +357,13 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 		return unsupported()
 	}
 
-	updatedPr, stateChanged, eventDefined := m.applyEventTransition(pr, eventName)
+	updatedPr, stateChanged, eventDefined, err := m.applyEventTransition(pr, eventName)
+	if err != nil {
+		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+	}
 	if !eventDefined {
 		return unsupported()
 	}

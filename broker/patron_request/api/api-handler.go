@@ -47,7 +47,7 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
-		actionMappingService: prservice.ActionMappingService{},
+		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 		tenant:               tenant,
 	}
 }
@@ -61,13 +61,23 @@ func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor Act
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
-	stateModel := a.actionMappingService.SMService.GetStateModel(model)
-
+	stateModel, err := a.actionMappingService.GetStateModel(model)
+	if err != nil {
+		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+			Other: map[string]string{"method": "GetStateModelModelsModel", "model": model},
+		})
+		addInternalError(ctx, w, err)
+		return
+	}
 	if stateModel == nil {
 		addNotFoundError(w)
 		return
 	}
 	writeJsonResponse(w, *stateModel)
+}
+
+func (a *PatronRequestApiHandler) GetStateModelCapabilities(w http.ResponseWriter, r *http.Request, params proapi.GetStateModelCapabilitiesParams) {
+	writeJsonResponse(w, prservice.BuiltInStateModelCapabilities())
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
@@ -330,7 +340,12 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 		addNotFoundError(w)
 		return
 	}
-	actions := a.actionMappingService.GetActionMapping(*pr).GetActionsForPatronRequest(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	actions := actionMapping.GetActionsForPatronRequest(*pr)
 	writeJsonResponse(w, actions)
 }
 
@@ -362,7 +377,12 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 
-	if !a.actionMappingService.GetActionMapping(*pr).IsActionAvailable(*pr, pr_db.PatronRequestAction(action.Action)) {
+	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	if !actionMapping.IsActionAvailable(*pr, pr_db.PatronRequestAction(action.Action)) {
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
 		return
 	}

@@ -18,64 +18,6 @@ import (
 )
 
 const COMP = "pr_action_service"
-const (
-	ActionOutcomeSuccess = "success"
-	ActionOutcomeFailure = "failure"
-)
-
-const (
-	SideBorrowing pr_db.PatronRequestSide = "borrowing"
-	SideLending   pr_db.PatronRequestSide = "lending"
-)
-
-const (
-	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
-	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
-	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
-	BorrowerStateSupplierLocated  pr_db.PatronRequestState = "SUPPLIER_LOCATED"
-	BorrowerStateConditionPending pr_db.PatronRequestState = "CONDITION_PENDING"
-	BorrowerStateWillSupply       pr_db.PatronRequestState = "WILL_SUPPLY"
-	BorrowerStateShipped          pr_db.PatronRequestState = "SHIPPED"
-	BorrowerStateReceived         pr_db.PatronRequestState = "RECEIVED"
-	BorrowerStateCheckedOut       pr_db.PatronRequestState = "CHECKED_OUT"
-	BorrowerStateCheckedIn        pr_db.PatronRequestState = "CHECKED_IN"
-	BorrowerStateShippedReturned  pr_db.PatronRequestState = "SHIPPED_RETURNED"
-	BorrowerStateCancelPending    pr_db.PatronRequestState = "CANCEL_PENDING"
-	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
-	BorrowerStateCancelled        pr_db.PatronRequestState = "CANCELLED"
-	BorrowerStateUnfilled         pr_db.PatronRequestState = "UNFILLED"
-	LenderStateNew                pr_db.PatronRequestState = "NEW"
-	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
-	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
-	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
-	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
-	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
-	LenderStateShippedReturn      pr_db.PatronRequestState = "SHIPPED_RETURN"
-	LenderStateCancelRequested    pr_db.PatronRequestState = "CANCEL_REQUESTED"
-	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
-	LenderStateCancelled          pr_db.PatronRequestState = "CANCELLED"
-	LenderStateUnfilled           pr_db.PatronRequestState = "UNFILLED"
-)
-
-const (
-	BorrowerActionValidate        pr_db.PatronRequestAction = "validate"
-	BorrowerActionSendRequest     pr_db.PatronRequestAction = "send-request"
-	BorrowerActionCancelRequest   pr_db.PatronRequestAction = "cancel-request"
-	BorrowerActionAcceptCondition pr_db.PatronRequestAction = "accept-condition"
-	BorrowerActionRejectCondition pr_db.PatronRequestAction = "reject-condition"
-	BorrowerActionReceive         pr_db.PatronRequestAction = "receive"
-	BorrowerActionCheckOut        pr_db.PatronRequestAction = "check-out"
-	BorrowerActionCheckIn         pr_db.PatronRequestAction = "check-in"
-	BorrowerActionShipReturn      pr_db.PatronRequestAction = "ship-return"
-
-	LenderActionValidate      pr_db.PatronRequestAction = "validate"
-	LenderActionWillSupply    pr_db.PatronRequestAction = "will-supply"
-	LenderActionCannotSupply  pr_db.PatronRequestAction = "cannot-supply"
-	LenderActionAddCondition  pr_db.PatronRequestAction = "add-condition"
-	LenderActionShip          pr_db.PatronRequestAction = "ship"
-	LenderActionMarkReceived  pr_db.PatronRequestAction = "mark-received"
-	LenderActionMarkCancelled pr_db.PatronRequestAction = "mark-cancelled"
-)
 
 type PatronRequestActionService struct {
 	prRepo               pr_db.PrRepo
@@ -99,7 +41,7 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.Event
 		eventBus:             eventBus,
 		iso18626Handler:      iso18626Handler,
 		lmsCreator:           lmsCreator,
-		actionMappingService: ActionMappingService{},
+		actionMappingService: ActionMappingService{SMService: &StateModelService{}},
 	}
 }
 
@@ -126,7 +68,10 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
-	actionMapping := a.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to load state model", err)
+	}
 	if !actionMapping.IsActionSupported(pr, action) {
 		return events.LogErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
@@ -179,7 +124,11 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
-	autoActions := a.actionMappingService.GetActionMapping(pr).GetAutoActionsForState(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	if err != nil {
+		return err
+	}
+	autoActions := actionMapping.GetAutoActionsForState(pr)
 	if len(autoActions) == 0 {
 		return nil
 	}

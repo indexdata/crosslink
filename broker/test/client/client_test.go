@@ -605,7 +605,7 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS, doNotSend=true\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, true, func(e events.Event) string {
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, false, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}
