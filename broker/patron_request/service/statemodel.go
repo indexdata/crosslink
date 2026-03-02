@@ -7,15 +7,29 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"sync"
 
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
 type StateModelService struct {
 	stateMap map[string]*proapi.StateModel
+	mu       sync.RWMutex
 }
 
 func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
+	s.mu.RLock()
+	if s.stateMap != nil {
+		if stateModel, ok := s.stateMap[modelName]; ok {
+			s.mu.RUnlock()
+			return stateModel, nil
+		}
+	}
+	s.mu.RUnlock()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.stateMap == nil {
 		s.stateMap = make(map[string]*proapi.StateModel)
 	}

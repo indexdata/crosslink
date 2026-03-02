@@ -2,6 +2,7 @@ package prservice
 
 import (
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -160,4 +161,45 @@ func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid transition target")
+}
+
+func TestStateModelServiceConcurrentGetStateModel(t *testing.T) {
+	service := &StateModelService{}
+	const goroutines = 50
+
+	var wg sync.WaitGroup
+	results := make(chan *proapi.StateModel, goroutines)
+	errs := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			model, err := service.GetStateModel("returnables")
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- model
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for err := range errs {
+		assert.NoError(t, err)
+	}
+
+	var first *proapi.StateModel
+	for model := range results {
+		assert.NotNil(t, model)
+		if first == nil {
+			first = model
+			continue
+		}
+		assert.Same(t, first, model)
+	}
+	assert.NotNil(t, first)
 }
