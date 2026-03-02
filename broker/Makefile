@@ -36,7 +36,7 @@ PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
 PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check vet clean view-coverage deps-update deps-update-tools
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint check-coverage
 
 all: $(BINARY) archive
 
