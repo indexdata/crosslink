@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -81,50 +82,60 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		return fmt.Errorf("state model is nil")
 	}
 	c := BuiltInStateModelCapabilities()
-	allStates := append([]string{}, c.RequesterStates...)
-	allStates = append(allStates, c.SupplierStates...)
-
+	definedStates := map[proapi.ModelStateSide]map[string]struct{}{
+		proapi.REQUESTER: {},
+		proapi.SUPPLIER:  {},
+	}
+	// Pass 1: validate all states and collect the state set defined in this model.
 	for _, state := range stateModel.States {
+		var builtInStates []string
 		switch state.Side {
 		case proapi.REQUESTER:
-			if !slices.Contains(c.RequesterStates, state.Name) {
-				return fmt.Errorf("state %s is not a built-in requester state", state.Name)
-			}
-			if state.Actions != nil {
-				for _, action := range *state.Actions {
-					if !slices.Contains(c.RequesterActions, action.Name) {
-						return fmt.Errorf("action %s in state %s is not a built-in requester action", action.Name, state.Name)
-					}
-					if err := validateActionTransitions(action, state.Name, allStates); err != nil {
-						return err
-					}
-				}
-			}
+			builtInStates = c.RequesterStates
 		case proapi.SUPPLIER:
-			if !slices.Contains(c.SupplierStates, state.Name) {
-				return fmt.Errorf("state %s is not a built-in supplier state", state.Name)
-			}
-			if state.Actions != nil {
-				for _, action := range *state.Actions {
-					if !slices.Contains(c.SupplierActions, action.Name) {
-						return fmt.Errorf("action %s in state %s is not a built-in supplier action", action.Name, state.Name)
-					}
-					if err := validateActionTransitions(action, state.Name, allStates); err != nil {
-						return err
-					}
-				}
-			}
+			builtInStates = c.SupplierStates
 		default:
 			return fmt.Errorf("state %s has unsupported side %s", state.Name, state.Side)
 		}
+		if !slices.Contains(builtInStates, state.Name) {
+			return fmt.Errorf("state %s is not a built-in %s state", state.Name, strings.ToLower(string(state.Side)))
+		}
+		sideStates := definedStates[state.Side]
+		if _, exists := sideStates[state.Name]; exists {
+			return fmt.Errorf("state %s is defined multiple times for side %s", state.Name, state.Side)
+		}
+		sideStates[state.Name] = struct{}{}
+	}
 
+	// Pass 2: validate actions/events and their transitions.
+	for _, state := range stateModel.States {
+		var allowedActions []string
+		var allowedEvents []string
+		allowedTransitionTargets := definedStates[state.Side]
+		if state.Side == proapi.REQUESTER {
+			allowedActions = c.RequesterActions
+			allowedEvents = c.SupplierMessageEvents
+		} else {
+			allowedActions = c.SupplierActions
+			allowedEvents = c.RequesterMessageEvents
+		}
+		if state.Actions != nil {
+			for _, action := range *state.Actions {
+				if !slices.Contains(allowedActions, action.Name) {
+					return fmt.Errorf("action %s in state %s is not a built-in %s action", action.Name, state.Name, strings.ToLower(string(state.Side)))
+				}
+				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets); err != nil {
+					return err
+				}
+			}
+		}
 		if state.Events != nil {
 			for _, event := range *state.Events {
-				if !slices.Contains(c.MessageEvents, event.Name) {
-					return fmt.Errorf("event %s in state %s is not a built-in message event", event.Name, state.Name)
+				if !slices.Contains(allowedEvents, event.Name) {
+					return fmt.Errorf("event %s in state %s is not a built-in %s message event", event.Name, state.Name, strings.ToLower(string(state.Side)))
 				}
-				if event.Transition != nil && *event.Transition != "" && !slices.Contains(allStates, *event.Transition) {
-					return fmt.Errorf("event %s in state %s has invalid transition target %s", event.Name, state.Name, *event.Transition)
+				if err := validateEventTransition(event, state.Name, allowedTransitionTargets); err != nil {
+					return err
 				}
 			}
 		}
@@ -133,15 +144,37 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 	return nil
 }
 
-func validateActionTransitions(action proapi.ModelAction, stateName string, allStates []string) error {
+func validateActionTransitions(action proapi.ModelAction, stateName string, allowedTransitionTargets map[string]struct{}) error {
 	if action.Transitions == nil {
 		return nil
 	}
-	if action.Transitions.Success != nil && *action.Transitions.Success != "" && !slices.Contains(allStates, *action.Transitions.Success) {
-		return fmt.Errorf("action %s in state %s has invalid success transition target %s", action.Name, stateName, *action.Transitions.Success)
+	if action.Transitions.Success != nil && *action.Transitions.Success != "" {
+		target := *action.Transitions.Success
+		if !hasTransitionTarget(allowedTransitionTargets, target) {
+			return fmt.Errorf("action %s in state %s has invalid success transition target %s", action.Name, stateName, target)
+		}
 	}
-	if action.Transitions.Failure != nil && *action.Transitions.Failure != "" && !slices.Contains(allStates, *action.Transitions.Failure) {
-		return fmt.Errorf("action %s in state %s has invalid failure transition target %s", action.Name, stateName, *action.Transitions.Failure)
+	if action.Transitions.Failure != nil && *action.Transitions.Failure != "" {
+		target := *action.Transitions.Failure
+		if !hasTransitionTarget(allowedTransitionTargets, target) {
+			return fmt.Errorf("action %s in state %s has invalid failure transition target %s", action.Name, stateName, target)
+		}
 	}
 	return nil
+}
+
+func validateEventTransition(event proapi.ModelEvent, stateName string, allowedTransitionTargets map[string]struct{}) error {
+	if event.Transition == nil || *event.Transition == "" {
+		return nil
+	}
+	target := *event.Transition
+	if !hasTransitionTarget(allowedTransitionTargets, target) {
+		return fmt.Errorf("event %s in state %s has invalid transition target %s", event.Name, stateName, target)
+	}
+	return nil
+}
+
+func hasTransitionTarget(allowedTransitionTargets map[string]struct{}, name string) bool {
+	_, ok := allowedTransitionTargets[name]
+	return ok
 }

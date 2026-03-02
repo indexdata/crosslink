@@ -145,7 +145,16 @@ func supplierBuiltInActions() []string {
 	})
 }
 
-func builtInMessageEvents() []string {
+func requesterBuiltInMessageEvents() []string {
+	return uniqueSorted([]string{
+		string(RequesterCancelRequest),
+		string(RequesterShippedReturn),
+		string(RequesterCondAccepted),
+		string(RequesterCondRejected),
+	})
+}
+
+func supplierBuiltInMessageEvents() []string {
 	return uniqueSorted([]string{
 		string(SupplierExpectToSupply),
 		string(SupplierWillSupply),
@@ -154,20 +163,17 @@ func builtInMessageEvents() []string {
 		string(SupplierCompleted),
 		string(SupplierUnfilled),
 		string(SupplierCancelAccepted),
-		string(RequesterCancelRequest),
-		string(RequesterShippedReturn),
-		string(RequesterCondAccepted),
-		string(RequesterCondRejected),
 	})
 }
 
 func BuiltInStateModelCapabilities() proapi.StateModelCapabilities {
 	return proapi.StateModelCapabilities{
-		RequesterActions: requesterBuiltInActions(),
-		RequesterStates:  requesterBuiltInStates(),
-		SupplierActions:  supplierBuiltInActions(),
-		SupplierStates:   supplierBuiltInStates(),
-		MessageEvents:    builtInMessageEvents(),
+		RequesterActions:       requesterBuiltInActions(),
+		RequesterMessageEvents: requesterBuiltInMessageEvents(),
+		RequesterStates:        requesterBuiltInStates(),
+		SupplierActions:        supplierBuiltInActions(),
+		SupplierMessageEvents:  supplierBuiltInMessageEvents(),
+		SupplierStates:         supplierBuiltInStates(),
 	}
 }
 

@@ -15,7 +15,8 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.RequesterActions, string(BorrowerActionSendRequest)))
 	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionWillSupply)))
-	assert.True(t, slices.Contains(c.MessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
+	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 }
 
 func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
@@ -57,7 +58,7 @@ func TestValidateStateModelInvalidMessageEvent(t *testing.T) {
 
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a built-in message event")
+	assert.Contains(t, err.Error(), "not a built-in requester message event")
 }
 
 func TestValidateStateModelUnsupportedSide(t *testing.T) {
@@ -154,6 +155,99 @@ func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 						Transition: &invalidTarget,
 					},
 				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid transition target")
+}
+
+func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *testing.T) {
+	transition := string(BorrowerStateValidated)
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: string(BorrowerStateNew),
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{
+						Name: string(BorrowerActionValidate),
+						Transitions: &struct {
+							Failure *string `json:"failure,omitempty"`
+							Success *string `json:"success,omitempty"`
+						}{
+							Success: &transition,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid success transition target")
+}
+
+func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
+	transition := string(BorrowerStateValidated)
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: string(BorrowerStateNew),
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{
+						Name: string(BorrowerActionValidate),
+						Transitions: &struct {
+							Failure *string `json:"failure,omitempty"`
+							Success *string `json:"success,omitempty"`
+						}{
+							Success: &transition,
+						},
+					},
+				},
+			},
+			{
+				Name: string(LenderStateValidated),
+				Side: proapi.SUPPLIER,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid success transition target")
+}
+
+func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
+	transition := string(BorrowerStateShipped)
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: string(BorrowerStateSent),
+				Side: proapi.REQUESTER,
+				Events: &[]proapi.ModelEvent{
+					{
+						Name:       string(SupplierLoaned),
+						Transition: &transition,
+					},
+				},
+			},
+			{
+				Name: string(LenderStateShipped),
+				Side: proapi.SUPPLIER,
 			},
 		},
 	}

@@ -410,7 +410,8 @@ func TestGetStateModelCapabilities(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal state model capabilities")
 	assert.True(t, slices.Contains(capabilities.RequesterStates, string(prservice.BorrowerStateValidated)))
 	assert.True(t, slices.Contains(capabilities.SupplierActions, string(prservice.LenderActionWillSupply)))
-	assert.True(t, slices.Contains(capabilities.MessageEvents, string(prservice.SupplierWillSupply)))
+	assert.True(t, slices.Contains(capabilities.SupplierMessageEvents, string(prservice.SupplierWillSupply)))
+	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterCancelRequest)))
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {

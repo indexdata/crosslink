@@ -596,7 +596,11 @@ components:
           type: array
           items:
             type: string
-        messageEvents:
+        requesterMessageEvents:
+          type: array
+          items:
+            type: string
+        supplierMessageEvents:
           type: array
           items:
             type: string
@@ -605,7 +609,8 @@ components:
         - supplierStates
         - requesterActions
         - supplierActions
-        - messageEvents
+        - requesterMessageEvents
+        - supplierMessageEvents
 
     ModelState:
       title: State
