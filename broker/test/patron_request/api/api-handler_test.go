@@ -80,6 +80,44 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestInvalidCreateRequest(t *testing.T) {
+	requesterSymbol := "ISIL:REQ" + uuid.NewString()
+
+	id := uuid.NewString()
+	newPr := proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		Id:              &id,
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err, "failed to marshal patron request")
+
+	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 500)
+	assert.Contains(t, string(respBytes), "failed to parse ILL request")
+
+	queryParams := "?side=borrowing&symbol=" + *newPr.RequesterSymbol
+	respBytes = httpRequest(t, "GET", basePath+"/"+*newPr.Id+"/events"+queryParams, []byte{}, 200)
+	var events []oapi.Event
+	err = json.Unmarshal(respBytes, &events)
+	assert.NoError(t, err, "failed to unmarshal patron request events")
+	assert.Len(t, events, 1)
+	ev := events[0]
+	assert.Equal(t, "ERROR", ev.EventStatus)
+	if assert.NotNil(t, ev.ResultData) {
+		resultData := *ev.ResultData
+
+		commonEventData, ok := resultData["CommonEventData"].(map[string]interface{})
+		if assert.True(t, ok, "CommonEventData missing/wrong type") {
+			eventError, ok := commonEventData["eventError"].(map[string]interface{})
+			if assert.True(t, ok, "eventError missing/wrong type") {
+				msg, ok := eventError["Message"].(string)
+				if assert.True(t, ok, "Message missing/wrong type") {
+					assert.Contains(t, msg, "failed to parse ILL request")
+				}
+			}
+		}
+	}
+}
+
 func TestCrud(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
