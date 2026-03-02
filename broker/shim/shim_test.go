@@ -689,6 +689,45 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Equal(t, "other", resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text, "LoanCondition should be 'other'")
 }
 
+func TestIso18626AReShareShimSupplyingOutgoingZeroCost(t *testing.T) {
+	OFFERED_COSTS = true // ensure that offered costs are enabled
+	msg := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			StatusInfo: iso18626.StatusInfo{
+				Status: iso18626.TypeStatusLoaned,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				DeliveryCosts: &iso18626.TypeCosts{
+					MonetaryValue: utils.XSDDecimal{
+						Base: 0,
+						Exp:  2,
+					},
+					CurrencyCode: iso18626.TypeSchemeValuePair{
+						Text: "USD",
+					},
+				},
+			},
+		},
+	}
+
+	shim := GetShim(string(directory.ReShare))
+	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	if err != nil {
+		t.Errorf("failed to apply outgoing")
+	}
+	var resmsg iso18626.ISO18626Message
+	err = xml.Unmarshal(bytes, &resmsg)
+	if err != nil {
+		t.Errorf("failed to unmarshal outgoing")
+	}
+
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil for zero delivery cost")
+	assert.Nil(t, resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should remain nil for zero delivery cost")
+}
+
 func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 	shima := new(Iso18626AlmaShim)
 	sam := iso18626.SupplyingAgencyMessage{
