@@ -58,7 +58,7 @@ func TestValidateStateModelInvalidMessageEvent(t *testing.T) {
 
 	err := ValidateStateModel(model)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "not a built-in requester message event")
+	assert.Contains(t, err.Error(), "not a built-in supplier message event")
 }
 
 func TestValidateStateModelUnsupportedSide(t *testing.T) {

@@ -111,13 +111,16 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 	for _, state := range stateModel.States {
 		var allowedActions []string
 		var allowedEvents []string
+		var allowedEventsSide string
 		allowedTransitionTargets := definedStates[state.Side]
 		if state.Side == proapi.REQUESTER {
 			allowedActions = c.RequesterActions
 			allowedEvents = c.SupplierMessageEvents
+			allowedEventsSide = strings.ToLower(string(proapi.SUPPLIER))
 		} else {
 			allowedActions = c.SupplierActions
 			allowedEvents = c.RequesterMessageEvents
+			allowedEventsSide = strings.ToLower(string(proapi.REQUESTER))
 		}
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
@@ -132,7 +135,7 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		if state.Events != nil {
 			for _, event := range *state.Events {
 				if !slices.Contains(allowedEvents, event.Name) {
-					return fmt.Errorf("event %s in state %s is not a built-in %s message event", event.Name, state.Name, strings.ToLower(string(state.Side)))
+					return fmt.Errorf("event %s in state %s is not a built-in %s message event", event.Name, state.Name, allowedEventsSide)
 				}
 				if err := validateEventTransition(event, state.Name, allowedTransitionTargets); err != nil {
 					return err
