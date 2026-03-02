@@ -850,6 +850,35 @@ func TestProcessItemIdMultipleItemsReShare(t *testing.T) {
 	assert.Equal(t, "send multiple items", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
+func TestProcessItemIdMultipleItemsReShareNoNote(t *testing.T) {
+	shimR := new(Iso18626ReShareShim)
+
+	sam := iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
+			},
+		},
+	}
+
+	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "#MultipleItems#\n"+
+		"name1\\|2,3\\\\|c\\|123|id\\|123\n"+
+		"name1\\|2,4\\\\|c\\|124|id\\|124\n"+
+		"name1\\|2,5\\\\|c\\|125|id\\|125\n"+
+		"#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
+
+	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
+	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
+	assert.NoError(t, err)
+	var resmsg iso18626.ISO18626Message
+	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
+	assert.NoError(t, err)
+	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
 func TestProcessItemIdOneItemAlma(t *testing.T) {
 	shimA := new(Iso18626AlmaShim)
 

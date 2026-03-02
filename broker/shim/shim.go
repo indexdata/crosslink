@@ -34,6 +34,7 @@ const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 var edgeNonWord = regexp.MustCompile(`^\W+|\W+$`)
+var reshareItemRegex = regexp.MustCompile(`(.*),(.*),(.*)`)
 
 type Iso18626Shim interface {
 	ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error)
@@ -214,7 +215,8 @@ func (i *Iso18626AlmaShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
 		}
 		sam.DeliveryInfo.ItemId = strings.Join(items, ",")
 
-		sam.MessageInfo.Note = sam.MessageInfo.Note[0:startIdx-1] + // -1 because we remove new line symbol
+		tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
+		sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
 			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
 	}
 }
@@ -611,8 +613,8 @@ func (i *Iso18626ReShareShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
 			}
 			sam.DeliveryInfo.ItemId = "multivol:" + strings.Join(items, ",multivol:")
 		}
-
-		sam.MessageInfo.Note = sam.MessageInfo.Note[0:startIdx-1] + // -1 because we remove new line symbol
+		tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
+		sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
 			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
 	}
 }
@@ -644,8 +646,7 @@ func (i *Iso18626ReShareShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
 }
 
 func writeItemValues(sb *strings.Builder, itemId string) {
-	re := regexp.MustCompile(`(.*),(.*),(.*)`)
-	match := re.FindStringSubmatch(itemId)
+	match := reshareItemRegex.FindStringSubmatch(itemId)
 	var row string
 	if len(match) > 0 {
 		row = common.PackItemsNote([]string{match[1], match[2], match[3]})

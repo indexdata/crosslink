@@ -268,10 +268,8 @@ func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ct
 			addNotFoundError(w)
 			return nil
 		}
-		if err != nil {
-			addInternalError(ctx, w, err)
-			return nil
-		}
+		addInternalError(ctx, w, err)
+		return nil
 	}
 	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == *side) {
 		return &pr

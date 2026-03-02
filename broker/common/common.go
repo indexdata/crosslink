@@ -51,6 +51,11 @@ func GetItemParams(note string) ([][]string, int, int) {
 	startIdx := strings.Index(note, MULTIPLE_ITEMS)
 	endIdx := strings.Index(note, MULTIPLE_ITEMS_END)
 
+	// Validate indices to avoid panics if markers are missing or misordered.
+	if startIdx < 0 || endIdx < 0 || endIdx <= startIdx {
+		return nil, startIdx, endIdx
+	}
+
 	content := note[startIdx+len(MULTIPLE_ITEMS) : endIdx]
 	content = strings.TrimSpace(content)
 	var result [][]string
