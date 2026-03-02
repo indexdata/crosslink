@@ -9,22 +9,33 @@ import (
 )
 
 type ActionMappingService struct {
-	SMService StateModelService
+	SMService *StateModelService
 }
 
 func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 	return &ActionMappingService{
-		SMService: StateModelService{},
+		SMService: &StateModelService{},
 	}
 }
 
 func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) (*ActionMapping, error) {
 	//TODO: check the PatronRequest loan type to decide what kind of state model/mapping to return
-	stateModel, err := r.SMService.GetStateModel("returnables")
+	stateModel, err := r.getStateModelService().GetStateModel("returnables")
 	if err != nil {
 		return nil, err
 	}
 	return NewActionMapping(stateModel), nil
+}
+
+func (r *ActionMappingService) GetStateModel(modelName string) (*proapi.StateModel, error) {
+	return r.getStateModelService().GetStateModel(modelName)
+}
+
+func (r *ActionMappingService) getStateModelService() *StateModelService {
+	if r.SMService == nil {
+		r.SMService = &StateModelService{}
+	}
+	return r.SMService
 }
 
 type ActionMapping struct {

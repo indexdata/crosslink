@@ -41,7 +41,7 @@ func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.Event
 		eventBus:             eventBus,
 		iso18626Handler:      iso18626Handler,
 		lmsCreator:           lmsCreator,
-		actionMappingService: ActionMappingService{},
+		actionMappingService: ActionMappingService{SMService: &StateModelService{}},
 	}
 }
 

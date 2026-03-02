@@ -47,7 +47,7 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
-		actionMappingService: prservice.ActionMappingService{},
+		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 		tenant:               tenant,
 	}
 }
@@ -61,7 +61,7 @@ func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor Act
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
-	stateModel, err := a.actionMappingService.SMService.GetStateModel(model)
+	stateModel, err := a.actionMappingService.GetStateModel(model)
 	if err != nil {
 		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 			Other: map[string]string{"method": "GetStateModelModelsModel", "model": model},

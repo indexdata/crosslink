@@ -42,7 +42,7 @@ func CreatePatronRequestMessageHandler(prRepo pr_db.PrRepo, eventRepo events.Eve
 		eventRepo:            eventRepo,
 		illRepo:              illRepo,
 		eventBus:             eventBus,
-		actionMappingService: ActionMappingService{},
+		actionMappingService: ActionMappingService{SMService: &StateModelService{}},
 	}
 }
 
