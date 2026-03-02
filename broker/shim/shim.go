@@ -576,6 +576,9 @@ func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18
 		if suppMsg.DeliveryInfo == nil || suppMsg.DeliveryInfo.DeliveryCosts == nil {
 			return
 		}
+		if suppMsg.DeliveryInfo.DeliveryCosts.MonetaryValue.Base <= 0 {
+			return
+		}
 		if suppMsg.MessageInfo.OfferedCosts == nil {
 			suppMsg.MessageInfo.OfferedCosts = suppMsg.DeliveryInfo.DeliveryCosts
 			// also append a loan condition so reshare shows the cost as a condition
