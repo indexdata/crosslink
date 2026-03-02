@@ -68,7 +68,10 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
-	actionMapping := a.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to load state model", err)
+	}
 	if !actionMapping.IsActionSupported(pr, action) {
 		return events.LogErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
@@ -121,7 +124,11 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
-	autoActions := a.actionMappingService.GetActionMapping(pr).GetAutoActionsForState(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	if err != nil {
+		return err
+	}
+	autoActions := actionMapping.GetAutoActionsForState(pr)
 	if len(autoActions) == 0 {
 		return nil
 	}

@@ -18,9 +18,13 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 	}
 }
 
-func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) *ActionMapping {
+func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) (*ActionMapping, error) {
 	//TODO: check the PatronRequest loan type to decide what kind of state model/mapping to return
-	return NewActionMapping(r.SMService.GetStateModel("returnables"))
+	stateModel, err := r.SMService.GetStateModel("returnables")
+	if err != nil {
+		return nil, err
+	}
+	return NewActionMapping(stateModel), nil
 }
 
 type ActionMapping struct {

@@ -3,7 +3,9 @@ package prservice
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -13,7 +15,7 @@ type StateModelService struct {
 	stateMap map[string]*proapi.StateModel
 }
 
-func (s *StateModelService) GetStateModel(modelName string) *proapi.StateModel {
+func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
 	if s.stateMap == nil {
 		s.stateMap = make(map[string]*proapi.StateModel)
 	}
@@ -21,15 +23,18 @@ func (s *StateModelService) GetStateModel(modelName string) *proapi.StateModel {
 	stateModel, ok := s.stateMap[modelName]
 
 	if ok {
-		return stateModel
+		return stateModel, nil
 	}
 
 	stateModel, err := LoadStateModelByName(modelName)
-	if err == nil {
-		s.stateMap[modelName] = stateModel
-		return stateModel
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return nil
+	s.stateMap[modelName] = stateModel
+	return stateModel, nil
 }
 
 //go:embed statemodels
