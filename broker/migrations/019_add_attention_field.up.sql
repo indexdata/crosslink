@@ -1,0 +1,1 @@
+ALTER TABLE patron_request ADD COLUMN needs_attention BOOLEAN NOT NULL DEFAULT false;

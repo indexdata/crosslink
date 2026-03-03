@@ -137,6 +137,8 @@ func TestCrud(t *testing.T) {
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
 
+	assert.Equal(t, false, foundPr.NeedsAttention)
+
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
 	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
 
