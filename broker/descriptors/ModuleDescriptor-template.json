@@ -116,6 +116,15 @@
         },
         {
           "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/events",
+          "permissionsRequired": [
+            "broker.patron_requests.item.events.get"
+          ]
+        },
+        {
+          "methods": [
             "POST"
           ],
           "pathPattern": "/broker/patron_requests/{id}/action",
@@ -217,6 +226,11 @@
       "permissionName": "broker.patron_requests.item.action.post"
     },
     {
+      "description": "Read events for a patron request",
+      "displayName": "Broker - read patron request events",
+      "permissionName": "broker.patron_requests.item.events.get"
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -224,7 +238,8 @@
       "subPermissions": [
         "broker.patron_requests.get",
         "broker.patron_requests.item.get",
-        "broker.patron_requests.item.actions.get"
+        "broker.patron_requests.item.actions.get",
+        "broker.patron_requests.item.events.get"
       ]
     },
     {
@@ -272,6 +287,7 @@
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.actions.get",
+        "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.action.post",
         "broker.state_model.item.get"
       ]
