@@ -39,8 +39,8 @@ script:pre-request {
 }
 
 script:post-response {
-  const json = res.getBody()
-  bru.setVar("prId", json.id)
+  const jreq = req.getBody()
+  bru.setVar("prId", jreq.id)
 }
 
 settings {
