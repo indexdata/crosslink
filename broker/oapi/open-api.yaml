@@ -465,12 +465,16 @@ components:
         requesterRequestId:
           type: string
           description: Requester patron request ID
+        needsAttention:
+          type: boolean
+          description: Indicates if the request needs attention
       required:
         - id
         - timestamp
         - state
         - side
         - illRequest
+        - needsAttention
     PatronRequests:
       type: object
       required:

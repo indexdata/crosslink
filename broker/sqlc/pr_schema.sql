@@ -9,7 +9,8 @@ CREATE TABLE patron_request
     requester_symbol  VARCHAR,
     supplier_symbol   VARCHAR,
     tenant            VARCHAR,
-    requester_req_id  VARCHAR
+    requester_req_id  VARCHAR,
+    needs_attention   BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

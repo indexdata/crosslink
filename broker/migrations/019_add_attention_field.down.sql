@@ -1,0 +1,1 @@
+ALTER TABLE patron_request DROP COLUMN needs_attention;
