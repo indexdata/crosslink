@@ -140,6 +140,24 @@
           "permissionsRequired" : [
             "broker.state_model.item.get"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/items",
+          "permissionsRequired": [
+            "broker.patron_requests.item.items.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/notifications",
+          "permissionsRequired": [
+            "broker.patron_requests.item.notifications.get"
+          ]
         }
       ]
     }
@@ -231,6 +249,16 @@
       "permissionName": "broker.patron_requests.item.events.get"
     },
     {
+      "description": "List items for a patron request",
+      "displayName": "Broker - read patron request items",
+      "permissionName": "broker.patron_requests.item.items.get"
+    },
+    {
+      "description": "List notifications for a patron request",
+      "displayName": "Broker - read patron request notifications",
+      "permissionName": "broker.patron_requests.item.notifications.get"
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -239,7 +267,10 @@
         "broker.patron_requests.get",
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.actions.get",
-        "broker.patron_requests.item.events.get"
+        "broker.patron_requests.item.events.get",
+        "broker.patron_requests.item.actions.get",
+        "broker.patron_requests.item.items.get",
+        "broker.patron_requests.item.notifications.get"
       ]
     },
     {
@@ -289,7 +320,9 @@
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.action.post",
-        "broker.state_model.item.get"
+        "broker.state_model.item.get",
+        "broker.patron_requests.item.items.get",
+        "broker.patron_requests.item.notifications.get"
       ]
     }
   ]

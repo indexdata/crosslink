@@ -390,7 +390,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	var prNotifications []proapi.PrNotification
 	err = json.Unmarshal(respBytes, &prNotifications)
 	assert.NoError(t, err, "failed to unmarshal patron request notifications")
-	assert.Len(t, prNotifications, 2)
+	assert.True(t, len(prNotifications) >= 4)
 
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath+supQueryParams, []byte{}, 200)

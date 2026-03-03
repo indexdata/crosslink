@@ -151,6 +151,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	switch sam.MessageInfo.ReasonForMessage {
 	case iso18626.TypeReasonForMessageNotification:
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractSamNotifications(ctx, pr, sam)
+		if notErr != nil {
+			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: notErr.Error(),
+			}, notErr)
+		}
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
 		iso18626.TypeReasonForMessageRequestResponse,
@@ -365,6 +372,13 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 
 	if ram.Action == iso18626.TypeActionNotification {
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractRamNotifications(ctx, pr, ram)
+		if notErr != nil {
+			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
+				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+				ErrorValue: notErr.Error(),
+			}, notErr)
+		}
 		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 	}
 

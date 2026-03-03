@@ -639,9 +639,10 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		val := f.Float64
 		cost = &val
 	}
-	var receipt string
+	var receipt *string
 	if notification.Receipt != "" {
-		receipt = string(notification.Receipt)
+		r := string(notification.Receipt)
+		receipt = &r
 	}
 	return proapi.PrNotification{
 		Id:             notification.ID,
@@ -652,7 +653,7 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
 		Condition:      toString(notification.Condition),
-		Receipt:        &receipt,
+		Receipt:        receipt,
 		CreatedAt:      notification.CreatedAt.Time,
 		AcknowledgedAt: ackAt,
 	}, nil
