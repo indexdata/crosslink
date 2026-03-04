@@ -462,6 +462,41 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 	writeJsonResponse(w, responseItems)
 }
 
+func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+	list, err := a.prRepo.GetNotificationsByPrId(ctx, pr.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+
+	var responseList []proapi.PrNotification
+	for _, n := range list {
+		apiN, inErr := toApiNotification(n)
+		if inErr != nil {
+			addInternalError(ctx, w, inErr)
+			return
+		}
+		responseList = append(responseList, apiN)
+	}
+	writeJsonResponse(w, responseList)
+}
+
 func writeJsonResponse(w http.ResponseWriter, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -587,4 +622,39 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 		Title:      toString(item.Title),
 		CreatedAt:  item.CreatedAt.Time,
 	}
+}
+
+func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, error) {
+	var ackAt *time.Time
+	if notification.AcknowledgedAt.Valid {
+		t := notification.AcknowledgedAt.Time
+		ackAt = &t
+	}
+	var cost *float64
+	if notification.Cost.Valid {
+		f, err := notification.Cost.Float64Value()
+		if err != nil {
+			return proapi.PrNotification{}, err
+		}
+		val := f.Float64
+		cost = &val
+	}
+	var receipt *string
+	if notification.Receipt != "" {
+		r := string(notification.Receipt)
+		receipt = &r
+	}
+	return proapi.PrNotification{
+		Id:             notification.ID,
+		FromSymbol:     notification.FromSymbol,
+		ToSymbol:       notification.ToSymbol,
+		Side:           string(notification.Side),
+		Note:           toString(notification.Note),
+		Cost:           cost,
+		Currency:       toString(notification.Currency),
+		Condition:      toString(notification.Condition),
+		Receipt:        receipt,
+		CreatedAt:      notification.CreatedAt.Time,
+		AcknowledgedAt: ackAt,
+	}, nil
 }

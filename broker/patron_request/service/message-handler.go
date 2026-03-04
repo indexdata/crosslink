@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -149,6 +151,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	switch sam.MessageInfo.ReasonForMessage {
 	case iso18626.TypeReasonForMessageNotification:
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractSamNotifications(ctx, pr, sam)
+		if notErr != nil {
+			ctx.Logger().Error("failed to save sam notifications", "error", notErr)
+		}
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
 		iso18626.TypeReasonForMessageRequestResponse,
@@ -220,6 +226,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	err = m.extractSamNotifications(ctx, pr, sam)
+	if err != nil {
+		ctx.Logger().Error("failed to save sam notifications", "error", err)
 	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
@@ -320,6 +330,10 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: err.Error(),
 		}, err)
 	}
+	err = m.extractRequestNotifications(ctx, pr, request)
+	if err != nil {
+		ctx.Logger().Error("failed to save request notifications", "error", err)
+	}
 	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
 		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -349,6 +363,10 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 
 	if ram.Action == iso18626.TypeActionNotification {
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractRamNotifications(ctx, pr, ram)
+		if notErr != nil {
+			ctx.Logger().Error("failed to save ram notifications", "error", notErr)
+		}
 		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 	}
 
@@ -406,6 +424,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 			ErrorValue: err.Error(),
 		}, err)
 	}
+	err = m.extractRamNotifications(ctx, pr, ram)
+	if err != nil {
+		ctx.Logger().Error("failed to save ram notifications", "error", err)
+	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
 		if err != nil {
@@ -453,4 +475,186 @@ func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId 
 		Barcode:    id, //TODO barcode generation. How to do that?
 	})
 	return err
+}
+
+func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
+	if sam.MessageInfo.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(sam.MessageInfo.Note),
+			FromSymbol: supSymbol,
+			ToSymbol:   reqSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if sam.MessageInfo.OfferedCosts != nil {
+		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+		cost, err := safeConvertInt32(sam.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			FromSymbol: supSymbol,
+			ToSymbol:   reqSymbol,
+			Side:       pr.Side,
+			Note:       getDbText("Offered costs"),
+			Currency:   getDbText(sam.MessageInfo.OfferedCosts.CurrencyCode.Text),
+			Cost: pgtype.Numeric{
+				Valid: true,
+				Int:   big.NewInt(int64(sam.MessageInfo.OfferedCosts.MonetaryValue.Base)),
+				Exp:   cost,
+			},
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if sam.DeliveryInfo != nil {
+		if sam.DeliveryInfo.DeliveryCosts != nil {
+			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+			cost, err := safeConvertInt32(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp)
+			if err != nil {
+				return err
+			}
+			_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+				ID:         uuid.NewString(),
+				PrID:       pr.ID,
+				FromSymbol: supSymbol,
+				ToSymbol:   reqSymbol,
+				Side:       pr.Side,
+				Note:       getDbText("Delivery costs"),
+				Currency:   getDbText(sam.DeliveryInfo.DeliveryCosts.CurrencyCode.Text),
+				Cost: pgtype.Numeric{
+					Valid: true,
+					Int:   big.NewInt(int64(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Base)),
+					Exp:   cost,
+				},
+				CreatedAt: pgtype.Timestamp{
+					Valid: true,
+					Time:  time.Now(),
+				},
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if sam.DeliveryInfo.LoanCondition != nil {
+			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+			_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+				ID:         uuid.NewString(),
+				PrID:       pr.ID,
+				FromSymbol: supSymbol,
+				ToSymbol:   reqSymbol,
+				Side:       pr.Side,
+				Condition:  getDbText(sam.DeliveryInfo.LoanCondition.Text),
+				CreatedAt: pgtype.Timestamp{
+					Valid: true,
+					Time:  time.Now(),
+				},
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
+	if ram.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(ram.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(ram.Note),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
+	if request.ServiceInfo != nil && request.ServiceInfo.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(request.ServiceInfo.Note),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
+		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
+		cost, err := safeConvertInt32(request.BillingInfo.MaximumCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText("Maximum costs"),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			Currency:   getDbText(request.BillingInfo.MaximumCosts.CurrencyCode.Text),
+			Cost: pgtype.Numeric{
+				Valid: true,
+				Int:   big.NewInt(int64(request.BillingInfo.MaximumCosts.MonetaryValue.Base)),
+				Exp:   cost,
+			},
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func getSymbolsFromHeader(header iso18626.Header) (string, string) {
+	return header.SupplyingAgencyId.AgencyIdType.Text + ":" + header.SupplyingAgencyId.AgencyIdValue,
+		header.RequestingAgencyId.AgencyIdType.Text + ":" + header.RequestingAgencyId.AgencyIdValue
+}
+
+func safeConvertInt32(n int) (int32, error) {
+	if n < math.MinInt32 || n > math.MaxInt32 {
+		return 0, fmt.Errorf("integer out of range for int32: %d", n)
+	}
+	return int32(n), nil
 }
