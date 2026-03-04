@@ -153,10 +153,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 		// Notifications are acknowledged but must not drive state transitions.
 		notErr := m.extractSamNotifications(ctx, pr, sam)
 		if notErr != nil {
-			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: notErr.Error(),
-			}, notErr)
+			ctx.Logger().Error("failed to save sam notifications", "error", notErr)
 		}
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
@@ -232,10 +229,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 	}
 	err = m.extractSamNotifications(ctx, pr, sam)
 	if err != nil {
-		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
+		ctx.Logger().Error("failed to save sam notifications", "error", err)
 	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
@@ -338,10 +332,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	err = m.extractRequestNotifications(ctx, pr, request)
 	if err != nil {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
+		ctx.Logger().Error("failed to save request notifications", "error", err)
 	}
 	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
@@ -374,10 +365,7 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 		// Notifications are acknowledged but must not drive state transitions.
 		notErr := m.extractRamNotifications(ctx, pr, ram)
 		if notErr != nil {
-			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
-				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-				ErrorValue: notErr.Error(),
-			}, notErr)
+			ctx.Logger().Error("failed to save ram notifications", "error", notErr)
 		}
 		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 	}
@@ -438,10 +426,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 	}
 	err = m.extractRamNotifications(ctx, pr, ram)
 	if err != nil {
-		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
+		ctx.Logger().Error("failed to save ram notifications", "error", err)
 	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
