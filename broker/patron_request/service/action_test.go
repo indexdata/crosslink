@@ -732,7 +732,7 @@ func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_d
 }
 
 func (r *MockPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, symbol string, requesterReqId string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
-	args := r.Called(symbol, requesterReqId)
+	args := r.Called(symbol, requesterReqId, side)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
 

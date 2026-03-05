@@ -36,7 +36,7 @@ FROM patron_request
 WHERE id = $1;
 
 -- name: GetPatronRequestBySupplierSymbolAndRequesterReqId :one
--- params: supplier_symbol string, requester_req_id string
+-- params: supplier_symbol string, requester_req_id string, side string
 SELECT sqlc.embed(patron_request)
 FROM patron_request
 WHERE supplier_symbol = $1 AND requester_req_id = $2 AND side = $3

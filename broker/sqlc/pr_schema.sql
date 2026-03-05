@@ -64,7 +64,7 @@ SELECT
         SELECT 1
         FROM notification n
         WHERE n.pr_id = pr.id and acknowledged_at is null
-    ) AS has_unreaded_not,
+    ) AS has_unreaded_notification,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
     (pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate')::timestamptz AS needed_at
