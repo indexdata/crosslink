@@ -1,17 +1,17 @@
 meta {
-  name: Lending side mark-received
+  name: Supplier Events
   type: http
-  seq: 11
+  seq: 19
 }
 
-post {
-  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
-  body: json
+get {
+  url: {{host}}/events?requester_req_id={{prId}}
+  body: none
   auth: basic
 }
 
 params:query {
-  side: lending
+  requester_req_id: {{prId}}
 }
 
 headers {
@@ -21,12 +21,6 @@ headers {
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
-}
-
-body:json {
-  {
-      "action": "mark-received"
-  }
 }
 
 settings {

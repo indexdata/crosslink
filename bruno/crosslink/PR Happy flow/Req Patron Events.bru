@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side  get all actions
+  name: Req Patron Events
   type: http
-  seq: 14
+  seq: 18
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}/actions?side=borrowing
+  url: {{host}}/patron_requests/{{prId}}/events?side=borrowing
   body: none
   auth: basic
 }
@@ -21,6 +21,10 @@ headers {
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
+}
+
+vars:pre-request {
+  prId: {{prId}}
 }
 
 settings {
