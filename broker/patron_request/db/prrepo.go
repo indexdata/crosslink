@@ -69,7 +69,19 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
 				fullCount = r.FullCount
-				list = append(list, r.PatronRequest)
+				list = append(list, PatronRequest{
+					ID:              r.ID,
+					Timestamp:       r.Timestamp,
+					IllRequest:      r.IllRequest,
+					State:           PatronRequestState(r.State),
+					Side:            PatronRequestSide(r.Side),
+					Patron:          r.Patron,
+					RequesterSymbol: r.RequesterSymbol,
+					SupplierSymbol:  r.SupplierSymbol,
+					Tenant:          r.Tenant,
+					RequesterReqID:  r.RequesterReqID,
+					NeedsAttention:  r.NeedsAttention,
+				})
 			}
 		} else {
 			params.Limit = 1
