@@ -350,6 +350,9 @@ func TestToDbPatronRequest(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.Timestamp.Valid)
+	assert.True(t, pr.RequesterReqID.Valid)
+	assert.Equal(t, id, pr.RequesterReqID.String)
+	assert.False(t, pr.SupplierSymbol.Valid)
 
 	pr, err = handler.toDbPatronRequest(ctx, proapi.CreatePatronRequest{RequesterSymbol: &symbol}, nil)
 	assert.NoError(t, err)
