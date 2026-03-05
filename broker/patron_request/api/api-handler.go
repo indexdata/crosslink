@@ -594,6 +594,7 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		SupplierSymbol:  getDbText(request.SupplierSymbol),
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
+		RequesterReqID:  getDbText(&id),
 	}, nil
 }
 

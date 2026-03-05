@@ -15,7 +15,7 @@ type PrRepo interface {
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
-	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
+	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string, side PatronRequestSide) (PatronRequest, error)
 	GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error)
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
@@ -56,7 +56,19 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
 				fullCount = r.FullCount
-				list = append(list, r.PatronRequest)
+				list = append(list, PatronRequest{
+					ID:              r.ID,
+					Timestamp:       r.Timestamp,
+					IllRequest:      r.IllRequest,
+					State:           PatronRequestState(r.State),
+					Side:            PatronRequestSide(r.Side),
+					Patron:          r.Patron,
+					RequesterSymbol: r.RequesterSymbol,
+					SupplierSymbol:  r.SupplierSymbol,
+					Tenant:          r.Tenant,
+					RequesterReqID:  r.RequesterReqID,
+					NeedsAttention:  r.NeedsAttention,
+				})
 			}
 		} else {
 			params.Limit = 1
@@ -83,7 +95,7 @@ func (r *PgPrRepo) DeletePatronRequest(ctx common.ExtendedContext, id string) er
 	return r.queries.DeletePatronRequest(ctx, r.GetConnOrTx(), id)
 }
 
-func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error) {
+func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string, side PatronRequestSide) (PatronRequest, error) {
 	row, err := r.queries.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, r.GetConnOrTx(), GetPatronRequestBySupplierSymbolAndRequesterReqIdParams{
 		SupplierSymbol: pgtype.Text{
 			String: supplierSymbol,
@@ -93,6 +105,7 @@ func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.
 			String: requesterReId,
 			Valid:  true,
 		},
+		Side: side,
 	})
 	return row.PatronRequest, err
 }

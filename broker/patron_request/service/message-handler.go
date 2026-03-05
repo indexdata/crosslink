@@ -123,7 +123,7 @@ func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContex
 			return m.prRepo.GetPatronRequestById(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId)
 		} else {
 			symbol := msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-			return m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
+			return m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId, SideLending)
 		}
 	} else if msg.Request != nil {
 		return m.prRepo.GetPatronRequestById(ctx, msg.Request.Header.RequestingAgencyRequestId)
@@ -292,7 +292,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	supplierSymbol := request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue
 	requesterSymbol := request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue
-	_, err := m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
+	_, err := m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId, SideLending)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{

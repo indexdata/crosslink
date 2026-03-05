@@ -5,8 +5,8 @@ WHERE id = $1
 LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT sqlc.embed(patron_request), COUNT(*) OVER () as full_count
-FROM patron_request
+SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, COUNT(*) OVER () as full_count
+FROM patron_request_search_view
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
 
@@ -39,7 +39,7 @@ WHERE id = $1;
 -- params: supplier_symbol string, requester_req_id string
 SELECT sqlc.embed(patron_request)
 FROM patron_request
-WHERE supplier_symbol = $1 AND requester_req_id = $2
+WHERE supplier_symbol = $1 AND requester_req_id = $2 AND side = $3
 LIMIT 1;
 
 -- name: GetNextHrid :one
