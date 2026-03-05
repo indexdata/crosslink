@@ -715,6 +715,11 @@ func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
 
+func (r *MockPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
+	args := r.Called(id, side)
+	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+}
+
 func (r *MockPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
 	if strings.Contains(params.ID, "error") || strings.Contains(params.RequesterReqID.String, "error") {
 		return pr_db.PatronRequest{}, errors.New("db error")
@@ -731,7 +736,7 @@ func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_d
 	return pr_db.PatronRequest(params), nil
 }
 
-func (r *MockPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, symbol string, requesterReqId string) (pr_db.PatronRequest, error) {
+func (r *MockPrRepo) GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, symbol string, requesterReqId string) (pr_db.PatronRequest, error) {
 	args := r.Called(symbol, requesterReqId)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }

@@ -590,9 +590,10 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
 		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(request.SupplierSymbol),
+		SupplierSymbol:  getDbText(nil),
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
+		RequesterReqID:  getDbText(&id),
 	}, nil
 }
 

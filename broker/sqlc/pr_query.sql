@@ -34,11 +34,11 @@ DELETE
 FROM patron_request
 WHERE id = $1;
 
--- name: GetPatronRequestBySupplierSymbolAndRequesterReqId :one
+-- name: GetLendingRequestBySupplierSymbolAndRequesterReqId :one
 -- params: supplier_symbol string, requester_req_id string
 SELECT sqlc.embed(patron_request)
 FROM patron_request
-WHERE supplier_symbol = $1 AND requester_req_id = $2
+WHERE supplier_symbol = $1 AND requester_req_id = $2 AND side = 'lending'
 LIMIT 1;
 
 -- name: GetNextHrid :one
