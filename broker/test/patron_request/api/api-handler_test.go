@@ -106,7 +106,6 @@ func TestCrud(t *testing.T) {
 	id := uuid.NewString()
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
@@ -232,7 +231,6 @@ func TestActionsToCompleteState(t *testing.T) {
 		},
 	}
 	newPr := proapi.CreatePatronRequest{
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
