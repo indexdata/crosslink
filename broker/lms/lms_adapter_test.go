@@ -159,8 +159,10 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
+	barcode, callNumber, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
+	assert.Equal(t, "123.456", barcode)
+	assert.Equal(t, "QA123 .A45", callNumber)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
@@ -175,7 +177,7 @@ func TestRequestItem(t *testing.T) {
 		config:     directory.LmsConfig{},
 		ncipClient: mock,
 	}
-	err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	_, _, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
@@ -194,7 +196,7 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
+	_, _, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
@@ -430,7 +432,17 @@ func (n *ncipClientMock) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemRes
 
 func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
 	n.lastRequest = request
-	return nil, nil
+	return &ncip.RequestItemResponse{
+		ItemId: &ncip.ItemId{
+			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
+			ItemIdentifierValue: "123.456",
+		},
+		ItemOptionalFields: &ncip.ItemOptionalFields{
+			ItemDescription: &ncip.ItemDescription{
+				CallNumber: "QA123 .A45",
+			},
+		},
+	}, nil
 }
 
 func (n *ncipClientMock) CancelRequestItem(cancel ncip.CancelRequestItem) (*ncip.CancelRequestItemResponse, error) {

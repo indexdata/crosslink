@@ -36,8 +36,8 @@ func (l *LmsAdapterManual) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) error {
-	return nil
+) (string, string, error) {
+	return "", "", nil
 }
 
 func (l *LmsAdapterManual) CancelRequestItem(requestId string, userId string) error {
@@ -50,7 +50,7 @@ func (l *LmsAdapterManual) CheckInItem(itemId string) error {
 
 func (l *LmsAdapterManual) CheckOutItem(
 	requestId string,
-	itemId string,
+	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
 ) error {
