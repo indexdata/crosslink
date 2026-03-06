@@ -118,6 +118,9 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		}
 	}
 
+	if execResult.outcome == ActionOutcomeFailure {
+		a.setNeedsAttention(ctx, updatedPr)
+	}
 	return execResult.status, execResult.result
 }
 
@@ -721,6 +724,19 @@ func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventS
 		return actionExecutionResult{status: events.EventStatusProblem, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: nil, outcome: ActionOutcomeSuccess, pr: pr}
+}
+
+func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContext, pr pr_db.PatronRequest) {
+	prToUpdate, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
+	if err != nil {
+		ctx.Logger().Error("failed to read patron request", "error", err)
+		return
+	}
+	prToUpdate.NeedsAttention = true
+	_, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
+	if err != nil {
+		ctx.Logger().Error("failed to update patron request", "error", err)
+	}
 }
 
 type ResponseCaptureWriter struct {

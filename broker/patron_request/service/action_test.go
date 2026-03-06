@@ -109,6 +109,7 @@ func TestHandleBorrowingActionMissingRequesterSymbol(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
 func TestHandleInvokeActionValidateOK(t *testing.T) {
