@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -498,9 +500,22 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.SupplierPickupLocation()
 	itemLocation := lmsAdapter.ItemLocation()
-	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+	itemBarcode, callNumber, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbText(itemId),
+		Title:      pgtype.Text{}, // no title
+		CallNumber: getDbText(callNumber),
+		Barcode:    itemBarcode,
+	})
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	result := events.EventResult{}
@@ -526,12 +541,20 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	// TODO set these values properly
 	externalReferenceValue := ""
-	err := lmsAdapter.CheckOutItem(requestId, itemId, userId, externalReferenceValue)
+
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to get item", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	if len(items) == 0 {
+		status, result := events.LogErrorAndReturnResult(ctx, "no item found for patron request", nil)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
