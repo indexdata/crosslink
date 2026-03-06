@@ -46,7 +46,7 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	def.AddField("has_cost", f)
 
 	f = pgcql.NewFieldString().WithExact()
-	def.AddField("has_unreaded_notification", f)
+	def.AddField("has_unread_notification", f)
 
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("service_type", f)

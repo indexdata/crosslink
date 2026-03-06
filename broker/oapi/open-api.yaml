@@ -1123,7 +1123,7 @@ paths:
         Use this endpoint to retrieve patron requests. 
         Query parameter cql can be used to filter the results.
         With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
-        has_notification, has_cost, has_unreaded_notification, service_type, service_level, created_at, needed_at.
+        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at.
       tags:
         - patron-requests-api
       parameters:
