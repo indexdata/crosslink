@@ -17,9 +17,9 @@ import (
 
 func TestGetPatronRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	mockPrRepo.On("GetPatronRequestById", "req-id-1").Return(pr_db.PatronRequest{ID: "req-id-1"}, nil)
-	mockPrRepo.On("GetPatronRequestById", "sam-id-1").Return(pr_db.PatronRequest{ID: "sam-id-1"}, nil)
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{ID: "sam-id-1"}, nil)
+	mockPrRepo.On("GetPatronRequestByIdAndSide", "req-id-1", SideBorrowing).Return(pr_db.PatronRequest{ID: "req-id-1", Side: SideBorrowing}, nil)
+	mockPrRepo.On("GetPatronRequestByIdAndSide", "sam-id-1", SideLending).Return(pr_db.PatronRequest{ID: "sam-id-1", Side: SideLending}, nil)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{ID: "sam-id-1", Side: SideLending}, nil)
 
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 	msg := iso18626.ISO18626Message{
@@ -93,7 +93,7 @@ func TestHandleMessageNoMessage(t *testing.T) {
 
 func TestHandleMessageFetchPRError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{}, errors.New("db error"))
+	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{}, errors.New("db error"))
 
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
@@ -112,7 +112,7 @@ func TestHandleMessageFetchPRError(t *testing.T) {
 func TestHandleMessageFetchEventError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: "error"}, nil)
+	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{ID: "error", Side: SideBorrowing}, nil)
 
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
@@ -581,7 +581,7 @@ func TestHandleRequestMessage(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockAutoActionRunner := &MockAutoActionRunner{}
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 	handler.SetAutoActionRunner(mockAutoActionRunner)
 
@@ -614,7 +614,7 @@ func TestHandleRequestMessageAutoActionError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockAutoActionRunner := &MockAutoActionRunner{err: errors.New("auto action failed")}
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 	handler.SetAutoActionRunner(mockAutoActionRunner)
 
@@ -640,7 +640,7 @@ func TestHandleRequestMessageAutoActionError(t *testing.T) {
 func TestHandleRequestMessageMissingRequestId(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, err := handler.handleRequestMessage(appCtx, iso18626.Request{
@@ -669,7 +669,7 @@ func TestHandleRequestMessageMissingRequestId(t *testing.T) {
 func TestHandleRequestMessageExistingRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{}, nil)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, err := handler.handleRequestMessage(appCtx, iso18626.Request{
@@ -698,7 +698,7 @@ func TestHandleRequestMessageExistingRequest(t *testing.T) {
 func TestHandleRequestMessageSearchDbError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1", SideLending).Return(pr_db.PatronRequest{}, errors.New("db error"))
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, errors.New("db error"))
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, err := handler.handleRequestMessage(appCtx, iso18626.Request{
@@ -727,7 +727,7 @@ func TestHandleRequestMessageSearchDbError(t *testing.T) {
 func TestHandleRequestMessageSaveError(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	mockPrRepo.On("GetPatronRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "error", SideLending).Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "error").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, err := handler.handleRequestMessage(appCtx, iso18626.Request{

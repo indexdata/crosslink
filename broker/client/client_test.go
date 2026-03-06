@@ -870,3 +870,7 @@ type MockPrRepo struct {
 func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
 }
+
+func (r *MockPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side pr_db.PatronRequestSide) (pr_db.PatronRequest, error) {
+	return pr_db.PatronRequest{}, errors.New("searching pr with id=" + id)
+}

@@ -106,7 +106,6 @@ func TestCrud(t *testing.T) {
 	id := uuid.NewString()
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
@@ -128,7 +127,7 @@ func TestCrud(t *testing.T) {
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
-	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
+	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
 	assert.Equal(t, false, foundPr.NeedsAttention)
 
@@ -233,7 +232,6 @@ func TestActionsToCompleteState(t *testing.T) {
 		},
 	}
 	newPr := proapi.CreatePatronRequest{
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
@@ -267,16 +265,16 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
-		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id, prservice.SideLending)
+		supPr, _ := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 		return supPr.ID != ""
 	})
-	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id, prservice.SideLending)
+	supPr, err := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 	assert.NoError(t, err)
 	assert.NotNil(t, supPr.ID)
 
 	// Wait for action
 	supplierPrPath := basePath + "/" + supPr.ID
-	supQueryParams := "?side=lending&symbol=" + *foundPr.SupplierSymbol
+	supQueryParams := "?side=lending&symbol=" + supplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
 		return string(respBytes) == "[\""+string(prservice.LenderActionShip)+"\"]\n"

@@ -117,16 +117,16 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 
 func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContext, msg iso18626.ISO18626Message) (pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
-		return m.prRepo.GetPatronRequestById(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 	} else if msg.RequestingAgencyMessage != nil {
 		if msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId != "" {
-			return m.prRepo.GetPatronRequestById(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId)
+			return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId, SideLending)
 		} else {
 			symbol := msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-			return m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId, SideLending)
+			return m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
 		}
 	} else if msg.Request != nil {
-		return m.prRepo.GetPatronRequestById(ctx, msg.Request.Header.RequestingAgencyRequestId)
+		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.Request.Header.RequestingAgencyRequestId, SideBorrowing)
 	} else {
 		return pr_db.PatronRequest{}, errors.New("missing message")
 	}
@@ -292,7 +292,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	supplierSymbol := request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue
 	requesterSymbol := request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue
-	_, err := m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId, SideLending)
+	_, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{

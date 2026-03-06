@@ -504,9 +504,6 @@ components:
         requesterSymbol:
           type: string
           description: Requester symbol
-        supplierSymbol:
-          type: string
-          description: Supplier symbol
       required:
         - illRequest
 
@@ -744,7 +741,7 @@ components:
 
     PrNotification:
       type: object
-      title: Notification 
+      title: Notification
       description: Patron request notification
       properties:
         id:
@@ -752,7 +749,7 @@ components:
           description: Notification id
         fromSymbol:
           type: string
-          description: Symbol of notification sender 
+          description: Symbol of notification sender
         toSymbol:
           type: string
           description: Symbol of notification receiver
@@ -1464,7 +1461,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SseResult'
-  
+
   /state_model/models/{model}:
     get:
       summary: Retrieve a state model by name
@@ -1473,7 +1470,7 @@ paths:
       parameters:
         - in: path
           name: model
-          schema: 
+          schema:
             type: string
           required: true
           description: The name of the statemodel to retrieve
