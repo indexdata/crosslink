@@ -159,9 +159,9 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	barCode, callNumber, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
+	barcode, callNumber, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
-	assert.Equal(t, "123.456", barCode)
+	assert.Equal(t, "123.456", barcode)
 	assert.Equal(t, "QA123 .A45", callNumber)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
@@ -433,9 +433,12 @@ func (n *ncipClientMock) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemRes
 func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
 	n.lastRequest = request
 	return &ncip.RequestItemResponse{
+		ItemId: &ncip.ItemId{
+			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
+			ItemIdentifierValue: "123.456",
+		},
 		ItemOptionalFields: &ncip.ItemOptionalFields{
 			ItemDescription: &ncip.ItemDescription{
-				CopyNumber: "123.456",
 				CallNumber: "QA123 .A45",
 			},
 		},

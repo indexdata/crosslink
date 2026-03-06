@@ -14,7 +14,8 @@ import (
 type NcipUserElement string
 
 const (
-	NCIPUserId NcipUserElement = "User Id"
+	NCIPUserId      string = "User Id"
+	NCIPItemBarcode string = "Item Barcode"
 )
 
 type NcipItemElement string
@@ -225,8 +226,11 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	barCode := ""
 	callNumber := ""
+	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
+		response.ItemId.ItemIdentifierType.Text == NCIPItemBarcode {
+		barCode = response.ItemId.ItemIdentifierValue
+	}
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.ItemDescription != nil {
-		barCode = response.ItemOptionalFields.ItemDescription.CopyNumber
 		callNumber = response.ItemOptionalFields.ItemDescription.CallNumber
 	}
 	return barCode, callNumber, err
