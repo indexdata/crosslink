@@ -498,11 +498,13 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.SupplierPickupLocation()
 	itemLocation := lmsAdapter.ItemLocation()
-	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+	itemBarcode, callNumber, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
+	// TODO: store barCode in item table and use it in CheckOutItem
+	ctx.Logger().Info("RequestItem response", "itemBarcode", itemBarcode, "callNumber", callNumber)
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageNotification}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
@@ -526,12 +528,11 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	itemBarcode := illRequest.BibliographicInfo.SupplierUniqueRecordId // TODO: read from item table
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	// TODO set these values properly
 	externalReferenceValue := ""
-	err := lmsAdapter.CheckOutItem(requestId, itemId, userId, externalReferenceValue)
+	err := lmsAdapter.CheckOutItem(requestId, itemBarcode, userId, externalReferenceValue)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}

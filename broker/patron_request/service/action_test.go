@@ -878,8 +878,8 @@ func (l *MockLmsAdapterFail) RequestItem(
 	borrowerBarcode string,
 	pickupLocation string,
 	itemLocation string,
-) error {
-	return errors.New("RequestItem failed")
+) (string, string, error) {
+	return "", "", errors.New("RequestItem failed")
 }
 
 func (l *MockLmsAdapterFail) CancelRequestItem(requestId string, userId string) error {
