@@ -5,8 +5,8 @@ WHERE id = $1
 LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT sqlc.embed(patron_request), COUNT(*) OVER () as full_count
-FROM patron_request
+SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, COUNT(*) OVER () as full_count
+FROM patron_request_search_view
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
 
@@ -20,13 +20,14 @@ SET timestamp         = $2,
     requester_symbol  = $7,
     supplier_symbol   = $8,
     tenant            = $9,
-    requester_req_id  = $10
+    requester_req_id  = $10,
+    needs_attention   = $11
 WHERE id = $1
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec

@@ -36,6 +36,30 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("supplier_symbol", f)
 
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("needs_attention", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("has_notification", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("has_cost", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("has_unread_notification", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("service_type", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("service_level", f)
+
+	nf := pgcql.NewFieldDate().WithColumn("timestamp")
+	def.AddField("created_at", nf)
+
+	nf = pgcql.NewFieldDate()
+	def.AddField("needed_at", nf)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
@@ -49,7 +73,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	if cqlString == nil {
 		return q.ListPatronRequests(ctx, db, arg)
 	}
-	noBaseArgs := 2 // weh have two base arguments: limit and offset
+	noBaseArgs := 2 // we have two base arguments: limit and offset
 	res, err := handlePatronRequestsQuery(*cqlString, noBaseArgs)
 	if err != nil {
 		return nil, err
@@ -76,16 +100,17 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	for rows.Next() {
 		var i ListPatronRequestsRow
 		if err := rows.Scan(
-			&i.PatronRequest.ID,
-			&i.PatronRequest.Timestamp,
-			&i.PatronRequest.IllRequest,
-			&i.PatronRequest.State,
-			&i.PatronRequest.Side,
-			&i.PatronRequest.Patron,
-			&i.PatronRequest.RequesterSymbol,
-			&i.PatronRequest.SupplierSymbol,
-			&i.PatronRequest.Tenant,
-			&i.PatronRequest.RequesterReqID,
+			&i.ID,
+			&i.Timestamp,
+			&i.IllRequest,
+			&i.State,
+			&i.Side,
+			&i.Patron,
+			&i.RequesterSymbol,
+			&i.SupplierSymbol,
+			&i.Tenant,
+			&i.RequesterReqID,
+			&i.NeedsAttention,
 			&i.FullCount,
 		); err != nil {
 			return nil, err
