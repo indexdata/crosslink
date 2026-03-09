@@ -93,3 +93,19 @@ func TestGetItemParams(t *testing.T) {
 	assert.Equal(t, 0, endIdx)
 	assert.Nil(t, result)
 }
+
+func TestPackSamNote(t *testing.T) {
+	items := [][]string{
+		{"T1", "CallNumber1", "Barcode1"},
+		{"T2", "CallNumber2", "Barcode2"},
+		{"Barcode3"},
+	}
+	note := PackSamNote(items)
+	expected := MULTIPLE_ITEMS + "\nT1|CallNumber1|Barcode1\nT2|CallNumber2|Barcode2\nBarcode3\n" + MULTIPLE_ITEMS_END
+	assert.Equal(t, expected, note)
+	result, startIdx, endIdx := GetItemParams(note)
+	assert.Equal(t, 0, startIdx)
+	assert.Equal(t, len(note)-len(MULTIPLE_ITEMS_END), endIdx)
+	assert.Equal(t, items, result)
+	assert.Equal(t, [][]string{{"T1", "CallNumber1", "Barcode1"}, {"T2", "CallNumber2", "Barcode2"}, {"Barcode3"}}, result)
+}

@@ -65,6 +65,20 @@ func GetItemParams(note string) ([][]string, int, int) {
 	return result, startIdx, endIdx
 }
 
+// PackSamNote creates a note string for a SupplyingAgencyMessage containing multiple items,
+// using the defined markers and escaping. Does the reverse of GetItemsParams
+func PackSamNote(items [][]string) string {
+	var current strings.Builder
+	current.WriteString(MULTIPLE_ITEMS)
+	current.WriteString("\n")
+	for _, item := range items {
+		current.WriteString(PackItemsNote(item))
+		current.WriteString("\n")
+	}
+	current.WriteString(MULTIPLE_ITEMS_END)
+	return current.String()
+}
+
 func PackItemsNote(fields []string) string {
 	escaped := make([]string, len(fields))
 	for i, f := range fields {

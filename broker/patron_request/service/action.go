@@ -555,9 +555,31 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
+	note := encodeItemsNote(items)
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, Note: note},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func encodeItemsNote(items []pr_db.Item) string {
+	var list [][]string
+	for _, item := range items {
+		// we don't have title at the moment, but we'd like callnumber if present
+		// at this point there is only 1 and 3 arg handling in
+		// must match PatronRequestMessageHandler.saveItems
+		title := "no title"
+		if item.Title.Valid {
+			title = item.Title.String
+		}
+		if item.CallNumber.Valid {
+			list = append(list, []string{title, item.CallNumber.String, item.Barcode})
+		} else {
+			list = append(list, []string{item.Barcode})
+		}
+	}
+	return common.PackSamNote(list)
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
