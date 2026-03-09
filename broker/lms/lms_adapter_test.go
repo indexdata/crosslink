@@ -177,11 +177,38 @@ func TestRequestItem(t *testing.T) {
 		config:     directory.LmsConfig{},
 		ncipClient: mock,
 	}
-	_, _, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	barcode, callNumber, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Equal(t, "123.456", barcode)
+	assert.Equal(t, "QA123 .A45", callNumber)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
+
+	barcode, callNumber, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
+	assert.NoError(t, err)
+	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Equal(t, "234.567", barcode)
+	assert.Equal(t, "QA123 .A45", callNumber)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "copynumber", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
+	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
+	assert.Equal(t, "loc", req.PickupLocation.Text)
+	assert.Equal(t, "Page", req.RequestType.Text)
+	assert.Equal(t, "Item", req.RequestScopeType.Text)
+
+	_, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	assert.Error(t, err)
+	assert.Equal(t, "missing item barcode in RequestItem response", err.Error())
+	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
+	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
+	assert.Equal(t, "empty", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
 	assert.Equal(t, "SYSNUMBER", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifierCode.Text)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "loc", req.PickupLocation.Text)
@@ -196,8 +223,10 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	_, _, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
+	barcode, callNumber, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
 	assert.NoError(t, err)
+	assert.Equal(t, "123.456", barcode)
+	assert.Equal(t, "QA123 .A45", callNumber)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
 	assert.Nil(t, req.ItemOptionalFields)
@@ -432,6 +461,23 @@ func (n *ncipClientMock) DeleteItem(delete ncip.DeleteItem) (*ncip.DeleteItemRes
 
 func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestItemResponse, error) {
 	n.lastRequest = request
+	itemId := ""
+	if len(request.BibliographicId) > 0 {
+		itemId = request.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier
+	}
+	if itemId == "empty" {
+		return &ncip.RequestItemResponse{}, nil
+	}
+	if itemId == "copynumber" {
+		return &ncip.RequestItemResponse{
+			ItemOptionalFields: &ncip.ItemOptionalFields{
+				ItemDescription: &ncip.ItemDescription{
+					CallNumber: "QA123 .A45",
+					CopyNumber: "234.567",
+				},
+			},
+		}, nil
+	}
 	return &ncip.RequestItemResponse{
 		ItemId: &ncip.ItemId{
 			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
@@ -440,6 +486,7 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 		ItemOptionalFields: &ncip.ItemOptionalFields{
 			ItemDescription: &ncip.ItemDescription{
 				CallNumber: "QA123 .A45",
+				CopyNumber: "234.567",
 			},
 		},
 	}, nil

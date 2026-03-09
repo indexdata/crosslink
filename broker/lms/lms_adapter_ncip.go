@@ -224,16 +224,20 @@ func (l *LmsAdapterNcip) RequestItem(
 	if err != nil {
 		return "", "", err
 	}
-	barCode := ""
+	barcode := ""
 	callNumber := ""
-	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
-		response.ItemId.ItemIdentifierType.Text == NCIPItemBarcode {
-		barCode = response.ItemId.ItemIdentifierValue
-	}
 	if response.ItemOptionalFields != nil && response.ItemOptionalFields.ItemDescription != nil {
 		callNumber = response.ItemOptionalFields.ItemDescription.CallNumber
+		barcode = response.ItemOptionalFields.ItemDescription.CopyNumber
 	}
-	return barCode, callNumber, err
+	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
+		response.ItemId.ItemIdentifierType.Text == NCIPItemBarcode {
+		barcode = response.ItemId.ItemIdentifierValue
+	}
+	if barcode == "" {
+		return "", "", fmt.Errorf("missing item barcode in RequestItem response")
+	}
+	return barcode, callNumber, err
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
