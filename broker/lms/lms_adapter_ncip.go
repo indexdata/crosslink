@@ -226,13 +226,15 @@ func (l *LmsAdapterNcip) RequestItem(
 	}
 	barcode := ""
 	callNumber := ""
-	if response.ItemOptionalFields != nil && response.ItemOptionalFields.ItemDescription != nil {
-		callNumber = response.ItemOptionalFields.ItemDescription.CallNumber
-		barcode = response.ItemOptionalFields.ItemDescription.CopyNumber
-	}
 	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
 		response.ItemId.ItemIdentifierType.Text == NCIPItemBarcode {
 		barcode = response.ItemId.ItemIdentifierValue
+	}
+	if response.ItemOptionalFields != nil && response.ItemOptionalFields.ItemDescription != nil {
+		callNumber = response.ItemOptionalFields.ItemDescription.CallNumber
+		if barcode == "" {
+			barcode = response.ItemOptionalFields.ItemDescription.CopyNumber
+		}
 	}
 	if barcode == "" {
 		return "", "", fmt.Errorf("missing item barcode in RequestItem response")
