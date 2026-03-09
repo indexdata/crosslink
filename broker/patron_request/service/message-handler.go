@@ -446,9 +446,9 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		for _, item := range result {
 			var loopErr error
 			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], item[0], nil)
+				loopErr = m.saveItem(ctx, pr.ID, item[0], nil, item[0])
 			} else if len(item) == 3 {
-				loopErr = m.saveItem(ctx, pr.ID, item[2], item[0], &item[1])
+				loopErr = m.saveItem(ctx, pr.ID, item[0], &item[1], item[2])
 			} else {
 				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
 			}
@@ -460,7 +460,7 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, name string, callNumber *string) error {
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, callNumber *string, name string) error {
 	dbCallNumber := pgtype.Text{Valid: false, String: ""}
 	if callNumber != nil {
 		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}

@@ -573,7 +573,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 			title = item.Title.String
 		}
 		if item.CallNumber.Valid {
-			list = append(list, []string{title, item.CallNumber.String, item.Barcode})
+			list = append(list, []string{item.Barcode, item.CallNumber.String, title})
 		} else {
 			list = append(list, []string{item.Barcode})
 		}
