@@ -66,7 +66,7 @@ func GetItemParams(note string) ([][]string, int, int) {
 }
 
 // PackSamNote creates a note string for a SupplyingAgencyMessage containing multiple items,
-// using the defined markers and escaping. Does the reverse of GetItemsParams
+// using the defined markers and escaping. Does the reverse of GetItemParams
 func PackSamNote(items [][]string) string {
 	var current strings.Builder
 	current.WriteString(MULTIPLE_ITEMS)
