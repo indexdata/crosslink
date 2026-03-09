@@ -545,17 +545,10 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
 
-	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	items, err := a.getItemsLender(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to get item", err)
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to get items", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
-	}
-	if len(items) == 0 {
-		status, result := events.LogErrorAndReturnResult(ctx, "no item found for patron request", errors.New("no item found for patron request"))
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
-	}
-	if len(items) > 1 {
-		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
 	}
 	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
 	if err != nil {
@@ -568,8 +561,12 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	err := lmsAdapter.CheckInItem(itemId)
+	items, err := a.getItemsLender(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to get items", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	err = lmsAdapter.CheckInItem(items[0].Barcode)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -652,4 +649,18 @@ func (rcw *ResponseCaptureWriter) WriteHeader(code int) {
 }
 func (rcw *ResponseCaptureWriter) Header() http.Header {
 	return http.Header{}
+}
+
+func (a *PatronRequestActionService) getItemsLender(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get item: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, errors.New("no item found for patron request")
+	}
+	if len(items) > 1 {
+		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
+	}
+	return items, nil
 }
