@@ -568,7 +568,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 	for _, item := range items {
 		// we don't have title at the moment, but we'd like callnumber if present at this point
 		// there is only 1 and 3 arg handling in PatronRequestMessageHandler.saveItems
-		title := "no title"
+		title := ""
 		if item.Title.Valid {
 			title = item.Title.String
 		}
