@@ -446,7 +446,7 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		for _, item := range result {
 			var loopErr error
 			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], nil, item[0])
+				loopErr = m.saveItem(ctx, pr.ID, item[0], nil, "")
 			} else if len(item) == 3 {
 				loopErr = m.saveItem(ctx, pr.ID, item[0], &item[1], item[2])
 			} else {
