@@ -551,8 +551,11 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	if len(items) == 0 {
-		status, result := events.LogErrorAndReturnResult(ctx, "no item found for patron request", nil)
+		status, result := events.LogErrorAndReturnResult(ctx, "no item found for patron request", errors.New("no item found for patron request"))
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	if len(items) > 1 {
+		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
 	}
 	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
 	if err != nil {

@@ -594,7 +594,7 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := []byte("{\"request\": {}}")
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}, {Barcode: "5678"}}, nil)
 
 	action := LenderActionShip
 
@@ -639,6 +639,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdEmpty(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "no item found for patron request", resultData.EventError.Message)
+	assert.Equal(t, "no item found for patron request", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionShipLmsFailed(t *testing.T) {
