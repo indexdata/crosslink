@@ -654,7 +654,7 @@ func (rcw *ResponseCaptureWriter) Header() http.Header {
 func (a *PatronRequestActionService) getItemsLender(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
 	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get item: %w", err)
+		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
 	if len(items) == 0 {
 		return nil, errors.New("no item found for patron request")

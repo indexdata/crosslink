@@ -621,6 +621,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdFail(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to get items", resultData.EventError.Message)
+	assert.Equal(t, "failed to get items: assert.AnError general error for testing", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionShipGetItemsByIdEmpty(t *testing.T) {
@@ -657,6 +658,7 @@ func TestHandleInvokeLenderActionShipLmsFailed(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "LMS CheckOutItem failed", resultData.EventError.Message)
+	assert.Equal(t, "CheckOutItem failed", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionMarkReceivedOK(t *testing.T) {
