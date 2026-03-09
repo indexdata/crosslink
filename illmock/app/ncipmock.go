@@ -78,8 +78,7 @@ func handleRequestItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
 			ItemIdentifierValue: req.RequestItem.ItemId[0].ItemIdentifierValue,
 		}
-	}
-	if len(req.RequestItem.BibliographicId) > 0 && req.RequestItem.BibliographicId[0].BibliographicRecordId != nil {
+	} else if len(req.RequestItem.BibliographicId) > 0 && req.RequestItem.BibliographicId[0].BibliographicRecordId != nil {
 		res.RequestItemResponse.ItemId = &ncip.ItemId{
 			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
 			ItemIdentifierValue: req.RequestItem.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier,
