@@ -620,7 +620,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdFail(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "failed to get items", resultData.EventError.Message)
+	assert.Equal(t, "no items for shipping in the request", resultData.EventError.Message)
 	assert.Equal(t, "failed to get items: assert.AnError general error for testing", resultData.EventError.Cause)
 }
 
@@ -639,7 +639,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdEmpty(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "failed to get items", resultData.EventError.Message)
+	assert.Equal(t, "no items for shipping in the request", resultData.EventError.Message)
 	assert.Equal(t, "no item found for patron request", resultData.EventError.Cause)
 }
 
@@ -676,6 +676,22 @@ func TestHandleInvokeLenderActionMarkReceivedOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData)
 	assert.Equal(t, LenderStateCompleted, mockPrRepo.savedPr.State)
+}
+
+func TestHandleInvokeLenderActionMarkReceivedNoItems(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := []byte("{\"request\": {}}")
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateShippedReturn, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{}, nil)
+	action := LenderActionMarkReceived
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, "no items for check-in in the request", resultData.EventError.Message)
 }
 
 func TestHandleInvokeLenderActionMarkReceivedLmsFailed(t *testing.T) {

@@ -547,7 +547,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 
 	items, err := a.getItemsLender(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to get items", err)
+		status, result := events.LogErrorAndReturnResult(ctx, "no items for shipping in the request", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
@@ -585,7 +585,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItemsLender(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to get items", err)
+		status, result := events.LogErrorAndReturnResult(ctx, "no items for check-in in the request", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	err = lmsAdapter.CheckInItem(items[0].Barcode)
