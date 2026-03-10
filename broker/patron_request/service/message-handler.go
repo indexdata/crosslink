@@ -344,6 +344,15 @@ func getDbText(value string) pgtype.Text {
 	}
 }
 
+func getDbTextPtr(value *string) pgtype.Text {
+	if value == nil || *value == "" {
+		return pgtype.Text{
+			Valid: false,
+		}
+	}
+	return getDbText(*value)
+}
+
 func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := errors.New("unsupported action: " + string(ram.Action))
@@ -433,38 +442,35 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	if common.SamHasItems(sam) {
-		result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
-		for _, item := range result {
-			var loopErr error
-			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], item[0], nil)
-			} else if len(item) == 3 {
-				loopErr = m.saveItem(ctx, pr.ID, item[2], item[0], &item[1])
-			} else {
-				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
-			}
-			if loopErr != nil {
-				return loopErr
-			}
+	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	for _, item := range result {
+		var loopErr error
+		if len(item) == 1 && item[0] != "" {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
+		} else if len(item) == 3 {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
+		} else {
+			loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
+		}
+		if loopErr != nil {
+			return loopErr
 		}
 	}
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, name string, callNumber *string) error {
-	dbCallNumber := pgtype.Text{Valid: false, String: ""}
-	if callNumber != nil {
-		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}
-	}
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
+	// not using supplier barcode as it may not be unique, using prId instead to link item to request, as
+	// each request can have only one item without barcode and prId is unique for each request
+	requesterBarcode := prId
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       prId,
-		ItemID:     getDbText(id),
-		Title:      getDbText(name),
-		CallNumber: dbCallNumber,
-		Barcode:    id, //TODO barcode generation. How to do that?
+		ItemID:     getDbTextPtr(supplierBarcode),
+		Title:      getDbTextPtr(name),
+		CallNumber: getDbTextPtr(callNumber),
+		Barcode:    requesterBarcode,
 	})
 	return err
 }

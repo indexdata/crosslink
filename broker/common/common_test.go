@@ -71,25 +71,41 @@ func TestStructToMap(t *testing.T) {
 	}
 }
 
-func TestGetItemParams(t *testing.T) {
+func TestUnpackItemsNote(t *testing.T) {
 	// Just ID
 	note := MULTIPLE_ITEMS + "\n1\n" + MULTIPLE_ITEMS_END
-	result, startIdx, endIdx := GetItemParams(note)
+	result, startIdx, endIdx := UnpackItemsNote(note)
 	assert.Equal(t, 0, startIdx)
 	assert.Equal(t, 18, endIdx)
 	assert.Equal(t, [][]string{{"1"}}, result)
 
 	// All params
 	note = MULTIPLE_ITEMS + "\n1|2\\||3\\\\\n" + MULTIPLE_ITEMS_END
-	result, startIdx, endIdx = GetItemParams(note)
+	result, startIdx, endIdx = UnpackItemsNote(note)
 	assert.Equal(t, 0, startIdx)
 	assert.Equal(t, 26, endIdx)
 	assert.Equal(t, [][]string{{"1", "2|", "3\\"}}, result)
 
 	// Incorrect tag order
 	note = MULTIPLE_ITEMS_END + "\n1\n" + MULTIPLE_ITEMS
-	result, startIdx, endIdx = GetItemParams(note)
+	result, startIdx, endIdx = UnpackItemsNote(note)
 	assert.Equal(t, 21, startIdx)
 	assert.Equal(t, 0, endIdx)
 	assert.Nil(t, result)
+}
+
+func TestPackItemsNote(t *testing.T) {
+	items := [][]string{
+		{"T1", "CallNumber1", "Barcode1"},
+		{"T2", "CallNumber2", "Barcode2"},
+		{"Barcode3"},
+	}
+	note := PackItemsNote(items)
+	expected := MULTIPLE_ITEMS + "\nT1|CallNumber1|Barcode1\nT2|CallNumber2|Barcode2\nBarcode3\n" + MULTIPLE_ITEMS_END
+	assert.Equal(t, expected, note)
+	result, startIdx, endIdx := UnpackItemsNote(note)
+	assert.Equal(t, 0, startIdx)
+	assert.Equal(t, len(note)-len(MULTIPLE_ITEMS_END), endIdx)
+	assert.Equal(t, items, result)
+	assert.Equal(t, [][]string{{"T1", "CallNumber1", "Barcode1"}, {"T2", "CallNumber2", "Barcode2"}, {"Barcode3"}}, result)
 }

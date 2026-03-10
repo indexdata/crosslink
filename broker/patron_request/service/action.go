@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -318,21 +320,17 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
-func callNumberFromIllRequest(illRequest iso18626.Request) string {
-	callNumber := ""
-	if len(illRequest.SupplierInfo) > 0 {
-		callNumber = illRequest.SupplierInfo[0].CallNumber
+func (a *PatronRequestActionService) getFirstItem(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return nil, err
 	}
-	return callNumber
-}
-
-func isbnFromIllRequest(illRequest iso18626.Request) string {
-	isbn := ""
-	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
-		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
-		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
+	if len(items) == 0 {
+		return nil, errors.New("no items found for PR ID")
+	} else if len(items) > 1 {
+		ctx.Logger().Warn("multiple items found for PR ID, only the first one will be used", "prId", pr.ID, "itemCount", len(items))
 	}
-	return isbn
+	return items, nil
 }
 
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
@@ -340,15 +338,25 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	author := illRequest.BibliographicInfo.Author
-	title := illRequest.BibliographicInfo.Title
-	isbn := isbnFromIllRequest(illRequest)
-	callNumber := callNumberFromIllRequest(illRequest)
+	items, err := a.getFirstItem(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	callNumber := ""
+	if items[0].CallNumber.Valid {
+		callNumber = items[0].CallNumber.String
+	}
+	title := ""
+	if items[0].Title.Valid {
+		title = items[0].Title.String
+	}
+	itemId := items[0].Barcode // requester bar code
+	author := ""
+	isbn := ""
 	pickupLocation := lmsAdapter.RequesterPickupLocation()
 	requestedAction := "Hold For Pickup"
-	err := lmsAdapter.AcceptItem(itemId, requestId, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+	err = lmsAdapter.AcceptItem(itemId, pr.ID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -370,10 +378,14 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	items, err := a.getFirstItem(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	itemId := items[0].Barcode
 	borrowerBarcode := patron
-	err := lmsAdapter.CheckOutItem(requestId, itemId, borrowerBarcode, "externalReferenceValue")
+	err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -382,8 +394,13 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 }
 
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	err := lmsAdapter.CheckInItem(itemId)
+	items, err := a.getFirstItem(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	itemId := items[0].Barcode
+	err = lmsAdapter.CheckInItem(itemId)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -392,8 +409,13 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	err := lmsAdapter.DeleteItem(itemId)
+	items, err := a.getFirstItem(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	itemId := items[0].Barcode
+	err = lmsAdapter.DeleteItem(itemId)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -493,9 +515,22 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	pickupLocation := lmsAdapter.SupplierPickupLocation()
 	itemLocation := lmsAdapter.ItemLocation()
-	err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
+	itemBarcode, callNumber, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       pr.ID,
+		ItemID:     getDbText(itemId),
+		Title:      pgtype.Text{}, // no title
+		CallNumber: getDbText(callNumber),
+		Barcode:    itemBarcode,
+	})
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	result := events.EventResult{}
@@ -521,24 +556,51 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
-	// TODO set these values properly
 	externalReferenceValue := ""
-	err := lmsAdapter.CheckOutItem(requestId, itemId, userId, externalReferenceValue)
+
+	items, err := a.getItemsLender(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "no items for shipping in the request", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
+	note := encodeItemsNote(items)
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, Note: note},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
+func encodeItemsNote(items []pr_db.Item) string {
+	var list [][]string
+	for _, item := range items {
+		title := ""
+		if item.Title.Valid {
+			title = item.Title.String
+		}
+		callnumber := ""
+		if item.CallNumber.Valid {
+			callnumber = item.CallNumber.String
+		}
+		list = append(list, []string{item.Barcode, callnumber, title})
+	}
+	return common.PackItemsNote(list)
+}
+
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	err := lmsAdapter.CheckInItem(itemId)
+	items, err := a.getItemsLender(ctx, pr)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "no items for check-in in the request", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	err = lmsAdapter.CheckInItem(items[0].Barcode)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -621,4 +683,18 @@ func (rcw *ResponseCaptureWriter) WriteHeader(code int) {
 }
 func (rcw *ResponseCaptureWriter) Header() http.Header {
 	return http.Header{}
+}
+
+func (a *PatronRequestActionService) getItemsLender(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get items: %w", err)
+	}
+	if len(items) == 0 {
+		return nil, errors.New("no item found for patron request")
+	}
+	if len(items) > 1 {
+		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
+	}
+	return items, nil
 }

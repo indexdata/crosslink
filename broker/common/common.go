@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/indexdata/crosslink/iso18626"
 )
 
 const MULTIPLE_ITEMS = "#MultipleItems#"
@@ -43,11 +41,7 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func SamHasItems(sam iso18626.SupplyingAgencyMessage) bool {
-	return strings.Contains(sam.MessageInfo.Note, MULTIPLE_ITEMS) && strings.Contains(sam.MessageInfo.Note, MULTIPLE_ITEMS_END)
-}
-
-func GetItemParams(note string) ([][]string, int, int) {
+func UnpackItemsNote(note string) ([][]string, int, int) {
 	startIdx := strings.Index(note, MULTIPLE_ITEMS)
 	endIdx := strings.Index(note, MULTIPLE_ITEMS_END)
 
@@ -60,12 +54,26 @@ func GetItemParams(note string) ([][]string, int, int) {
 	content = strings.TrimSpace(content)
 	var result [][]string
 	for _, f := range strings.Split(content, "\n") {
-		result = append(result, UnpackItemsNote(f))
+		result = append(result, UnpackItemNote(f))
 	}
 	return result, startIdx, endIdx
 }
 
-func PackItemsNote(fields []string) string {
+// PackItemsNote creates a note string for a SupplyingAgencyMessage containing multiple items,
+// using the defined markers and escaping. Does the reverse of UnpackItemsNote.
+func PackItemsNote(items [][]string) string {
+	var current strings.Builder
+	current.WriteString(MULTIPLE_ITEMS)
+	current.WriteString("\n")
+	for _, item := range items {
+		current.WriteString(PackItemNote(item))
+		current.WriteString("\n")
+	}
+	current.WriteString(MULTIPLE_ITEMS_END)
+	return current.String()
+}
+
+func PackItemNote(fields []string) string {
 	escaped := make([]string, len(fields))
 	for i, f := range fields {
 		// Escape backslashes first, then the separator
@@ -75,7 +83,7 @@ func PackItemsNote(fields []string) string {
 	return strings.Join(escaped, "|")
 }
 
-func UnpackItemsNote(input string) []string {
+func UnpackItemNote(input string) []string {
 	var result []string
 	var current strings.Builder
 	escaped := false

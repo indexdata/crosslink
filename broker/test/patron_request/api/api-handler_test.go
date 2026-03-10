@@ -215,7 +215,7 @@ func TestCrud(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request
@@ -414,7 +414,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	var prItems []proapi.PrItem
 	err = json.Unmarshal(respBytes, &prItems)
 	assert.NoError(t, err, "failed to unmarshal patron request items")
-	assert.Len(t, prItems, 0)
+	assert.Len(t, prItems, 1)
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
