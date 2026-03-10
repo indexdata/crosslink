@@ -450,20 +450,18 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	if common.SamHasItems(sam) {
-		result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
-		for _, item := range result {
-			var loopErr error
-			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
-			} else if len(item) == 3 {
-				loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
-			} else {
-				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
-			}
-			if loopErr != nil {
-				return loopErr
-			}
+	result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
+	for _, item := range result {
+		var loopErr error
+		if len(item) == 1 && item[0] != "" {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
+		} else if len(item) == 3 {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
+		} else {
+			loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
+		}
+		if loopErr != nil {
+			return loopErr
 		}
 	}
 	return nil

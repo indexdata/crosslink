@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/indexdata/crosslink/iso18626"
 )
 
 const MULTIPLE_ITEMS = "#MultipleItems#"
@@ -41,10 +39,6 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 	}
 
 	return result, nil
-}
-
-func SamHasItems(sam iso18626.SupplyingAgencyMessage) bool {
-	return strings.Contains(sam.MessageInfo.Note, MULTIPLE_ITEMS) && strings.Contains(sam.MessageInfo.Note, MULTIPLE_ITEMS_END)
 }
 
 func GetItemParams(note string) ([][]string, int, int) {
