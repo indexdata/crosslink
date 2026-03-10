@@ -399,7 +399,7 @@ func TestSetLogFunc(t *testing.T) {
 		ncipClient: mock,
 	}
 	assert.Nil(t, mock.(*ncipClientMock).lastLogFunc)
-	logFunc1 := func(outgoing []byte, incoming []byte, err error) {}
+	logFunc1 := func(outgoing map[string]any, incoming map[string]any, err error) {}
 	ad.SetLogFunc(logFunc1)
 	assert.NotNil(t, mock.(*ncipClientMock).lastLogFunc)
 }

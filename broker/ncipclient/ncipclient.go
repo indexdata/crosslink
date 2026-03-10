@@ -2,7 +2,7 @@ package ncipclient
 
 import "github.com/indexdata/crosslink/ncip"
 
-type NcipLogFunc func(outgoing []byte, incoming []byte, err error)
+type NcipLogFunc func(outgoing map[string]any, incoming map[string]any, err error)
 
 type NcipClient interface {
 	SetLogFunc(logFunc NcipLogFunc)
