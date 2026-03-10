@@ -561,17 +561,15 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 func encodeItemsNote(items []pr_db.Item) string {
 	var list [][]string
 	for _, item := range items {
-		// we don't have title at the moment, but we'd like callnumber if present at this point
-		// there is only 1 and 3 arg handling in PatronRequestMessageHandler.saveItems
 		title := ""
 		if item.Title.Valid {
 			title = item.Title.String
 		}
+		callnumber := ""
 		if item.CallNumber.Valid {
-			list = append(list, []string{item.Barcode, item.CallNumber.String, title})
-		} else {
-			list = append(list, []string{item.Barcode})
+			callnumber = item.CallNumber.String
 		}
+		list = append(list, []string{item.Barcode, callnumber, title})
 	}
 	return common.PackItemsNote(list)
 }
