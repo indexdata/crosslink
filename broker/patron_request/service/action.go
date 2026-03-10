@@ -1,7 +1,6 @@
 package prservice
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -78,11 +77,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if a.lmsCreator == nil {
 		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to parse ILL request", err)
-	}
+	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:
 		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest)
