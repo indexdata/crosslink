@@ -552,7 +552,7 @@ func (i *Iso18626AlmaShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
 		sb.WriteString("\n")
 		list := strings.Split(sam.DeliveryInfo.ItemId, ",")
 		for _, item := range list {
-			sb.WriteString(common.PackItemsNote([]string{item}))
+			sb.WriteString(common.PackItemNote([]string{item}))
 			sb.WriteString("\n")
 		}
 		sb.WriteString(common.MULTIPLE_ITEMS_END)
@@ -654,9 +654,9 @@ func writeItemValues(sb *strings.Builder, itemId string) {
 	match := reshareItemRegex.FindStringSubmatch(itemId)
 	var row string
 	if len(match) > 0 {
-		row = common.PackItemsNote([]string{match[1], match[2], match[3]})
+		row = common.PackItemNote([]string{match[1], match[2], match[3]})
 	} else {
-		row = common.PackItemsNote([]string{itemId})
+		row = common.PackItemNote([]string{itemId})
 	}
 	sb.WriteString(row)
 }

@@ -66,14 +66,14 @@ func PackSamNote(items [][]string) string {
 	current.WriteString(MULTIPLE_ITEMS)
 	current.WriteString("\n")
 	for _, item := range items {
-		current.WriteString(PackItemsNote(item))
+		current.WriteString(PackItemNote(item))
 		current.WriteString("\n")
 	}
 	current.WriteString(MULTIPLE_ITEMS_END)
 	return current.String()
 }
 
-func PackItemsNote(fields []string) string {
+func PackItemNote(fields []string) string {
 	escaped := make([]string, len(fields))
 	for i, f := range fields {
 		// Escape backslashes first, then the separator
