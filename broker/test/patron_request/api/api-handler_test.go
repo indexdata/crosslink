@@ -101,6 +101,7 @@ func TestCrud(t *testing.T) {
 	request := iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
+			Title:                  "Typed request round trip",
 		},
 	}
 	id := uuid.NewString()
@@ -129,6 +130,12 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+		assert.False(t, r.Header.Timestamp.IsZero())
+	})
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
 	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
@@ -143,6 +150,11 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 	assert.Nil(t, foundPrs.About.LastLink)
+	assertPatronRequestIllRequest(t, foundPrs.Items[0].IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET list with offset in
 	respBytes = httpRequest(t, "GET", basePath+queryParams+"&offset=100000", []byte{}, 200)
@@ -158,12 +170,20 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET by id with symbol
 	respBytes = httpRequest(t, "GET", thisPrPath+"?symbol="+*foundPr.RequesterSymbol, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -203,6 +223,19 @@ func TestCrud(t *testing.T) {
 	//
 	//// GET patron request which is deleted
 	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
+}
+
+func assertPatronRequestIllRequest(t *testing.T, payload map[string]interface{}, assertFn func(iso18626.Request)) {
+	t.Helper()
+
+	data, err := json.Marshal(payload)
+	assert.NoError(t, err)
+
+	var request iso18626.Request
+	err = json.Unmarshal(data, &request)
+	assert.NoError(t, err)
+
+	assertFn(request)
 }
 
 func TestActionsToCompleteState(t *testing.T) {
