@@ -1,7 +1,6 @@
 package prservice
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -306,13 +305,6 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: "there is already request with this id " + raRequestId,
 		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
 	}
-	requestBytes, err := json.Marshal(request)
-	if err != nil {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
-	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: time.Now()},
@@ -320,7 +312,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		Side:            SideLending,
 		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),
 		RequesterSymbol: getDbText(requesterSymbol),
-		IllRequest:      requestBytes,
+		IllRequest:      request,
 		SupplierSymbol:  getDbText(supplierSymbol),
 		RequesterReqID:  getDbText(raRequestId),
 	})

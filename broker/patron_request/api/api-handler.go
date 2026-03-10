@@ -139,17 +139,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 	var responseItems []proapi.PatronRequest
 	for _, pr := range prs {
-		var illRequest iso18626.Request
-		if pr.IllRequest != nil {
-			err = json.Unmarshal(pr.IllRequest, &illRequest)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				addInternalError(ctx, w, err)
-				return
-			}
-		} else {
-			illRequest = iso18626.Request{}
-		}
-		responseItems = append(responseItems, toApiPatronRequest(pr, illRequest))
+		responseItems = append(responseItems, toApiPatronRequest(pr, pr.IllRequest))
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
@@ -223,16 +213,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		addInternalError(ctx, w, err)
-		return
-	}
 	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, illRequest))
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
@@ -303,13 +287,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	if pr == nil {
 		return
 	}
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	writeJsonResponse(w, toApiPatronRequest(*pr, illRequest))
+	writeJsonResponse(w, toApiPatronRequest(*pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
@@ -570,17 +548,15 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		}
 		id = hrid
 	}
-	var illRequest []byte
+	var illRequest iso18626.Request
 	if request.IllRequest != nil {
-		illRequest = utils.Must(json.Marshal(request.IllRequest))
-		var isoRequest iso18626.Request
-		err := json.Unmarshal(illRequest, &isoRequest)
+		illRequestBytes := utils.Must(json.Marshal(request.IllRequest))
+		err := json.Unmarshal(illRequestBytes, &illRequest)
 		if err != nil {
 			return pr_db.PatronRequest{}, err
 		}
-		isoRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
-		isoRequest.Header.RequestingAgencyRequestId = id
-		illRequest = utils.Must(json.Marshal(isoRequest))
+		illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
+		illRequest.Header.RequestingAgencyRequestId = id
 	}
 
 	return pr_db.PatronRequest{

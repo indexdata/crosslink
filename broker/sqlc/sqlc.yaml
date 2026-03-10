@@ -70,6 +70,10 @@ sql:
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true
         overrides:
+          - column: "patron_request.ill_request"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "Request"
           - column: "patron_request.state"
             go_type:
               type: "PatronRequestState"
