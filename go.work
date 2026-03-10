@@ -2,7 +2,6 @@ go 1.26
 
 use (
 	./broker
-	./common
 	./directory
 	./httpclient
 	./illmock
