@@ -8,7 +8,6 @@ COPY go.work go.work.sum ./
 COPY broker/go.mod ./broker/go.mod
 
 # copy common sources
-COPY common/ ./common
 COPY directory/ directory
 COPY httpclient/ ./httpclient
 COPY iso18626/ ./iso18626
