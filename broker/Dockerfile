@@ -9,7 +9,6 @@ COPY illmock/go.mod ./illmock/go.mod
 
 
 # Copy dependent modules' sources (these change seldom)
-COPY common/ ./common
 COPY directory/ ./directory
 COPY httpclient/ ./httpclient
 COPY marcxml/ ./marcxml
