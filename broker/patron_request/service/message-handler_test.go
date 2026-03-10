@@ -770,7 +770,7 @@ func TestSaveItems(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockPrRepo.savedItems))
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].ItemID.String)
-	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
 	assert.Equal(t, "3", mockPrRepo.savedItems[0].Title.String)
 	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].PrID)
@@ -784,12 +784,12 @@ func TestSaveItems(t *testing.T) {
 	assert.Equal(t, "3", mockPrRepo.savedItems[0].Title.String)
 	assert.Equal(t, "2", mockPrRepo.savedItems[0].CallNumber.String)
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].ItemID.String)
-	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "pr1", mockPrRepo.savedItems[0].PrID)
 	assert.Equal(t, "7", mockPrRepo.savedItems[1].Title.String)
 	assert.Equal(t, "6", mockPrRepo.savedItems[1].CallNumber.String)
 	assert.Equal(t, "4,5", mockPrRepo.savedItems[1].ItemID.String)
-	assert.Equal(t, "4,5", mockPrRepo.savedItems[1].Barcode)
+	assert.Equal(t, "pr1", mockPrRepo.savedItems[1].Barcode)
 	assert.Equal(t, "pr1", mockPrRepo.savedItems[1].PrID)
 }
 

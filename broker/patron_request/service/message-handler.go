@@ -352,6 +352,15 @@ func getDbText(value string) pgtype.Text {
 	}
 }
 
+func getDbTextPtr(value *string) pgtype.Text {
+	if value == nil || *value == "" {
+		return pgtype.Text{
+			Valid: false,
+		}
+	}
+	return getDbText(*value)
+}
+
 func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := errors.New("unsupported action: " + string(ram.Action))
@@ -446,9 +455,9 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 		for _, item := range result {
 			var loopErr error
 			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], nil, "")
+				loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
 			} else if len(item) == 3 {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], &item[1], item[2])
+				loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
 			} else {
 				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
 			}
@@ -460,19 +469,16 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, callNumber *string, name string) error {
-	dbCallNumber := pgtype.Text{Valid: false, String: ""}
-	if callNumber != nil {
-		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}
-	}
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
+	requesterBarcode := prId
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       prId,
-		ItemID:     getDbText(id),
-		Title:      getDbText(name),
-		CallNumber: dbCallNumber,
-		Barcode:    id, //TODO barcode generation. How to do that?
+		ItemID:     getDbTextPtr(supplierBarcode),
+		Title:      getDbTextPtr(name),
+		CallNumber: getDbTextPtr(callNumber),
+		Barcode:    requesterBarcode,
 	})
 	return err
 }
