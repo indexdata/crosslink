@@ -442,7 +442,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
+	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
 	for _, item := range result {
 		var loopErr error
 		if len(item) == 1 && item[0] != "" {

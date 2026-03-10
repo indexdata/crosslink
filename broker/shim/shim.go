@@ -207,7 +207,7 @@ func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso186
 }
 
 func (i *Iso18626AlmaShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
-	result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
 	if result == nil {
 		return
 	}
@@ -606,7 +606,7 @@ func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.ISO18626M
 }
 
 func (i *Iso18626ReShareShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
-	result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
 	if len(result) == 0 {
 		return
 	}

@@ -41,7 +41,7 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func GetItemParams(note string) ([][]string, int, int) {
+func UnpackItemsNote(note string) ([][]string, int, int) {
 	startIdx := strings.Index(note, MULTIPLE_ITEMS)
 	endIdx := strings.Index(note, MULTIPLE_ITEMS_END)
 
@@ -54,14 +54,14 @@ func GetItemParams(note string) ([][]string, int, int) {
 	content = strings.TrimSpace(content)
 	var result [][]string
 	for _, f := range strings.Split(content, "\n") {
-		result = append(result, UnpackItemsNote(f))
+		result = append(result, UnpackItemNote(f))
 	}
 	return result, startIdx, endIdx
 }
 
-// PackSamNote creates a note string for a SupplyingAgencyMessage containing multiple items,
-// using the defined markers and escaping. Does the reverse of GetItemParams
-func PackSamNote(items [][]string) string {
+// PackItemsNote creates a note string for a SupplyingAgencyMessage containing multiple items,
+// using the defined markers and escaping. Does the reverse of UnpackItemsNote.
+func PackItemsNote(items [][]string) string {
 	var current strings.Builder
 	current.WriteString(MULTIPLE_ITEMS)
 	current.WriteString("\n")
@@ -83,7 +83,7 @@ func PackItemNote(fields []string) string {
 	return strings.Join(escaped, "|")
 }
 
-func UnpackItemsNote(input string) []string {
+func UnpackItemNote(input string) []string {
 	var result []string
 	var current strings.Builder
 	escaped := false

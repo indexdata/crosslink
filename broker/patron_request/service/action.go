@@ -573,7 +573,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 			list = append(list, []string{item.Barcode})
 		}
 	}
-	return common.PackSamNote(list)
+	return common.PackItemsNote(list)
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
