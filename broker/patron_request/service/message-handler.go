@@ -1,9 +1,10 @@
 package prservice
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -115,16 +116,16 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 
 func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContext, msg iso18626.ISO18626Message) (pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
-		return m.prRepo.GetPatronRequestById(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId)
+		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 	} else if msg.RequestingAgencyMessage != nil {
 		if msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId != "" {
-			return m.prRepo.GetPatronRequestById(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId)
+			return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId, SideLending)
 		} else {
 			symbol := msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-			return m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
+			return m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
 		}
 	} else if msg.Request != nil {
-		return m.prRepo.GetPatronRequestById(ctx, msg.Request.Header.RequestingAgencyRequestId)
+		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.Request.Header.RequestingAgencyRequestId, SideBorrowing)
 	} else {
 		return pr_db.PatronRequest{}, errors.New("missing message")
 	}
@@ -149,6 +150,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	switch sam.MessageInfo.ReasonForMessage {
 	case iso18626.TypeReasonForMessageNotification:
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractSamNotifications(ctx, pr, sam)
+		if notErr != nil {
+			ctx.Logger().Error("failed to save sam notifications", "error", notErr)
+		}
 		return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 	case iso18626.TypeReasonForMessageStatusChange,
 		iso18626.TypeReasonForMessageRequestResponse,
@@ -221,6 +226,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 			ErrorValue: err.Error(),
 		}, err)
 	}
+	err = m.extractSamNotifications(ctx, pr, sam)
+	if err != nil {
+		ctx.Logger().Error("failed to save sam notifications", "error", err)
+	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
 		if err != nil {
@@ -282,7 +291,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	supplierSymbol := request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue
 	requesterSymbol := request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue
-	_, err := m.prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
+	_, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -296,13 +305,6 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorValue: "there is already request with this id " + raRequestId,
 		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
 	}
-	requestBytes, err := json.Marshal(request)
-	if err != nil {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
-	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
 		Timestamp:       pgtype.Timestamp{Valid: true, Time: time.Now()},
@@ -310,7 +312,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		Side:            SideLending,
 		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),
 		RequesterSymbol: getDbText(requesterSymbol),
-		IllRequest:      requestBytes,
+		IllRequest:      request,
 		SupplierSymbol:  getDbText(supplierSymbol),
 		RequesterReqID:  getDbText(raRequestId),
 	})
@@ -319,6 +321,10 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	err = m.extractRequestNotifications(ctx, pr, request)
+	if err != nil {
+		ctx.Logger().Error("failed to save request notifications", "error", err)
 	}
 	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
@@ -338,6 +344,15 @@ func getDbText(value string) pgtype.Text {
 	}
 }
 
+func getDbTextPtr(value *string) pgtype.Text {
+	if value == nil || *value == "" {
+		return pgtype.Text{
+			Valid: false,
+		}
+	}
+	return getDbText(*value)
+}
+
 func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := errors.New("unsupported action: " + string(ram.Action))
@@ -349,6 +364,10 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 
 	if ram.Action == iso18626.TypeActionNotification {
 		// Notifications are acknowledged but must not drive state transitions.
+		notErr := m.extractRamNotifications(ctx, pr, ram)
+		if notErr != nil {
+			ctx.Logger().Error("failed to save ram notifications", "error", notErr)
+		}
 		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
 	}
 
@@ -406,6 +425,10 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 			ErrorValue: err.Error(),
 		}, err)
 	}
+	err = m.extractRamNotifications(ctx, pr, ram)
+	if err != nil {
+		ctx.Logger().Error("failed to save ram notifications", "error", err)
+	}
 	if stateChanged {
 		err = m.runAutoActionsOnStateEntry(ctx, pr)
 		if err != nil {
@@ -419,38 +442,217 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 }
 
 func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	if common.SamHasItems(sam) {
-		result, _, _ := common.GetItemParams(sam.MessageInfo.Note)
-		for _, item := range result {
-			var loopErr error
-			if len(item) == 1 && item[0] != "" {
-				loopErr = m.saveItem(ctx, pr.ID, item[0], item[0], nil)
-			} else if len(item) == 3 {
-				loopErr = m.saveItem(ctx, pr.ID, item[2], item[0], &item[1])
-			} else {
-				loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
+	result, _, _ := common.UnpackItemsNote(sam.MessageInfo.Note)
+	for _, item := range result {
+		var loopErr error
+		if len(item) == 1 && item[0] != "" {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], nil, nil)
+		} else if len(item) == 3 {
+			loopErr = m.saveItem(ctx, pr.ID, &item[0], &item[1], &item[2])
+		} else {
+			loopErr = errors.New("incorrect item param count: " + strconv.Itoa(len(item)))
+		}
+		if loopErr != nil {
+			return loopErr
+		}
+	}
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
+	// not using supplier barcode as it may not be unique, using prId instead to link item to request, as
+	// each request can have only one item without barcode and prId is unique for each request
+	requesterBarcode := prId
+	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
+		ID:         uuid.NewString(),
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+		PrID:       prId,
+		ItemID:     getDbTextPtr(supplierBarcode),
+		Title:      getDbTextPtr(name),
+		CallNumber: getDbTextPtr(callNumber),
+		Barcode:    requesterBarcode,
+	})
+	return err
+}
+
+func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
+	if sam.MessageInfo.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(sam.MessageInfo.Note),
+			FromSymbol: supSymbol,
+			ToSymbol:   reqSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if sam.MessageInfo.OfferedCosts != nil {
+		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+		cost, err := safeConvertInt32(sam.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			FromSymbol: supSymbol,
+			ToSymbol:   reqSymbol,
+			Side:       pr.Side,
+			Note:       getDbText("Offered costs"),
+			Currency:   getDbText(sam.MessageInfo.OfferedCosts.CurrencyCode.Text),
+			Cost: pgtype.Numeric{
+				Valid: true,
+				Int:   big.NewInt(int64(sam.MessageInfo.OfferedCosts.MonetaryValue.Base)),
+				Exp:   cost,
+			},
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if sam.DeliveryInfo != nil {
+		if sam.DeliveryInfo.DeliveryCosts != nil {
+			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+			cost, err := safeConvertInt32(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp)
+			if err != nil {
+				return err
 			}
-			if loopErr != nil {
-				return loopErr
+			_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+				ID:         uuid.NewString(),
+				PrID:       pr.ID,
+				FromSymbol: supSymbol,
+				ToSymbol:   reqSymbol,
+				Side:       pr.Side,
+				Note:       getDbText("Delivery costs"),
+				Currency:   getDbText(sam.DeliveryInfo.DeliveryCosts.CurrencyCode.Text),
+				Cost: pgtype.Numeric{
+					Valid: true,
+					Int:   big.NewInt(int64(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Base)),
+					Exp:   cost,
+				},
+				CreatedAt: pgtype.Timestamp{
+					Valid: true,
+					Time:  time.Now(),
+				},
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if sam.DeliveryInfo.LoanCondition != nil {
+			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+			_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+				ID:         uuid.NewString(),
+				PrID:       pr.ID,
+				FromSymbol: supSymbol,
+				ToSymbol:   reqSymbol,
+				Side:       pr.Side,
+				Condition:  getDbText(sam.DeliveryInfo.LoanCondition.Text),
+				CreatedAt: pgtype.Timestamp{
+					Valid: true,
+					Time:  time.Now(),
+				},
+			})
+			if err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
-func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, id string, name string, callNumber *string) error {
-	dbCallNumber := pgtype.Text{Valid: false, String: ""}
-	if callNumber != nil {
-		dbCallNumber = pgtype.Text{Valid: true, String: *callNumber}
+func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
+	if ram.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(ram.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(ram.Note),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
 	}
-	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-		ID:         uuid.NewString(),
-		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
-		PrID:       prId,
-		ItemID:     getDbText(id),
-		Title:      getDbText(name),
-		CallNumber: dbCallNumber,
-		Barcode:    id, //TODO barcode generation. How to do that?
-	})
-	return err
+	return nil
+}
+
+func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
+	if request.ServiceInfo != nil && request.ServiceInfo.Note != "" {
+		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
+		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText(request.ServiceInfo.Note),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
+		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
+		cost, err := safeConvertInt32(request.BillingInfo.MaximumCosts.MonetaryValue.Exp)
+		if err != nil {
+			return err
+		}
+		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+			ID:         uuid.NewString(),
+			PrID:       pr.ID,
+			Note:       getDbText("Maximum costs"),
+			FromSymbol: reqSymbol,
+			ToSymbol:   supSymbol,
+			Side:       pr.Side,
+			Currency:   getDbText(request.BillingInfo.MaximumCosts.CurrencyCode.Text),
+			Cost: pgtype.Numeric{
+				Valid: true,
+				Int:   big.NewInt(int64(request.BillingInfo.MaximumCosts.MonetaryValue.Base)),
+				Exp:   cost,
+			},
+			CreatedAt: pgtype.Timestamp{
+				Valid: true,
+				Time:  time.Now(),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func getSymbolsFromHeader(header iso18626.Header) (string, string) {
+	return header.SupplyingAgencyId.AgencyIdType.Text + ":" + header.SupplyingAgencyId.AgencyIdValue,
+		header.RequestingAgencyId.AgencyIdType.Text + ":" + header.RequestingAgencyId.AgencyIdValue
+}
+
+func safeConvertInt32(n int) (int32, error) {
+	if n < math.MinInt32 || n > math.MaxInt32 {
+		return 0, fmt.Errorf("integer out of range for int32: %d", n)
+	}
+	return int32(n), nil
 }

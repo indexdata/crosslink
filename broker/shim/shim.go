@@ -207,18 +207,19 @@ func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso186
 }
 
 func (i *Iso18626AlmaShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
-	if common.SamHasItems(*sam) {
-		result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
-		var items []string
-		for _, item := range result {
-			items = append(items, item[0])
-		}
-		sam.DeliveryInfo.ItemId = strings.Join(items, ",")
-
-		tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
-		sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
-			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if result == nil {
+		return
 	}
+	var items []string
+	for _, item := range result {
+		items = append(items, item[0])
+	}
+	sam.DeliveryInfo.ItemId = strings.Join(items, ",")
+
+	tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
+	sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
+		sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
 }
 
 func (i *Iso18626AlmaShim) transferOfferedCostsToDeliveryCosts(suppMsg *iso18626.SupplyingAgencyMessage) {
@@ -551,7 +552,7 @@ func (i *Iso18626AlmaShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
 		sb.WriteString("\n")
 		list := strings.Split(sam.DeliveryInfo.ItemId, ",")
 		for _, item := range list {
-			sb.WriteString(common.PackItemsNote([]string{item}))
+			sb.WriteString(common.PackItemNote([]string{item}))
 			sb.WriteString("\n")
 		}
 		sb.WriteString(common.MULTIPLE_ITEMS_END)
@@ -605,21 +606,22 @@ func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.ISO18626M
 }
 
 func (i *Iso18626ReShareShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
-	if common.SamHasItems(*sam) {
-		result, startIdx, endIdx := common.GetItemParams(sam.MessageInfo.Note)
-		if len(result) == 1 {
-			sam.DeliveryInfo.ItemId = strings.Join(result[0], ",")
-		} else {
-			var items []string
-			for _, item := range result {
-				items = append(items, strings.Join(item, ","))
-			}
-			sam.DeliveryInfo.ItemId = "multivol:" + strings.Join(items, ",multivol:")
-		}
-		tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
-		sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
-			sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
+	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
+	if len(result) == 0 {
+		return
 	}
+	if len(result) == 1 {
+		sam.DeliveryInfo.ItemId = strings.Join(result[0], ",")
+	} else {
+		var items []string
+		for _, item := range result {
+			items = append(items, strings.Join(item, ","))
+		}
+		sam.DeliveryInfo.ItemId = "multivol:" + strings.Join(items, ",multivol:")
+	}
+	tillIndex := max(0, startIdx-1) // -1 because we remove new line symbol but index cannot be negative
+	sam.MessageInfo.Note = sam.MessageInfo.Note[0:tillIndex] +
+		sam.MessageInfo.Note[endIdx+len(common.MULTIPLE_ITEMS_END):]
 }
 
 func (i *Iso18626ReShareShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
@@ -652,9 +654,9 @@ func writeItemValues(sb *strings.Builder, itemId string) {
 	match := reshareItemRegex.FindStringSubmatch(itemId)
 	var row string
 	if len(match) > 0 {
-		row = common.PackItemsNote([]string{match[1], match[2], match[3]})
+		row = common.PackItemNote([]string{match[1], match[2], match[3]})
 	} else {
-		row = common.PackItemsNote([]string{itemId})
+		row = common.PackItemNote([]string{itemId})
 	}
 	sb.WriteString(row)
 }

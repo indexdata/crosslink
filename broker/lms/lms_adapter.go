@@ -29,7 +29,7 @@ type LmsAdapter interface {
 		userId string,
 		pickupLocation string,
 		itemLocation string,
-	) error
+	) (string, string, error)
 
 	CancelRequestItem(requestId string, userId string) error
 
@@ -37,7 +37,7 @@ type LmsAdapter interface {
 
 	CheckOutItem(
 		requestId string,
-		itemId string,
+		itemBarcode string,
 		userId string,
 		externalReferenceValue string,
 	) error

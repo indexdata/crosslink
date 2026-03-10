@@ -14,7 +14,8 @@ import (
 type NcipUserElement string
 
 const (
-	NCIPUserId NcipUserElement = "User Id"
+	NCIPUserId      string = "User Id"
+	NCIPItemBarcode string = "Item Barcode"
 )
 
 type NcipItemElement string
@@ -164,7 +165,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) error {
+) (string, string, error) {
 	var pickupLocationField *ncip.SchemeValuePair
 	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
@@ -219,8 +220,26 @@ func (l *LmsAdapterNcip) RequestItem(
 		RequestScopeType:   requestScopeTypeField,
 		ItemOptionalFields: itemOptionalFields,
 	}
-	_, err := l.ncipClient.RequestItem(arg)
-	return err
+	response, err := l.ncipClient.RequestItem(arg)
+	if err != nil {
+		return "", "", err
+	}
+	barcode := ""
+	callNumber := ""
+	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
+		response.ItemId.ItemIdentifierType.Text == NCIPItemBarcode {
+		barcode = response.ItemId.ItemIdentifierValue
+	}
+	if response.ItemOptionalFields != nil && response.ItemOptionalFields.ItemDescription != nil {
+		callNumber = response.ItemOptionalFields.ItemDescription.CallNumber
+		if barcode == "" {
+			barcode = response.ItemOptionalFields.ItemDescription.CopyNumber
+		}
+	}
+	if barcode == "" {
+		return "", "", fmt.Errorf("missing item barcode in RequestItem response")
+	}
+	return barcode, callNumber, err
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
@@ -250,7 +269,7 @@ func (l *LmsAdapterNcip) CheckInItem(itemId string) error {
 
 func (l *LmsAdapterNcip) CheckOutItem(
 	requestId string,
-	itemId string,
+	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
 ) error {
@@ -269,7 +288,7 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	arg := ncip.CheckOutItem{
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
 		UserId:    &ncip.UserId{UserIdentifierValue: userId},
-		ItemId:    ncip.ItemId{ItemIdentifierValue: itemId},
+		ItemId:    ncip.ItemId{ItemIdentifierValue: itemBarcode},
 		Ext:       ext,
 	}
 	_, err := l.ncipClient.CheckOutItem(arg)

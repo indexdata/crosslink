@@ -101,12 +101,12 @@ func TestCrud(t *testing.T) {
 	request := iso18626.Request{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
+			Title:                  "Typed request round trip",
 		},
 	}
 	id := uuid.NewString()
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
@@ -128,8 +128,14 @@ func TestCrud(t *testing.T) {
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
-	assert.Equal(t, *newPr.SupplierSymbol, *foundPr.SupplierSymbol)
+	assert.Nil(t, foundPr.SupplierSymbol)
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+		assert.False(t, r.Header.Timestamp.IsZero())
+	})
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
 	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
@@ -144,6 +150,11 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 	assert.Nil(t, foundPrs.About.LastLink)
+	assertPatronRequestIllRequest(t, foundPrs.Items[0].IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET list with offset in
 	respBytes = httpRequest(t, "GET", basePath+queryParams+"&offset=100000", []byte{}, 200)
@@ -159,12 +170,20 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET by id with symbol
 	respBytes = httpRequest(t, "GET", thisPrPath+"?symbol="+*foundPr.RequesterSymbol, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+	})
 
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -196,7 +215,7 @@ func TestCrud(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request
@@ -204,6 +223,19 @@ func TestCrud(t *testing.T) {
 	//
 	//// GET patron request which is deleted
 	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
+}
+
+func assertPatronRequestIllRequest(t *testing.T, payload map[string]interface{}, assertFn func(iso18626.Request)) {
+	t.Helper()
+
+	data, err := json.Marshal(payload)
+	assert.NoError(t, err)
+
+	var request iso18626.Request
+	err = json.Unmarshal(data, &request)
+	assert.NoError(t, err)
+
+	assertFn(request)
 }
 
 func TestActionsToCompleteState(t *testing.T) {
@@ -232,7 +264,6 @@ func TestActionsToCompleteState(t *testing.T) {
 		},
 	}
 	newPr := proapi.CreatePatronRequest{
-		SupplierSymbol:  &supplierSymbol,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
 		IllRequest:      utils.Must(common.StructToMap(request)),
@@ -266,16 +297,16 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
-		supPr, _ := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
+		supPr, _ := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 		return supPr.ID != ""
 	})
-	supPr, err := prRepo.GetPatronRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
+	supPr, err := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
 	assert.NoError(t, err)
 	assert.NotNil(t, supPr.ID)
 
 	// Wait for action
 	supplierPrPath := basePath + "/" + supPr.ID
-	supQueryParams := "?side=lending&symbol=" + *foundPr.SupplierSymbol
+	supQueryParams := "?side=lending&symbol=" + supplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
 		return string(respBytes) == "[\""+string(prservice.LenderActionShip)+"\"]\n"
@@ -383,7 +414,14 @@ func TestActionsToCompleteState(t *testing.T) {
 	var prItems []proapi.PrItem
 	err = json.Unmarshal(respBytes, &prItems)
 	assert.NoError(t, err, "failed to unmarshal patron request items")
-	assert.Len(t, prItems, 0)
+	assert.Len(t, prItems, 1)
+
+	// Check requester patron request item count
+	respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
+	var prNotifications []proapi.PrNotification
+	err = json.Unmarshal(respBytes, &prNotifications)
+	assert.NoError(t, err, "failed to unmarshal patron request notifications")
+	assert.True(t, len(prNotifications) >= 4)
 
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath+supQueryParams, []byte{}, 200)

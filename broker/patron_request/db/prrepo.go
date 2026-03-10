@@ -5,17 +5,19 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type PrRepo interface {
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
+	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
-	GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
+	GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
 	GetNextHrid(ctx common.ExtendedContext, prefix string) (string, error)
 	SaveItem(ctx common.ExtendedContext, params SaveItemParams) (Item, error)
 	GetItemById(ctx common.ExtendedContext, id string) (Item, error)
@@ -45,6 +47,17 @@ func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
 func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error) {
 	row, err := r.queries.GetPatronRequestById(ctx, r.GetConnOrTx(), id)
 	return row.PatronRequest, err
+}
+
+func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error) {
+	pr, err := r.GetPatronRequestById(ctx, id)
+	if err != nil {
+		return PatronRequest{}, err
+	}
+	if pr.Side != side {
+		return PatronRequest{}, pgx.ErrNoRows
+	}
+	return pr, nil
 }
 
 func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
@@ -83,8 +96,8 @@ func (r *PgPrRepo) DeletePatronRequest(ctx common.ExtendedContext, id string) er
 	return r.queries.DeletePatronRequest(ctx, r.GetConnOrTx(), id)
 }
 
-func (r *PgPrRepo) GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error) {
-	row, err := r.queries.GetPatronRequestBySupplierSymbolAndRequesterReqId(ctx, r.GetConnOrTx(), GetPatronRequestBySupplierSymbolAndRequesterReqIdParams{
+func (r *PgPrRepo) GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error) {
+	row, err := r.queries.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, r.GetConnOrTx(), GetLendingRequestBySupplierSymbolAndRequesterReqIdParams{
 		SupplierSymbol: pgtype.Text{
 			String: supplierSymbol,
 			Valid:  true,

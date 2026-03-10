@@ -139,17 +139,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 	var responseItems []proapi.PatronRequest
 	for _, pr := range prs {
-		var illRequest iso18626.Request
-		if pr.IllRequest != nil {
-			err = json.Unmarshal(pr.IllRequest, &illRequest)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				addInternalError(ctx, w, err)
-				return
-			}
-		} else {
-			illRequest = iso18626.Request{}
-		}
-		responseItems = append(responseItems, toApiPatronRequest(pr, illRequest))
+		responseItems = append(responseItems, toApiPatronRequest(pr, pr.IllRequest))
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
@@ -223,16 +213,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		addInternalError(ctx, w, err)
-		return
-	}
 	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, illRequest))
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
@@ -303,13 +287,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	if pr == nil {
 		return
 	}
-	var illRequest iso18626.Request
-	err = json.Unmarshal(pr.IllRequest, &illRequest)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
-	}
-	writeJsonResponse(w, toApiPatronRequest(*pr, illRequest))
+	writeJsonResponse(w, toApiPatronRequest(*pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
@@ -462,6 +440,41 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 	writeJsonResponse(w, responseItems)
 }
 
+func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+	list, err := a.prRepo.GetNotificationsByPrId(ctx, pr.ID)
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+
+	var responseList []proapi.PrNotification
+	for _, n := range list {
+		apiN, inErr := toApiNotification(n)
+		if inErr != nil {
+			addInternalError(ctx, w, inErr)
+			return
+		}
+		responseList = append(responseList, apiN)
+	}
+	writeJsonResponse(w, responseList)
+}
+
 func writeJsonResponse(w http.ResponseWriter, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -535,17 +548,15 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		}
 		id = hrid
 	}
-	var illRequest []byte
+	var illRequest iso18626.Request
 	if request.IllRequest != nil {
-		illRequest = utils.Must(json.Marshal(request.IllRequest))
-		var isoRequest iso18626.Request
-		err := json.Unmarshal(illRequest, &isoRequest)
+		illRequestBytes := utils.Must(json.Marshal(request.IllRequest))
+		err := json.Unmarshal(illRequestBytes, &illRequest)
 		if err != nil {
 			return pr_db.PatronRequest{}, err
 		}
-		isoRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
-		isoRequest.Header.RequestingAgencyRequestId = id
-		illRequest = utils.Must(json.Marshal(isoRequest))
+		illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
+		illRequest.Header.RequestingAgencyRequestId = id
 	}
 
 	return pr_db.PatronRequest{
@@ -555,9 +566,10 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
 		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(request.SupplierSymbol),
+		SupplierSymbol:  getDbText(nil),
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
+		RequesterReqID:  getDbText(&id),
 	}, nil
 }
 
@@ -587,4 +599,39 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 		Title:      toString(item.Title),
 		CreatedAt:  item.CreatedAt.Time,
 	}
+}
+
+func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, error) {
+	var ackAt *time.Time
+	if notification.AcknowledgedAt.Valid {
+		t := notification.AcknowledgedAt.Time
+		ackAt = &t
+	}
+	var cost *float64
+	if notification.Cost.Valid {
+		f, err := notification.Cost.Float64Value()
+		if err != nil {
+			return proapi.PrNotification{}, err
+		}
+		val := f.Float64
+		cost = &val
+	}
+	var receipt *string
+	if notification.Receipt != "" {
+		r := string(notification.Receipt)
+		receipt = &r
+	}
+	return proapi.PrNotification{
+		Id:             notification.ID,
+		FromSymbol:     notification.FromSymbol,
+		ToSymbol:       notification.ToSymbol,
+		Side:           string(notification.Side),
+		Note:           toString(notification.Note),
+		Cost:           cost,
+		Currency:       toString(notification.Currency),
+		Condition:      toString(notification.Condition),
+		Receipt:        receipt,
+		CreatedAt:      notification.CreatedAt.Time,
+		AcknowledgedAt: ackAt,
+	}, nil
 }
