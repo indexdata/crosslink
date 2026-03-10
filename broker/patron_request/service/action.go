@@ -320,37 +320,36 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
-func callNumberFromIllRequest(illRequest iso18626.Request) string {
-	callNumber := ""
-	if len(illRequest.SupplierInfo) > 0 {
-		callNumber = illRequest.SupplierInfo[0].CallNumber
-	}
-	return callNumber
-}
-
-func isbnFromIllRequest(illRequest iso18626.Request) string {
-	isbn := ""
-	if len(illRequest.BibliographicInfo.BibliographicItemId) > 0 &&
-		illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text == "ISBN" {
-		isbn = illRequest.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier
-	}
-	return isbn
-}
-
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
-	requestId := illRequest.Header.RequestingAgencyRequestId
-	author := illRequest.BibliographicInfo.Author
-	title := illRequest.BibliographicInfo.Title
-	isbn := isbnFromIllRequest(illRequest)
-	callNumber := callNumberFromIllRequest(illRequest)
+	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
+	if err != nil {
+		status, result := events.LogErrorAndReturnResult(ctx, "failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	if len(items) == 0 {
+		status, result := events.LogErrorAndReturnResult(ctx, "no item to accept for this request", errors.New("no items found for PR ID"))
+		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+	} else if len(items) > 1 {
+		ctx.Logger().Warn("multiple items found for PR ID, only the first one will be used", "prId", pr.ID, "itemCount", len(items))
+	}
+	callNumber := ""
+	if items[0].CallNumber.Valid {
+		callNumber = items[0].CallNumber.String
+	}
+	title := ""
+	if items[0].Title.Valid {
+		title = items[0].Title.String
+	}
+	itemId := items[0].Barcode // requester bar code
+	author := ""
+	isbn := ""
 	pickupLocation := lmsAdapter.RequesterPickupLocation()
 	requestedAction := "Hold For Pickup"
-	err := lmsAdapter.AcceptItem(itemId, requestId, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
+	err = lmsAdapter.AcceptItem(itemId, pr.ID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
