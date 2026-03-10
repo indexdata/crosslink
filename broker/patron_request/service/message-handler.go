@@ -468,6 +468,8 @@ func (m *PatronRequestMessageHandler) saveItems(ctx common.ExtendedContext, pr p
 }
 
 func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId string, supplierBarcode *string, callNumber *string, name *string) error {
+	// not using supplier barcode as it may not be unique, using prId instead to link item to request, as
+	// each request can have only one item without barcode and prId is unique for each request
 	requesterBarcode := prId
 	_, err := m.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
 		ID:         uuid.NewString(),
