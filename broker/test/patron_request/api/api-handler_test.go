@@ -134,7 +134,7 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
-		assert.False(t, r.Header.Timestamp.Time.IsZero())
+		assert.False(t, r.Header.Timestamp.IsZero())
 	})
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
