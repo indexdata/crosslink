@@ -1,0 +1,311 @@
+    [
+        {
+          "id": "d1016335-fe98-4ce7-a6a3-5f9b5273fcaa",
+          "name": "rs1",
+          "description": "rs1",
+          "organizationId": "001",
+          "type": "institution",
+          "email": "test@example.com",
+          "hrid": "RS1",
+          "endpoints": [],
+          "symbols": [
+            {
+              "id": "8ebc46eb-f8e1-468e-809c-b442b4ff0f14",
+              "symbol": "US-RS1",
+              "authority": "ISIL"
+            }
+          ],
+          "vendor": "CrossLink",
+          "networks": [
+            {
+              "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
+              "name": "reshare2",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "priority": 1
+            }
+          ],
+          "tiers": [
+            {
+              "id": "ef400d60-d6a7-59a6-b85d-804b51ffd871",
+              "name": "Reciprocal Peer to Peer - Core Loan",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Loan",
+              "level": "Standard",
+              "cost": 0.0
+            },
+            {
+              "id": "419d4b63-ac25-50ef-a7fd-d16bb8521baf",
+              "name": "Reciprocal Peer to Peer - Core Copy",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Copy",
+              "level": "Standard",
+              "cost": 0.0
+            }
+          ],
+          "addresses": [
+            {
+              "id": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+              "entry": "d1016335-fe98-4ce7-a6a3-5f9b5273fcaa",
+              "type": "Shipping",
+              "addressComponents": [
+                {
+                  "id": "ed7b716e-96b0-46d9-8201-c5e6e520314e",
+                  "address": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+                  "type": "Thoroughfare",
+                  "value": "100 Library Way"
+                },
+                {
+                  "id": "e74cd0f8-ea7f-4105-ab99-08eb836c1d50",
+                  "address": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+                  "type": "Locality",
+                  "value": "Ann Arbor"
+                },
+                {
+                  "id": "858f528d-5bc8-43a5-bdfd-0571192459df",
+                  "address": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+                  "type": "AdministrativeArea",
+                  "value": "MI"
+                },
+                {
+                  "id": "057e7178-8728-4ce2-acd2-43e1a753daee",
+                  "address": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+                  "type": "PostalCode",
+                  "value": "48104"
+                },
+                {
+                  "id": "b18cd6d1-8863-4d83-9568-aa29a4aafb61",
+                  "address": "6394536b-9d63-4e7b-949e-b91c57e12b82",
+                  "type": "CountryCode",
+                  "value": "USA"
+                }
+              ]
+            }
+          ],
+          "closures": [],
+          "timeZone": "America/New_York",
+          "lmsConfig": {
+            "address": "http://illmock:8081/ncip",
+            "fromAgency": "ReShare",
+            "fromAgencyAuthentication": "changeme",
+            "toAgency": "rs1",
+            "lookupUserEnabled": true,
+            "acceptItemEnabled": true,
+            "checkInItemEnabled": true,
+            "checkOutItemEnabled": true,
+            "itemLocation": "KU/CC/DI/M",
+            "requestItemRequestType": "Page",
+            "requestItemRequestScopeType": "Item",
+            "requestItemBibIdCode": "SYSNUMBER",
+            "requestItemPickupLocationEnabled": true,
+            "requesterPickupLocation": "cd1",
+            "supplierPickupLocation": "cd1",
+            "requesterPatronPattern": "INST-{requesterSymbol}"
+          }
+        },
+        {
+          "id": "b19314ad-1219-4e9a-8486-e5317b21c4ab",
+          "name": "rs2",
+          "description": "rs2",
+          "organizationId": "002",
+          "type": "institution",
+          "email": "test@example.com",
+          "hrid": "RS2",
+          "endpoints": [],
+          "symbols": [
+            {
+              "id": "7ed9ced0-d302-459f-94aa-ac52d956de92",
+              "symbol": "US-RS2",
+              "authority": "ISIL"
+            }
+          ],
+          "vendor": "CrossLink",
+          "networks": [
+            {
+              "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
+              "name": "reshare2",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "priority": 1
+            }
+          ],
+          "tiers": [
+            {
+              "id": "ef400d60-d6a7-59a6-b85d-804b51ffd871",
+              "name": "Reciprocal Peer to Peer - Core Loan",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Loan",
+              "level": "Standard",
+              "cost": 0.0
+            },
+            {
+              "id": "419d4b63-ac25-50ef-a7fd-d16bb8521baf",
+              "name": "Reciprocal Peer to Peer - Core Copy",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Copy",
+              "level": "Standard",
+              "cost": 0.0
+            }
+          ],
+          "addresses": [
+            {
+              "id": "19a0f466-45ab-4674-a35e-40af1881e866",
+              "entry": "b19314ad-1219-4e9a-8486-e5317b21c4ab",
+              "type": "Shipping",
+              "addressComponents": [
+                {
+                  "id": "808018cc-00a8-45e7-a25f-6022782a6558",
+                  "address": "19a0f466-45ab-4674-a35e-40af1881e866",
+                  "type": "Thoroughfare",
+                  "value": "200 Library Way"
+                },
+                {
+                  "id": "daf1c4b3-ab6b-4f13-9c53-4ffb3be0b8d4",
+                  "address": "19a0f466-45ab-4674-a35e-40af1881e866",
+                  "type": "Locality",
+                  "value": "Ann Arbor"
+                },
+                {
+                  "id": "b8433b9b-829e-4723-8a23-047ea26f5fc0",
+                  "address": "19a0f466-45ab-4674-a35e-40af1881e866",
+                  "type": "AdministrativeArea",
+                  "value": "MI"
+                },
+                {
+                  "id": "62e9a3f4-8849-490f-b347-7e0aaa8d9056",
+                  "address": "19a0f466-45ab-4674-a35e-40af1881e866",
+                  "type": "PostalCode",
+                  "value": "48104"
+                },
+                {
+                  "id": "d3c9600f-13c6-4e3b-8fbf-0b2670c9938b",
+                  "address": "19a0f466-45ab-4674-a35e-40af1881e866",
+                  "type": "CountryCode",
+                  "value": "USA"
+                }
+              ]
+            }
+          ],
+          "closures": [],
+          "timeZone": "America/New_York",
+          "lmsConfig": {
+            "address": "http://illmock:8081/ncip",
+            "fromAgency": "ReShare",
+            "fromAgencyAuthentication": "changeme",
+            "toAgency": "rs2",
+            "lookupUserEnabled": true,
+            "acceptItemEnabled": true,
+            "checkInItemEnabled": true,
+            "checkOutItemEnabled": true,
+            "itemLocation": "KU/CC/DI/M",
+            "requestItemRequestType": "Page",
+            "requestItemRequestScopeType": "Item",
+            "requestItemBibIdCode": "SYSNUMBER",
+            "requestItemPickupLocationEnabled": true,
+            "requesterPickupLocation": "cd1",
+            "supplierPickupLocation": "cd1",
+            "requesterPatronPattern": "INST-{requesterSymbol}"
+          }
+        },
+        {
+          "id": "040113f1-5496-414a-a82b-08e6b35778a2",
+          "name": "rs3",
+          "description": "rs3",
+          "organizationId": "003",
+          "type": "institution",
+          "email": "test@example.com",
+          "hrid": "RS3",
+          "symbols": [
+            {
+              "id": "f17f0017-79ed-41aa-8131-dcfb45067d65",
+              "symbol": "US-RS3",
+              "authority": "ISIL"
+            }
+          ],
+          "vendor": "CrossLink",
+          "endpoints": [],
+          "networks": [
+            {
+              "id": "078473d7-71e8-41c0-a8c8-2a9d29920cd4",
+              "name": "reshare2",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "priority": 1
+            }
+          ],
+          "tiers": [
+            {
+              "id": "ef400d60-d6a7-59a6-b85d-804b51ffd871",
+              "name": "Reciprocal Peer to Peer - Core Loan",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Loan",
+              "level": "Standard",
+              "cost": 0.0
+            },
+            {
+              "id": "419d4b63-ac25-50ef-a7fd-d16bb8521baf",
+              "name": "Reciprocal Peer to Peer - Core Copy",
+              "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
+              "type": "Copy",
+              "level": "Standard",
+              "cost": 0.0
+            }
+          ],
+          "addresses": [
+            {
+              "id": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+              "entry": "040113f1-5496-414a-a82b-08e6b35778a2",
+              "type": "Shipping",
+              "addressComponents": [
+                {
+                  "id": "99049f0e-f1e2-4ded-8abf-2eabb74d7f27",
+                  "address": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+                  "type": "Thoroughfare",
+                  "value": "300 Library Way"
+                },
+                {
+                  "id": "30ed86fb-b8b5-490a-9e0b-4c7571467f07",
+                  "address": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+                  "type": "Locality",
+                  "value": "Ann Arbor"
+                },
+                {
+                  "id": "04148d95-a1b8-4636-88b6-6dba8a5ad68c",
+                  "address": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+                  "type": "AdministrativeArea",
+                  "value": "MI"
+                },
+                {
+                  "id": "0b115b36-256d-499d-a09e-c02bb53b8dc2",
+                  "address": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+                  "type": "PostalCode",
+                  "value": "48104"
+                },
+                {
+                  "id": "49eeb32a-d3db-4382-a6ea-f51e1fbaab39",
+                  "address": "6ae2dc32-c09d-4a60-b7b2-1fd3b4cc25e5",
+                  "type": "CountryCode",
+                  "value": "USA"
+                }
+              ]
+            }
+          ],
+          "closures": [],
+          "timeZone": "America/New_York",
+          "lmsConfig": {
+            "address": "http://illmock:8081/ncip",
+            "fromAgency": "ReShare",
+            "fromAgencyAuthentication": "",
+            "toAgency": "rs3",
+            "lookupUserEnabled": true,
+            "acceptItemEnabled": true,
+            "checkInItemEnabled": true,
+            "checkOutItemEnabled": true,
+            "itemLocation": "KU/CC/DI/M",
+            "requestItemRequestType": "Page",
+            "requestItemRequestScopeType": "Item",
+            "requestItemBibIdCode": "SYSNUMBER",
+            "requestItemPickupLocationEnabled": true,
+            "requesterPickupLocation": "cd1",
+            "supplierPickupLocation": "cd1",
+            "requesterPatronPattern": "rs3ncip"
+          }
+        }
+      ]
