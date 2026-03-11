@@ -1,12 +1,12 @@
 meta {
-  name: Lending side mark-received
+  name: Sup Patron Events
   type: http
-  seq: 10
+  seq: 18
 }
 
-post {
-  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
-  body: json
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}/events?side=lending
+  body: none
   auth: basic
 }
 
@@ -23,10 +23,8 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-      "action": "mark-received"
-  }
+vars:pre-request {
+  prId: {{prId}}
 }
 
 settings {
