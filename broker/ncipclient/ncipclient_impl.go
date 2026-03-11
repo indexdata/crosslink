@@ -1,6 +1,7 @@
 package ncipclient
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -199,14 +200,14 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		n.address, message, &respMessage, xml.Marshal, xml.Unmarshal)
 	if n.logFunc != nil {
 		hideSensitive(message)
-		var outgoing []byte
+		var outgoing map[string]any
 		var err1 error
-		outgoing, err1 = xml.MarshalIndent(message, "", "  ")
+		outgoing, err1 = toJSONObj(message)
 
 		hideSensitive(&respMessage)
-		var incoming []byte
+		var incoming map[string]any
 		var err2 error
-		incoming, err2 = xml.MarshalIndent(&respMessage, "", "  ")
+		incoming, err2 = toJSONObj(&respMessage)
 
 		logErr := err
 		if logErr == nil {
@@ -227,6 +228,19 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		}
 	}
 	return &respMessage, nil
+}
+
+func toJSONObj(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var obj map[string]any
+	err = json.Unmarshal(b, &obj)
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
 }
 
 func hideSensitive(message *ncip.NCIPMessage) {

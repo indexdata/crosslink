@@ -185,14 +185,14 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		status, result := events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
-	lmsAdapter.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
 		if err != nil {
 			status = events.EventStatusError
 		}
 		var customData = make(map[string]any)
-		customData["lmsOutgoingMessage"] = string(outgoing)
-		customData["lmsIncomingMessage"] = string(incoming)
+		customData["lmsOutgoingMessage"] = outgoing
+		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
 		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
 		if createErr != nil {
@@ -234,14 +234,14 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		status, result := events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
-	lms.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+	lms.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
 		if err != nil {
 			status = events.EventStatusError
 		}
 		var customData = make(map[string]any)
-		customData["lmsOutgoingMessage"] = string(outgoing)
-		customData["lmsIncomingMessage"] = string(incoming)
+		customData["lmsOutgoingMessage"] = outgoing
+		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
 		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
 		if createErr != nil {

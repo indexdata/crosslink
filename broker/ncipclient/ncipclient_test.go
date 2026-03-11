@@ -1,6 +1,7 @@
 package ncipclient
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"net/http"
 	"net/http/httptest"
@@ -185,11 +186,11 @@ func TestEmptyNcipResponse(t *testing.T) {
 	ncipClient.fromAgencyAuthentication = "pass"
 	ncipClient.toAgency = "ILL-MOCK"
 	ncipClient.address = server.URL
-	var logOutgoing []byte
-	var logIncoming []byte
+	var logOutgoing map[string]any
+	var logIncoming map[string]any
 	var logError error
 
-	ncipClient.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		logOutgoing = outgoing
 		logIncoming = incoming
 		logError = err
@@ -502,10 +503,10 @@ func TestHideSensitiveInvalid(t *testing.T) {
 
 func TestSetLogFunc(t *testing.T) {
 	ncipClient := createTestClient()
-	var logOutgoing []byte
-	var logIncoming []byte
+	var logOutgoing map[string]any
+	var logIncoming map[string]any
 
-	ncipClient.SetLogFunc(func(outgoing []byte, incoming []byte, err error) {
+	ncipClient.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		logOutgoing = outgoing
 		logIncoming = incoming
 	})
@@ -523,5 +524,7 @@ func TestSetLogFunc(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, logOutgoing)
 	assert.NotNil(t, logIncoming)
-	assert.Contains(t, string(logOutgoing), "***")
+	logOutgoingJSON, marshalErr := json.Marshal(logOutgoing)
+	assert.NoError(t, marshalErr)
+	assert.Contains(t, string(logOutgoingJSON), "***")
 }
