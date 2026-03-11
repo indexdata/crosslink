@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: crosslink_postgres
+    environment:
+      POSTGRES_USER: crosslink
+      POSTGRES_PASSWORD: crosslink
+      POSTGRES_DB: crosslink
+    ports:
+      - "25432:5432"
+    volumes:
+      - ./pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crosslink -d crosslink"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  db-up:
+    profiles: ["db-up"]
+    build:
+      context: ..
+      dockerfile: broker/Dockerfile
+    container_name: crosslink_db_up
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/broker", "db-up"]
+    environment:
+      DB_TYPE: postgres
+      DB_USER: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+      DB_PROVISION: "true"
+      DB_MIGRATE: "true"
+
+  broker:
+    build:
+      context: ..
+      dockerfile: broker/Dockerfile
+    container_name: crosslink_broker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_PORT: 8080
+      DB_TYPE: postgres
+      DB_USER: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+      DB_PROVISION: "true"
+      DB_MIGRATE: "true"
+      DIRECTORY_ADAPTER: api
+      DIRECTORY_API_URL: http://illmock:8081/directory/entries
+      TENANT_TO_SYMBOL: "ISIL:US-{tenant}"
+    ports:
+      - "8080:8080"
+
+  illmock:
+    build:
+      context: ..
+      dockerfile: illmock/Dockerfile
+    container_name: crosslink_illmock
+    command: ["/illmock"]
+    environment:
+      HTTP_PORT: 8081
+      MOCK_DIRECTORY_ENTRIES_PATH: /data/directory.json
+    volumes:
+      - ./:/data:ro
+    ports:
+      - "8081:8081"
