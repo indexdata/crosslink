@@ -217,7 +217,7 @@ func TestHandleInvokeActionReceiveNoItem(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", resultData.EventError.Message)
-	assert.Equal(t, "no items found for PR ID", resultData.EventError.Cause)
+	assert.Equal(t, "no items found for patron request", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeActionReceiveItemLookupFailure(t *testing.T) {
@@ -234,7 +234,7 @@ func TestHandleInvokeActionReceiveItemLookupFailure(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", resultData.EventError.Message)
-	assert.Equal(t, "assert.AnError general error for testing", resultData.EventError.Cause)
+	assert.Equal(t, "failed to get items: assert.AnError general error for testing", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeActionCheckOutOK(t *testing.T) {
@@ -689,7 +689,7 @@ func TestHandleInvokeLenderActionShipGetItemsByIdEmpty(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "no items for shipping in the request", resultData.EventError.Message)
-	assert.Equal(t, "no item found for patron request", resultData.EventError.Cause)
+	assert.Equal(t, "no items found for patron request", resultData.EventError.Cause)
 }
 
 func TestHandleInvokeLenderActionShipLmsFailed(t *testing.T) {

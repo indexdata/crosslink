@@ -320,25 +320,12 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) getFirstItem(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
-	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
-	if err != nil {
-		return nil, err
-	}
-	if len(items) == 0 {
-		return nil, errors.New("no items found for PR ID")
-	} else if len(items) > 1 {
-		ctx.Logger().Warn("multiple items found for PR ID, only the first one will be used", "prId", pr.ID, "itemCount", len(items))
-	}
-	return items, nil
-}
-
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	items, err := a.getFirstItem(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -378,7 +365,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
 	}
-	items, err := a.getFirstItem(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -394,7 +381,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 }
 
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	items, err := a.getFirstItem(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -409,7 +396,7 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	items, err := a.getFirstItem(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -560,7 +547,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
 
-	items, err := a.getItemsLender(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "no items for shipping in the request", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -595,7 +582,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 }
 
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
-	items, err := a.getItemsLender(ctx, pr)
+	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "no items for check-in in the request", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -685,13 +672,13 @@ func (rcw *ResponseCaptureWriter) Header() http.Header {
 	return http.Header{}
 }
 
-func (a *PatronRequestActionService) getItemsLender(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
+func (a *PatronRequestActionService) getItems(ctx common.ExtendedContext, pr pr_db.PatronRequest) ([]pr_db.Item, error) {
 	items, err := a.prRepo.GetItemsByPrId(ctx, pr.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get items: %w", err)
 	}
 	if len(items) == 0 {
-		return nil, errors.New("no item found for patron request")
+		return nil, fmt.Errorf("no items found for patron request")
 	}
 	if len(items) > 1 {
 		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
