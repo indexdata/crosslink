@@ -1,17 +1,17 @@
 meta {
-  name: Borrowing side ship-return
+  name: Requester Events
   type: http
-  seq: 9
+  seq: 15
 }
 
-post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
-  body: json
+get {
+  url: {{host}}/events?requester_req_id={{prId}}
+  body: none
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  requester_req_id: {{prId}}
 }
 
 headers {
@@ -21,12 +21,6 @@ headers {
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
-}
-
-body:json {
-  {
-      "action": "ship-return"
-  }
 }
 
 settings {

@@ -23,14 +23,14 @@ body:json {
   {
       "illRequest": {
         "bibliographicInfo": {
-          "supplierUniqueRecordId": "return-{{supplierSymbol}}"
+          "supplierUniqueRecordId": "return-{{supplierSymbol}}::{{itemId}}"
         }
       },
       "id": "{{prId}}",
-      "patron": "patron1234",
+      "patron": "{{requesterPatron}}",
       "side": "borrowing",
       "state": "NEW",
-      "requesterSymbol": "ISIL:REQ"
+      "requesterSymbol": "{{requesterSymbol}}"
   }
 }
 
@@ -39,8 +39,8 @@ script:pre-request {
 }
 
 script:post-response {
-  const json = res.getBody()
-  bru.setVar("prId", json.id)
+  const jreq = req.getBody()
+  bru.setVar("prId", jreq.id)
 }
 
 settings {

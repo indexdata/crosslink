@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side check status
+  name: Req Patron Events
   type: http
-  seq: 12
+  seq: 16
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  url: {{host}}/patron_requests/{{prId}}/events?side=borrowing
   body: none
   auth: basic
 }
@@ -23,10 +23,8 @@ auth:basic {
   password: {{userPassword}}
 }
 
-script:post-response {
-  test("Check if found lending PR", () => {
-      expect(res.getBody().State).to.eql("COMPLETED");
-  });
+vars:pre-request {
+  prId: {{prId}}
 }
 
 settings {

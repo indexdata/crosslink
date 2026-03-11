@@ -1,26 +1,26 @@
 meta {
-  name: Events
+  name: Get Peers
   type: http
-  seq: 16
+  seq: 19
 }
 
 get {
-  url: {{host}}/events?requester_req_id={{prId}}
+  url: {{host}}/peers
   body: none
   auth: basic
 }
 
-params:query {
-  requester_req_id: {{prId}}
-}
-
 headers {
-  X-Okapi-Tenant: {{OkapiTenantSup}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
 }
 
 auth:basic {
   username: {{userName}}
   password: {{userPassword}}
+}
+
+vars:pre-request {
+  prId: {{prId}}
 }
 
 settings {
