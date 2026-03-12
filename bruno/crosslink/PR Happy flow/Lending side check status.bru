@@ -24,7 +24,7 @@ auth:basic {
 }
 
 script:post-response {
-  test("Check if found lending PR", () => {
+  test("Check if patron request is complete", () => {
       expect(res.getBody().state).to.eql("COMPLETED");
   });
 }

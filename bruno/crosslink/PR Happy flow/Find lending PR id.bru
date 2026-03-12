@@ -31,7 +31,7 @@ script:pre-request {
 script:post-response {
   const responseData = res.getBody();
   const targetPrId = bru.getVar("prId");
-  const withReqId = responseData.items.filter(pr => {
+  const lendingPr = responseData.items.find(pr => {
       const ill = pr.illRequest;
       const header = ill && ill.header;
       const requestingId = header && header.requestingAgencyRequestId;
@@ -39,10 +39,11 @@ script:post-response {
       return requestingId === targetPrId;
   });
   test("Check if found lending PR", () => {
-      expect(withReqId.length).to.be.at.least(1);
-  });
+      expect(lendingPr).to.exist;
+      expect(lendingPr.id).to.be.a("string").and.not.empty;
   
-  bru.setEnvVar("lendingPrId", withReqId[0].id);
+      bru.setEnvVar("lendingPrId", lendingPr.id);
+  });
 }
 
 settings {
