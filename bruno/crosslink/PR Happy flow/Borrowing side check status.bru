@@ -25,7 +25,7 @@ auth:basic {
 
 script:post-response {
   test("Check if found lending PR", () => {
-      expect(res.getBody().State).to.eql("COMPLETED");
+      expect(res.getBody().state).to.eql("COMPLETED");
   });
 }
 
