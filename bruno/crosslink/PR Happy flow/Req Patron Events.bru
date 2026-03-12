@@ -27,6 +27,25 @@ vars:pre-request {
   prId: {{prId}}
 }
 
+script:post-response {
+  const responseData = res.getBody();
+  const eventsByAction = action => responseData.filter(pr => {
+    return pr.eventData.CommonEventData.action == action;
+  });
+  
+  const expectActionWithFirstSuccess = action => {
+    const events = eventsByAction(action);
+    expect(events.length).to.be.at.least(1);
+    expect(events[0].eventStatus).to.equal("SUCCESS");
+  };
+  
+  ["validate", "send-request", "receive", "check-out", "check-in", "ship-return"].forEach(action => {
+    test(`Check ${action}`, () => {
+      expectActionWithFirstSuccess(action);
+    });
+  });
+}
+
 settings {
   encodeUrl: true
   timeout: 0
