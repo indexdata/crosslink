@@ -24,6 +24,10 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(100)
+}
+
 script:post-response {
   const responseData = res.getBody();
   const targetPrId = bru.getVar("prId");
