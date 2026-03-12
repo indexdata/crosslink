@@ -13,6 +13,7 @@ type FieldAllRecords struct{}
 
 func (f *FieldAllRecords) GetColumn() string       { return "" }
 func (f *FieldAllRecords) SetColumn(column string) {}
+func (f *FieldAllRecords) Sort() string            { return "" }
 func (f *FieldAllRecords) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
 	// Accept standard cql.allRecords = 1 (ignore term/relation).
 	return "TRUE", nil, nil
