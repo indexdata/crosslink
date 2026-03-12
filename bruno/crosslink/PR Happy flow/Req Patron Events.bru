@@ -27,6 +27,56 @@ vars:pre-request {
   prId: {{prId}}
 }
 
+script:post-response {
+  const responseData = res.getBody();
+  test("Check validate", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "validate" && pr.eventStatus == "SUCCESS"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+  })
+  
+  test("Check send-request", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "send-request"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check receive", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "receive"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check check-out", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "check-out"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check check-in", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "check-in"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check ship-return", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "ship-return"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+}
+
 settings {
   encodeUrl: true
   timeout: 0

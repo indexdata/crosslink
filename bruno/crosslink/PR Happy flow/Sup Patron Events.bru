@@ -27,6 +27,40 @@ vars:pre-request {
   prId: {{prId}}
 }
 
+script:post-response {
+  const responseData = res.getBody();
+  test("Check validate", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "validate" && pr.eventStatus == "SUCCESS"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+  })
+  
+  test("Check will-supply", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "will-supply"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check ship", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "ship"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+  
+  test("Check mark-received", () => {
+    const withValidate = responseData.filter(pr => {
+      return pr.eventData.CommonEventData.action == "mark-received"
+    });
+    expect(withValidate.length).to.be.at.least(1);
+    expect(withValidate[0].eventStatus).to.equal("SUCCESS")
+  })
+}
+
 settings {
   encodeUrl: true
   timeout: 0
