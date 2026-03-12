@@ -94,7 +94,7 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 			Message: err.Error(),
 		}
 	}
-	_, err = m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
+	_, err = m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		return nil, err
 	}

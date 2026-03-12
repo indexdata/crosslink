@@ -82,10 +82,10 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:
-		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest)
+		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest, event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	case SideLending:
-		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData)
+		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData, event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	default:
 		return events.LogErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
@@ -175,7 +175,8 @@ func autoActionErrorSuffix(event events.Event) string {
 	return ""
 }
 
-func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request,
+	eventId string) actionExecutionResult {
 	if !pr.RequesterSymbol.Valid {
 		status, result := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -194,7 +195,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest)
+		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, &eventId)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -224,7 +225,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	}
 }
 
-func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{}) actionExecutionResult {
+func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{},
+	eventId string) actionExecutionResult {
 	if !pr.SupplierSymbol.Valid {
 		status, result := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -243,7 +245,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest)
+		_, createErr := a.eventBus.CreateNotice(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, &eventId)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", err)
 		}

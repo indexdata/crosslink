@@ -526,7 +526,7 @@ func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Re
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, nil)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
@@ -781,14 +781,14 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, nil)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
 }
 
 func createNotice(ctx common.ExtendedContext, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) (string, error) {
-	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction)
+	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, nil)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		return "", err

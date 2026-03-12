@@ -28,7 +28,7 @@ type EventBus interface {
 	// When event (task or notice) is broadcasting, every event bus instance receives all event signals (created, started, completed) and executes registered handlers
 	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
 	// Create a regular (unicast) notice event
-	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
+	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string) (string, error)
 	// See CreateTaskBroadcast for more details
 	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
 	// Mark task for processing or fail if status is invalid (e.g already started)
@@ -229,15 +229,15 @@ func (p *PostgresEventBus) createTask(classId string, eventName EventName, data 
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, false)
+func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventDomain, parentId, false)
 }
 
 func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, true)
+	return p.createNotice(classId, eventName, data, status, eventDomain, nil, true)
 }
 
-func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, broadcast bool) (string, error) {
+func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, broadcast bool) (string, error) {
 	id := uuid.New().String()
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
@@ -252,6 +252,7 @@ func (p *PostgresEventBus) createNotice(classId string, eventName EventName, dat
 			LastSignal:       string(SignalNoticeCreated),
 			Broadcast:        broadcast,
 			PatronRequestID:  patronRequestID,
+			ParentID:         getPgText(parentId),
 		})
 		if err != nil {
 			return err

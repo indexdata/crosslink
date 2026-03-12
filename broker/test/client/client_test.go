@@ -596,7 +596,7 @@ func requestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, b
 func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrans := requestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
-	_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameRequesterMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, nil)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
@@ -629,7 +629,7 @@ func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 				},
 			},
 		},
-	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+	}, events.EventStatusSuccess, events.EventDomainIllTransaction, nil)
 	assert.NoError(t, err)
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
