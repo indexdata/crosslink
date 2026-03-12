@@ -215,7 +215,7 @@ func (p *PostgresEventBus) createTask(classId string, eventName EventName, data 
 			EventName:        eventName,
 			EventStatus:      EventStatusNew,
 			EventData:        data,
-			ParentID:         getPgText(parentId),
+			ParentID:         getPgTextNonEmpty(parentId),
 			LastSignal:       string(SignalTaskCreated),
 			Broadcast:        broadcast,
 			PatronRequestID:  patronRequestID,
@@ -252,7 +252,7 @@ func (p *PostgresEventBus) createNotice(classId string, eventName EventName, dat
 			LastSignal:       string(SignalNoticeCreated),
 			Broadcast:        broadcast,
 			PatronRequestID:  patronRequestID,
-			ParentID:         getPgText(parentId),
+			ParentID:         getPgTextNonEmpty(parentId),
 		})
 		if err != nil {
 			return err
@@ -412,14 +412,15 @@ func getPgNow() pgtype.Timestamp {
 	}
 }
 
-func getPgText(value *string) pgtype.Text {
-	stringValue := ""
-	if value != nil {
-		stringValue = *value
+func getPgTextNonEmpty(value *string) pgtype.Text {
+	if value == nil || *value == "" {
+		return pgtype.Text{
+			Valid: false,
+		}
 	}
 	return pgtype.Text{
-		Valid:  value != nil,
-		String: stringValue,
+		Valid:  true,
+		String: *value,
 	}
 }
 
