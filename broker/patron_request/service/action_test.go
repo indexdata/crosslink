@@ -833,7 +833,7 @@ func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data 
 }
 
 func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, parentId *string) (string, error) {
-	if id == "error" {
+	if parentId == nil || id == "error" {
 		return "", errors.New("event bus error")
 	}
 	args := m.Called(*parentId)
