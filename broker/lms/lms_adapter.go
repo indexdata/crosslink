@@ -23,6 +23,7 @@ type LmsAdapter interface {
 
 	DeleteItem(itemId string) error
 
+	// RequestItem returns the item barcode and callNumber
 	RequestItem(
 		requestId string,
 		itemId string,
@@ -35,6 +36,7 @@ type LmsAdapter interface {
 
 	CheckInItem(itemId string) error
 
+	// CheckOutItem returns the title of the checked out item, if available. If not available, it returns an empty string.
 	CheckOutItem(
 		requestId string,
 		itemBarcode string,
