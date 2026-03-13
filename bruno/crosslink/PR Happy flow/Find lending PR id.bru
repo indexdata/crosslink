@@ -5,14 +5,14 @@ meta {
 }
 
 get {
-  url: {{host}}/patron_requests?side=lending&limit=100
+  url: {{host}}/patron_requests?side=lending&requester_req_id={{prId}}
   body: none
   auth: basic
 }
 
 params:query {
   side: lending
-  limit: 100
+  requester_req_id: {{prId}}
 }
 
 headers {
@@ -30,19 +30,11 @@ script:pre-request {
 
 script:post-response {
   const responseData = res.getBody();
-  const targetPrId = bru.getVar("prId");
-  const lendingPr = responseData.items.find(pr => {
-      const ill = pr.illRequest;
-      const header = ill && ill.header;
-      const requestingId = header && header.requestingAgencyRequestId;
-  
-      return requestingId === targetPrId;
-  });
+  const lendingPr = responseData.items && responseData.items[0];
   test("Check if found lending PR", () => {
       expect(lendingPr).to.exist;
       expect(lendingPr.id).to.be.a("string").and.not.empty;
-  
-      bru.setEnvVar("lendingPrId", lendingPr.id);
+      bru.setVar("lendingPrId", lendingPr.id);
   });
 }
 

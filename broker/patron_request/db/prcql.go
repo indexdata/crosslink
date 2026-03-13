@@ -37,6 +37,9 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("supplier_symbol", f)
 
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("requester_req_id", f)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
