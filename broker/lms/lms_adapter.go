@@ -7,7 +7,7 @@ import "github.com/indexdata/crosslink/broker/ncipclient"
 type LmsAdapter interface {
 	SetLogFunc(logFunc ncipclient.NcipLogFunc)
 
-	LookupUser(patron string) (string, error)
+	LookupUser(patron string) (userId string, err error)
 
 	AcceptItem(
 		itemId string,
@@ -23,26 +23,24 @@ type LmsAdapter interface {
 
 	DeleteItem(itemId string) error
 
-	// RequestItem returns the item barcode and callNumber
 	RequestItem(
 		requestId string,
 		itemId string,
 		userId string,
 		pickupLocation string,
 		itemLocation string,
-	) (string, string, error)
+	) (barcode string, callNumber string, err error)
 
 	CancelRequestItem(requestId string, userId string) error
 
 	CheckInItem(itemId string) error
 
-	// CheckOutItem returns the title of the checked out item, if available. If not available, it returns an empty string.
 	CheckOutItem(
 		requestId string,
 		itemBarcode string,
 		userId string,
 		externalReferenceValue string,
-	) (string, error)
+	) (title string, err error)
 
 	CreateUserFiscalTransaction(userId string, itemId string) error
 
