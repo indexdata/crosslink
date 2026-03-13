@@ -112,12 +112,16 @@ func TestHandleBorrowingActionMissingRequesterSymbol(t *testing.T) {
 func TestHandleInvokeActionValidateOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", "ISIL:x").Return(lms.CreateLmsAdapterMockOK(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator)
-	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+	mockEventBus := new(MockEventBus)
 
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, new(handler.Iso18626Handler), lmsCreator)
+	illRequest := iso18626.Request{}
+	fakeEventID := "1234"
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
+	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData)
@@ -518,7 +522,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	mockEventBus.runTaskHandler = true
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(createLmsAdapterMockLog(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
@@ -539,6 +543,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(willSupplyPR, nil).Once()
+	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
@@ -827,6 +832,14 @@ func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data 
 	return id, nil
 }
 
+func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, parentId *string) (string, error) {
+	if parentId == nil || id == "error" {
+		return "", errors.New("event bus error")
+	}
+	args := m.Called(*parentId)
+	return args.Get(0).(string), args.Error(1)
+}
+
 type MockPrRepo struct {
 	mock.Mock
 	pr_db.PgPrRepo
@@ -989,6 +1002,52 @@ func (m *MockLmsCreator) GetAdapter(ctx common.ExtendedContext, symbol string) (
 
 func createLmsAdapterMockFail() lms.LmsAdapter {
 	return &MockLmsAdapterFail{}
+}
+
+func createLmsAdapterMockLog() lms.LmsAdapter {
+	return &MockLmsAdapterLog{}
+}
+
+type MockLmsAdapterLog struct {
+	lms.LmsAdapter
+	logFunc ncipclient.NcipLogFunc
+}
+
+func (l *MockLmsAdapterLog) SetLogFunc(logFunc ncipclient.NcipLogFunc) {
+	l.logFunc = logFunc
+}
+
+func (l *MockLmsAdapterLog) LookupUser(patron string) (string, error) {
+	if l.logFunc != nil {
+		l.logFunc(map[string]any{"patron": patron}, map[string]any{"patron": patron}, nil)
+	}
+	return patron, nil
+}
+
+func (l *MockLmsAdapterLog) RequestItem(
+	requestId string,
+	itemId string,
+	userId string,
+	pickupLocation string,
+	itemLocation string,
+) (string, string, error) {
+	return "", "", nil
+}
+
+func (l *MockLmsAdapterLog) InstitutionalPatron(requesterSymbol string) string {
+	return ""
+}
+
+func (l *MockLmsAdapterLog) SupplierPickupLocation() string {
+	return ""
+}
+
+func (l *MockLmsAdapterLog) ItemLocation() string {
+	return ""
+}
+
+func (l *MockLmsAdapterLog) RequesterPickupLocation() string {
+	return ""
 }
 
 type MockLmsAdapterFail struct {
