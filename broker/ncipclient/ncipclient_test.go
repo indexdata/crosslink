@@ -307,10 +307,35 @@ func TestAcceptItemOK(t *testing.T) {
 		RequestId: ncip.RequestId{
 			RequestIdentifierValue: "validrequest",
 		},
+		ItemOptionalFields: &ncip.ItemOptionalFields{
+			BibliographicDescription: &ncip.BibliographicDescription{
+				Title: "Test Item Title",
+			},
+		},
 	}
 	res, err := ncipClient.AcceptItem(accept)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
+}
+
+func TestAcceptItemMissingTitle(t *testing.T) {
+	ncipClient := NcipClientImpl{}
+	ncipClient.client = http.DefaultClient
+	ncipClient.fromAgency = "ILL-MOCK"
+	ncipClient.fromAgencyAuthentication = "pass"
+	ncipClient.toAgency = "ILL-MOCK"
+	ncipClient.address = "http://localhost:" + os.Getenv("HTTP_PORT") + "/ncip"
+	accept := ncip.AcceptItem{
+		UserId: &ncip.UserId{
+			UserIdentifierValue: "validuser",
+		},
+		RequestId: ncip.RequestId{
+			RequestIdentifierValue: "validrequest",
+		},
+	}
+	_, err := ncipClient.AcceptItem(accept)
+	assert.Error(t, err)
+	assert.Equal(t, "NCIP accept item failed: Needed Data Missing: Title is required in ItemOptionalFields.BibliographicDescription for accepting the request", err.Error())
 }
 
 func TestAcceptItemInvalidUser(t *testing.T) {
@@ -326,6 +351,11 @@ func TestAcceptItemInvalidUser(t *testing.T) {
 		},
 		RequestId: ncip.RequestId{
 			RequestIdentifierValue: "validrequest",
+		},
+		ItemOptionalFields: &ncip.ItemOptionalFields{
+			BibliographicDescription: &ncip.BibliographicDescription{
+				Title: "Test Item Title",
+			},
 		},
 	}
 	_, err := ncipClient.AcceptItem(accept)

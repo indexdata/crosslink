@@ -339,7 +339,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		title = items[0].Title.String
 	}
 	itemId := items[0].Barcode // requester bar code
-	author := ""
+	author := pr.IllRequest.BibliographicInfo.Author
 	isbn := ""
 	pickupLocation := lmsAdapter.RequesterPickupLocation()
 	requestedAction := "Hold For Pickup"
@@ -512,7 +512,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       pr.ID,
 		ItemID:     getDbText(itemId),
-		Title:      pgtype.Text{}, // no title
+		Title:      getDbText(illRequest.BibliographicInfo.Title),
 		CallNumber: getDbText(callNumber),
 		Barcode:    itemBarcode,
 	})

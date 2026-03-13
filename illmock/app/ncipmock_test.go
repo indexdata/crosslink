@@ -175,11 +175,39 @@ func TestPostAcceptItemOK(t *testing.T) {
 			RequestId: ncip.RequestId{
 				RequestIdentifierValue: "req-001",
 			},
+			ItemOptionalFields: &ncip.ItemOptionalFields{
+				BibliographicDescription: &ncip.BibliographicDescription{
+					Title: "Test Item Title",
+				},
+			},
 		},
 	}
 	ncipResponse := sendReceive(t, req)
 	assert.NotNil(t, ncipResponse.AcceptItemResponse)
 	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 0)
+}
+
+func TestPostAcceptItemMissingTitle(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		AcceptItem: &ncip.AcceptItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: &ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+			RequestId: ncip.RequestId{
+				RequestIdentifierValue: "req-001",
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.AcceptItemResponse)
+	assert.Len(t, ncipResponse.AcceptItemResponse.Problem, 1)
+	assert.Equal(t, string(ncip.NeededDataMissing), ncipResponse.AcceptItemResponse.Problem[0].ProblemType.Text)
+	assert.Equal(t, "Title is required in ItemOptionalFields.BibliographicDescription for accepting the request",
+		ncipResponse.AcceptItemResponse.Problem[0].ProblemDetail)
 }
 
 func TestPostAcceptItemMissingRequestId(t *testing.T) {
@@ -191,6 +219,11 @@ func TestPostAcceptItemMissingRequestId(t *testing.T) {
 			},
 			ItemId: &ncip.ItemId{
 				ItemIdentifierValue: "item-001",
+			},
+			ItemOptionalFields: &ncip.ItemOptionalFields{
+				BibliographicDescription: &ncip.BibliographicDescription{
+					Title: "Test Item Title",
+				},
 			},
 		},
 	}
@@ -214,6 +247,11 @@ func TestPostAcceptItemFailUserId(t *testing.T) {
 			RequestId: ncip.RequestId{
 				RequestIdentifierValue: "req-001",
 			},
+			ItemOptionalFields: &ncip.ItemOptionalFields{
+				BibliographicDescription: &ncip.BibliographicDescription{
+					Title: "Test Item Title",
+				},
+			},
 		},
 	}
 	ncipResponse := sendReceive(t, req)
@@ -235,6 +273,11 @@ func TestPostAcceptItemFailItemId(t *testing.T) {
 			},
 			RequestId: ncip.RequestId{
 				RequestIdentifierValue: "req-001",
+			},
+			ItemOptionalFields: &ncip.ItemOptionalFields{
+				BibliographicDescription: &ncip.BibliographicDescription{
+					Title: "Test Item Title",
+				},
 			},
 		},
 	}
@@ -615,29 +658,6 @@ func TestPostCheckOutItemOK(t *testing.T) {
 	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
 	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 0)
 	assert.Nil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields)
-}
-
-func TestPostCheckOutItemOKWithBibliographicDescription(t *testing.T) {
-	req := ncip.NCIPMessage{
-		Version: ncip.NCIP_V2_02_XSD,
-		CheckOutItem: &ncip.CheckOutItem{
-			UserId: &ncip.UserId{
-				UserIdentifierValue: "12345",
-			},
-			ItemId: ncip.ItemId{
-				ItemIdentifierValue: "item-001",
-			},
-			ItemElementType: []ncip.SchemeValuePair{
-				{Text: "Bibliographic Description"},
-			},
-		},
-	}
-	ncipResponse := sendReceive(t, req)
-	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
-	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 0)
-	assert.NotNil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields)
-	assert.NotNil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields.BibliographicDescription)
-	assert.Equal(t, "fake title", ncipResponse.CheckOutItemResponse.ItemOptionalFields.BibliographicDescription.Title)
 }
 
 func TestPostCheckOutItemMissingUserId(t *testing.T) {

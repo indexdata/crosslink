@@ -42,6 +42,10 @@ func handleAcceptItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	} else if req.AcceptItem.ItemId != nil && strings.HasPrefix(req.AcceptItem.ItemId.ItemIdentifierValue, "f") {
 		problem = setProblem(ncip.UnknownItem, req.AcceptItem.ItemId.ItemIdentifierValue)
 	}
+	if req.AcceptItem.ItemOptionalFields == nil || req.AcceptItem.ItemOptionalFields.BibliographicDescription == nil ||
+		req.AcceptItem.ItemOptionalFields.BibliographicDescription.Title == "" {
+		problem = setProblem(ncip.NeededDataMissing, "Title is required in ItemOptionalFields.BibliographicDescription for accepting the request")
+	}
 	res.AcceptItemResponse.RequestId = &req.AcceptItem.RequestId
 	res.AcceptItemResponse.ItemId = req.AcceptItem.ItemId
 	res.AcceptItemResponse.Problem = problem
@@ -137,18 +141,6 @@ func handleCheckOutItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	}
 	res.CheckOutItemResponse.ItemId = &req.CheckOutItem.ItemId
 	res.CheckOutItemResponse.UserId = req.CheckOutItem.UserId
-	if len(problem) == 0 {
-		for _, itemElement := range req.CheckOutItem.ItemElementType {
-			if itemElement.Text == "Bibliographic Description" {
-				res.CheckOutItemResponse.ItemOptionalFields = &ncip.ItemOptionalFields{
-					BibliographicDescription: &ncip.BibliographicDescription{
-						Title: "fake title",
-					},
-				}
-				break
-			}
-		}
-	}
 	res.CheckOutItemResponse.Problem = problem
 }
 
