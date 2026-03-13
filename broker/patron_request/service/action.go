@@ -512,8 +512,8 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
 		PrID:       pr.ID,
 		ItemID:     getDbText(itemId),
-		Title:      getDbText(illRequest.BibliographicInfo.Title),
-		CallNumber: getDbText(callNumber),
+		Title:      getDbTextPtr(&illRequest.BibliographicInfo.Title),
+		CallNumber: getDbTextPtr(&callNumber),
 		Barcode:    itemBarcode,
 	})
 	if err != nil {
