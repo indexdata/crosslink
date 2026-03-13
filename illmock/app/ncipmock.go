@@ -137,6 +137,18 @@ func handleCheckOutItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 	}
 	res.CheckOutItemResponse.ItemId = &req.CheckOutItem.ItemId
 	res.CheckOutItemResponse.UserId = req.CheckOutItem.UserId
+	if len(problem) == 0 {
+		for _, itemElement := range req.CheckOutItem.ItemElementType {
+			if itemElement.Text == "Bibliographic Description" {
+				res.CheckOutItemResponse.ItemOptionalFields = &ncip.ItemOptionalFields{
+					BibliographicDescription: &ncip.BibliographicDescription{
+						Title: "fake title",
+					},
+				}
+				break
+			}
+		}
+	}
 	res.CheckOutItemResponse.Problem = problem
 }
 

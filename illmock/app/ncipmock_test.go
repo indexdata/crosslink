@@ -614,6 +614,30 @@ func TestPostCheckOutItemOK(t *testing.T) {
 	ncipResponse := sendReceive(t, req)
 	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
 	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 0)
+	assert.Nil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields)
+}
+
+func TestPostCheckOutItemOKWithBibliographicDescription(t *testing.T) {
+	req := ncip.NCIPMessage{
+		Version: ncip.NCIP_V2_02_XSD,
+		CheckOutItem: &ncip.CheckOutItem{
+			UserId: &ncip.UserId{
+				UserIdentifierValue: "12345",
+			},
+			ItemId: ncip.ItemId{
+				ItemIdentifierValue: "item-001",
+			},
+			ItemElementType: []ncip.SchemeValuePair{
+				{Text: "Bibliographic Description"},
+			},
+		},
+	}
+	ncipResponse := sendReceive(t, req)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse)
+	assert.Len(t, ncipResponse.CheckOutItemResponse.Problem, 0)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields)
+	assert.NotNil(t, ncipResponse.CheckOutItemResponse.ItemOptionalFields.BibliographicDescription)
+	assert.Equal(t, "fake title", ncipResponse.CheckOutItemResponse.ItemOptionalFields.BibliographicDescription.Title)
 }
 
 func TestPostCheckOutItemMissingUserId(t *testing.T) {

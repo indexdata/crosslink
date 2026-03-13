@@ -277,19 +277,23 @@ func TestCheckOutItem(t *testing.T) {
 		},
 	}
 	ref := "extref"
-	err := ad.CheckOutItem("req1", "item1", "barcodeid", ref)
+	title, err := ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
+	assert.Equal(t, "", title)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
 	assert.Equal(t, "barcodeid", req.UserId.UserIdentifierValue)
+	assert.Equal(t, 1, len(req.ItemElementType))
+	assert.Equal(t, "Bibliographic Description", req.ItemElementType[0].Text)
 	bytes, err := xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
 
 	ref = "\x10" // will be replaced with replacement character
-	err = ad.CheckOutItem("req1", "item1", "barcodeid", ref)
+	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
+	assert.Equal(t, "", title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	bytes, err = xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
@@ -297,8 +301,9 @@ func TestCheckOutItem(t *testing.T) {
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
-	err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.NoError(t, err)
+	assert.Equal(t, "", title)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
 }
 
@@ -504,7 +509,7 @@ func (n *ncipClientMock) CheckInItem(checkin ncip.CheckInItem) (*ncip.CheckInIte
 
 func (n *ncipClientMock) CheckOutItem(checkout ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
 	n.lastRequest = checkout
-	return nil, nil
+	return &ncip.CheckOutItemResponse{}, nil
 }
 
 func (n *ncipClientMock) CreateUserFiscalTransaction(create ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error) {

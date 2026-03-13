@@ -272,16 +272,16 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
-) error {
+) (string, error) {
 	if l.config.CheckOutItemEnabled != nil && !*l.config.CheckOutItemEnabled {
-		return nil
+		return "", nil
 	}
 	var ext *ncip.Ext
 	if externalReferenceValue != "" {
 		externalId := ncip.RequestId{RequestIdentifierValue: externalReferenceValue}
 		bytes, err := xml.Marshal(externalId)
 		if err != nil {
-			return err
+			return "", err
 		}
 		ext = &ncip.Ext{XMLContent: bytes}
 	}
@@ -289,10 +289,19 @@ func (l *LmsAdapterNcip) CheckOutItem(
 		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
 		UserId:    &ncip.UserId{UserIdentifierValue: userId},
 		ItemId:    ncip.ItemId{ItemIdentifierValue: itemBarcode},
-		Ext:       ext,
+		ItemElementType: []ncip.SchemeValuePair{
+			{Text: string(NCIPBibliographicDescription)},
+		},
+		Ext: ext,
 	}
-	_, err := l.ncipClient.CheckOutItem(arg)
-	return err
+	response, err := l.ncipClient.CheckOutItem(arg)
+	if err != nil {
+		return "", err
+	}
+	if response != nil && response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
+		return response.ItemOptionalFields.BibliographicDescription.Title, nil
+	}
+	return "", nil
 }
 
 func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId string) error {

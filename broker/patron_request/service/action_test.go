@@ -1101,8 +1101,8 @@ func (l *MockLmsAdapterFail) CheckOutItem(
 	itemBarcode string,
 	borrowerBarcode string,
 	externalReferenceValue string,
-) error {
-	return errors.New("CheckOutItem failed")
+) (string, error) {
+	return "", errors.New("CheckOutItem failed")
 }
 
 func (l *MockLmsAdapterFail) CreateUserFiscalTransaction(userId string, itemId string) error {

@@ -40,7 +40,7 @@ type LmsAdapter interface {
 		itemBarcode string,
 		userId string,
 		externalReferenceValue string,
-	) error
+	) (string, error)
 
 	CreateUserFiscalTransaction(userId string, itemId string) error
 

@@ -372,7 +372,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	}
 	itemId := items[0].Barcode
 	borrowerBarcode := patron
-	err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
+	_, err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -552,11 +552,15 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		status, result := events.LogErrorAndReturnResult(ctx, "no items for shipping in the request", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
-	err = lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
+	title, err := lmsAdapter.CheckOutItem(requestId, items[0].Barcode, userId, externalReferenceValue)
 	if err != nil {
 		status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
+	if title != "" {
+		items[0].Title = pgtype.Text{String: title, Valid: true}
+	}
+	// consider saving the items with title for future reference
 	note := encodeItemsNote(items)
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
