@@ -41,8 +41,7 @@ func handleAcceptItem(req *ncip.NCIPMessage, res *ncip.NCIPMessage) {
 		problem = setProblem(ncip.UnknownUser, req.AcceptItem.UserId.UserIdentifierValue)
 	} else if req.AcceptItem.ItemId != nil && strings.HasPrefix(req.AcceptItem.ItemId.ItemIdentifierValue, "f") {
 		problem = setProblem(ncip.UnknownItem, req.AcceptItem.ItemId.ItemIdentifierValue)
-	}
-	if req.AcceptItem.ItemOptionalFields == nil || req.AcceptItem.ItemOptionalFields.BibliographicDescription == nil ||
+	} else if req.AcceptItem.ItemOptionalFields == nil || req.AcceptItem.ItemOptionalFields.BibliographicDescription == nil ||
 		req.AcceptItem.ItemOptionalFields.BibliographicDescription.Title == "" {
 		problem = setProblem(ncip.NeededDataMissing, "Title is required in ItemOptionalFields.BibliographicDescription for accepting the request")
 	}
