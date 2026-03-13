@@ -121,6 +121,13 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 			return
 		}
 	}
+	if params.RequesterReqId != nil {
+		_, err = qb.And().Search("requester_req_id").Term(*params.RequesterReqId).Build()
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
+	}
 	qb, err = addOwnerRestriction(qb, symbol, side)
 	if err != nil {
 		addBadRequestError(ctx, w, err)

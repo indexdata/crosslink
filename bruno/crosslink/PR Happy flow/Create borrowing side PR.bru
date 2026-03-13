@@ -26,7 +26,6 @@ body:json {
           "supplierUniqueRecordId": "return-{{supplierSymbol}}::{{itemId}}"
         }
       },
-      "id": "{{prId}}",
       "patron": "{{requesterPatron}}",
       "side": "borrowing",
       "state": "NEW",
@@ -34,13 +33,13 @@ body:json {
   }
 }
 
-script:pre-request {
-  bru.setVar("prId", "{{$randomUUID}}")
-}
-
 script:post-response {
-  const jreq = req.getBody()
-  bru.setVar("prId", jreq.id)
+  const responseData = res.getBody();
+  
+  test("Capture patron request id", () => {
+      expect(responseData.id).to.be.a("string").and.not.empty;
+      bru.setVar("prId", responseData.id);
+  });
 }
 
 settings {
