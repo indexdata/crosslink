@@ -90,6 +90,26 @@ func TestGetPatronRequestsWithLimits(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
+	repo := new(PrRepoCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, common.NewTenant(""), 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	requesterReqID := "req-123"
+	params := proapi.GetPatronRequestsParams{
+		Side:           &lendingString,
+		Symbol:         &symbol,
+		RequesterReqId: &requesterReqID,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.cql) {
+		assert.Contains(t, *repo.cql, "requester_req_id = req-123")
+		assert.Contains(t, *repo.cql, "side = lending")
+		assert.Contains(t, *repo.cql, "supplier_symbol = ISIL:REQ")
+	}
+}
+
 func TestPostPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
 	toCreate := proapi.PatronRequest{Id: "1", RequesterSymbol: &symbol}
@@ -364,6 +384,16 @@ type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
 	counter int64
+}
+
+type PrRepoCapture struct {
+	PrRepoError
+	cql *string
+}
+
+func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
+	r.cql = cql
+	return []pr_db.PatronRequest{}, 0, nil
 }
 
 func (r *PrRepoError) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
