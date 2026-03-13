@@ -276,10 +276,11 @@ func TestCheckOutItem(t *testing.T) {
 			CheckOutItemEnabled: &b,
 		},
 	}
+	mock.(*ncipClientMock).honorTitle = true
 	ref := "extref"
 	title, err := ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
-	assert.Equal(t, "", title)
+	assert.Equal(t, "fake title", title)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.CheckOutItem)
 	assert.Equal(t, "req1", req.RequestId.RequestIdentifierValue)
 	assert.Equal(t, "item1", req.ItemId.ItemIdentifierValue)
@@ -290,6 +291,7 @@ func TestCheckOutItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
 
+	mock.(*ncipClientMock).honorTitle = false
 	ref = "\x10" // will be replaced with replacement character
 	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", ref)
 	assert.NoError(t, err)
@@ -411,6 +413,7 @@ func TestSetLogFunc(t *testing.T) {
 
 type ncipClientMock struct {
 	lastRequest any
+	honorTitle  bool
 	lastLogFunc ncipclient.NcipLogFunc
 }
 
@@ -509,7 +512,18 @@ func (n *ncipClientMock) CheckInItem(checkin ncip.CheckInItem) (*ncip.CheckInIte
 
 func (n *ncipClientMock) CheckOutItem(checkout ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
 	n.lastRequest = checkout
-	return &ncip.CheckOutItemResponse{}, nil
+	res := &ncip.CheckOutItemResponse{}
+	for _, itemElement := range checkout.ItemElementType {
+		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
+			res.ItemOptionalFields = &ncip.ItemOptionalFields{
+				BibliographicDescription: &ncip.BibliographicDescription{
+					Title: "fake title",
+				},
+			}
+			break
+		}
+	}
+	return res, nil
 }
 
 func (n *ncipClientMock) CreateUserFiscalTransaction(create ncip.CreateUserFiscalTransaction) (*ncip.CreateUserFiscalTransactionResponse, error) {
