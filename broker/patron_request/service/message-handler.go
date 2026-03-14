@@ -146,6 +146,13 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 			ErrorValue: err.Error(),
 		}, err)
 	}
+	contradictoryCancelResponse := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+		err := fmt.Errorf("contradictory cancel response: status=%s answerYesNo=%v", sam.StatusInfo.Status, sam.MessageInfo.AnswerYesNo)
+		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+	}
 
 	switch sam.MessageInfo.ReasonForMessage {
 	case iso18626.TypeReasonForMessageNotification:
@@ -176,7 +183,12 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
 	case iso18626.TypeStatusWillSupply:
-		if strings.Contains(sam.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
+		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
+				return contradictoryCancelResponse()
+			}
+			eventName = SupplierCancelRejected
+		} else if strings.Contains(sam.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
 			eventName = SupplierWillSupplyCond
 		} else {
 			eventName = SupplierWillSupply
@@ -197,6 +209,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	case iso18626.TypeStatusCancelled:
 		// Cancellation transition is accepted only for cancel-response messages.
 		if sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageCancelResponse {
+			if sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoN {
+				return contradictoryCancelResponse()
+			}
 			eventName = SupplierCancelAccepted
 		}
 	}
