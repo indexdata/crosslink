@@ -53,8 +53,8 @@ func (l *LmsAdapterManual) CheckOutItem(
 	itemBarcode string,
 	userId string,
 	externalReferenceValue string,
-) error {
-	return nil
+) (string, error) {
+	return "", nil
 }
 
 func (l *LmsAdapterManual) CreateUserFiscalTransaction(userId string, itemId string) error {
