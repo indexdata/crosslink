@@ -418,6 +418,19 @@
       "side": "SUPPLIER",
       "events": [
         {
+          "name": "received",
+          "desc": "Requester sends ISO Received",
+          "transition": "RECEIVED"
+        }
+      ]
+    },
+    {
+      "name": "RECEIVED",
+      "display": "Received",
+      "desc": "Requester has received the shipped item",
+      "side": "SUPPLIER",
+      "events": [
+        {
           "name": "shipped-return",
           "desc": "Requester sends ISO ShippedReturn",
           "transition": "SHIPPED_RETURN"

@@ -571,10 +571,26 @@ func TestHandleRequestingAgencyMessageShippedReturn(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 		Action: iso18626.TypeActionShippedReturn,
-	}, pr_db.PatronRequest{State: LenderStateShipped, Side: SideLending})
+	}, pr_db.PatronRequest{State: LenderStateReceived, Side: SideLending})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, LenderStateShippedReturn, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
+func TestHandleRequestingAgencyMessageReceived(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleRequestingAgencyMessage(appCtx, iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		Action: iso18626.TypeActionReceived,
+	}, pr_db.PatronRequest{State: LenderStateShipped, Side: SideLending})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, LenderStateReceived, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
 }
 
@@ -616,7 +632,7 @@ func TestHandleRequestingAgencyMessageFailToSave(t *testing.T) {
 			RequestingAgencyRequestId: patronRequestId,
 		},
 		Action: iso18626.TypeActionShippedReturn,
-	}, pr_db.PatronRequest{State: LenderStateShipped, ID: "error", Side: SideLending})
+	}, pr_db.PatronRequest{State: LenderStateReceived, ID: "error", Side: SideLending})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, "db error", err.Error())
