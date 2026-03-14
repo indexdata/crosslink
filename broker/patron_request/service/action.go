@@ -481,10 +481,14 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	// TODO: Implement outbound ISO behavior for BorrowerActionAcceptCondition so it
+	// aligns with the supplier-side RequesterCondAccepted event.
 	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	// TODO: Implement outbound ISO behavior for BorrowerActionRejectCondition so it
+	// aligns with the supplier-side RequesterCondRejected event or cancel-request flow.
 	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
