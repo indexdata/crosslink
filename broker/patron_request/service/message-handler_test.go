@@ -396,8 +396,31 @@ func TestHandleSupplyingAgencyMessageCancelResponseCancelled(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestHandleSupplyingAgencyMessageCancelResponseRejectsNonCancelledStatus(t *testing.T) {
-	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+func TestHandleSupplyingAgencyMessageCancelResponseCancelledContradictsAnswerYesNo(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	no := iso18626.TypeYesNoN
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			AnswerYesNo:      &no,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "contradictory cancel response:")
+	assert.Contains(t, err.Error(), "contradictory cancel response:")
+	assert.Equal(t, "", mockPrRepo.savedPr.ID)
+}
+
+func TestHandleSupplyingAgencyMessageCancelResponseWillSupplyRejectsCancel(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
 
 	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
@@ -407,11 +430,33 @@ func TestHandleSupplyingAgencyMessageCancelResponseRejectsNonCancelledStatus(t *
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
-	}, pr_db.PatronRequest{})
+	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageCancelResponseWillSupplyContradictsAnswerYesNo(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	yes := iso18626.TypeYesNoY
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			AnswerYesNo:      &yes,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+	}, pr_db.PatronRequest{State: BorrowerStateCancelPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "status change not allowed:")
-	assert.Contains(t, err.Error(), "status change not allowed:")
+	assert.Contains(t, resp.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue, "contradictory cancel response:")
+	assert.Contains(t, err.Error(), "contradictory cancel response:")
+	assert.Equal(t, "", mockPrRepo.savedPr.ID)
 }
 
 func TestHandleSupplyingAgencyMessageNoImplemented(t *testing.T) {

@@ -232,6 +232,11 @@
           "name": "cancel-accepted",
           "desc": "Supplier accepts cancellation",
           "transition": "CANCELLED"
+        },
+        {
+          "name": "cancel-rejected",
+          "desc": "Supplier rejects cancellation",
+          "transition": "WILL_SUPPLY"
         }
       ]
     },
@@ -441,14 +446,14 @@
       "side": "SUPPLIER",
       "actions": [
         {
-          "name": "mark-cancelled",
+          "name": "accept-cancel",
           "desc": "Confirm cancellation",
           "transitions": {
             "success": "CANCELLED"
           }
         },
         {
-          "name": "will-supply",
+          "name": "reject-cancel",
           "desc": "Resume supplying despite cancel request",
           "transitions": {
             "success": "WILL_SUPPLY"

@@ -575,6 +575,40 @@ func TestHandleInvokeLenderActionWillSupplyOK(t *testing.T) {
 	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 }
 
+func TestHandleInvokeLenderActionRejectCancel(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateCancelRequested,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+		RequesterReqID:  getDbText("req-1"),
+	}, nil)
+	action := LenderActionRejectCancel
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Nil(t, resultData)
+	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
+	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
+		assert.Equal(t, iso18626.TypeYesNoN, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+	}
+}
+
 func TestHandleInvokeLenderActionWillSupplyNcipFailed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -764,24 +798,30 @@ func TestHandleInvokeLenderActionMarkReceivedLmsFailed(t *testing.T) {
 	assert.Equal(t, "LMS CheckInItem failed", resultData.EventError.Message)
 }
 
-func TestHandleInvokeLenderActionMarkCancelled(t *testing.T) {
+func TestHandleInvokeLenderActionAcceptCancel(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateCancelRequested, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	action := LenderActionMarkCancelled
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateCancelRequested, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("req-1")}, nil)
+	action := LenderActionAcceptCancel
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData)
 	assert.Equal(t, LenderStateCancelled, mockPrRepo.savedPr.State)
+	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
+	assert.Equal(t, iso18626.TypeStatusCancelled, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
+		assert.Equal(t, iso18626.TypeYesNoY, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
+	}
 }
 
-func TestHandleInvokeLenderActionMarkCancelledMissingRequesterSymbol(t *testing.T) {
+func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
@@ -789,7 +829,7 @@ func TestHandleInvokeLenderActionMarkCancelledMissingRequesterSymbol(t *testing.
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateCancelRequested, Side: SideLending, RequesterSymbol: pgtype.Text{Valid: false, String: ""}, SupplierSymbol: getDbText("ISIL:SUP1")}, nil)
-	action := LenderActionMarkCancelled
+	action := LenderActionAcceptCancel
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -923,6 +963,7 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 type MockIso18626Handler struct {
 	mock.Mock
 	handler.Iso18626Handler
+	lastSupplyingAgencyMessage *iso18626.SupplyingAgencyMessage
 }
 
 func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
@@ -969,6 +1010,7 @@ func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedC
 	w.Write(output)
 }
 func (h *MockIso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+	h.lastSupplyingAgencyMessage = illMessage.SupplyingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR

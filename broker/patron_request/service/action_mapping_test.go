@@ -26,7 +26,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		LenderStateConditionPending:  {LenderActionCannotSupply},
 		LenderStateConditionAccepted: {LenderActionShip, LenderActionCannotSupply},
 		LenderStateShippedReturn:     {LenderActionMarkReceived},
-		LenderStateCancelRequested:   {LenderActionMarkCancelled, LenderActionWillSupply},
+		LenderStateCancelRequested:   {LenderActionAcceptCancel, LenderActionRejectCancel},
 	}
 
 	stateModel, err := LoadStateModelByName("returnables")
