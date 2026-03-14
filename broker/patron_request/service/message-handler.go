@@ -390,11 +390,10 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 	switch ram.Action {
 	case iso18626.TypeActionCancel:
 		eventName = RequesterCancelRequest
+	case iso18626.TypeActionReceived:
+		eventName = RequesterReceived
 	case iso18626.TypeActionShippedReturn:
 		eventName = RequesterShippedReturn
-	case iso18626.TypeActionReceived:
-		// TODO add event here
-		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action, false)
 	default:
 		// TODO: Map requester-side wire behavior for RequesterCondAccepted and
 		// RequesterCondRejected here instead of relying on local-only actions.

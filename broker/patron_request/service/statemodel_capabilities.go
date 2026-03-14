@@ -42,6 +42,7 @@ const (
 	LenderStateConditionPending   pr_db.PatronRequestState = "CONDITION_PENDING"
 	LenderStateConditionAccepted  pr_db.PatronRequestState = "CONDITION_ACCEPTED"
 	LenderStateShipped            pr_db.PatronRequestState = "SHIPPED"
+	LenderStateReceived           pr_db.PatronRequestState = "RECEIVED"
 	LenderStateShippedReturn      pr_db.PatronRequestState = "SHIPPED_RETURN"
 	LenderStateCancelRequested    pr_db.PatronRequestState = "CANCEL_REQUESTED"
 	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
@@ -80,6 +81,7 @@ const (
 	SupplierCancelAccepted MessageEvent = "cancel-accepted"
 	SupplierCancelRejected MessageEvent = "cancel-rejected"
 	RequesterCancelRequest MessageEvent = "cancel-request"
+	RequesterReceived      MessageEvent = "received"
 	RequesterShippedReturn MessageEvent = "shipped-return"
 	RequesterCondAccepted  MessageEvent = "conditions-accepted"
 	RequesterCondRejected  MessageEvent = "condition-rejected"
@@ -113,6 +115,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateConditionPending),
 		string(LenderStateConditionAccepted),
 		string(LenderStateShipped),
+		string(LenderStateReceived),
 		string(LenderStateShippedReturn),
 		string(LenderStateCancelRequested),
 		string(LenderStateCompleted),
@@ -151,6 +154,7 @@ func supplierBuiltInActions() []string {
 func requesterBuiltInMessageEvents() []string {
 	return uniqueSorted([]string{
 		string(RequesterCancelRequest),
+		string(RequesterReceived),
 		string(RequesterShippedReturn),
 		string(RequesterCondAccepted),
 		string(RequesterCondRejected),
