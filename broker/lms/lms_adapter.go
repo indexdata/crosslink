@@ -29,7 +29,7 @@ type LmsAdapter interface {
 		userId string,
 		pickupLocation string,
 		itemLocation string,
-	) (barcode string, callNumber string, err error)
+	) (barcode string, callNumber string, title string, err error)
 
 	CancelRequestItem(requestId string, userId string) error
 

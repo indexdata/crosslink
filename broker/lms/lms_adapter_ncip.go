@@ -165,7 +165,7 @@ func (l *LmsAdapterNcip) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, error) {
+) (string, string, string, error) {
 	var pickupLocationField *ncip.SchemeValuePair
 	if pickupLocation != "" && (l.config.RequestItemPickupLocationEnabled == nil || *l.config.RequestItemPickupLocationEnabled) {
 		pickupLocationField = &ncip.SchemeValuePair{Text: pickupLocation}
@@ -211,6 +211,9 @@ func (l *LmsAdapterNcip) RequestItem(
 			Location: []ncip.Location{location},
 		}
 	}
+	itemElements := []ncip.SchemeValuePair{
+		{Text: string(NCIPBibliographicDescription)},
+	}
 	arg := ncip.RequestItem{
 		RequestId:          &ncip.RequestId{RequestIdentifierValue: requestId},
 		BibliographicId:    []ncip.BibliographicId{bibIdField},
@@ -219,10 +222,11 @@ func (l *LmsAdapterNcip) RequestItem(
 		RequestType:        requestTypeField,
 		RequestScopeType:   requestScopeTypeField,
 		ItemOptionalFields: itemOptionalFields,
+		ItemElementType:    itemElements,
 	}
 	response, err := l.ncipClient.RequestItem(arg)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	barcode := ""
 	callNumber := ""
@@ -236,10 +240,14 @@ func (l *LmsAdapterNcip) RequestItem(
 			barcode = response.ItemOptionalFields.ItemDescription.CopyNumber
 		}
 	}
-	if barcode == "" {
-		return "", "", fmt.Errorf("missing item barcode in RequestItem response")
+	title := ""
+	if response != nil && response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
+		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	return barcode, callNumber, err
+	if barcode == "" {
+		return "", "", "", fmt.Errorf("missing item barcode in RequestItem response")
+	}
+	return barcode, callNumber, title, nil
 }
 
 func (l *LmsAdapterNcip) CancelRequestItem(requestId string, userId string) error {
@@ -285,23 +293,25 @@ func (l *LmsAdapterNcip) CheckOutItem(
 		}
 		ext = &ncip.Ext{XMLContent: bytes}
 	}
+	itemElements := []ncip.SchemeValuePair{
+		{Text: string(NCIPBibliographicDescription)},
+	}
 	arg := ncip.CheckOutItem{
-		RequestId: &ncip.RequestId{RequestIdentifierValue: requestId},
-		UserId:    &ncip.UserId{UserIdentifierValue: userId},
-		ItemId:    ncip.ItemId{ItemIdentifierValue: itemBarcode},
-		ItemElementType: []ncip.SchemeValuePair{
-			{Text: string(NCIPBibliographicDescription)},
-		},
-		Ext: ext,
+		RequestId:       &ncip.RequestId{RequestIdentifierValue: requestId},
+		UserId:          &ncip.UserId{UserIdentifierValue: userId},
+		ItemId:          ncip.ItemId{ItemIdentifierValue: itemBarcode},
+		ItemElementType: itemElements,
+		Ext:             ext,
 	}
 	response, err := l.ncipClient.CheckOutItem(arg)
 	if err != nil {
 		return "", err
 	}
+	title := ""
 	if response != nil && response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
-		return response.ItemOptionalFields.BibliographicDescription.Title, nil
+		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
-	return "", nil
+	return title, nil
 }
 
 func (l *LmsAdapterNcip) CreateUserFiscalTransaction(userId string, itemId string) error {

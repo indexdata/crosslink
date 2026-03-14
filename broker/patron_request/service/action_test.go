@@ -1030,8 +1030,8 @@ func (l *MockLmsAdapterLog) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, error) {
-	return "", "", nil
+) (string, string, string, error) {
+	return "", "", "", nil
 }
 
 func (l *MockLmsAdapterLog) InstitutionalPatron(requesterSymbol string) string {
@@ -1084,8 +1084,8 @@ func (l *MockLmsAdapterFail) RequestItem(
 	borrowerBarcode string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, error) {
-	return "", "", errors.New("RequestItem failed")
+) (string, string, string, error) {
+	return "", "", "", errors.New("RequestItem failed")
 }
 
 func (l *MockLmsAdapterFail) CancelRequestItem(requestId string, userId string) error {
