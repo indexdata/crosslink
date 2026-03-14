@@ -372,8 +372,8 @@
         },
         {
           "name": "condition-rejected",
-          "desc": "Requester rejects conditions (auto-responder may mark unfilled)",
-          "transition": "UNFILLED"
+          "desc": "Requester rejects conditions",
+          "transition": "CANCEL_REQUESTED"
         },
         {
           "name": "cancel-request",

@@ -396,6 +396,8 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 		// TODO add event here
 		return m.updatePatronRequestAndCreateRamResponse(ctx, pr, ram, &ram.Action, false)
 	default:
+		// TODO: Map requester-side wire behavior for RequesterCondAccepted and
+		// RequesterCondRejected here instead of relying on local-only actions.
 		return unsupported()
 	}
 
