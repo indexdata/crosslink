@@ -13,10 +13,14 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	c := BuiltInStateModelCapabilities()
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
+	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
 	assert.True(t, slices.Contains(c.RequesterActions, string(BorrowerActionSendRequest)))
 	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionWillSupply)))
+	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionRejectCancel)))
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
+	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))
+	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
 }
 
 func TestValidateStateModelInvalidRequesterAction(t *testing.T) {

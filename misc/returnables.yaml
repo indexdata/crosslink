@@ -154,6 +154,9 @@ states:
       - name: cancel-accepted
         desc: Supplier accepts cancellation
         transition: CANCELLED
+      - name: cancel-rejected
+        desc: Supplier rejects cancellation
+        transition: WILL_SUPPLY
 
   - name: COMPLETED
     display: Completed
@@ -242,8 +245,8 @@ states:
         desc: Requester accepts conditions
         transition: CONDITION_ACCEPTED
       - name: condition-rejected
-        desc: Requester rejects conditions (auto-responder may mark unfilled)
-        transition: UNFILLED
+        desc: Requester rejects conditions
+        transition: CANCEL_REQUESTED
       - name: cancel-request
         desc: Requester sends ISO Cancel
         transition: CANCEL_REQUESTED
@@ -271,6 +274,15 @@ states:
     desc: After marking shipped and sending ISO Loaned; NCIP CheckOutItem
     side: SUPPLIER
     events:
+      - name: received
+        desc: Requester sends ISO Received
+        transition: RECEIVED
+    
+  - name: RECEIVED
+    display: Received
+    desc: Requester has received the shipped item
+    side: SUPPLIER
+    events:
       - name: shipped-return
         desc: Requester sends ISO ShippedReturn
         transition: SHIPPED_RETURN
@@ -290,11 +302,11 @@ states:
     desc: After receiving ISO18626 Cancel from requester
     side: SUPPLIER
     actions:
-      - name: mark-cancelled
+      - name: accept-cancel
         desc: Confirm cancellation
         transitions:
           success: CANCELLED
-      - name: will-supply
+      - name: reject-cancel
         desc: Resume supplying despite cancel request
         transitions:
           success: WILL_SUPPLY

@@ -253,6 +253,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.validateLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
 		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest)
+	case LenderActionRejectCancel:
+		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
 		return a.cannotSupplyLenderRequest(ctx, pr)
 	case LenderActionAddCondition:
@@ -261,8 +263,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.shipLenderRequest(ctx, pr, lms, illRequest)
 	case LenderActionMarkReceived:
 		return a.markReceivedLenderRequest(ctx, pr, lms, illRequest)
-	case LenderActionMarkCancelled:
-		return a.markCancelledLenderRequest(ctx, pr)
+	case LenderActionAcceptCancel:
+		return a.acceptCancelLenderRequest(ctx, pr)
 	default:
 		status, result := events.LogErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
@@ -483,10 +485,14 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	// TODO: Implement outbound ISO behavior for BorrowerActionAcceptCondition so it
+	// aligns with the supplier-side RequesterCondAccepted event.
 	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	// TODO: Implement outbound ISO behavior for BorrowerActionRejectCondition so it
+	// aligns with the supplier-side RequesterCondRejected event or cancel-request flow.
 	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
@@ -623,9 +629,27 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) markCancelledLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	no := iso18626.TypeYesNoN
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled})
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			AnswerYesNo:      &no,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	yes := iso18626.TypeYesNoY
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+			AnswerYesNo:      &yes,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled})
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
