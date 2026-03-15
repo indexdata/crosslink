@@ -626,7 +626,7 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 	}
 	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
-	assert.Equal(t, "--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, "SUP1", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 

@@ -30,6 +30,7 @@ const ALMA_SUPPLIER_CONDITIONS_ASSUMED_AGREED = "Supplier assumes approval of co
 const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
+const RESHARE_LOAN_CONDITION_REJECT = "#ReShareLoanConditionRejectResponse#"
 const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
@@ -536,6 +537,7 @@ func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *is
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE + requestingAgencyMessage.Note
 		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
+			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_REJECT + requestingAgencyMessage.Note
 		}
 	}
 }

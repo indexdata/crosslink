@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
@@ -23,7 +24,6 @@ import (
 var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
 
 const COMP_MESSAGE = "pr_massage_handler"
-const RESHARE_ADD_LOAN_CONDITION = "#ReShareAddLoanCondition#"
 
 type PatronRequestMessageHandler struct {
 	prRepo               pr_db.PrRepo
@@ -188,7 +188,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 				return contradictoryCancelResponse()
 			}
 			eventName = SupplierCancelRejected
-		} else if strings.Contains(sam.MessageInfo.Note, RESHARE_ADD_LOAN_CONDITION) {
+		} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
 			eventName = SupplierWillSupplyCond
 		} else {
 			eventName = SupplierWillSupply
@@ -377,26 +377,33 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 		}, err)
 	}
 
-	if ram.Action == iso18626.TypeActionNotification {
-		// Notifications are acknowledged but must not drive state transitions.
-		notErr := m.extractRamNotifications(ctx, pr, ram)
-		if notErr != nil {
-			ctx.Logger().Error("failed to save ram notifications", "error", notErr)
-		}
-		return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
-	}
-
 	eventName := MessageEvent("")
 	switch ram.Action {
+	case iso18626.TypeActionNotification:
+		if strings.Contains(ram.Note, shim.RESHARE_LOAN_CONDITION_AGREE) {
+			eventName = RequesterCondAccepted
+		} else {
+			// Notifications are acknowledged but must not drive state transitions.
+			notErr := m.extractRamNotifications(ctx, pr, ram)
+			if notErr != nil {
+				ctx.Logger().Error("failed to save ram notifications", "error", notErr)
+			}
+			return createRAMResponse(ram, iso18626.TypeMessageStatusOK, &ram.Action, nil, nil)
+		}
 	case iso18626.TypeActionCancel:
-		eventName = RequesterCancelRequest
+		if strings.Contains(ram.Note, shim.RESHARE_LOAN_CONDITION_REJECT) {
+			eventName = RequesterCondRejected
+		} else {
+			// TODO: ReShare currently does not send an explicit reject-condition marker on
+			// cancel messages. Detect regular cancel vs condition rejection from the
+			// incoming message shape once that distinction is known.
+			eventName = RequesterCancelRequest
+		}
 	case iso18626.TypeActionReceived:
 		eventName = RequesterReceived
 	case iso18626.TypeActionShippedReturn:
 		eventName = RequesterShippedReturn
 	default:
-		// TODO: Map requester-side wire behavior for RequesterCondAccepted and
-		// RequesterCondRejected here instead of relying on local-only actions.
 		return unsupported()
 	}
 
