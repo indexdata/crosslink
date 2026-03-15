@@ -634,6 +634,29 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 	assert.Equal(t, "BROKER", msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestIso18626AlmaShimRequestingMessageOriginalCancelKeepsSupplyingAgencyId(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType: iso18626.TypeSchemeValuePair{
+						Text: "ISIL",
+					},
+					AgencyIdValue: "BROKER",
+				},
+			},
+			Action: iso18626.TypeActionCancel,
+		},
+	}
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+
+	assert.Equal(t, iso18626.TypeActionCancel, msg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "BROKER", msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
 func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	OFFERED_COSTS = true // ensure that offered costs are enabled
 	msg := iso18626.ISO18626Message{
@@ -823,6 +846,46 @@ func TestProcessItemIdOneItemSimpleReShare(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestIso18626ReShareShimRequestingMessageSupplierCancelMarkedAsConditionReject(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+					AgencyIdValue: "SUP1",
+				},
+			},
+			Action: iso18626.TypeActionCancel,
+		},
+	}
+
+	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(&msg, nil, nil)
+
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT, resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "SUP1", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
+func TestIso18626ReShareShimRequestingMessageBrokerCancelNotMarkedAsConditionReject(t *testing.T) {
+	msg := iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+					AgencyIdValue: "BROKER",
+				},
+			},
+			Action: iso18626.TypeActionCancel,
+		},
+	}
+
+	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(&msg, nil, nil)
+
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Empty(t, resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestProcessItemIdOneItemReShare(t *testing.T) {

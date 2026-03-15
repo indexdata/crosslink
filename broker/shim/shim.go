@@ -14,6 +14,7 @@ import (
 
 var NOTE_FIELD_SEP = utils.GetEnv("NOTE_FIELD_SEP", ", ")
 var OFFERED_COSTS, _ = utils.GetEnvBool("OFFERED_COSTS", false)
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 const DELIVERY_ADDRESS_BEGIN = "#SHIP_TO#"
 const DELIVERY_ADDRESS_END = "#ST_END#"
@@ -84,8 +85,10 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 	if message.RequestingAgencyMessage != nil {
 		copyRam := *message.RequestingAgencyMessage
 		copyMessage.RequestingAgencyMessage = &copyRam
-		i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
-		if copyMessage.RequestingAgencyMessage.Action == iso18626.TypeActionCancel && supplier != nil {
+		conditionNote := i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
+		if conditionNote == RESHARE_LOAN_CONDITION_REJECT && supplier != nil {
+			// condition reject is handled as a non-terminal Cancel addressed to the supplier
+			// regular Cancel is always terminal (addressed to broker)
 			symbol := strings.SplitN(supplier.SupplierSymbol, ":", 2)
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbol[0]
 			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]
@@ -529,17 +532,20 @@ func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyM
 	}
 }
 
-func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
+func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) string {
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
 		note := rsNoteRegexp.ReplaceAllString(requestingAgencyMessage.Note, "") //this is only needed to test human-notes from ReShare
 		note = edgeNonWord.ReplaceAllString(note, "")
 		if strings.EqualFold(note, ACCEPT) {
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE + requestingAgencyMessage.Note
+			return RESHARE_LOAN_CONDITION_AGREE
 		} else if strings.EqualFold(note, REJECT) {
 			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_REJECT + requestingAgencyMessage.Note
+			return RESHARE_LOAN_CONDITION_REJECT
 		}
 	}
+	return ""
 }
 
 func (i *Iso18626AlmaShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
@@ -599,12 +605,31 @@ func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.ISO18626M
 		return message
 	}
 	copyMessage := *message
+	if message.RequestingAgencyMessage != nil {
+		copyRam := *message.RequestingAgencyMessage
+		copyMessage.RequestingAgencyMessage = &copyRam
+		i.markConditionReject(copyMessage.RequestingAgencyMessage)
+	}
 	if message.SupplyingAgencyMessage != nil {
 		copySam := *message.SupplyingAgencyMessage
 		copyMessage.SupplyingAgencyMessage = &copySam
 		i.unifyItem(copyMessage.SupplyingAgencyMessage)
 	}
 	return &copyMessage
+}
+
+func (i *Iso18626ReShareShim) markConditionReject(requestingAgencyMessage *iso18626.RequestingAgencyMessage) {
+	if requestingAgencyMessage.Action != iso18626.TypeActionCancel {
+		return
+	}
+	supplier := requestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
+		requestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+	if supplier == brokerSymbol || strings.Contains(requestingAgencyMessage.Note, RESHARE_LOAN_CONDITION_REJECT) {
+		return
+	}
+	// we assume that non-terminal Cancel (addressed to supplier) is a condition reject since
+	// ReShare does not differentiate when sending it
+	requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_REJECT + requestingAgencyMessage.Note
 }
 
 func (i *Iso18626ReShareShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
