@@ -235,9 +235,9 @@ func TestRequestItem(t *testing.T) {
 	assert.Nil(t, req.ItemOptionalFields)
 
 	mock.(*ncipClientMock).nilResponse = true
-	_, _, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	_, _, _, err = ad.RequestItem("req1", "item2", "testuser", "loc", "itemloc")
 	assert.Error(t, err)
-	assert.Equal(t, "missing item barcode in RequestItem response", err.Error())
+	assert.Equal(t, "empty response from RequestItem", err.Error())
 }
 
 func TestCancelRequestItem(t *testing.T) {
