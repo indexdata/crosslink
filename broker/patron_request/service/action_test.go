@@ -178,7 +178,9 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
 	lmsCreator := new(MockLmsCreator)
-	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	lmsAdapter := new(mockLmsAdapter)
+	lmsAdapter.On("AcceptItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(lmsAdapter, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
@@ -189,6 +191,13 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateReceived, mockPrRepo.savedPr.State)
+	lmsAdapter.AssertNumberOfCalls(t, "AcceptItem", 2)
+	if assert.Len(t, lmsAdapter.Calls, 2) {
+		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[0].Method)
+		assert.Equal(t, "1234", lmsAdapter.Calls[0].Arguments.String(0))
+		assert.Equal(t, "AcceptItem", lmsAdapter.Calls[1].Method)
+		assert.Equal(t, "5678", lmsAdapter.Calls[1].Arguments.String(0))
+	}
 }
 
 func TestHandleInvokeActionReceiveAcceptItemFailed(t *testing.T) {
@@ -789,13 +798,13 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
-	lmsAdapter.On("CheckOutItem", mock.Anything, "1234", mock.Anything, mock.Anything).Return("new title", nil)
+	lmsAdapter.On("CheckOutItem", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("new title", nil)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lmsAdapter, nil)
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}, {Barcode: "5678"}}, nil)
 
 	action := LenderActionShip
 
@@ -804,9 +813,11 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Nil(t, resultData)
 	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
-	assert.Len(t, mockPrRepo.savedItems, 1)
+	assert.Len(t, mockPrRepo.savedItems, 2)
 	assert.Equal(t, "1234", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "new title", mockPrRepo.savedItems[0].Title.String)
+	assert.Equal(t, "5678", mockPrRepo.savedItems[1].Barcode)
+	assert.Equal(t, "new title", mockPrRepo.savedItems[1].Title.String)
 }
 
 func TestHandleInvokeLenderActionShipNewTitleFail(t *testing.T) {
@@ -1338,4 +1349,19 @@ func (m *mockLmsAdapter) RequestItem(
 ) (barcode string, callNumber string, title string, err error) {
 	args := m.Called(requestId, itemId, userId, pickupLocation, itemLocation)
 	return args.String(0), args.String(1), args.String(2), args.Error(3)
+}
+
+func (m *mockLmsAdapter) AcceptItem(
+	itemId string,
+	requestId string,
+	userId string,
+	author string,
+	title string,
+	isbn string,
+	callNumber string,
+	pickupLocation string,
+	requestedAction string,
+) error {
+	args := m.Called(itemId, requestId, userId, author, title, isbn, callNumber, pickupLocation, requestedAction)
+	return args.Error(0)
 }
