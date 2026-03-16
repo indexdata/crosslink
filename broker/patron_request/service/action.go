@@ -751,8 +751,5 @@ func (a *PatronRequestActionService) getItems(ctx common.ExtendedContext, pr pr_
 	if len(items) == 0 {
 		return nil, errors.New("no items found for patron request")
 	}
-	if len(items) > 1 {
-		ctx.Logger().Warn("multiple items found for patron request, using the first one", "itemCount", len(items))
-	}
 	return items, nil
 }
