@@ -621,7 +621,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	assert.Equal(t, LenderActionWillSupply, *mockEventBus.createdTaskData[0].Action)
 }
 
-func TestHandleInvokeLenderActionWillSupplyOK1(t *testing.T) {
+func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
@@ -643,7 +643,7 @@ func TestHandleInvokeLenderActionWillSupplyOK1(t *testing.T) {
 	assert.Equal(t, "title1", mockPrRepo.savedItems[0].Title.String)
 }
 
-func TestHandleInvokeLenderActionWillSupplyOK2(t *testing.T) {
+func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsAdapter := new(mockLmsAdapter)
