@@ -586,20 +586,21 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	for i := range items {
-		title, err := lmsAdapter.CheckOutItem(requestId, items[i].Barcode, userId, externalReferenceValue)
+		item := &items[i]
+		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
 			status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 		}
 		if title != "" {
-			items[i].Title = getDbText(title)
+			item.Title = getDbText(title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:         items[i].ID,
-				CreatedAt:  items[i].CreatedAt,
-				PrID:       items[i].PrID,
-				ItemID:     items[i].ItemID,
-				Title:      items[i].Title,
-				CallNumber: items[i].CallNumber,
+				ID:         item.ID,
+				CreatedAt:  item.CreatedAt,
+				PrID:       item.PrID,
+				ItemID:     item.ItemID,
+				Title:      item.Title,
+				CallNumber: item.CallNumber,
 				Barcode:    items[i].Barcode,
 			})
 			if err != nil {
