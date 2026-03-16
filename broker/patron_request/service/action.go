@@ -594,7 +594,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		if title != "" {
 			item.Title = getDbText(title)
 			_, err = a.prRepo.SaveItem(ctx, pr_db.SaveItemParams{
-				ID:         item.ID,
+				ID:         (&item).ID,
 				CreatedAt:  item.CreatedAt,
 				PrID:       item.PrID,
 				ItemID:     item.ItemID,
