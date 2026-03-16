@@ -159,10 +159,11 @@ func TestRequestItem(t *testing.T) {
 		},
 		ncipClient: mock,
 	}
-	barcode, callNumber, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
+	barcode, callNumber, title, err := ad.RequestItem("req1", "item1", "testuser", "pickloc", itemLocation)
 	assert.NoError(t, err)
 	assert.Equal(t, "123.456", barcode)
 	assert.Equal(t, "QA123 .A45", callNumber)
+	assert.Equal(t, "", title)
 	req := mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "testuser", req.UserId.UserIdentifierValue)
 	assert.Equal(t, "item1", req.BibliographicId[0].BibliographicRecordId.BibliographicRecordIdentifier)
@@ -177,7 +178,8 @@ func TestRequestItem(t *testing.T) {
 		config:     directory.LmsConfig{},
 		ncipClient: mock,
 	}
-	barcode, callNumber, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
+	mock.(*ncipClientMock).honorTitle = true
+	barcode, callNumber, title, err = ad.RequestItem("req1", "item1", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "123.456", barcode)
@@ -190,7 +192,7 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	barcode, callNumber, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
+	barcode, callNumber, title, err = ad.RequestItem("req1", "copynumber", "testuser", "loc", "itemloc")
 	assert.NoError(t, err)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Equal(t, "234.567", barcode)
@@ -203,7 +205,7 @@ func TestRequestItem(t *testing.T) {
 	assert.Equal(t, "Page", req.RequestType.Text)
 	assert.Equal(t, "Item", req.RequestScopeType.Text)
 
-	_, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	_, _, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
 	assert.Error(t, err)
 	assert.Equal(t, "missing item barcode in RequestItem response", err.Error())
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
@@ -223,13 +225,19 @@ func TestRequestItem(t *testing.T) {
 		ncipClient: mock,
 	}
 	mock.(*ncipClientMock).lastRequest = nil
-	barcode, callNumber, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
+	barcode, callNumber, title, err = ad.RequestItem("req1", "item1", "testuser", "pickloc", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "123.456", barcode)
 	assert.Equal(t, "QA123 .A45", callNumber)
+	assert.Equal(t, "request title", title)
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
 	assert.Nil(t, req.ItemOptionalFields)
+
+	mock.(*ncipClientMock).nilResponse = true
+	_, _, _, err = ad.RequestItem("req1", "item2", "testuser", "loc", "itemloc")
+	assert.Error(t, err)
+	assert.Equal(t, "empty response from RequestItem", err.Error())
 }
 
 func TestCancelRequestItem(t *testing.T) {
@@ -300,6 +308,11 @@ func TestCheckOutItem(t *testing.T) {
 	bytes, err = xml.Marshal(ncip.RequestId{RequestIdentifierValue: ref})
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
+
+	mock.(*ncipClientMock).nilResponse = true
+	_, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	assert.Error(t, err)
+	assert.Equal(t, "empty response from CheckOutItem", err.Error())
 
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
@@ -414,6 +427,7 @@ func TestSetLogFunc(t *testing.T) {
 type ncipClientMock struct {
 	lastRequest any
 	honorTitle  bool
+	nilResponse bool
 	lastLogFunc ncipclient.NcipLogFunc
 }
 
@@ -476,28 +490,30 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 	if itemId == "empty" {
 		return &ncip.RequestItemResponse{}, nil
 	}
-	if itemId == "copynumber" {
-		return &ncip.RequestItemResponse{
-			ItemOptionalFields: &ncip.ItemOptionalFields{
-				ItemDescription: &ncip.ItemDescription{
-					CallNumber: "QA123 .A45",
-					CopyNumber: "234.567",
-				},
-			},
-		}, nil
+	if n.nilResponse {
+		return nil, nil
 	}
-	return &ncip.RequestItemResponse{
-		ItemId: &ncip.ItemId{
-			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
-			ItemIdentifierValue: "123.456",
-		},
+	res := &ncip.RequestItemResponse{
 		ItemOptionalFields: &ncip.ItemOptionalFields{
 			ItemDescription: &ncip.ItemDescription{
 				CallNumber: "QA123 .A45",
 				CopyNumber: "234.567",
 			},
 		},
-	}, nil
+	}
+	if itemId != "copynumber" {
+		res.ItemId = &ncip.ItemId{
+			ItemIdentifierType:  &ncip.SchemeValuePair{Text: "Item Barcode"},
+			ItemIdentifierValue: "123.456",
+		}
+	}
+	for _, itemElement := range request.ItemElementType {
+		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
+			res.ItemOptionalFields.BibliographicDescription = &ncip.BibliographicDescription{Title: "request title"}
+			break
+		}
+	}
+	return res, nil
 }
 
 func (n *ncipClientMock) CancelRequestItem(cancel ncip.CancelRequestItem) (*ncip.CancelRequestItemResponse, error) {
@@ -512,6 +528,9 @@ func (n *ncipClientMock) CheckInItem(checkin ncip.CheckInItem) (*ncip.CheckInIte
 
 func (n *ncipClientMock) CheckOutItem(checkout ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
 	n.lastRequest = checkout
+	if n.nilResponse {
+		return nil, nil
+	}
 	res := &ncip.CheckOutItemResponse{}
 	for _, itemElement := range checkout.ItemElementType {
 		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
