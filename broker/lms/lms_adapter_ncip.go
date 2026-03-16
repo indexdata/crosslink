@@ -228,6 +228,9 @@ func (l *LmsAdapterNcip) RequestItem(
 	if err != nil {
 		return "", "", "", err
 	}
+	if response == nil {
+		return "", "", "", fmt.Errorf("empty response from RequestItem")
+	}
 	barcode := ""
 	callNumber := ""
 	if response.ItemId != nil && response.ItemId.ItemIdentifierType != nil &&
@@ -241,7 +244,7 @@ func (l *LmsAdapterNcip) RequestItem(
 		}
 	}
 	title := ""
-	if response != nil && response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
+	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
 	if barcode == "" {
@@ -307,8 +310,11 @@ func (l *LmsAdapterNcip) CheckOutItem(
 	if err != nil {
 		return "", err
 	}
+	if response == nil {
+		return "", fmt.Errorf("empty response from CheckOutItem")
+	}
 	title := ""
-	if response != nil && response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
+	if response.ItemOptionalFields != nil && response.ItemOptionalFields.BibliographicDescription != nil {
 		title = response.ItemOptionalFields.BibliographicDescription.Title
 	}
 	return title, nil

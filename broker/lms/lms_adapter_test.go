@@ -233,6 +233,11 @@ func TestRequestItem(t *testing.T) {
 	req = mock.(*ncipClientMock).lastRequest.(ncip.RequestItem)
 	assert.Nil(t, req.PickupLocation)
 	assert.Nil(t, req.ItemOptionalFields)
+
+	mock.(*ncipClientMock).nilResponse = true
+	_, _, _, err = ad.RequestItem("req1", "empty", "testuser", "loc", "itemloc")
+	assert.Error(t, err)
+	assert.Equal(t, "missing item barcode in RequestItem response", err.Error())
 }
 
 func TestCancelRequestItem(t *testing.T) {
@@ -304,12 +309,18 @@ func TestCheckOutItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, bytes, req.Ext.XMLContent)
 
+	mock.(*ncipClientMock).nilResponse = true
+	_, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
+	assert.Error(t, err)
+	assert.Equal(t, "empty response from CheckOutItem", err.Error())
+
 	b = false
 	mock.(*ncipClientMock).lastRequest = nil
 	title, err = ad.CheckOutItem("req1", "item1", "barcodeid", "extref")
 	assert.NoError(t, err)
 	assert.Equal(t, "", title)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
+
 }
 
 func TestCreateUserFiscalTransaction(t *testing.T) {
@@ -417,6 +428,7 @@ func TestSetLogFunc(t *testing.T) {
 type ncipClientMock struct {
 	lastRequest any
 	honorTitle  bool
+	nilResponse bool
 	lastLogFunc ncipclient.NcipLogFunc
 }
 
@@ -479,6 +491,9 @@ func (n *ncipClientMock) RequestItem(request ncip.RequestItem) (*ncip.RequestIte
 	if itemId == "empty" {
 		return &ncip.RequestItemResponse{}, nil
 	}
+	if n.nilResponse {
+		return nil, nil
+	}
 	res := &ncip.RequestItemResponse{
 		ItemOptionalFields: &ncip.ItemOptionalFields{
 			ItemDescription: &ncip.ItemDescription{
@@ -514,6 +529,9 @@ func (n *ncipClientMock) CheckInItem(checkin ncip.CheckInItem) (*ncip.CheckInIte
 
 func (n *ncipClientMock) CheckOutItem(checkout ncip.CheckOutItem) (*ncip.CheckOutItemResponse, error) {
 	n.lastRequest = checkout
+	if n.nilResponse {
+		return nil, nil
+	}
 	res := &ncip.CheckOutItemResponse{}
 	for _, itemElement := range checkout.ItemElementType {
 		if n.honorTitle && itemElement.Text == "Bibliographic Description" {
