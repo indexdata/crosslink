@@ -320,7 +320,6 @@ func TestCheckOutItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "", title)
 	assert.Nil(t, mock.(*ncipClientMock).lastRequest)
-
 }
 
 func TestCreateUserFiscalTransaction(t *testing.T) {
