@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/lms"
 	"github.com/indexdata/crosslink/broker/ncipclient"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -367,7 +368,13 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	if assert.NotNil(t, resultData) && assert.NotNil(t, resultData.IncomingMessage) {
+		assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	}
+	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeActionNotification, mockIso18626Handler.lastRequestingAgencyMessage.Action)
+		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_AGREE, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+	}
 	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
 }
 
@@ -383,7 +390,13 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	if assert.NotNil(t, resultData) && assert.NotNil(t, resultData.IncomingMessage) {
+		assert.Equal(t, iso18626.TypeMessageStatusOK, resultData.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	}
+	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
+		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
 }
 
@@ -963,7 +976,8 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 type MockIso18626Handler struct {
 	mock.Mock
 	handler.Iso18626Handler
-	lastSupplyingAgencyMessage *iso18626.SupplyingAgencyMessage
+	lastRequestingAgencyMessage *iso18626.RequestingAgencyMessage
+	lastSupplyingAgencyMessage  *iso18626.SupplyingAgencyMessage
 }
 
 func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
@@ -989,6 +1003,7 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 }
 
 func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+	h.lastRequestingAgencyMessage = illMessage.RequestingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR

@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -352,7 +353,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived)
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived, "")
 	if httpStatus == nil {
 		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
 	}
@@ -414,7 +415,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn)
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn, "")
 	if httpStatus == nil {
 		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
 	}
@@ -425,7 +426,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction) (events.EventStatus, *events.EventResult, *int) {
+func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
 		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
@@ -462,6 +463,7 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 				RequestingAgencyRequestId: pr.ID,
 			},
 			Action: action,
+			Note:   note,
 		},
 	}
 	w := NewResponseCaptureWriter()
@@ -473,7 +475,7 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 
 func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel)
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, "")
 	if httpStatus == nil {
 		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
 	}
@@ -485,15 +487,29 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
-	// TODO: Implement outbound ISO behavior for BorrowerActionAcceptCondition so it
-	// aligns with the supplier-side RequesterCondAccepted event.
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionNotification, shim.RESHARE_LOAN_CONDITION_AGREE)
+	if httpStatus == nil {
+		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
-	// TODO: Implement outbound ISO behavior for BorrowerActionRejectCondition so it
-	// aligns with the supplier-side RequesterCondRejected event or cancel-request flow.
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, shim.RESHARE_LOAN_CONDITION_REJECT)
+	if httpStatus == nil {
+		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
+		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
@@ -549,7 +565,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			Note:             RESHARE_ADD_LOAN_CONDITION, // TODO add action params
+			Note:             shim.RESHARE_ADD_LOAN_CONDITION, // TODO add action params
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
