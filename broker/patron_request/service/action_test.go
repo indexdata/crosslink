@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -184,7 +185,20 @@ func TestHandleInvokeActionReceiveOK(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}, {Barcode: "5678"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{
+			ID:        "item1",
+			PrID:      patronRequestId,
+			Barcode:   "1234",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+		{
+			ID:        "item2",
+			PrID:      patronRequestId,
+			Barcode:   "5678",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+	}, nil)
 
 	action := BorrowerActionReceive
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -783,7 +797,20 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}, {Barcode: "5678"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{
+			ID:        "item1",
+			PrID:      patronRequestId,
+			Barcode:   "1234",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+		{
+			ID:        "item2",
+			PrID:      patronRequestId,
+			Barcode:   "5678",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+	}, nil)
 
 	action := LenderActionShip
 
@@ -804,7 +831,20 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
-	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}, {Barcode: "5678"}}, nil)
+	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{
+		{
+			ID:        "item1",
+			PrID:      patronRequestId,
+			Barcode:   "1234",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+		{
+			ID:        "item2",
+			PrID:      patronRequestId,
+			Barcode:   "5678",
+			CreatedAt: pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+	}, nil)
 
 	action := LenderActionShip
 
@@ -814,8 +854,10 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	assert.Nil(t, resultData)
 	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 2)
+	assert.Equal(t, "item1", mockPrRepo.savedItems[0].ID)
 	assert.Equal(t, "1234", mockPrRepo.savedItems[0].Barcode)
 	assert.Equal(t, "new title", mockPrRepo.savedItems[0].Title.String)
+	assert.Equal(t, "item2", mockPrRepo.savedItems[1].ID)
 	assert.Equal(t, "5678", mockPrRepo.savedItems[1].Barcode)
 	assert.Equal(t, "new title", mockPrRepo.savedItems[1].Title.String)
 }
