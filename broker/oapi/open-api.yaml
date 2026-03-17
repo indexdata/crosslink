@@ -465,6 +465,15 @@ components:
         requesterRequestId:
           type: string
           description: Requester patron request ID
+        lastAction:
+          type: string
+          description: Latest requester action
+        lastActionOutcome:
+          type: string
+          description: Latest requester action outcome
+        lastActionResult:
+          type: string
+          description: Latest requester action result
       required:
         - id
         - timestamp

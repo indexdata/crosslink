@@ -12,21 +12,24 @@ LIMIT $1 OFFSET $2;
 
 -- name: UpdatePatronRequest :one
 UPDATE patron_request
-SET timestamp         = $2,
-    ill_request       = $3,
-    state             = $4,
-    side              = $5,
-    patron            = $6,
-    requester_symbol  = $7,
-    supplier_symbol   = $8,
-    tenant            = $9,
-    requester_req_id  = $10
+SET timestamp           = $2,
+    ill_request         = $3,
+    state               = $4,
+    side                = $5,
+    patron              = $6,
+    requester_symbol    = $7,
+    supplier_symbol     = $8,
+    tenant              = $9,
+    requester_req_id    = $10,
+    last_action         = $11,
+    last_action_outcome = $12,
+    last_action_result  = $13
 WHERE id = $1
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, last_action, last_action_outcome, last_action_result)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec
