@@ -727,15 +727,21 @@ func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventS
 }
 
 func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContext, pr pr_db.PatronRequest) {
-	prToUpdate, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
-	if err != nil {
-		ctx.Logger().Error("failed to read patron request", "error", err)
+	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, pr.ID)
+		if err != nil {
+			ctx.Logger().Error("failed to read patron request", "error", err)
+			return nil
+		}
+		prToUpdate.NeedsAttention = true
+		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
+		if err != nil {
+			ctx.Logger().Error("failed to update patron request", "error", err)
+		}
+		return nil
+	})
+	if err != nil { // Just to ignore warning about ignored error, because it is always nil
 		return
-	}
-	prToUpdate.NeedsAttention = true
-	_, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
-	if err != nil {
-		ctx.Logger().Error("failed to update patron request", "error", err)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 type PrRepo interface {
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
+	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
@@ -46,6 +47,11 @@ func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
 
 func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error) {
 	row, err := r.queries.GetPatronRequestById(ctx, r.GetConnOrTx(), id)
+	return row.PatronRequest, err
+}
+
+func (r *PgPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error) {
+	row, err := r.queries.GetPatronRequestByIdForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.PatronRequest, err
 }
 
