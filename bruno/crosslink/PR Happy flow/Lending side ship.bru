@@ -29,6 +29,10 @@ body:json {
   }
 }
 
+script:pre-request {
+  bru.sleep(500)
+}
+
 settings {
   encodeUrl: true
   timeout: 0
