@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16
     container_name: crosslink_postgres
     environment:
       POSTGRES_USER: crosslink
