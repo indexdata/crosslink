@@ -157,9 +157,9 @@ jobs:
         exit 1
 
     - name: Run Bruno collection (headless)
+      working-directory: bruno/crosslink
       run: |
-        npx --yes @usebruno/cli@latest run "bruno/crosslink" \
-          --folder "PR Happy flow" \
+        npx --yes @usebruno/cli@latest run \
           --env LocalDev \
           --env-var userPassword="dummy"
 
