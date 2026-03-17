@@ -158,7 +158,8 @@ jobs:
 
     - name: Run Bruno collection (headless)
       run: |
-        npx --yes @usebruno/cli@latest run "bruno/crosslink/PR Happy flow" \
+        npx --yes @usebruno/cli@latest run "bruno/crosslink" \
+          --folder "PR Happy flow" \
           --env LocalDev \
           --env-var userPassword="dummy"
 
