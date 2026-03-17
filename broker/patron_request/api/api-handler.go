@@ -351,7 +351,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 	if !actionMapping.IsActionAvailable(*pr, pr_db.PatronRequestAction(action.Action)) {
-		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id))
+		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id+" in state "+string(pr.State)))
 		return
 	}
 	eventAction := pr_db.PatronRequestAction(action.Action)
