@@ -1,3 +1,4 @@
+-- when changing patron_request members, also update rows.Scan args in prcql.go
 CREATE TABLE patron_request
 (
     id                  VARCHAR PRIMARY KEY,
