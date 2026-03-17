@@ -473,7 +473,7 @@ components:
           description: Latest requester action outcome
         lastActionResult:
           type: string
-          description: Latest requester action result
+          description: Latest requester action status ("NEW", "PROCESSING", "SUCCESS", "PROBLEM", "ERROR")
       required:
         - id
         - timestamp
