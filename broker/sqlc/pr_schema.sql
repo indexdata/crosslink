@@ -47,6 +47,14 @@ CREATE TABLE notification
     acknowledged_at TIMESTAMP
 );
 
+CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)
+RETURNS timestamp
+LANGUAGE sql
+IMMUTABLE STRICT
+AS $$
+SELECT $1::timestamp;
+$$;
+
 CREATE OR REPLACE VIEW patron_request_search_view AS
 SELECT
     pr.*,
@@ -67,5 +75,5 @@ SELECT
     ) AS has_unread_notification,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
-    (pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate')::timestamptz AS needed_at
+    immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at
 FROM patron_request pr;

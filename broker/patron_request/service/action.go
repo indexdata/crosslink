@@ -737,7 +737,7 @@ func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContex
 		return err
 	})
 	if err != nil {
-		ctx.Logger().Error("failed to set need attention", "error", err)
+		ctx.Logger().Error("failed to set needs attention", "pr_id", pr.ID, "error", err)
 		return
 	}
 }
