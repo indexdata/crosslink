@@ -580,6 +580,8 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
 		RequesterReqID:  getDbText(&id),
+		// LastAction, LastActionOutcome and LastActionResult are not set on creation
+		// they will be updated when the first action is executed.
 	}, nil
 }
 
