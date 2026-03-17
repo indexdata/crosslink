@@ -730,17 +730,14 @@ func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContex
 	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, pr.ID)
 		if err != nil {
-			ctx.Logger().Error("failed to read patron request", "error", err)
-			return nil
+			return err
 		}
 		prToUpdate.NeedsAttention = true
 		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
-		if err != nil {
-			ctx.Logger().Error("failed to update patron request", "error", err)
-		}
-		return nil
+		return err
 	})
-	if err != nil { // Just to ignore warning about ignored error, because it is always nil
+	if err != nil {
+		ctx.Logger().Error("failed to set need attention", "error", err)
 		return
 	}
 }
