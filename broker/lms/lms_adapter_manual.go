@@ -36,8 +36,8 @@ func (l *LmsAdapterManual) RequestItem(
 	userId string,
 	pickupLocation string,
 	itemLocation string,
-) (string, string, error) {
-	return "", "", nil
+) (string, string, string, error) {
+	return "", "", "", nil
 }
 
 func (l *LmsAdapterManual) CancelRequestItem(requestId string, userId string) error {
