@@ -146,7 +146,7 @@ jobs:
     - name: Wait for broker readiness
       run: |
         for i in {1..60}; do
-          if curl -sS -o /dev/null http://localhost:8080/broker; then
+          if curl -sSf -o /dev/null http://localhost:8080/healthz; then
             exit 0
           fi
           sleep 2
