@@ -103,6 +103,15 @@ func TestCrud(t *testing.T) {
 			SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
 			Title:                  "Typed request round trip",
 		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceLevel: &iso18626.TypeSchemeValuePair{
+				Text: "Copy",
+			},
+			ServiceType: iso18626.TypeServiceTypeCopy,
+			NeedBeforeDate: &utils.XSDDateTime{
+				Time: time.Now().Add(24 * time.Hour),
+			},
+		},
 	}
 	id := uuid.NewString()
 	newPr := proapi.CreatePatronRequest{
@@ -165,6 +174,18 @@ func TestCrud(t *testing.T) {
 
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
+
+	// GET list with all query params
+	respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DVALIDATED%20and%20"+
+		"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
+		"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20needs_attention%3Dfalse%20and%20"+
+		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
+		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 1)
 
 	// GET by id with symbol and side
 	thisPrPath := basePath + "/" + *newPr.Id

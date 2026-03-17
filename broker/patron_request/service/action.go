@@ -118,7 +118,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		}
 	}
 
-	if execResult.outcome == ActionOutcomeFailure {
+	if execResult.outcome == ActionOutcomeFailure && !updatedPr.NeedsAttention {
 		a.setNeedsAttention(ctx, updatedPr)
 	}
 	return execResult.status, execResult.result
@@ -731,6 +731,9 @@ func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContex
 		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, pr.ID)
 		if err != nil {
 			return err
+		}
+		if prToUpdate.NeedsAttention {
+			return nil
 		}
 		prToUpdate.NeedsAttention = true
 		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
