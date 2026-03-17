@@ -601,7 +601,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 				ItemID:     item.ItemID,
 				Title:      item.Title,
 				CallNumber: item.CallNumber,
-				Barcode:    items[i].Barcode,
+				Barcode:    item.Barcode,
 			})
 			if err != nil {
 				status, result := events.LogErrorAndReturnResult(ctx, "failed to save item", err)
