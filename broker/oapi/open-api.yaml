@@ -467,13 +467,13 @@ components:
           description: Requester patron request ID
         lastAction:
           type: string
-          description: Latest requester action
+          description: Latest action on this request
         lastActionOutcome:
           type: string
-          description: Latest requester action outcome
+          description: Latest action outcome
         lastActionResult:
           type: string
-          description: Latest requester action status ("NEW", "PROCESSING", "SUCCESS", "PROBLEM", "ERROR")
+          description: Latest action status ("NEW", "PROCESSING", "SUCCESS", "PROBLEM", "ERROR")
       required:
         - id
         - timestamp
