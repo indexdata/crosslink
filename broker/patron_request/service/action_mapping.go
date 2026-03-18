@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
@@ -105,20 +106,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	return r
 }
 
-func (r *ActionMapping) GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
-	return r.borrowerStateActionMapping
-}
-
-func (r *ActionMapping) GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
-	return r.lenderStateActionMapping
-}
-
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
-	if pr.Side == SideBorrowing {
-		return isActionAvailable(pr.State, action, r.borrowerStateActionMapping)
-	} else {
-		return isActionAvailable(pr.State, action, r.lenderStateActionMapping)
-	}
+	actions := r.getActionsForState(pr)
+	return slices.Contains(actions, action)
 }
 
 func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
@@ -131,11 +121,22 @@ func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.P
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	if pr.Side == SideBorrowing {
-		return getActionsByStateFromMapping(pr.State, r.borrowerStateActionMapping)
-	} else {
-		return getActionsByStateFromMapping(pr.State, r.lenderStateActionMapping)
+	actions := r.getActionsForState(pr)
+	var autoActions []pr_db.PatronRequestAction
+	if sc, ok := r.getStateConfig(pr); ok {
+		autoActions = sc.autoActions
 	}
+	actions2 := make([]pr_db.PatronRequestAction, 0)
+	hasFailed := false
+	for _, action := range actions {
+		if string(action) == pr.LastAction.String && pr.LastActionResult.String == string(events.EventStatusError) {
+			hasFailed = true
+		}
+		if !slices.Contains(autoActions, action) || hasFailed {
+			actions2 = append(actions2, action)
+		}
+	}
+	return actions2
 }
 
 func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, outcome string) (pr_db.PatronRequestState, bool) {
@@ -191,8 +192,12 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 	return cfg, ok
 }
 
-func isActionAvailable(state pr_db.PatronRequestState, action pr_db.PatronRequestAction, actionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) bool {
-	return slices.Contains(getActionsByStateFromMapping(state, actionMapping), action)
+func (r *ActionMapping) getActionsForState(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+	if pr.Side == SideBorrowing {
+		return getActionsByStateFromMapping(pr.State, r.borrowerStateActionMapping)
+	} else {
+		return getActionsByStateFromMapping(pr.State, r.lenderStateActionMapping)
+	}
 }
 
 func getActionsByStateFromMapping(state pr_db.PatronRequestState, actionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) []pr_db.PatronRequestAction {
