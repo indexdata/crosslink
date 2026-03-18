@@ -12,7 +12,7 @@ docker compose up
 
 2. Launch Bruno and open the `crosslink` collection located in this directory.
 
-3. In Bruno, load the `Local Dev` environment.
+3. In Bruno, load the `LocalDev` environment.
 
 4. Run all steps in the Bruno runner. All HTTP response codes and validations should be green.
 
