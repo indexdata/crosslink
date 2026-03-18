@@ -100,13 +100,19 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	updatedPr.LastActionResult = getDbText(string(execResult.status))
 	stateChanged := false
 
+	persistPr := execResult.persistPr
+	if updatedPr.LastAction != currentPr.LastAction ||
+		updatedPr.LastActionOutcome != currentPr.LastActionOutcome ||
+		updatedPr.LastActionResult != currentPr.LastActionResult {
+		persistPr = true
+	}
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, execResult.outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
-		execResult.persistPr = true
+		persistPr = true
 		stateChanged = true
 	}
 
-	if execResult.persistPr {
+	if persistPr {
 		var err error
 		updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 		if err != nil {

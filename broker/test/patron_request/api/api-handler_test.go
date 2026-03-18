@@ -234,9 +234,9 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
-	assert.Equal(t, "send-request", *foundPr.LastAction)
-	assert.Equal(t, "success", *foundPr.LastActionOutcome)
-	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.Equal(t, "receive", *foundPr.LastAction)
+	assert.Equal(t, "failure", *foundPr.LastActionOutcome)
+	assert.Equal(t, "ERROR", *foundPr.LastActionResult)
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request
