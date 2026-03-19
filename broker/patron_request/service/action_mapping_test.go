@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,7 +77,15 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
 		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
-		LastActionResult: pgtype.Text{String: "ERROR", Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusError), Valid: true},
+	}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusProblem), Valid: true},
+	}))
+	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusSuccess), Valid: true},
 	}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))

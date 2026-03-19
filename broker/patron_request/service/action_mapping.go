@@ -113,8 +113,8 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	if r.stateModel == nil || r.stateModel.States == nil {
 		return actions
 	}
-	// Consider events.EventStatusProblem as well?
-	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError))
+	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
+		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
 	for _, state := range r.stateModel.States {
 		if pr.Side == SideBorrowing && state.Side != proapi.REQUESTER {
