@@ -22,9 +22,9 @@ replace (
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20260306093515-a33d6339182e
+	github.com/indexdata/cql-go v1.0.1-0.20260319162837-5de3f0cfda2b
 	github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa
-	github.com/oapi-codegen/runtime v1.2.0
+	github.com/oapi-codegen/runtime v1.3.0
 	github.com/stretchr/testify v1.11.1
 )
 
