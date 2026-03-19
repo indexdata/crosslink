@@ -69,6 +69,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	assert.Empty(t, actions)
 	mapping.stateModel = &proapi.StateModel{}
 	actions = mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew})
+	assert.Empty(t, actions)
 
 	mapping = mustActionMapping(t)
 	// Borrower
