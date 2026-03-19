@@ -126,7 +126,9 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 			continue
 		}
 		for _, action := range *state.Actions {
-			hasFailed = pr.LastAction.String != "" && pr.LastActionResult.String == string(events.EventStatusError)
+			if pr.LastAction.String != "" && pr.LastActionResult.String == string(events.EventStatusError) {
+				hasFailed = true
+			}
 			isAuto := action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto))
 			if !isAuto || hasFailed {
 				actionName := pr_db.PatronRequestAction(action.Name)
