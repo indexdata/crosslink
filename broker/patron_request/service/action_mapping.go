@@ -40,6 +40,7 @@ func (r *ActionMappingService) getStateModelService() *StateModelService {
 }
 
 type ActionMapping struct {
+	stateModel                 *proapi.StateModel
 	borrowerStateActionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
@@ -55,6 +56,7 @@ type stateConfig struct {
 // Constructor function to initialize the mappings for given StateModel
 func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	r := new(ActionMapping)
+	r.stateModel = stateModel
 	if stateModel == nil || stateModel.States == nil {
 		return r
 	}
@@ -106,6 +108,35 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	return r
 }
 
+func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+	actions := make([]pr_db.PatronRequestAction, 0)
+	if r.stateModel == nil || r.stateModel.States == nil {
+		return actions
+	}
+	hasFailed := false
+	for _, state := range r.stateModel.States {
+		if pr.Side == SideBorrowing && state.Side != proapi.REQUESTER {
+			continue
+		}
+		if pr.Side == SideLending && state.Side != proapi.SUPPLIER {
+			continue
+		}
+		stateName := pr_db.PatronRequestState(state.Name)
+		if stateName != pr.State || state.Actions == nil {
+			continue
+		}
+		for _, action := range *state.Actions {
+			hasFailed = pr.LastAction.String != "" && pr.LastActionResult.String == string(events.EventStatusError)
+			manual := action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto))
+			if !manual || hasFailed {
+				actionName := pr_db.PatronRequestAction(action.Name)
+				actions = append(actions, actionName)
+			}
+		}
+	}
+	return actions
+}
+
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
 	actions := r.getActionsForState(pr)
 	return slices.Contains(actions, action)
@@ -118,25 +149,6 @@ func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.P
 	}
 	_, ok = stateConfig.actions[action]
 	return ok
-}
-
-func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	actions := r.getActionsForState(pr)
-	var autoActions []pr_db.PatronRequestAction
-	if sc, ok := r.getStateConfig(pr); ok {
-		autoActions = sc.autoActions
-	}
-	actions2 := make([]pr_db.PatronRequestAction, 0)
-	hasFailed := false
-	for _, action := range actions {
-		if string(action) == pr.LastAction.String && pr.LastActionResult.String == string(events.EventStatusError) {
-			hasFailed = true
-		}
-		if !slices.Contains(autoActions, action) || hasFailed {
-			actions2 = append(actions2, action)
-		}
-	}
-	return actions2
 }
 
 func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, outcome string) (pr_db.PatronRequestState, bool) {
