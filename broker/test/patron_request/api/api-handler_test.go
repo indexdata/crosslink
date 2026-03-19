@@ -136,6 +136,9 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
 	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
