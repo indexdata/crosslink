@@ -138,7 +138,7 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 }
 
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
-	actions := r.getActionsForState(pr)
+	actions := r.GetActionsForPatronRequest(pr)
 	return slices.Contains(actions, action)
 }
 
@@ -202,20 +202,4 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 	}
 	cfg, ok := r.lenderStateConfig[pr.State]
 	return cfg, ok
-}
-
-func (r *ActionMapping) getActionsForState(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	if pr.Side == SideBorrowing {
-		return getActionsByStateFromMapping(pr.State, r.borrowerStateActionMapping)
-	} else {
-		return getActionsByStateFromMapping(pr.State, r.lenderStateActionMapping)
-	}
-}
-
-func getActionsByStateFromMapping(state pr_db.PatronRequestState, actionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) []pr_db.PatronRequestAction {
-	if actions, ok := actionMapping[state]; ok {
-		return actions
-	} else {
-		return []pr_db.PatronRequestAction{}
-	}
 }
