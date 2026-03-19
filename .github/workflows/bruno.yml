@@ -1,0 +1,80 @@
+# Standalone workflow for Bruno end-to-end tests.
+name: bruno-e2e
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - 'README.md'
+      - '**/README.md'
+
+env:
+  GO_VERSION: stable
+  SQLC_VERSION: '1.29.0'
+
+jobs:
+  bruno:
+    name: Bruno E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - uses: awalsh128/cache-apt-pkgs-action@latest
+      with:
+        packages: xsltproc
+        version: 1.0
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache-dependency-path: |
+          go.work.sum
+          broker/go.sum
+          illmock/go.sum
+
+    - name : Ensure sqlc is installed
+      uses: sqlc-dev/setup-sqlc@v4
+      with:
+        sqlc-version: ${{ env.SQLC_VERSION }}
+
+    - name: Generate sources
+      run: make generate
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Start Crosslink stack
+      run: docker compose -f bruno/docker-compose.yml up -d --build
+
+    - name: Wait for broker readiness
+      run: |
+        for i in {1..60}; do
+          if curl -sSf -o /dev/null http://localhost:8080/healthz; then
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "Broker did not become ready in time"
+        docker compose -f bruno/docker-compose.yml ps
+        docker compose -f bruno/docker-compose.yml logs --no-color broker postgres illmock
+        exit 1
+
+    - name: Run Bruno collection (headless)
+      working-directory: bruno/crosslink
+      run: |
+        npx --yes @usebruno/cli@3.1.3 run \
+          --env LocalDev \
+          --env-var userPassword="dummy"
+
+    - name: Print container logs on failure
+      if: failure()
+      run: docker compose -f bruno/docker-compose.yml logs --no-color
+
+    - name: Stop Crosslink stack
+      if: always()
+      run: docker compose -f bruno/docker-compose.yml down -v --remove-orphans

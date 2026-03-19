@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16
     container_name: crosslink_postgres
     environment:
       POSTGRES_USER: crosslink
@@ -8,34 +8,12 @@ services:
       POSTGRES_DB: crosslink
     ports:
       - "25432:5432"
-    volumes:
-      - ./pg_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crosslink -d crosslink"]
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 5s
-
-  db-up:
-    profiles: ["db-up"]
-    build:
-      context: ..
-      dockerfile: broker/Dockerfile
-    container_name: crosslink_db_up
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["/broker", "db-up"]
-    environment:
-      DB_TYPE: postgres
-      DB_USER: crosslink
-      DB_PASSWORD: crosslink
-      DB_HOST: postgres
-      DB_DATABASE: crosslink
-      DB_PORT: 5432
-      DB_PROVISION: "true"
-      DB_MIGRATE: "true"
 
   broker:
     build:
