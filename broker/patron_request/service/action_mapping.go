@@ -39,10 +39,14 @@ func (r *ActionMappingService) getStateModelService() *StateModelService {
 	return r.SMService
 }
 
+type ActionEntry struct {
+	name pr_db.PatronRequestAction
+	auto bool
+}
+
 type ActionMapping struct {
-	stateModel                 *proapi.StateModel
-	borrowerStateActionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
-	lenderStateActionMapping   map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
+	borrowerStateActionMapping map[pr_db.PatronRequestState][]ActionEntry
+	lenderStateActionMapping   map[pr_db.PatronRequestState][]ActionEntry
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
 }
@@ -56,13 +60,12 @@ type stateConfig struct {
 // Constructor function to initialize the mappings for given StateModel
 func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	r := new(ActionMapping)
-	r.stateModel = stateModel
 	if stateModel == nil || stateModel.States == nil {
 		return r
 	}
 
-	borrowerMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
-	lenderMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
+	borrowerMap := make(map[pr_db.PatronRequestState][]ActionEntry)
+	lenderMap := make(map[pr_db.PatronRequestState][]ActionEntry)
 	borrowerConfig := make(map[pr_db.PatronRequestState]stateConfig)
 	lenderConfig := make(map[pr_db.PatronRequestState]stateConfig)
 
@@ -72,16 +75,16 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 			actions: make(map[pr_db.PatronRequestAction]proapi.ModelAction),
 			events:  make(map[string]proapi.ModelEvent),
 		}
-		manualActions := make([]pr_db.PatronRequestAction, 0)
+		actionEntries := make([]ActionEntry, 0)
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				actionName := pr_db.PatronRequestAction(action.Name)
-				currentStateConfig.actions[actionName] = action
+				entry := ActionEntry{name: pr_db.PatronRequestAction(action.Name)}
+				currentStateConfig.actions[entry.name] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, actionName)
-					continue
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.name)
+					entry.auto = true
 				}
-				manualActions = append(manualActions, actionName)
+				actionEntries = append(actionEntries, entry)
 			}
 		}
 		if state.Events != nil {
@@ -92,10 +95,10 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 
 		switch state.Side {
 		case proapi.REQUESTER:
-			borrowerMap[stateName] = manualActions
+			borrowerMap[stateName] = actionEntries
 			borrowerConfig[stateName] = currentStateConfig
 		case proapi.SUPPLIER:
-			lenderMap[stateName] = manualActions
+			lenderMap[stateName] = actionEntries
 			lenderConfig[stateName] = currentStateConfig
 		}
 	}
@@ -110,32 +113,23 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
 	actions := make([]pr_db.PatronRequestAction, 0)
-	if r.stateModel == nil || r.stateModel.States == nil {
-		return actions
-	}
+
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
-	for _, state := range r.stateModel.States {
-		if pr.Side == SideBorrowing && state.Side != proapi.REQUESTER {
-			continue
+	var actionEntries []ActionEntry
+	if pr.Side == SideBorrowing {
+		actionEntries = r.borrowerStateActionMapping[pr.State]
+	} else {
+		actionEntries = r.lenderStateActionMapping[pr.State]
+	}
+	for _, action := range actionEntries {
+		if pr.LastAction.String == string(action.name) && prLastActionFailed {
+			hasFailed = true
 		}
-		if pr.Side == SideLending && state.Side != proapi.SUPPLIER {
-			continue
-		}
-		stateName := pr_db.PatronRequestState(state.Name)
-		if stateName != pr.State || state.Actions == nil {
-			continue
-		}
-		for _, action := range *state.Actions {
-			if pr.LastAction.String == action.Name && prLastActionFailed {
-				hasFailed = true
-			}
-			isAuto := action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto))
-			if !isAuto || hasFailed {
-				actionName := pr_db.PatronRequestAction(action.Name)
-				actions = append(actions, actionName)
-			}
+		if !action.auto || hasFailed {
+			actionName := pr_db.PatronRequestAction(action.name)
+			actions = append(actions, actionName)
 		}
 	}
 	return actions
