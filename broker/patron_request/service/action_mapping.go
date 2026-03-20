@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
@@ -38,9 +39,14 @@ func (r *ActionMappingService) getStateModelService() *StateModelService {
 	return r.SMService
 }
 
+type PatronRequestAction struct {
+	actionName pr_db.PatronRequestAction
+	auto       bool
+}
+
 type ActionMapping struct {
-	borrowerStateActionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
-	lenderStateActionMapping   map[pr_db.PatronRequestState][]pr_db.PatronRequestAction
+	borrowerStateActionMapping map[pr_db.PatronRequestState][]PatronRequestAction
+	lenderStateActionMapping   map[pr_db.PatronRequestState][]PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
 }
@@ -58,8 +64,8 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		return r
 	}
 
-	borrowerMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
-	lenderMap := make(map[pr_db.PatronRequestState][]pr_db.PatronRequestAction)
+	borrowerMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
+	lenderMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
 	borrowerConfig := make(map[pr_db.PatronRequestState]stateConfig)
 	lenderConfig := make(map[pr_db.PatronRequestState]stateConfig)
 
@@ -69,16 +75,16 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 			actions: make(map[pr_db.PatronRequestAction]proapi.ModelAction),
 			events:  make(map[string]proapi.ModelEvent),
 		}
-		manualActions := make([]pr_db.PatronRequestAction, 0)
+		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				actionName := pr_db.PatronRequestAction(action.Name)
-				currentStateConfig.actions[actionName] = action
+				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
+				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, actionName)
-					continue
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
+					entry.auto = true
 				}
-				manualActions = append(manualActions, actionName)
+				actionEntries = append(actionEntries, entry)
 			}
 		}
 		if state.Events != nil {
@@ -89,10 +95,10 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 
 		switch state.Side {
 		case proapi.REQUESTER:
-			borrowerMap[stateName] = manualActions
+			borrowerMap[stateName] = actionEntries
 			borrowerConfig[stateName] = currentStateConfig
 		case proapi.SUPPLIER:
-			lenderMap[stateName] = manualActions
+			lenderMap[stateName] = actionEntries
 			lenderConfig[stateName] = currentStateConfig
 		}
 	}
@@ -105,20 +111,33 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	return r
 }
 
-func (r *ActionMapping) GetBorrowerActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
-	return r.borrowerStateActionMapping
-}
+func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+	actions := make([]pr_db.PatronRequestAction, 0)
 
-func (r *ActionMapping) GetLenderActionsMap() map[pr_db.PatronRequestState][]pr_db.PatronRequestAction {
-	return r.lenderStateActionMapping
+	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
+		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
+	hasFailed := false
+	var actionEntries []PatronRequestAction
+	if pr.Side == SideBorrowing {
+		actionEntries = r.borrowerStateActionMapping[pr.State]
+	} else {
+		actionEntries = r.lenderStateActionMapping[pr.State]
+	}
+	for _, action := range actionEntries {
+		if pr.LastAction.String == string(action.actionName) && prLastActionFailed {
+			hasFailed = true
+		}
+		if !action.auto || hasFailed {
+			actionName := pr_db.PatronRequestAction(action.actionName)
+			actions = append(actions, actionName)
+		}
+	}
+	return actions
 }
 
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
-	if pr.Side == SideBorrowing {
-		return isActionAvailable(pr.State, action, r.borrowerStateActionMapping)
-	} else {
-		return isActionAvailable(pr.State, action, r.lenderStateActionMapping)
-	}
+	actions := r.GetActionsForPatronRequest(pr)
+	return slices.Contains(actions, action)
 }
 
 func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
@@ -128,14 +147,6 @@ func (r *ActionMapping) IsActionSupported(pr pr_db.PatronRequest, action pr_db.P
 	}
 	_, ok = stateConfig.actions[action]
 	return ok
-}
-
-func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	if pr.Side == SideBorrowing {
-		return getActionsByStateFromMapping(pr.State, r.borrowerStateActionMapping)
-	} else {
-		return getActionsByStateFromMapping(pr.State, r.lenderStateActionMapping)
-	}
 }
 
 func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db.PatronRequestAction, outcome string) (pr_db.PatronRequestState, bool) {
@@ -189,16 +200,4 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 	}
 	cfg, ok := r.lenderStateConfig[pr.State]
 	return cfg, ok
-}
-
-func isActionAvailable(state pr_db.PatronRequestState, action pr_db.PatronRequestAction, actionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) bool {
-	return slices.Contains(getActionsByStateFromMapping(state, actionMapping), action)
-}
-
-func getActionsByStateFromMapping(state pr_db.PatronRequestState, actionMapping map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) []pr_db.PatronRequestAction {
-	if actions, ok := actionMapping[state]; ok {
-		return actions
-	} else {
-		return []pr_db.PatronRequestAction{}
-	}
 }

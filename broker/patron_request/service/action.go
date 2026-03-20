@@ -30,11 +30,10 @@ type PatronRequestActionService struct {
 }
 
 type actionExecutionResult struct {
-	status    events.EventStatus
-	result    *events.EventResult
-	outcome   string
-	pr        pr_db.PatronRequest
-	persistPr bool
+	status  events.EventStatus
+	result  *events.EventResult
+	outcome string
+	pr      pr_db.PatronRequest
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -95,20 +94,19 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 
 func (a *PatronRequestActionService) finalizeActionExecution(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, action pr_db.PatronRequestAction, currentPr pr_db.PatronRequest, execResult actionExecutionResult) (events.EventStatus, *events.EventResult) {
 	updatedPr := execResult.pr
+	updatedPr.LastAction = getDbText(string(action))
+	updatedPr.LastActionOutcome = getDbText(execResult.outcome)
+	updatedPr.LastActionResult = getDbText(string(execResult.status))
 	stateChanged := false
-
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, execResult.outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
-		execResult.persistPr = true
 		stateChanged = true
 	}
 
-	if execResult.persistPr {
-		var err error
-		updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to update patron request", err)
-		}
+	var err error
+	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
 
 	if stateChanged {
@@ -288,7 +286,7 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	// change patron to canonical user id
 	// perhaps it would be better to have both original and canonical id stored?
 	pr.Patron = pgtype.Text{String: userId, Valid: true}
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr, persistPr: true}
+	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) actionExecutionResult {
