@@ -24,7 +24,7 @@ auth:basic {
 }
 
 script:post-response {
-  test("for ship", function() {
+  test("for check-out", function() {
     const pr = res.getBody();
     expect(pr.lastAction).to.equal("check-out")
     expect(pr.lastActionResult).to.equal("SUCCESS")
