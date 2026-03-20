@@ -21,12 +21,12 @@ auth:basic {
 
 script:post-response {
   test("for items", function() {
-    const pr = res.getBody();
-    expect(pr.length).to.be.at.least(1);
-     pr.forEach(function(item) {
-        expect(item).to.have.property("itemId");
-        expect(item).to.have.property("barcode");
-     });
+    const items = res.getBody();
+    expect(items.length).to.be.at.least(1);
+    items.forEach(function(item) {
+      expect(item).to.have.property("itemId");
+      expect(item).to.have.property("barcode");
+    });
   });
 }
 
