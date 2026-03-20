@@ -1,0 +1,41 @@
+meta {
+  name: Lending side check items
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}/items?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  test("for items", function() {
+    const pr = res.getBody();
+    const expected = bru.getEnvVar("itemId");
+    expect(pr.length).to.be.at.least(1);
+    pr.forEach(function(item) {
+      expect(item).to.have.property("itemId");
+      expect(item.itemId).to.equal(expected);
+    });
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
