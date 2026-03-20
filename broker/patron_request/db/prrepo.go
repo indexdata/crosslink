@@ -12,6 +12,7 @@ import (
 type PrRepo interface {
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
+	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
@@ -49,6 +50,11 @@ func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (
 	return row.PatronRequest, err
 }
 
+func (r *PgPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error) {
+	row, err := r.queries.GetPatronRequestByIdForUpdate(ctx, r.GetConnOrTx(), id)
+	return row.PatronRequest, err
+}
+
 func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error) {
 	pr, err := r.GetPatronRequestById(ctx, id)
 	if err != nil {
@@ -69,7 +75,22 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
 				fullCount = r.FullCount
-				list = append(list, r.PatronRequest)
+				list = append(list, PatronRequest{
+					ID:                r.ID,
+					Timestamp:         r.Timestamp,
+					IllRequest:        r.IllRequest,
+					State:             PatronRequestState(r.State),
+					Side:              PatronRequestSide(r.Side),
+					Patron:            r.Patron,
+					RequesterSymbol:   r.RequesterSymbol,
+					SupplierSymbol:    r.SupplierSymbol,
+					Tenant:            r.Tenant,
+					RequesterReqID:    r.RequesterReqID,
+					NeedsAttention:    r.NeedsAttention,
+					LastAction:        r.LastAction,
+					LastActionOutcome: r.LastActionOutcome,
+					LastActionResult:  r.LastActionResult,
+				})
 			}
 		} else {
 			params.Limit = 1

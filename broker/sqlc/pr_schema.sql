@@ -11,6 +11,7 @@ CREATE TABLE patron_request
     supplier_symbol     VARCHAR,
     tenant              VARCHAR,
     requester_req_id    VARCHAR,
+    needs_attention     BOOLEAN NOT NULL DEFAULT false,
     last_action         VARCHAR,
     last_action_outcome VARCHAR,
     last_action_result  VARCHAR
@@ -49,3 +50,34 @@ CREATE TABLE notification
     created_at      TIMESTAMP NOT NULL DEFAULT now(),
     acknowledged_at TIMESTAMP
 );
+
+CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)
+RETURNS timestamp
+LANGUAGE sql
+IMMUTABLE STRICT
+AS $$
+SELECT $1::timestamp;
+$$;
+
+CREATE OR REPLACE VIEW patron_request_search_view AS
+SELECT
+    pr.*,
+    EXISTS (
+        SELECT 1
+        FROM notification n
+        WHERE n.pr_id = pr.id
+    ) AS has_notification,
+    EXISTS (
+        SELECT 1
+        FROM notification n
+        WHERE n.pr_id = pr.id and cost is not null
+    ) AS has_cost,
+    EXISTS (
+        SELECT 1
+        FROM notification n
+        WHERE n.pr_id = pr.id and acknowledged_at is null
+    ) AS has_unread_notification,
+    pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
+    pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
+    immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at
+FROM patron_request pr;

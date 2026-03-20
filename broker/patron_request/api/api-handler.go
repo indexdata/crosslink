@@ -536,6 +536,7 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		SupplierSymbol:     toString(request.SupplierSymbol),
 		IllRequest:         utils.Must(common.StructToMap(illRequest)),
 		RequesterRequestId: toString(request.RequesterReqID),
+		NeedsAttention:     request.NeedsAttention,
 		LastAction:         toString(request.LastAction),
 		LastActionOutcome:  toString(request.LastActionOutcome),
 		LastActionResult:   toString(request.LastActionResult),

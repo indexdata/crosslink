@@ -74,6 +74,10 @@ sql:
             go_type:
               import: "github.com/indexdata/crosslink/iso18626"
               type: "Request"
+          - column: "patron_request_search_view.ill_request"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "Request"
           - column: "patron_request.state"
             go_type:
               type: "PatronRequestState"
