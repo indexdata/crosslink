@@ -219,11 +219,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			addInternalError(ctx, w, err)
 			return
 		}
-	}
-	pr, err = a.prRepo.GetPatronRequestById(ctx, pr.ID)
-	if err != nil {
-		addInternalError(ctx, w, err)
-		return
+		pr, err = a.prRepo.GetPatronRequestById(ctx, pr.ID)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")

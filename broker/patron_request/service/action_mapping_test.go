@@ -11,26 +11,26 @@ import (
 )
 
 func TestNewReturnableActionMapping(t *testing.T) {
-	borrowerStateActionMapping := map[pr_db.PatronRequestState][]ActionEntry{
-		BorrowerStateNew:              {{name: BorrowerActionValidate, auto: true}},
-		BorrowerStateValidated:        {{name: BorrowerActionSendRequest}},
-		BorrowerStateSupplierLocated:  {{name: BorrowerActionCancelRequest}},
-		BorrowerStateConditionPending: {{name: BorrowerActionAcceptCondition}, {name: BorrowerActionRejectCondition}},
-		BorrowerStateWillSupply:       {{name: BorrowerActionCancelRequest}},
-		BorrowerStateShipped:          {{name: BorrowerActionReceive}},
-		BorrowerStateReceived:         {{name: BorrowerActionCheckOut}},
-		BorrowerStateCheckedOut:       {{name: BorrowerActionCheckIn}},
-		BorrowerStateCheckedIn:        {{name: BorrowerActionShipReturn}},
+	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
+		BorrowerStateNew:              {{actionName: BorrowerActionValidate, auto: true}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest}},
+		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
+		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
+		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
+		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}},
+		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}},
+		BorrowerStateCheckedOut:       {{actionName: BorrowerActionCheckIn}},
+		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 	}
 
-	lenderStateActionMapping := map[pr_db.PatronRequestState][]ActionEntry{
-		LenderStateNew:               {{name: LenderActionValidate, auto: true}},
-		LenderStateValidated:         {{name: LenderActionWillSupply, auto: true}, {name: LenderActionCannotSupply}, {name: LenderActionAddCondition}},
-		LenderStateWillSupply:        {{name: LenderActionAddCondition}, {name: LenderActionShip}, {name: LenderActionCannotSupply}},
-		LenderStateConditionPending:  {{name: LenderActionCannotSupply}},
-		LenderStateConditionAccepted: {{name: LenderActionShip}, {name: LenderActionCannotSupply}},
-		LenderStateShippedReturn:     {{name: LenderActionMarkReceived}},
-		LenderStateCancelRequested:   {{name: LenderActionAcceptCancel}, {name: LenderActionRejectCancel}},
+	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
+		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
+		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}},
+		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateConditionPending:  {{actionName: LenderActionCannotSupply}},
+		LenderStateConditionAccepted: {{actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateShippedReturn:     {{actionName: LenderActionMarkReceived}},
+		LenderStateCancelRequested:   {{actionName: LenderActionAcceptCancel}, {actionName: LenderActionRejectCancel}},
 	}
 
 	stateModel, err := LoadStateModelByName("returnables")
@@ -127,13 +127,13 @@ func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.
 	}
 }
 
-func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]ActionEntry, map2 map[pr_db.PatronRequestState][]ActionEntry) {
+func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]PatronRequestAction, map2 map[pr_db.PatronRequestState][]PatronRequestAction) {
 	for stateName := range map1 {
 		listOne := map1[stateName]
 		listTwo := map2[stateName]
 		assert.Equal(t, len(listOne), len(listTwo))
 		for i := range listOne {
-			assert.Equal(t, listOne[i].name, listTwo[i].name)
+			assert.Equal(t, listOne[i].actionName, listTwo[i].actionName)
 			assert.Equal(t, listOne[i].auto, listTwo[i].auto)
 		}
 	}

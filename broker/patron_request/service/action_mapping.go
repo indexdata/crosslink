@@ -39,14 +39,14 @@ func (r *ActionMappingService) getStateModelService() *StateModelService {
 	return r.SMService
 }
 
-type ActionEntry struct {
-	name pr_db.PatronRequestAction
-	auto bool
+type PatronRequestAction struct {
+	actionName pr_db.PatronRequestAction
+	auto       bool
 }
 
 type ActionMapping struct {
-	borrowerStateActionMapping map[pr_db.PatronRequestState][]ActionEntry
-	lenderStateActionMapping   map[pr_db.PatronRequestState][]ActionEntry
+	borrowerStateActionMapping map[pr_db.PatronRequestState][]PatronRequestAction
+	lenderStateActionMapping   map[pr_db.PatronRequestState][]PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
 }
@@ -64,8 +64,8 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		return r
 	}
 
-	borrowerMap := make(map[pr_db.PatronRequestState][]ActionEntry)
-	lenderMap := make(map[pr_db.PatronRequestState][]ActionEntry)
+	borrowerMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
+	lenderMap := make(map[pr_db.PatronRequestState][]PatronRequestAction)
 	borrowerConfig := make(map[pr_db.PatronRequestState]stateConfig)
 	lenderConfig := make(map[pr_db.PatronRequestState]stateConfig)
 
@@ -75,13 +75,13 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 			actions: make(map[pr_db.PatronRequestAction]proapi.ModelAction),
 			events:  make(map[string]proapi.ModelEvent),
 		}
-		actionEntries := make([]ActionEntry, 0)
+		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				entry := ActionEntry{name: pr_db.PatronRequestAction(action.Name)}
-				currentStateConfig.actions[entry.name] = action
+				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
+				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.name)
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
 					entry.auto = true
 				}
 				actionEntries = append(actionEntries, entry)
@@ -117,18 +117,18 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
-	var actionEntries []ActionEntry
+	var actionEntries []PatronRequestAction
 	if pr.Side == SideBorrowing {
 		actionEntries = r.borrowerStateActionMapping[pr.State]
 	} else {
 		actionEntries = r.lenderStateActionMapping[pr.State]
 	}
 	for _, action := range actionEntries {
-		if pr.LastAction.String == string(action.name) && prLastActionFailed {
+		if pr.LastAction.String == string(action.actionName) && prLastActionFailed {
 			hasFailed = true
 		}
 		if !action.auto || hasFailed {
-			actionName := pr_db.PatronRequestAction(action.name)
+			actionName := pr_db.PatronRequestAction(action.actionName)
 			actions = append(actions, actionName)
 		}
 	}
