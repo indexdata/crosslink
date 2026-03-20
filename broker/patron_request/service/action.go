@@ -97,6 +97,9 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	updatedPr.LastAction = getDbText(string(action))
 	updatedPr.LastActionOutcome = getDbText(execResult.outcome)
 	updatedPr.LastActionResult = getDbText(string(execResult.status))
+	if execResult.outcome == ActionOutcomeFailure && !updatedPr.NeedsAttention {
+		updatedPr.NeedsAttention = true
+	}
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, execResult.outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
@@ -116,9 +119,6 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		}
 	}
 
-	if execResult.outcome == ActionOutcomeFailure && !updatedPr.NeedsAttention {
-		a.setNeedsAttention(ctx, updatedPr)
-	}
 	return execResult.status, execResult.result
 }
 
@@ -722,25 +722,6 @@ func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventS
 		return actionExecutionResult{status: events.EventStatusProblem, result: result, outcome: ActionOutcomeFailure, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: nil, outcome: ActionOutcomeSuccess, pr: pr}
-}
-
-func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContext, pr pr_db.PatronRequest) {
-	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
-		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, pr.ID)
-		if err != nil {
-			return err
-		}
-		if prToUpdate.NeedsAttention {
-			return nil
-		}
-		prToUpdate.NeedsAttention = true
-		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
-		return err
-	})
-	if err != nil {
-		ctx.Logger().Error("failed to set needs attention", "pr_id", pr.ID, "error", err)
-		return
-	}
 }
 
 type ResponseCaptureWriter struct {

@@ -145,7 +145,6 @@ func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {
 	assert.Equal(t, events.EventStatusError, status)
 	assert.Equal(t, "failed to create LMS adapter", resultData.EventError.Message)
 	assert.Equal(t, "assert.AnError general error for testing", resultData.EventError.Cause)
-	assert.Equal(t, "", mockPrRepo.savedPr.ID) // never saved because needs attention is already true
 }
 
 func TestHandleInvokeActionValidateLookupFailed(t *testing.T) {
