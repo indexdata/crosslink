@@ -1,7 +1,7 @@
 meta {
   name: Lending side check status
   type: http
-  seq: 11
+  seq: 18
 }
 
 get {
@@ -25,7 +25,10 @@ auth:basic {
 
 script:post-response {
   test("Check if patron request is complete", () => {
-      expect(res.getBody().state).to.eql("COMPLETED");
+      const pr = res.getBody()   
+      expect(pr.lastActionResult).to.eql("SUCCESS");
+      expect(pr.lastAction).to.eql("mark-received");
+      expect(pr.state).to.eql("COMPLETED");
   });
 }
 

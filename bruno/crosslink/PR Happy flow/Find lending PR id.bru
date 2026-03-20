@@ -1,7 +1,7 @@
 meta {
   name: Find lending PR id
   type: http
-  seq: 3
+  seq: 5
 }
 
 get {
@@ -34,6 +34,7 @@ script:post-response {
   test("Check if found lending PR", () => {
       expect(lendingPr).to.exist;
       expect(lendingPr.id).to.be.a("string").and.not.empty;
+      expect(lendingPr.lastActionResult).is.equal("SUCCESS")
       bru.setVar("lendingPrId", lendingPr.id);
   });
 }
