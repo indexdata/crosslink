@@ -219,6 +219,11 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			addInternalError(ctx, w, err)
 			return
 		}
+		pr, err = a.prRepo.GetPatronRequestById(ctx, pr.ID)
+		if err != nil {
+			addInternalError(ctx, w, err)
+			return
+		}
 	}
 	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")
@@ -531,6 +536,9 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		SupplierSymbol:     toString(request.SupplierSymbol),
 		IllRequest:         utils.Must(common.StructToMap(illRequest)),
 		RequesterRequestId: toString(request.RequesterReqID),
+		LastAction:         toString(request.LastAction),
+		LastActionOutcome:  toString(request.LastActionOutcome),
+		LastActionResult:   toString(request.LastActionResult),
 	}
 }
 
@@ -577,6 +585,8 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
 		RequesterReqID:  getDbText(&id),
+		// LastAction, LastActionOutcome and LastActionResult are not set on creation
+		// they will be updated when the first action is executed.
 	}, nil
 }
 

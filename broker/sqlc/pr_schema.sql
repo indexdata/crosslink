@@ -1,15 +1,19 @@
+-- when changing patron_request members, also update rows.Scan args in prcql.go
 CREATE TABLE patron_request
 (
-    id                VARCHAR PRIMARY KEY,
-    timestamp         TIMESTAMP NOT NULL DEFAULT now(),
-    ill_request       jsonb,
-    state             VARCHAR   NOT NULL,
-    side              VARCHAR   NOT NULL,
-    patron            VARCHAR,
-    requester_symbol  VARCHAR,
-    supplier_symbol   VARCHAR,
-    tenant            VARCHAR,
-    requester_req_id  VARCHAR
+    id                  VARCHAR PRIMARY KEY,
+    timestamp           TIMESTAMP NOT NULL DEFAULT now(),
+    ill_request         jsonb,
+    state               VARCHAR NOT NULL,
+    side                VARCHAR NOT NULL,
+    patron              VARCHAR,
+    requester_symbol    VARCHAR,
+    supplier_symbol     VARCHAR,
+    tenant              VARCHAR,
+    requester_req_id    VARCHAR,
+    last_action         VARCHAR,
+    last_action_outcome VARCHAR,
+    last_action_result  VARCHAR
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

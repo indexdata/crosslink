@@ -136,6 +136,9 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	respBytes = httpRequest(t, "POST", basePath, newPrBytes, 400)
 	assert.Contains(t, string(respBytes), "a patron request with this ID already exists")
@@ -174,6 +177,9 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	// GET by id with symbol
 	respBytes = httpRequest(t, "GET", thisPrPath+"?symbol="+*foundPr.RequesterSymbol, []byte{}, 200)
@@ -202,6 +208,14 @@ func TestCrud(t *testing.T) {
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
 
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+
 	// Wait till requester response processed
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
@@ -215,7 +229,17 @@ func TestCrud(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
+	// We should either update the mock to include items or change the test to not use blocking action.
 	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
+
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "receive", *foundPr.LastAction)
+	assert.Equal(t, "failure", *foundPr.LastActionOutcome)
+	assert.Equal(t, "ERROR", *foundPr.LastActionResult)
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request

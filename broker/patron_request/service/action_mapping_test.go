@@ -4,29 +4,33 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewReturnableActionMapping(t *testing.T) {
-	borrowerStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		BorrowerStateValidated:        {BorrowerActionSendRequest},
-		BorrowerStateSupplierLocated:  {BorrowerActionCancelRequest},
-		BorrowerStateConditionPending: {BorrowerActionAcceptCondition, BorrowerActionRejectCondition},
-		BorrowerStateWillSupply:       {BorrowerActionCancelRequest},
-		BorrowerStateShipped:          {BorrowerActionReceive},
-		BorrowerStateReceived:         {BorrowerActionCheckOut},
-		BorrowerStateCheckedOut:       {BorrowerActionCheckIn},
-		BorrowerStateCheckedIn:        {BorrowerActionShipReturn},
+	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
+		BorrowerStateNew:              {{actionName: BorrowerActionValidate, auto: true}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest}},
+		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
+		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
+		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
+		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}},
+		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}},
+		BorrowerStateCheckedOut:       {{actionName: BorrowerActionCheckIn}},
+		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 	}
 
-	lenderStateActionMapping := map[pr_db.PatronRequestState][]pr_db.PatronRequestAction{
-		LenderStateValidated:         {LenderActionCannotSupply, LenderActionAddCondition},
-		LenderStateWillSupply:        {LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip},
-		LenderStateConditionPending:  {LenderActionCannotSupply},
-		LenderStateConditionAccepted: {LenderActionShip, LenderActionCannotSupply},
-		LenderStateShippedReturn:     {LenderActionMarkReceived},
-		LenderStateCancelRequested:   {LenderActionAcceptCancel, LenderActionRejectCancel},
+	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
+		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
+		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}},
+		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateConditionPending:  {{actionName: LenderActionCannotSupply}},
+		LenderStateConditionAccepted: {{actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateShippedReturn:     {{actionName: LenderActionMarkReceived}},
+		LenderStateCancelRequested:   {{actionName: LenderActionAcceptCancel}, {actionName: LenderActionRejectCancel}},
 	}
 
 	stateModel, err := LoadStateModelByName("returnables")
@@ -65,7 +69,23 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	mapping := mustActionMapping(t)
 	// Borrower
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusError), Valid: true},
+	}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionValidate}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusProblem), Valid: true},
+	}))
+	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew,
+		LastAction:       pgtype.Text{String: string(BorrowerActionValidate), Valid: true},
+		LastActionResult: pgtype.Text{String: string(events.EventStatusSuccess), Valid: true},
+	}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
+	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
 
 	// Lender
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
@@ -107,13 +127,14 @@ func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.
 	}
 }
 
-func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]pr_db.PatronRequestAction, map2 map[pr_db.PatronRequestState][]pr_db.PatronRequestAction) {
+func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]PatronRequestAction, map2 map[pr_db.PatronRequestState][]PatronRequestAction) {
 	for stateName := range map1 {
 		listOne := map1[stateName]
 		listTwo := map2[stateName]
 		assert.Equal(t, len(listOne), len(listTwo))
 		for i := range listOne {
-			assert.True(t, slices.Contains(listTwo, listOne[i]))
+			assert.Equal(t, listOne[i].actionName, listTwo[i].actionName)
+			assert.Equal(t, listOne[i].auto, listTwo[i].auto)
 		}
 	}
 }
