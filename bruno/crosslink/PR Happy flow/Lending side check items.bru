@@ -5,13 +5,9 @@ meta {
 }
 
 get {
-  url: {{host}}/patron_requests/{{lendingPrId}}/items?side=lending
+  url: {{host}}/patron_requests/{{lendingPrId}}/items
   body: json
   auth: basic
-}
-
-params:query {
-  side: lending
 }
 
 headers {

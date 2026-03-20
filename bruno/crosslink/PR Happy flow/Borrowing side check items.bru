@@ -5,13 +5,9 @@ meta {
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}/items?side=borrowing
+  url: {{host}}/patron_requests/{{prId}}/items
   body: json
   auth: basic
-}
-
-params:query {
-  side: borrowing
 }
 
 headers {
