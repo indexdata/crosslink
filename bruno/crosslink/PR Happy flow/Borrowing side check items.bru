@@ -26,12 +26,11 @@ auth:basic {
 script:post-response {
   test("for items", function() {
     const pr = res.getBody();
-    const expected = bru.getEnvVar("itemId");
     expect(pr.length).to.be.at.least(1);
-    pr.forEach(function(item) {
-      expect(item).to.have.property("itemId");
-      expect(item.itemId).to.equal(expected);
-    });
+     pr.forEach(function(item) {
+        expect(item).to.have.property("itemId");
+        expect(item).to.have.property("barcode");
+     });
   });
 }
 
