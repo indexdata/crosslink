@@ -34,7 +34,7 @@ script:post-response {
   test("Check if found lending PR", () => {
       expect(lendingPr).to.exist;
       expect(lendingPr.id).to.be.a("string").and.not.empty;
-      expect(lendingPr.lastActionResult).is.equal("SUCCESS")
+      expect(lendingPr.lastActionResult).to.equal("SUCCESS")
       bru.setVar("lendingPrId", lendingPr.id);
   });
 }

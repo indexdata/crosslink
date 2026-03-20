@@ -1,12 +1,12 @@
 meta {
-  name: Borrowing side check status
+  name: Borrowing side ship-return check
   type: http
-  seq: 19
+  seq: 16
 }
 
 get {
   url: {{host}}/patron_requests/{{prId}}?side=borrowing
-  body: none
+  body: json
   auth: basic
 }
 
@@ -24,11 +24,11 @@ auth:basic {
 }
 
 script:post-response {
-  test("Check if patron request is complete", () => {
-      const pr = res.getBody();
-      expect(pr.lastActionResult).to.eql("SUCCESS");
-      expect(pr.lastAction).to.eql("ship-return");
-      expect(pr.state).to.eql("COMPLETED");
+  test("for ship", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("ship-return")
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.eql("SHIPPED_RETURNED");
   });
 }
 
