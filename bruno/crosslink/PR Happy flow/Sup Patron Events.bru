@@ -1,7 +1,7 @@
 meta {
   name: Sup Patron Events
   type: http
-  seq: 18
+  seq: 25
 }
 
 get {
@@ -29,17 +29,17 @@ vars:pre-request {
 
 script:post-response {
   const responseData = res.getBody();
-
+  
   const eventsByAction = action => responseData.filter(pr => {
     return pr.eventData.CommonEventData.action == action;
   });
-
+  
   const expectActionWithFirstSuccess = action => {
     const events = eventsByAction(action);
     expect(events.length).to.be.at.least(1);
     expect(events[0].eventStatus).to.equal("SUCCESS");
   };
-
+  
   ["validate", "will-supply", "ship", "mark-received"].forEach(action => {
     test(`Check ${action}`, () => {
       expectActionWithFirstSuccess(action);
