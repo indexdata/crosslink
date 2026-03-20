@@ -80,8 +80,8 @@ github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 h1:HWRh5R2+9EifMyIHV7ZV+MIZqgz+PMpZ14Jynv3O2Zs=
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0/go.mod h1:JfhWUomR1baixubs02l85lZYYOm7LV6om4ceouMv45c=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/indexdata/cql-go v1.0.1-0.20260319162837-5de3f0cfda2b h1:hvNdKt1wKpFbAQ9AmxLgY0zt6hmOqKpP9RrEOP0GXAM=
-github.com/indexdata/cql-go v1.0.1-0.20260319162837-5de3f0cfda2b/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
+github.com/indexdata/cql-go v1.0.1-0.20260320070143-5c5fc5f871a1 h1:jjgpjsFqrYefcfE5a8cV9kyYXtQDH6Gg5ILtDrvhLAc=
+github.com/indexdata/cql-go v1.0.1-0.20260320070143-5c5fc5f871a1/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
 github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa h1:cXVO434D+Guc1a1jcIB/ga5xO5VyWx1He1R0gJov7MY=
 github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/indexdata/xsd2goxsl v1.3.0 h1:LZGBORHnO6olHBtvc6hQEefymdRuiM77FgtW4pCek7g=
