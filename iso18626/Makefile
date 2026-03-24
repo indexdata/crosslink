@@ -10,17 +10,18 @@ GEN_SCHEMA_OUT=ill_gen.go
 
 all: generate
 
-generate: generate-schema 
+generate: generate-schema
 
 generate-schema: $(GEN_SCHEMA_OUT)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl@v1.1.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
+	$(GO) run github.com/indexdata/xsd2goxsl@v1.4.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 	qAttrType=utils.PrefixAttr \
 	dateTimeType=utils.XSDDateTime \
 	decimalType=utils.XSDDecimal \
-	json=yes
+	json=yes \
+	validate=yes
 	$(GO) fmt $(GEN_SCHEMA_OUT)
 
 clean:

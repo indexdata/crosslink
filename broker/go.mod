@@ -24,11 +24,11 @@ replace (
 
 require (
 	github.com/dustin/go-humanize v1.0.1
+	github.com/go-playground/validator/v10 v10.14.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/indexdata/cql-go v1.0.1-0.20260320114910-316aba36a2ce
 	github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa
-	github.com/indexdata/xsd2goxsl v1.3.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/lib/pq v1.12.0

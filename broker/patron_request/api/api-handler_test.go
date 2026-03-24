@@ -112,7 +112,19 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 
 func TestPostPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
-	toCreate := proapi.PatronRequest{Id: "1", RequesterSymbol: &symbol}
+	id := "1"
+	toCreate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"bibliographicInfo": map[string]interface{}{
+				"title": "test",
+			},
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Copy",
+			},
+		},
+	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))

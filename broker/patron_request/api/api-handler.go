@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
@@ -28,6 +30,9 @@ import (
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
+
+var illRequestValidator = validator.New()
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 
 type PatronRequestApiHandler struct {
 	limitDefault         int32
@@ -201,6 +206,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	dbreq, err := a.toDbPatronRequest(ctx, newPr, params.XOkapiTenant)
 	if err != nil {
 		addInternalError(ctx, w, err)
+		return
+	}
+	if err = validateIllRequest(dbreq.IllRequest); err != nil {
+		addBadRequestError(ctx, w, fmt.Errorf("invalid illRequest: %w", err))
 		return
 	}
 	pr, err := a.prRepo.CreatePatronRequest(ctx, (pr_db.CreatePatronRequestParams)(dbreq))
@@ -571,6 +580,20 @@ func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, 
 		if err != nil {
 			return pr_db.PatronRequest{}, err
 		}
+		requesterSymbol := strings.SplitN(*request.RequesterSymbol, ":", 2)
+		supplyingAgencySymbol := strings.SplitN(brokerSymbol, ":", 2)
+		illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
+			AgencyIdType: iso18626.TypeSchemeValuePair{
+				Text: requesterSymbol[0],
+			},
+			AgencyIdValue: requesterSymbol[1],
+		}
+		illRequest.Header.SupplyingAgencyId = iso18626.TypeAgencyId{
+			AgencyIdType: iso18626.TypeSchemeValuePair{
+				Text: supplyingAgencySymbol[0],
+			},
+			AgencyIdValue: supplyingAgencySymbol[1],
+		}
 		illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
 		illRequest.Header.RequestingAgencyRequestId = id
 	}
@@ -606,6 +629,15 @@ func getDbText(value *string) pgtype.Text {
 		Valid:  true,
 		String: *value,
 	}
+}
+
+func validateIllRequest(request iso18626.Request) error {
+	requestForValidation := request
+	if requestForValidation.Header.MultipleItemRequestId == "" {
+		//schema workaround
+		requestForValidation.Header.MultipleItemRequestId = "#empty"
+	}
+	return illRequestValidator.Struct(requestForValidation)
 }
 
 func toApiItem(item pr_db.Item) proapi.PrItem {
