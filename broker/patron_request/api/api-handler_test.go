@@ -406,6 +406,9 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 			"serviceInfo": map[string]interface{}{
 				"serviceType": "Copy",
 			},
+			"bibliographicInfo": map[string]interface{}{
+				"title": "Test title",
+			},
 		},
 	}
 
@@ -449,6 +452,9 @@ func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
 		IllRequest: map[string]interface{}{
 			"serviceInfo": map[string]interface{}{
 				"serviceType": "Copy",
+			},
+			"bibliographicInfo": map[string]interface{}{
+				"title": "Test title",
 			},
 		},
 	}, time.Now())

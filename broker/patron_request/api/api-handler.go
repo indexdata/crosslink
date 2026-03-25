@@ -31,7 +31,7 @@ type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
 
-var illRequestValidator = validator.New()
+var illRequestValidator = validator.New(validator.WithRequiredStructEnabled())
 var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
