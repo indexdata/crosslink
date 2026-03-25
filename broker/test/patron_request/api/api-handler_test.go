@@ -233,6 +233,7 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &pResult)
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Equal(t, "success", pResult.Outcome)
 	assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
@@ -262,6 +263,7 @@ func TestCrud(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "ERROR", pResult.ActionResult)
 	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
+	assert.Equal(t, "failure", pResult.Outcome)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)

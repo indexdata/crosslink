@@ -537,8 +537,12 @@ components:
         message:
           type: string
           description: Action message
+        outcome:
+          type: string
+          description: Action outcome ("success", "failure")
       required:
         - actionResult
+        - outcome
 
     SseResult:
       type: object

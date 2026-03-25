@@ -399,9 +399,14 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if completedEvent.ResultData.EventError != nil {
 		message = &completedEvent.ResultData.EventError.Message
 	}
+	outcome := prservice.ActionOutcomeSuccess
+	if completedEvent.ResultData.Outcome != nil {
+		outcome = *completedEvent.ResultData.Outcome
+	}
 	result := proapi.ActionResult{
 		ActionResult: string(completedEvent.EventStatus),
 		Message:      message,
+		Outcome:      outcome,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note
