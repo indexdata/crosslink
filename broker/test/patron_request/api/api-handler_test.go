@@ -229,7 +229,11 @@ func TestCrud(t *testing.T) {
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	var pResult proapi.ActionResult
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -254,7 +258,10 @@ func TestCrud(t *testing.T) {
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
 	// We should either update the mock to include items or change the test to not use blocking action.
-	assert.Equal(t, "{\"actionResult\":\"ERROR\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "ERROR", pResult.ActionResult)
+	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -340,7 +347,11 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	var pResult proapi.ActionResult
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -366,7 +377,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -381,7 +395,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -396,7 +413,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -411,7 +431,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -426,7 +449,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -441,7 +467,10 @@ func TestActionsToCompleteState(t *testing.T) {
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, actionBytes, 200)
-	assert.Equal(t, "{\"actionResult\":\"SUCCESS\"}\n", string(respBytes))
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.ActionResult)
+	assert.Nil(t, pResult.Message)
 
 	// Check requester patron request done
 	respBytes = httpRequest(t, "GET", requesterPrPath+queryParams, []byte{}, 200)

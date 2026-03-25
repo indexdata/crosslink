@@ -383,8 +383,13 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		addInternalError(ctx, w, err)
 		return
 	}
+	var message *string
+	if completedEvent.ResultData.EventError != nil {
+		message = &completedEvent.ResultData.EventError.Message
+	}
 	result := proapi.ActionResult{
 		ActionResult: string(completedEvent.EventStatus),
+		Message:      message,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note
