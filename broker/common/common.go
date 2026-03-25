@@ -29,6 +29,9 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 		jsonTag, ok := typ.Field(i).Tag.Lookup("json")
 		if ok {
 			before, _, found := strings.Cut(jsonTag, ",")
+			if before == "-" {
+				continue
+			}
 			if found {
 				fieldName = before
 			} else {
