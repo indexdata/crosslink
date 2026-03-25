@@ -1160,8 +1160,11 @@ func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T
 type MockEventBus struct {
 	mock.Mock
 	events.EventBus
-	createdTaskData []events.EventData
-	runTaskHandler  bool
+	createdTaskData     []events.EventData
+	createdNoticeIDs    []string
+	createdNoticeData   []events.EventData
+	createdNoticeStatus []events.EventStatus
+	runTaskHandler      bool
 }
 
 func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
@@ -1186,6 +1189,9 @@ func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 }
 
 func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain) (string, error) {
+	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
+	m.createdNoticeData = append(m.createdNoticeData, data)
+	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}
