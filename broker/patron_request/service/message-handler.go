@@ -82,52 +82,53 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 		return nil, errors.New("cannot process nil message")
 	}
 
-	pr, err := m.getPatronRequest(ctx, *msg)
-	if err != nil {
-		return nil, err
-	}
 	// Create notice with result
-	status, response, err := m.handlePatronRequestMessage(ctx, msg, pr)
+	status, response, pr, handleErr := m.handlePatronRequestMessage(ctx, msg)
 	eventData := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg, OutgoingMessage: response}}
-	if err != nil {
+	if handleErr != nil {
 		eventData.EventError = &events.EventError{
-			Message: err.Error(),
+			Message: handleErr.Error(),
 		}
 	}
-	_, err = m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
-	if err != nil {
-		return nil, err
+	if pr.ID != "" {
+		_, noticeErr := m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
+		if noticeErr != nil {
+			return nil, noticeErr
+		}
 	}
 
-	return response, err
+	return response, handleErr
 }
 
-func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
-		return m.handleSupplyingAgencyMessage(ctx, *msg.SupplyingAgencyMessage, pr)
+		pr, err := m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
+		if err != nil {
+			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
+		}
+		status, response, err := m.handleSupplyingAgencyMessage(ctx, *msg.SupplyingAgencyMessage, pr)
+		return status, response, pr, err
 	} else if msg.RequestingAgencyMessage != nil {
-		return m.handleRequestingAgencyMessage(ctx, *msg.RequestingAgencyMessage, pr)
-	} else if msg.Request != nil {
-		return m.handleRequestMessage(ctx, *msg.Request)
-	} else {
-		return events.EventStatusError, nil, errors.New("cannot process message without content")
-	}
-}
-
-func (m *PatronRequestMessageHandler) getPatronRequest(ctx common.ExtendedContext, msg iso18626.ISO18626Message) (pr_db.PatronRequest, error) {
-	if msg.SupplyingAgencyMessage != nil {
-		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
-	} else if msg.RequestingAgencyMessage != nil {
+		var (
+			pr  pr_db.PatronRequest
+			err error
+		)
 		if msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId != "" {
-			return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId, SideLending)
+			pr, err = m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId, SideLending)
 		} else {
 			symbol := msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-			return m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
+			pr, err = m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
 		}
+		if err != nil {
+			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
+		}
+		status, response, err := m.handleRequestingAgencyMessage(ctx, *msg.RequestingAgencyMessage, pr)
+		return status, response, pr, err
 	} else if msg.Request != nil {
-		return m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.Request.Header.RequestingAgencyRequestId, SideBorrowing)
+		status, response, pr, err := m.handleRequestMessage(ctx, *msg.Request)
+		return status, response, pr, err
 	} else {
-		return pr_db.PatronRequest{}, errors.New("missing message")
+		return events.EventStatusError, nil, pr_db.PatronRequest{}, errors.New("cannot process message without content")
 	}
 }
 
@@ -296,29 +297,32 @@ func createRequestResponse(request iso18626.Request, messageStatus iso18626.Type
 		err
 }
 
-func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
 	raRequestId := request.Header.RequestingAgencyRequestId
 	if raRequestId == "" {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+		status, response, err := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: "missing RequestingAgencyRequestId",
 		}, nil)
+		return status, response, pr_db.PatronRequest{}, err
 	}
 	supplierSymbol := request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue
 	requesterSymbol := request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue
-	_, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
+	existingPr, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 				ErrorValue: err.Error(),
 			}, err)
+			return status, response, pr_db.PatronRequest{}, handleErr
 		}
 	} else {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
 			ErrorValue: "there is already request with this id " + raRequestId,
 		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
+		return status, response, existingPr, handleErr
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
@@ -332,10 +336,11 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		RequesterReqID:  getDbText(raRequestId),
 	})
 	if err != nil {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+		return status, response, pr_db.PatronRequest{}, handleErr
 	}
 	err = m.extractRequestNotifications(ctx, pr, request)
 	if err != nil {
@@ -343,13 +348,14 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	err = m.runAutoActionsOnStateEntry(ctx, pr)
 	if err != nil {
-		return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+		return status, response, pr_db.PatronRequest{}, handleErr
 	}
-
-	return createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
+	status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
+	return status, response, pr, handleErr
 }
 
 func getDbText(value string) pgtype.Text {

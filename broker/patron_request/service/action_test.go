@@ -521,6 +521,74 @@ func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 	assert.Equal(t, iso18626.TypeMessageStatusOK, result.result.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
 }
 
+func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, nil)
+
+	requestType := iso18626.TypeRequestTypeNew
+	illRequest := iso18626.Request{
+		Header: iso18626.Header{
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "OLD"},
+				AgencyIdValue: "OLD_REQ",
+			},
+			RequestingAgencyRequestId: "old-id",
+		},
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "preserved-title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeCopy,
+			RequestType: &requestType,
+			Note:        "preserve me",
+		},
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+			{SortOrder: 1},
+		},
+		PatronInfo: &iso18626.PatronInfo{
+			PatronId: "old-patron",
+			Surname:  "Doe",
+		},
+	}
+
+	result := prAction.sendBorrowingRequest(appCtx, pr_db.PatronRequest{
+		ID:              patronRequestId,
+		State:           BorrowerStateValidated,
+		Side:            SideBorrowing,
+		Patron:          pgtype.Text{Valid: true, String: "patron1"},
+		RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"},
+	}, illRequest)
+
+	assert.Equal(t, events.EventStatusSuccess, result.status)
+	if assert.NotNil(t, result.result) && assert.NotNil(t, result.result.OutgoingMessage) &&
+		assert.NotNil(t, result.result.OutgoingMessage.Request) {
+		request := result.result.OutgoingMessage.Request
+		assert.Equal(t, "ISIL", request.Header.RequestingAgencyId.AgencyIdType.Text)
+		assert.Equal(t, "REC1", request.Header.RequestingAgencyId.AgencyIdValue)
+		assert.Equal(t, patronRequestId, request.Header.RequestingAgencyRequestId)
+		if assert.NotNil(t, request.PatronInfo) {
+			assert.Equal(t, "patron1", request.PatronInfo.PatronId)
+			assert.Equal(t, "Doe", request.PatronInfo.Surname)
+		}
+		if assert.NotNil(t, request.ServiceInfo) {
+			assert.Equal(t, "preserve me", request.ServiceInfo.Note)
+			assert.Equal(t, iso18626.TypeServiceTypeCopy, request.ServiceInfo.ServiceType)
+		}
+		assert.Equal(t, "preserved-title", request.BibliographicInfo.Title)
+		assert.Len(t, request.RequestedDeliveryInfo, 1)
+		assert.Equal(t, int64(1), request.RequestedDeliveryInfo[0].SortOrder)
+	}
+	assert.Equal(t, "OLD", illRequest.Header.RequestingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "OLD_REQ", illRequest.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "old-id", illRequest.Header.RequestingAgencyRequestId)
+	if assert.NotNil(t, illRequest.PatronInfo) {
+		assert.Equal(t, "old-patron", illRequest.PatronInfo.PatronId)
+		assert.Equal(t, "Doe", illRequest.PatronInfo.Surname)
+	}
+	assert.Equal(t, iso18626.TypeMessageStatusOK, result.result.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
+}
+
 func TestShipReturnBorrowingRequestMissingSupplierSymbol(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockIso18626Handler := new(MockIso18626Handler)
@@ -1092,8 +1160,11 @@ func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T
 type MockEventBus struct {
 	mock.Mock
 	events.EventBus
-	createdTaskData []events.EventData
-	runTaskHandler  bool
+	createdTaskData     []events.EventData
+	createdNoticeIDs    []string
+	createdNoticeData   []events.EventData
+	createdNoticeStatus []events.EventStatus
+	runTaskHandler      bool
 }
 
 func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
@@ -1118,6 +1189,9 @@ func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 }
 
 func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain) (string, error) {
+	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
+	m.createdNoticeData = append(m.createdNoticeData, data)
+	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}

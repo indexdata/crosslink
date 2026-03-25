@@ -1,6 +1,7 @@
 package prservice
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -317,20 +318,25 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 
-	var illMessage = iso18626.ISO18626Message{
-		Request: &iso18626.Request{
-			Header: iso18626.Header{
-				RequestingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: requesterSymbol[0],
-					},
-					AgencyIdValue: requesterSymbol[1],
-				},
-				RequestingAgencyRequestId: pr.ID,
-			},
-			PatronInfo:        &iso18626.PatronInfo{PatronId: pr.Patron.String},
-			BibliographicInfo: request.BibliographicInfo,
+	illRequest, err := deepCopyISO18626Request(request)
+	if err != nil {
+		status, eventResult := events.LogErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
+		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+	}
+	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: requesterSymbol[0],
 		},
+		AgencyIdValue: requesterSymbol[1],
+	}
+	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	if illRequest.PatronInfo == nil {
+		illRequest.PatronInfo = &iso18626.PatronInfo{}
+	}
+	illRequest.PatronInfo.PatronId = pr.Patron.String
+
+	var illMessage = iso18626.ISO18626Message{
+		Request: &illRequest,
 	}
 	w := NewResponseCaptureWriter()
 	a.iso18626Handler.HandleRequest(ctx, &illMessage, w)
@@ -342,6 +348,18 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error) {
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		return iso18626.Request{}, err
+	}
+	var clone iso18626.Request
+	if err = json.Unmarshal(requestJSON, &clone); err != nil {
+		return iso18626.Request{}, err
+	}
+	return clone, nil
 }
 
 func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
