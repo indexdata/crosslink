@@ -23,14 +23,28 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("input is not a struct")
 	}
 
+	if err := structToMap(result, val, typ); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func structToMap(result map[string]interface{}, val reflect.Value, typ reflect.Type) error {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
-		fieldName := typ.Field(i).Name
-		jsonTag, ok := typ.Field(i).Tag.Lookup("json")
+		structField := typ.Field(i)
+		fieldName := structField.Name
+		jsonTag, ok := structField.Tag.Lookup("json")
+		tagName := ""
+		tagOpts := ""
 		if ok {
-			before, _, found := strings.Cut(jsonTag, ",")
+			before, after, found := strings.Cut(jsonTag, ",")
 			if before == "-" {
 				continue
+			}
+			tagName = before
+			if found {
+				tagOpts = after
 			}
 			if found {
 				fieldName = before
@@ -38,10 +52,44 @@ func StructToMap(obj interface{}) (map[string]interface{}, error) {
 				fieldName = jsonTag
 			}
 		}
+
+		if structField.Anonymous && (tagName == "") {
+			fieldVal := field
+			fieldTyp := field.Type()
+			if fieldVal.Kind() == reflect.Ptr {
+				if fieldVal.IsNil() {
+					continue
+				}
+				fieldVal = fieldVal.Elem()
+				fieldTyp = fieldTyp.Elem()
+			}
+			if fieldVal.Kind() == reflect.Struct {
+				if err := structToMap(result, fieldVal, fieldTyp); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
+		if hasTagOption(tagOpts, "omitempty") && field.IsZero() {
+			continue
+		}
+
 		result[fieldName] = field.Interface()
 	}
+	return nil
+}
 
-	return result, nil
+func hasTagOption(options string, opt string) bool {
+	if options == "" {
+		return false
+	}
+	for _, item := range strings.Split(options, ",") {
+		if item == opt {
+			return true
+		}
+	}
+	return false
 }
 
 func UnpackItemsNote(note string) ([][]string, int, int) {

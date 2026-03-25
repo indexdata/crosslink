@@ -19,6 +19,26 @@ type userWithIgnoredField struct {
 	XMLName xml.Name `json:"-"`
 }
 
+type embeddedUser struct {
+	User
+	Role string `json:"role"`
+}
+
+type embeddedUserPtr struct {
+	*User
+	Role string `json:"role"`
+}
+
+type omitemptyFields struct {
+	NilMap    map[string]string `json:"nilMap,omitempty"`
+	NilSlice  []string          `json:"nilSlice,omitempty"`
+	NilPtr    *string           `json:"nilPtr,omitempty"`
+	EmptyStr  string            `json:"emptyStr,omitempty"`
+	ZeroInt   int               `json:"zeroInt,omitempty"`
+	FalseBool bool              `json:"falseBool,omitempty"`
+	Keep      string            `json:"keep"`
+}
+
 var bob = "Bob"
 var alice = "Alice"
 
@@ -44,8 +64,8 @@ func TestStructToMap(t *testing.T) {
 			input: &User{ID: 2, Name: &bob, Active: false},
 			want: map[string]interface{}{
 				"id":     2,
-				"name":   &bob,
 				"Active": false,
+				"name":   &bob,
 			},
 			wantErr: false,
 		},
@@ -54,6 +74,46 @@ func TestStructToMap(t *testing.T) {
 			input: userWithIgnoredField{Name: "alice"},
 			want: map[string]interface{}{
 				"name": "alice",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "Flatten anonymous embedded struct",
+			input: embeddedUser{User: User{ID: 3, Name: &alice, Active: true}, Role: "admin"},
+			want: map[string]interface{}{
+				"id":     3,
+				"name":   &alice,
+				"Active": true,
+				"role":   "admin",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "Flatten anonymous embedded pointer struct",
+			input: embeddedUserPtr{User: &User{ID: 4, Name: &bob, Active: false}, Role: "viewer"},
+			want: map[string]interface{}{
+				"id":     4,
+				"Active": false,
+				"name":   &bob,
+				"role":   "viewer",
+			},
+			wantErr: false,
+		},
+		{
+			name:  "Skip nil anonymous embedded pointer struct",
+			input: embeddedUserPtr{Role: "guest"},
+			want: map[string]interface{}{
+				"role": "guest",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Honor omitempty for zero values",
+			input: omitemptyFields{
+				Keep: "x",
+			},
+			want: map[string]interface{}{
+				"keep": "x",
 			},
 			wantErr: false,
 		},
