@@ -301,20 +301,21 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
 	}
 
-	var illMessage = iso18626.ISO18626Message{
-		Request: &iso18626.Request{
-			Header: iso18626.Header{
-				RequestingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: requesterSymbol[0],
-					},
-					AgencyIdValue: requesterSymbol[1],
-				},
-				RequestingAgencyRequestId: pr.ID,
-			},
-			PatronInfo:        &iso18626.PatronInfo{PatronId: pr.Patron.String},
-			BibliographicInfo: request.BibliographicInfo,
+	illRequest := request
+	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
+		AgencyIdType: iso18626.TypeSchemeValuePair{
+			Text: requesterSymbol[0],
 		},
+		AgencyIdValue: requesterSymbol[1],
+	}
+	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	if illRequest.PatronInfo == nil {
+		illRequest.PatronInfo = &iso18626.PatronInfo{}
+	}
+	illRequest.PatronInfo.PatronId = pr.Patron.String
+
+	var illMessage = iso18626.ISO18626Message{
+		Request: &illRequest,
 	}
 	w := NewResponseCaptureWriter()
 	a.iso18626Handler.HandleRequest(ctx, &illMessage, w)
