@@ -7,7 +7,10 @@ import (
 
 	"github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/pgcql"
+	"github.com/indexdata/go-utils/utils"
 )
+
+var LANGUAGE = utils.GetEnv("LANGUAGE", "english")
 
 type FieldAllRecords struct{}
 
@@ -64,6 +67,15 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	nf = pgcql.NewFieldDate()
 	def.AddField("needed_at", nf)
 
+	f = pgcql.NewFieldString().WithExact().WithColumn("ill_request->'bibliographicInfo'->>'title'")
+	def.AddField("title", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	def.AddField("patron", f)
+
+	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
+	def.AddField("cql.serverChoice", ftv)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
@@ -118,6 +130,8 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.LastAction,
 			&i.LastActionOutcome,
 			&i.LastActionResult,
+			&i.Language,
+			&i.Items,
 			&i.FullCount,
 		); err != nil {
 			return nil, err

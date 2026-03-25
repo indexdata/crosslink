@@ -84,6 +84,12 @@ sql:
           - column: "patron_request.side"
             go_type:
               type: "PatronRequestSide"
+          - column: "patron_request.items"
+            go_type:
+              type: "[]PrItem"
+          - column: "patron_request_search_view.items"
+            go_type:
+              type: "[]PrItem"
           - column: "notification.side"
             go_type:
               type: "PatronRequestSide"

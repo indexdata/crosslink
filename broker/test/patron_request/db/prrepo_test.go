@@ -75,6 +75,7 @@ func TestItem(t *testing.T) {
 			Time:  time.Now(),
 			Valid: true,
 		},
+		Language: "english",
 	})
 	assert.NoError(t, err)
 
@@ -163,6 +164,7 @@ func TestNotification(t *testing.T) {
 			Time:  time.Now(),
 			Valid: true,
 		},
+		Language: "english",
 	})
 	assert.NoError(t, err)
 

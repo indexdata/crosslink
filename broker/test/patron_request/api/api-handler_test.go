@@ -19,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -183,7 +184,8 @@ func TestCrud(t *testing.T) {
 		"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
 		"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20needs_attention%3Dfalse%20and%20"+
 		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
-		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16", []byte{}, 200)
+		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
+		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
@@ -570,6 +572,71 @@ func TestGetStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterCancelRequest)))
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterReceived)))
 	assert.True(t, slices.Contains(capabilities.SupplierMessageEvents, string(prservice.SupplierCancelRejected)))
+}
+
+func TestServerChoice(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prId,
+		Timestamp: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		Side: prservice.SideBorrowing,
+		RequesterSymbol: pgtype.Text{
+			String: "ISIL:REQ",
+			Valid:  true,
+		},
+		State:    prservice.BorrowerStateValidated,
+		Language: "english",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-123",
+			Valid:  true,
+		},
+		Patron: pgtype.Text{
+			String: "P456",
+			Valid:  true,
+		},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				Title:  "Do Androids Dream of Electric Sheep?",
+				Author: "Ray Bradbury",
+			},
+			PatronInfo: &iso18626.PatronInfo{
+				GivenName: "John",
+				Surname:   "Doe",
+				PatronId:  "PP-789",
+			},
+		},
+	})
+	assert.NoError(t, err)
+	itemId := uuid.NewString()
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      itemId,
+		PrID:    prId,
+		Barcode: "BAR-321",
+		CallNumber: pgtype.Text{
+			String: "CAL-321",
+			Valid:  true,
+		},
+		ItemID: pgtype.Text{
+			String: "ITEM-321",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
+	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	var foundPrs proapi.PatronRequests
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
