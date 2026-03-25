@@ -320,8 +320,8 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 
 	illRequest, err := deepCopyISO18626Request(request)
 	if err != nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		status, eventResult := a.logErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
 		AgencyIdType: iso18626.TypeSchemeValuePair{
