@@ -633,7 +633,7 @@ func parseAndValidateIllRequestPayload(
 ) (iso18626.Request, error) {
 	var illRequest iso18626.Request
 	if rawIllRequest == nil {
-		return illRequest, nil
+		return iso18626.Request{}, fmt.Errorf("%w: missing required illRequest payload", errInvalidPatronRequest)
 	}
 	illRequestBytes := utils.Must(json.Marshal(rawIllRequest))
 	err := json.Unmarshal(illRequestBytes, &illRequest)

@@ -399,7 +399,15 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	creationTime := time.Now()
 	id := uuid.NewString()
-	reqWithID := &proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}
+	reqWithID := &proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Copy",
+			},
+		},
+	}
 
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
@@ -412,11 +420,9 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.False(t, pr.SupplierSymbol.Valid)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
-	illRequest, requesterReqID, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
-	assert.NoError(t, err)
-	pr = buildDbPatronRequest(reqWithoutID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest)
-	assert.Equal(t, "REQ-1", pr.ID)
-	assert.True(t, pr.Timestamp.Valid)
+	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errInvalidPatronRequest))
 }
 
 func TestParseAndValidateIllRequestInvalidRequesterSymbol(t *testing.T) {
