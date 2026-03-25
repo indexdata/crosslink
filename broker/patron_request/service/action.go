@@ -61,7 +61,8 @@ func (a *PatronRequestActionService) processInvokeActionTask(ctx common.Extended
 
 func (a *PatronRequestActionService) logErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	status, result := events.LogErrorAndReturnResult(ctx, message, err)
-	result.Outcome = new(ActionOutcomeFailure)
+	outcome := ActionOutcomeFailure
+	result.Outcome = &outcome
 	return status, result
 }
 
@@ -102,7 +103,8 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		execResult.result = &events.EventResult{}
 	}
 	if execResult.result.Outcome == nil {
-		execResult.result.Outcome = new(ActionOutcomeSuccess)
+		outcome := ActionOutcomeSuccess
+		execResult.result.Outcome = &outcome
 	}
 	outcome := *execResult.result.Outcome
 	updatedPr := execResult.pr
