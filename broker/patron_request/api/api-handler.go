@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
@@ -28,6 +30,10 @@ import (
 type ActionTaskProcessor interface {
 	ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error)
 }
+
+var illRequestValidator = validator.New(validator.WithRequiredStructEnabled())
+var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
+var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
 	limitDefault         int32
@@ -198,11 +204,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	newPr.RequesterSymbol = &symbol
-	dbreq, err := a.toDbPatronRequest(ctx, newPr, params.XOkapiTenant)
+	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
+	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
 	if err != nil {
+		if errors.Is(err, errInvalidPatronRequest) {
+			addBadRequestError(ctx, w, err)
+			return
+		}
 		addInternalError(ctx, w, err)
 		return
 	}
+	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
 	pr, err := a.prRepo.CreatePatronRequest(ctx, (pr_db.CreatePatronRequestParams)(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -556,44 +568,40 @@ func toString(text pgtype.Text) *string {
 	return value
 }
 
-func (a *PatronRequestApiHandler) toDbPatronRequest(ctx common.ExtendedContext, request proapi.CreatePatronRequest, tenant *string) (pr_db.PatronRequest, error) {
-	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
-	var id string
-	if request.Id != nil {
-		id = *request.Id
-	} else {
-		prefix := strings.SplitN(*request.RequesterSymbol, ":", 2)[1]
-		hrid, err := a.prRepo.GetNextHrid(ctx, prefix)
-		if err != nil {
-			return pr_db.PatronRequest{}, err
-		}
-		id = hrid
+func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
+	ctx common.ExtendedContext,
+	request *proapi.CreatePatronRequest,
+	creationTime time.Time,
+) (iso18626.Request, string, error) {
+	if request.RequesterSymbol == nil || *request.RequesterSymbol == "" {
+		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol must be specified", errInvalidPatronRequest)
 	}
-	var illRequest iso18626.Request
-	if request.IllRequest != nil {
-		illRequestBytes := utils.Must(json.Marshal(request.IllRequest))
-		err := json.Unmarshal(illRequestBytes, &illRequest)
+	reqSymbolType, reqSymbolValue, err := parseAgencySymbol(*request.RequesterSymbol)
+	if err != nil {
+		return iso18626.Request{}, "", fmt.Errorf("%w: requesterSymbol: %w", errInvalidPatronRequest, err)
+	}
+	var requesterReqId string
+	if request.Id != nil {
+		requesterReqId = *request.Id
+	} else {
+		hrid, err := a.prRepo.GetNextHrid(ctx, reqSymbolValue)
 		if err != nil {
-			return pr_db.PatronRequest{}, err
+			return iso18626.Request{}, "", err
 		}
-		illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime.Time}
-		illRequest.Header.RequestingAgencyRequestId = id
+		requesterReqId = hrid
+	}
+	illRequest, err := parseAndValidateIllRequestPayload(
+		request.IllRequest,
+		reqSymbolType,
+		reqSymbolValue,
+		requesterReqId,
+		creationTime,
+	)
+	if err != nil {
+		return iso18626.Request{}, "", err
 	}
 
-	return pr_db.PatronRequest{
-		ID:              id,
-		Timestamp:       creationTime,
-		State:           prservice.BorrowerStateNew,
-		Side:            prservice.SideBorrowing,
-		Patron:          getDbText(request.Patron),
-		RequesterSymbol: getDbText(request.RequesterSymbol),
-		SupplierSymbol:  getDbText(nil),
-		IllRequest:      illRequest,
-		Tenant:          getDbText(tenant),
-		RequesterReqID:  getDbText(&id),
-		// LastAction, LastActionOutcome and LastActionResult are not set on creation
-		// they will be updated when the first action is executed.
-	}, nil
+	return illRequest, requesterReqId, nil
 }
 
 func getId(id string) string {
@@ -611,6 +619,85 @@ func getDbText(value *string) pgtype.Text {
 		Valid:  true,
 		String: *value,
 	}
+}
+
+func parseAgencySymbol(symbol string) (string, string, error) {
+	scheme, value, ok := strings.Cut(symbol, ":")
+	if !ok || scheme == "" || value == "" {
+		return "", "", fmt.Errorf("expected format SCHEME:VALUE, got %q", symbol)
+	}
+	return scheme, value, nil
+}
+
+func parseAndValidateIllRequestPayload(
+	rawIllRequest map[string]interface{},
+	reqSymbolType string,
+	reqSymbolValue string,
+	requesterReqId string,
+	creationTime time.Time,
+) (iso18626.Request, error) {
+	var illRequest iso18626.Request
+	if rawIllRequest == nil {
+		return iso18626.Request{}, fmt.Errorf("%w: missing required illRequest payload", errInvalidPatronRequest)
+	}
+	illRequestBytes, err := json.Marshal(rawIllRequest)
+	if err != nil {
+		return iso18626.Request{}, fmt.Errorf("%w: illRequest: %w", errInvalidPatronRequest, err)
+	}
+	err = json.Unmarshal(illRequestBytes, &illRequest)
+	if err != nil {
+		return iso18626.Request{}, fmt.Errorf("%w: illRequest: %w", errInvalidPatronRequest, err)
+	}
+	suppSymbolType, suppSymbolValue, err := parseAgencySymbol(brokerSymbol)
+	if err != nil {
+		return iso18626.Request{}, fmt.Errorf("invalid BROKER_SYMBOL %q: %w", brokerSymbol, err)
+	}
+	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
+		AgencyIdType:  iso18626.TypeSchemeValuePair{Text: reqSymbolType},
+		AgencyIdValue: reqSymbolValue,
+	}
+	illRequest.Header.SupplyingAgencyId = iso18626.TypeAgencyId{
+		AgencyIdType:  iso18626.TypeSchemeValuePair{Text: suppSymbolType},
+		AgencyIdValue: suppSymbolValue,
+	}
+	illRequest.Header.Timestamp = utils.XSDDateTime{Time: creationTime}
+	illRequest.Header.RequestingAgencyRequestId = requesterReqId
+	if err = validateIllRequest(illRequest); err != nil {
+		return iso18626.Request{}, fmt.Errorf("%w: invalid illRequest: %w", errInvalidPatronRequest, err)
+	}
+	return illRequest, nil
+}
+
+func buildDbPatronRequest(
+	request *proapi.CreatePatronRequest,
+	tenant *string,
+	creationTime pgtype.Timestamp,
+	requesterReqId string,
+	illRequest iso18626.Request,
+) pr_db.PatronRequest {
+	return pr_db.PatronRequest{
+		ID:              requesterReqId,
+		Timestamp:       creationTime,
+		State:           prservice.BorrowerStateNew,
+		Side:            prservice.SideBorrowing,
+		Patron:          getDbText(request.Patron),
+		RequesterSymbol: getDbText(request.RequesterSymbol),
+		SupplierSymbol:  getDbText(nil),
+		IllRequest:      illRequest,
+		Tenant:          getDbText(tenant),
+		RequesterReqID:  getDbText(&requesterReqId),
+		// LastAction, LastActionOutcome and LastActionResult are not set on creation
+		// they will be updated when the first action is executed.
+	}
+}
+
+func validateIllRequest(request iso18626.Request) error {
+	requestForValidation := request
+	if requestForValidation.Header.MultipleItemRequestId == "" {
+		//schema workaround
+		requestForValidation.Header.MultipleItemRequestId = "#empty"
+	}
+	return illRequestValidator.Struct(requestForValidation)
 }
 
 func toApiItem(item pr_db.Item) proapi.PrItem {

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/xml"
 	"reflect"
 	"testing"
 
@@ -11,6 +12,11 @@ type User struct {
 	ID     int     `json:"id"`
 	Name   *string `json:"name,omitempty"`
 	Active bool
+}
+
+type userWithIgnoredField struct {
+	Name    string   `json:"name"`
+	XMLName xml.Name `json:"-"`
 }
 
 var bob = "Bob"
@@ -40,6 +46,14 @@ func TestStructToMap(t *testing.T) {
 				"id":     2,
 				"name":   &bob,
 				"Active": false,
+			},
+			wantErr: false,
+		},
+		{
+			name:  "Skip json dash fields",
+			input: userWithIgnoredField{Name: "alice"},
+			want: map[string]interface{}{
+				"name": "alice",
 			},
 			wantErr: false,
 		},

@@ -5,11 +5,11 @@ OS ?= $(shell uname)
 XSLT ?= xsltproc
 GEN_FILES = MARC21slim_gen.go
 .PHONY: all generate generate-schema lint check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.2.0
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
 
 all: generate
 
-generate: generate-schema 
+generate: generate-schema
 
 generate-schema: $(GEN_FILES)
 

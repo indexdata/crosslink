@@ -513,6 +513,37 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.True(t, len(events) > 5)
 }
 
+func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
+	requesterSymbol := "localISIL:REQ" + uuid.NewString()
+
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
+		directory.Entry{
+			LmsConfig: &directory.LmsConfig{
+				FromAgency: "from-agency",
+				Address:    ncipMockUrl,
+			},
+		})
+	assert.NotNil(t, reqPeer)
+
+	newPr := proapi.CreatePatronRequest{
+		RequesterSymbol: &requesterSymbol,
+		IllRequest: map[string]interface{}{
+			"bibliographicInfo": map[string]interface{}{
+				"title": "Invalid request",
+			},
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Broken",
+			},
+		},
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err, "failed to marshal patron request")
+
+	respBytes := httpRequest(t, "POST", basePath, newPrBytes, 400)
+	assert.Contains(t, string(respBytes), "invalid illRequest")
+	assert.Contains(t, string(respBytes), "ServiceType")
+}
+
 func TestGetReturnableStateModel(t *testing.T) {
 	respBytes := httpRequest(t, "GET", "/state_model/models/returnables", []byte{}, 200)
 	var retrievedStateModel proapi.StateModel
