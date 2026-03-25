@@ -71,8 +71,12 @@ type CommonEventData struct {
 	EventError      *EventError                `json:"eventError,omitempty"`
 	Note            string                     `json:"note,omitempty"`
 	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
-	Outcome         *string                    `json:"outcome,omitempty"`
-	ToState         *string                    `json:"toState,omitempty"`
+	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
+}
+
+type ActionResult struct {
+	Outcome string  `json:"outcome"`
+	ToState *string `json:"toState,omitempty"`
 }
 
 type EventError struct {

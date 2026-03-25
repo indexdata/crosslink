@@ -400,13 +400,13 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if completedEvent.ResultData.EventError != nil {
 		message = &completedEvent.ResultData.EventError.Message
 	}
-	outcome := *completedEvent.ResultData.Outcome
+	outcome := completedEvent.ResultData.ActionResult.Outcome
 	result := proapi.ActionResult{
 		Result:    string(completedEvent.EventStatus),
 		Message:   message,
 		Outcome:   outcome,
 		FromState: fromState,
-		ToState:   completedEvent.ResultData.ToState,
+		ToState:   completedEvent.ResultData.ActionResult.ToState,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note

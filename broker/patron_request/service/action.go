@@ -61,8 +61,7 @@ func (a *PatronRequestActionService) processInvokeActionTask(ctx common.Extended
 
 func (a *PatronRequestActionService) logErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	status, result := events.LogErrorAndReturnResult(ctx, message, err)
-	outcome := ActionOutcomeFailure
-	result.Outcome = &outcome
+	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 	return status, result
 }
 
@@ -102,11 +101,12 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if execResult.result == nil {
 		execResult.result = &events.EventResult{}
 	}
-	if execResult.result.Outcome == nil {
+	if execResult.result.ActionResult == nil {
+		execResult.result.ActionResult = &events.ActionResult{}
 		outcome := ActionOutcomeSuccess
-		execResult.result.Outcome = &outcome
+		execResult.result.ActionResult.Outcome = outcome
 	}
-	outcome := *execResult.result.Outcome
+	outcome := execResult.result.ActionResult.Outcome
 	updatedPr := execResult.pr
 	updatedPr.LastAction = getDbText(string(action))
 	updatedPr.LastActionOutcome = getDbText(outcome)
@@ -117,8 +117,8 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
-		execResult.result.ToState = new(string)
-		*execResult.result.ToState = string(transitionState)
+		toState := string(transitionState)
+		execResult.result.ActionResult.ToState = &toState
 		stateChanged = true
 	}
 
@@ -338,7 +338,7 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	result.IncomingMessage = w.IllMessage
 	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestConfirmation == nil ||
 		w.IllMessage.RequestConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -377,12 +377,12 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived, "")
 	if httpStatus == nil {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -448,7 +448,7 @@ func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.Exten
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -505,12 +505,12 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, "")
 	if httpStatus == nil {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -520,12 +520,12 @@ func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionNotification, shim.RESHARE_LOAN_CONDITION_AGREE)
 	if httpStatus == nil {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -535,12 +535,12 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, shim.RESHARE_LOAN_CONDITION_REJECT)
 	if httpStatus == nil {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
@@ -744,12 +744,12 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 
 func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventStatus, eventResult *events.EventResult, result *events.EventResult, httpStatus *int, pr pr_db.PatronRequest) actionExecutionResult {
 	if httpStatus == nil {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.SupplyingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		result.Outcome = new(ActionOutcomeFailure)
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
