@@ -83,21 +83,21 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 	}
 
 	// Create notice with result
-	status, response, pr, err := m.handlePatronRequestMessage(ctx, msg)
+	status, response, pr, handleErr := m.handlePatronRequestMessage(ctx, msg)
 	eventData := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg, OutgoingMessage: response}}
-	if err != nil {
+	if handleErr != nil {
 		eventData.EventError = &events.EventError{
-			Message: err.Error(),
+			Message: handleErr.Error(),
 		}
 	}
 	if pr.ID != "" {
-		_, err = m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
-		if err != nil {
-			return nil, err
+		_, noticeErr := m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
+		if noticeErr != nil {
+			return nil, noticeErr
 		}
 	}
 
-	return response, err
+	return response, handleErr
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
@@ -308,7 +308,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	supplierSymbol := request.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + request.Header.SupplyingAgencyId.AgencyIdValue
 	requesterSymbol := request.Header.RequestingAgencyId.AgencyIdType.Text + ":" + request.Header.RequestingAgencyId.AgencyIdValue
-	_, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
+	existingPr, err := m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, supplierSymbol, raRequestId)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -322,7 +322,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
 			ErrorValue: "there is already request with this id " + raRequestId,
 		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
-		return status, response, pr_db.PatronRequest{}, handleErr
+		return status, response, existingPr, handleErr
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
