@@ -531,7 +531,7 @@ components:
     ActionResult:
       type: object
       properties:
-        actionResult:
+        result:
           type: string
           description: Action result
         message:
@@ -547,7 +547,7 @@ components:
           type: string
           description: State after action execution
       required:
-        - actionResult
+        - result
         - outcome
         - fromState
 

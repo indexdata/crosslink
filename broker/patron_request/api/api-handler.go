@@ -402,11 +402,11 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	}
 	outcome := *completedEvent.ResultData.Outcome
 	result := proapi.ActionResult{
-		ActionResult: string(completedEvent.EventStatus),
-		Message:      message,
-		Outcome:      outcome,
-		FromState:    fromState,
-		ToState:      completedEvent.ResultData.ToState,
+		Result:    string(completedEvent.EventStatus),
+		Message:   message,
+		Outcome:   outcome,
+		FromState: fromState,
+		ToState:   completedEvent.ResultData.ToState,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note
