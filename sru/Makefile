@@ -11,7 +11,7 @@ GEN_FILES = sru_gen.go \
 	scan/scan_gen.go
 
 .PHONY: all generate generate-schema lint check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
 
 define nsImports
 namespaced=yes \
@@ -24,7 +24,7 @@ endef
 
 all: generate
 
-generate: generate-schema 
+generate: generate-schema
 
 generate-schema: $(GEN_FILES)
 

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
@@ -112,7 +113,19 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 
 func TestPostPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
-	toCreate := proapi.PatronRequest{Id: "1", RequesterSymbol: &symbol}
+	id := "1"
+	toCreate := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"bibliographicInfo": map[string]interface{}{
+				"title": "test",
+			},
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Copy",
+			},
+		},
+	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
@@ -146,6 +159,26 @@ func TestPostPatronRequestsInvalidJson(t *testing.T) {
 	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "invalid character")
+}
+
+func TestPostPatronRequestsInvalidIllRequestShape(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
+	toCreate := proapi.CreatePatronRequest{
+		Id:              ptr("1"),
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"header": "invalid",
+		},
+	}
+	jsonBytes, err := json.Marshal(toCreate)
+	assert.NoError(t, err, "failed to marshal patron request")
+	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
+	assert.NoError(t, err, "failed to create request")
+	rr := httptest.NewRecorder()
+	tenant := proapi.Tenant("test-lib")
+	handler.PostPatronRequests(rr, req, proapi.PostPatronRequestsParams{XOkapiTenant: &tenant})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "illRequest")
 }
 
 func TestDeletePatronRequestsIdNotFound(t *testing.T) {
@@ -361,23 +394,72 @@ func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
-func TestToDbPatronRequest(t *testing.T) {
+func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	creationTime := time.Now()
 	id := uuid.NewString()
+	reqWithID := &proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Copy",
+			},
+			"bibliographicInfo": map[string]interface{}{
+				"title": "Test title",
+			},
+		},
+	}
 
-	pr, err := handler.toDbPatronRequest(ctx, proapi.CreatePatronRequest{Id: &id, RequesterSymbol: &symbol}, nil)
+	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
+	assert.Equal(t, id, requesterReqID)
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest)
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.Timestamp.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
 	assert.Equal(t, id, pr.RequesterReqID.String)
 	assert.False(t, pr.SupplierSymbol.Valid)
 
-	pr, err = handler.toDbPatronRequest(ctx, proapi.CreatePatronRequest{RequesterSymbol: &symbol}, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, "REQ-1", pr.ID)
-	assert.True(t, pr.Timestamp.Valid)
+	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
+	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errInvalidPatronRequest))
+}
+
+func TestParseAndValidateIllRequestInvalidRequesterSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	invalidSymbol := "REQ"
+
+	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{RequesterSymbol: &invalidSymbol}, time.Now())
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errInvalidPatronRequest))
+}
+
+func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	previousBrokerSymbol := brokerSymbol
+	brokerSymbol = "BROKER"
+	defer func() {
+		brokerSymbol = previousBrokerSymbol
+	}()
+
+	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{
+		RequesterSymbol: &symbol,
+		IllRequest: map[string]interface{}{
+			"serviceInfo": map[string]interface{}{
+				"serviceType": "Copy",
+			},
+			"bibliographicInfo": map[string]interface{}{
+				"title": "Test title",
+			},
+		},
+	}, time.Now())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid BROKER_SYMBOL")
 }
 
 type PrRepoError struct {
@@ -442,4 +524,8 @@ func (r *PrRepoError) GetNotificationsByPrId(ctx common.ExtendedContext, prId st
 type MockEventBus struct {
 	mock.Mock
 	events.EventBus
+}
+
+func ptr(value string) *string {
+	return &value
 }

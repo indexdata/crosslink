@@ -95,7 +95,6 @@ deps-update:
 	$(GO) mod tidy
 
 deps-update-tools:
-	$(GO) get github.com/indexdata/xsd2goxsl@latest
 	$(GO) get github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	$(GO) mod tidy
 

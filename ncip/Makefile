@@ -8,7 +8,7 @@ GEN_SCHEMA_OUT=ncip_gen.go
 COVERAGE=coverage.out
 
 .PHONY: all generate generate-schema lint check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@9a581ac
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
 
 all: generate
 
