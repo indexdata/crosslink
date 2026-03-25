@@ -234,6 +234,8 @@ func TestCrud(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "SUCCESS", pResult.ActionResult)
 	assert.Equal(t, "success", pResult.Outcome)
+	assert.Equal(t, "VALIDATED", pResult.FromState)
+	assert.Equal(t, "SENT", *pResult.ToState)
 	assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)

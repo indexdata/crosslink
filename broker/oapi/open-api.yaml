@@ -540,9 +540,16 @@ components:
         outcome:
           type: string
           description: Action outcome ("success", "failure")
+        fromState:
+          type: string
+          description: State before action execution
+        toState:
+          type: string
+          description: State after action execution
       required:
         - actionResult
         - outcome
+        - fromState
 
     SseResult:
       type: object

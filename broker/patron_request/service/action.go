@@ -98,10 +98,13 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 }
 
 func (a *PatronRequestActionService) finalizeActionExecution(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, action pr_db.PatronRequestAction, currentPr pr_db.PatronRequest, execResult actionExecutionResult) (events.EventStatus, *events.EventResult) {
-	outcome := ActionOutcomeSuccess
-	if execResult.result != nil && execResult.result.Outcome != nil {
-		outcome = *execResult.result.Outcome
+	if execResult.result == nil {
+		execResult.result = &events.EventResult{}
 	}
+	if execResult.result.Outcome == nil {
+		execResult.result.Outcome = new(ActionOutcomeSuccess)
+	}
+	outcome := *execResult.result.Outcome
 	updatedPr := execResult.pr
 	updatedPr.LastAction = getDbText(string(action))
 	updatedPr.LastActionOutcome = getDbText(outcome)
@@ -112,6 +115,8 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
+		execResult.result.ToState = new(string)
+		*execResult.result.ToState = string(transitionState)
 		stateChanged = true
 	}
 
