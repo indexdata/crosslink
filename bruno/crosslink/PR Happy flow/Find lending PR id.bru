@@ -34,6 +34,8 @@ script:post-response {
   test("Check if found lending PR", () => {
       expect(lendingPr).to.exist;
       expect(lendingPr.id).to.be.a("string").and.not.empty;
+      // Intentionally set lendingPrId before asserting lastActionResult so later steps can use it
+      // for cleanup/diagnostics even if the assertion fails.
       bru.setVar("lendingPrId", lendingPr.id);
       expect(lendingPr.lastActionResult).to.equal("SUCCESS")
   });
