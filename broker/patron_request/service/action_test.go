@@ -579,6 +579,13 @@ func TestSendBorrowingRequestPreservesIllRequestFields(t *testing.T) {
 		assert.Len(t, request.RequestedDeliveryInfo, 1)
 		assert.Equal(t, int64(1), request.RequestedDeliveryInfo[0].SortOrder)
 	}
+	assert.Equal(t, "OLD", illRequest.Header.RequestingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "OLD_REQ", illRequest.Header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "old-id", illRequest.Header.RequestingAgencyRequestId)
+	if assert.NotNil(t, illRequest.PatronInfo) {
+		assert.Equal(t, "old-patron", illRequest.PatronInfo.PatronId)
+		assert.Equal(t, "Doe", illRequest.PatronInfo.Surname)
+	}
 	assert.Equal(t, iso18626.TypeMessageStatusOK, result.result.IncomingMessage.RequestConfirmation.ConfirmationHeader.MessageStatus)
 }
 
