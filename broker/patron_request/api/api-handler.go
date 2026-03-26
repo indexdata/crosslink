@@ -215,23 +215,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
-	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
-		ID:                dbreq.ID,
-		Timestamp:         dbreq.Timestamp,
-		IllRequest:        dbreq.IllRequest,
-		State:             dbreq.State,
-		Side:              dbreq.Side,
-		Patron:            dbreq.Patron,
-		RequesterSymbol:   dbreq.RequesterSymbol,
-		SupplierSymbol:    dbreq.SupplierSymbol,
-		Tenant:            dbreq.Tenant,
-		RequesterReqID:    dbreq.RequesterReqID,
-		NeedsAttention:    dbreq.NeedsAttention,
-		LastAction:        dbreq.LastAction,
-		LastActionOutcome: dbreq.LastActionOutcome,
-		LastActionResult:  dbreq.LastActionResult,
-		Language:          dbreq.Language,
-	})
+	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {

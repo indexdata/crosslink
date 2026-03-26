@@ -631,7 +631,7 @@ func TestServerChoice(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cal=cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
 	var foundPrs proapi.PatronRequests
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)

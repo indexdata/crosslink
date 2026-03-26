@@ -124,23 +124,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	}
 
 	var err error
-	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams{
-		ID:                updatedPr.ID,
-		Timestamp:         updatedPr.Timestamp,
-		IllRequest:        updatedPr.IllRequest,
-		State:             updatedPr.State,
-		Side:              updatedPr.Side,
-		Patron:            updatedPr.Patron,
-		RequesterSymbol:   updatedPr.RequesterSymbol,
-		SupplierSymbol:    updatedPr.SupplierSymbol,
-		Tenant:            updatedPr.Tenant,
-		RequesterReqID:    updatedPr.RequesterReqID,
-		NeedsAttention:    updatedPr.NeedsAttention,
-		LastAction:        updatedPr.LastAction,
-		LastActionOutcome: updatedPr.LastActionOutcome,
-		LastActionResult:  updatedPr.LastActionResult,
-		Language:          updatedPr.Language,
-	})
+	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 	if err != nil {
 		return a.logErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
@@ -799,23 +783,7 @@ func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContex
 			return nil
 		}
 		prToUpdate.NeedsAttention = true
-		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams{
-			ID:                prToUpdate.ID,
-			Timestamp:         prToUpdate.Timestamp,
-			IllRequest:        prToUpdate.IllRequest,
-			State:             prToUpdate.State,
-			Side:              prToUpdate.Side,
-			Patron:            prToUpdate.Patron,
-			RequesterSymbol:   prToUpdate.RequesterSymbol,
-			SupplierSymbol:    prToUpdate.SupplierSymbol,
-			Tenant:            prToUpdate.Tenant,
-			RequesterReqID:    prToUpdate.RequesterReqID,
-			NeedsAttention:    prToUpdate.NeedsAttention,
-			LastAction:        prToUpdate.LastAction,
-			LastActionOutcome: prToUpdate.LastActionOutcome,
-			LastActionResult:  prToUpdate.LastActionResult,
-			Language:          prToUpdate.Language,
-		})
+		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
 		return err
 	})
 	if err != nil {

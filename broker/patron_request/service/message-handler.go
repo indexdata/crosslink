@@ -235,23 +235,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 }
 
 func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams{
-		ID:                pr.ID,
-		Timestamp:         pr.Timestamp,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Language:          pr.Language,
-	})
+	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -464,23 +448,7 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 }
 
 func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams{
-		ID:                pr.ID,
-		Timestamp:         pr.Timestamp,
-		IllRequest:        pr.IllRequest,
-		State:             pr.State,
-		Side:              pr.Side,
-		Patron:            pr.Patron,
-		RequesterSymbol:   pr.RequesterSymbol,
-		SupplierSymbol:    pr.SupplierSymbol,
-		Tenant:            pr.Tenant,
-		RequesterReqID:    pr.RequesterReqID,
-		NeedsAttention:    pr.NeedsAttention,
-		LastAction:        pr.LastAction,
-		LastActionOutcome: pr.LastActionOutcome,
-		LastActionResult:  pr.LastActionResult,
-		Language:          pr.Language,
-	})
+	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
