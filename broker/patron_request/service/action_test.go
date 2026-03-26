@@ -459,6 +459,7 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionNotification, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_AGREE, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
 	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
 }
@@ -481,6 +482,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	if assert.NotNil(t, mockIso18626Handler.lastRequestingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeActionCancel, mockIso18626Handler.lastRequestingAgencyMessage.Action)
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
+		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
 }
@@ -516,6 +518,7 @@ func TestSendBorrowingRequestZeroValueIllRequest(t *testing.T) {
 		assert.Equal(t, "ISIL", request.Header.RequestingAgencyId.AgencyIdType.Text)
 		assert.Equal(t, "REC1", request.Header.RequestingAgencyId.AgencyIdValue)
 		assert.Equal(t, patronRequestId, request.Header.RequestingAgencyRequestId)
+		assert.False(t, request.Header.Timestamp.IsZero())
 		assert.Equal(t, "patron1", request.PatronInfo.PatronId)
 		assert.Equal(t, iso18626.BibliographicInfo{}, request.BibliographicInfo)
 	}
@@ -891,6 +894,7 @@ func TestHandleInvokeLenderActionRejectCancel(t *testing.T) {
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+	assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.Header.Timestamp.IsZero())
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
 		assert.Equal(t, iso18626.TypeYesNoN, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 	}
@@ -995,6 +999,13 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 0)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeStatusLoaned, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+		assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.LastChange.IsZero())
+		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
+			assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero())
+		}
+	}
 }
 
 func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
@@ -1190,6 +1201,7 @@ func TestHandleInvokeLenderActionAcceptCancel(t *testing.T) {
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.Equal(t, iso18626.TypeStatusCancelled, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+	assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.Header.Timestamp.IsZero())
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo) {
 		assert.Equal(t, iso18626.TypeYesNoY, *mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.AnswerYesNo)
 	}

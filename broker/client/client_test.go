@@ -635,12 +635,39 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
+	assert.False(t, message.DeliveryInfo.DateSent.IsZero())
 	assert.Equal(t, "sup1", message.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Header.RequestingAgencyId.AgencyIdValue)
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, message.MessageInfo.ReasonForMessage)
 	assert.Equal(t, "Vendor: Alma", message.MessageInfo.Note)
 	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
+}
+
+func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{
+		ItemId: "testId1",
+	}
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(directory.Alma),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
+	msgTarget := messageTarget{
+		status:        iso18626.TypeStatusWillSupply,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	if assert.NotNil(t, message.DeliveryInfo) {
+		assert.True(t, message.DeliveryInfo.DateSent.IsZero())
+	}
+	assert.Equal(t, iso18626.TypeStatusWillSupply, message.StatusInfo.Status)
 }
 
 func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {

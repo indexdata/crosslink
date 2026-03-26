@@ -17,6 +17,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -350,6 +351,7 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 		AgencyIdValue: requesterSymbol[1],
 	}
 	illRequest.Header.RequestingAgencyRequestId = pr.ID
+	illRequest.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
 	if illRequest.PatronInfo == nil {
 		illRequest.PatronInfo = &iso18626.PatronInfo{}
 	}
@@ -526,6 +528,7 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 					},
 					AgencyIdValue: supplierSymbol[1],
 				},
+				Timestamp:                 utils.XSDDateTime{Time: time.Now()},
 				RequestingAgencyRequestId: pr.ID,
 			},
 			Action: action,
@@ -766,12 +769,24 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 					},
 					AgencyIdValue: supplierSymbol[1],
 				},
+				Timestamp:                 utils.XSDDateTime{Time: time.Now()},
 				RequestingAgencyRequestId: pr.RequesterReqID.String,
 				SupplyingAgencyRequestId:  pr.ID,
 			},
 			MessageInfo: messageInfo,
 			StatusInfo:  statusInfo,
 		},
+	}
+	if illMessage.SupplyingAgencyMessage.StatusInfo.LastChange.IsZero() {
+		illMessage.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
+	}
+	if illMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusLoaned {
+		if illMessage.SupplyingAgencyMessage.DeliveryInfo == nil {
+			illMessage.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
+		}
+		if illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero() {
+			illMessage.SupplyingAgencyMessage.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
+		}
 	}
 	w := NewResponseCaptureWriter()
 	a.iso18626Handler.HandleSupplyingAgencyMessage(ctx, &illMessage, w)
