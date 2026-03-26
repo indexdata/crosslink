@@ -52,12 +52,12 @@ func (m *PatronRequestMessageHandler) SetAutoActionRunner(autoActionRunner AutoA
 	m.autoActionRunner = autoActionRunner
 }
 
-func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest) error {
+func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
 	if m.autoActionRunner == nil {
 		return nil
 	}
 	// Auto actions run inline so incoming-message confirmations can include their outcomes.
-	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, parentEventID)
 }
 
 func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool, error) {
@@ -82,22 +82,65 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 		return nil, errors.New("cannot process nil message")
 	}
 
-	// Create notice with result
-	status, response, pr, handleErr := m.handlePatronRequestMessage(ctx, msg)
-	eventData := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: msg, OutgoingMessage: response}}
-	if handleErr != nil {
-		eventData.EventError = &events.EventError{
-			Message: handleErr.Error(),
-		}
+	_, response, _, handleErr := m.handlePatronRequestMessage(ctx, msg)
+	return response, handleErr
+}
+
+func (m *PatronRequestMessageHandler) getPatronRequestForRequestingAgencyMessage(ctx common.ExtendedContext, ram *iso18626.RequestingAgencyMessage) (pr_db.PatronRequest, error) {
+	if ram.Header.SupplyingAgencyRequestId != "" {
+		return m.prRepo.GetPatronRequestByIdAndSide(ctx, ram.Header.SupplyingAgencyRequestId, SideLending)
 	}
-	if pr.ID != "" {
-		_, noticeErr := m.eventBus.CreateNotice(pr.ID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
-		if noticeErr != nil {
-			return nil, noticeErr
-		}
+	symbol := ram.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + ram.Header.SupplyingAgencyId.AgencyIdValue
+	return m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, ram.Header.RequestingAgencyRequestId)
+}
+
+func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
+	ctx common.ExtendedContext,
+	prID string,
+	incoming *iso18626.ISO18626Message,
+	handler func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error),
+) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
+	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil)
+	if err != nil {
+		return events.EventStatusError, nil, err
 	}
 
-	return response, handleErr
+	var (
+		handlerStatus events.EventStatus
+		response      *iso18626.ISO18626Message
+		handleErr     error
+	)
+
+	_, err = m.eventBus.ProcessTask(ctx, events.Event{
+		ID:              eventID,
+		EventName:       events.EventNamePatronRequestMessage,
+		PatronRequestID: prID,
+		EventData:       data,
+	}, func(taskCtx common.ExtendedContext, task events.Event) (events.EventStatus, *events.EventResult) {
+		handlerStatus, response, handleErr = handler(taskCtx, taskParentID(&task))
+		result := &events.EventResult{
+			CommonEventData: events.CommonEventData{
+				IncomingMessage: incoming,
+				OutgoingMessage: response,
+			},
+		}
+		if handleErr != nil {
+			result.EventError = &events.EventError{Message: handleErr.Error()}
+		}
+		return handlerStatus, result
+	})
+	if err != nil {
+		return events.EventStatusError, nil, err
+	}
+	return handlerStatus, response, handleErr
+}
+
+func taskParentID(task *events.Event) *string {
+	if task == nil {
+		return nil
+	}
+	return &task.ID
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
@@ -106,23 +149,18 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.handleSupplyingAgencyMessage(ctx, *msg.SupplyingAgencyMessage, pr)
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			return m.handleSupplyingAgencyMessageWithParent(execCtx, *msg.SupplyingAgencyMessage, pr, parentEventID)
+		})
 		return status, response, pr, err
 	} else if msg.RequestingAgencyMessage != nil {
-		var (
-			pr  pr_db.PatronRequest
-			err error
-		)
-		if msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId != "" {
-			pr, err = m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.RequestingAgencyMessage.Header.SupplyingAgencyRequestId, SideLending)
-		} else {
-			symbol := msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
-			pr, err = m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, msg.RequestingAgencyMessage.Header.RequestingAgencyRequestId)
-		}
+		pr, err := m.getPatronRequestForRequestingAgencyMessage(ctx, msg.RequestingAgencyMessage)
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.handleRequestingAgencyMessage(ctx, *msg.RequestingAgencyMessage, pr)
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			return m.handleRequestingAgencyMessageWithParent(execCtx, *msg.RequestingAgencyMessage, pr, parentEventID)
+		})
 		return status, response, pr, err
 	} else if msg.Request != nil {
 		status, response, pr, err := m.handleRequestMessage(ctx, *msg.Request)
@@ -133,6 +171,10 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 }
 
 func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	return m.handleSupplyingAgencyMessageWithParent(ctx, sam, pr, nil)
+}
+
+func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupportedReason := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := fmt.Errorf("unsupported reason for message: %s", sam.MessageInfo.ReasonForMessage)
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -231,10 +273,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.Ex
 	if !eventDefined {
 		return statusChangeNotAllowed()
 	}
-	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged)
+	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -247,7 +289,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 		ctx.Logger().Error("failed to save sam notifications", "error", err)
 	}
 	if stateChanged {
-		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID)
 		if err != nil {
 			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -318,10 +360,13 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			return status, response, pr_db.PatronRequest{}, handleErr
 		}
 	} else {
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-			ErrorValue: "there is already request with this id " + raRequestId,
-		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
+		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, &iso18626.ISO18626Message{Request: &request},
+			func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+					ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
+					ErrorValue: "there is already request with this id " + raRequestId,
+				}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
+			})
 		return status, response, existingPr, handleErr
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
@@ -346,15 +391,20 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	if err != nil {
 		ctx.Logger().Error("failed to save request notifications", "error", err)
 	}
-	err = m.runAutoActionsOnStateEntry(ctx, pr)
-	if err != nil {
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
+	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, &iso18626.ISO18626Message{Request: &request},
+		func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID)
+			if err != nil {
+				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+					ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+					ErrorValue: err.Error(),
+				}, err)
+			}
+			return createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
+		})
+	if handleErr != nil {
 		return status, response, pr_db.PatronRequest{}, handleErr
 	}
-	status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
 	return status, response, pr, handleErr
 }
 
@@ -375,6 +425,10 @@ func getDbTextPtr(value *string) pgtype.Text {
 }
 
 func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	return m.handleRequestingAgencyMessageWithParent(ctx, ram, pr, nil)
+}
+
+func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
 		err := errors.New("unsupported action: " + string(ram.Action))
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
@@ -423,7 +477,7 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.E
 	if !eventDefined {
 		return unsupported()
 	}
-	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged)
+	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged, parentEventID)
 }
 
 func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
@@ -446,7 +500,7 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 		err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
@@ -459,7 +513,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 		ctx.Logger().Error("failed to save ram notifications", "error", err)
 	}
 	if stateChanged {
-		err = m.runAutoActionsOnStateEntry(ctx, pr)
+		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID)
 		if err != nil {
 			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
