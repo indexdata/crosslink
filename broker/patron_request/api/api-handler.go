@@ -697,6 +697,7 @@ func buildDbPatronRequest(
 		Tenant:          getDbText(tenant),
 		RequesterReqID:  getDbText(&requesterReqId),
 		Language:        pr_db.LANGUAGE,
+		Items:           []pr_db.PrItem{},
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}

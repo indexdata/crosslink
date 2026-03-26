@@ -335,6 +335,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		SupplierSymbol:  getDbText(supplierSymbol),
 		RequesterReqID:  getDbText(raRequestId),
 		Language:        pr_db.LANGUAGE,
+		Items:           []pr_db.PrItem{},
 	})
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{

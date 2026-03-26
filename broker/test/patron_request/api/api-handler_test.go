@@ -609,6 +609,7 @@ func TestServerChoice(t *testing.T) {
 				PatronId:  "PP-789",
 			},
 		},
+		Items: []pr_db.PrItem{},
 	})
 	assert.NoError(t, err)
 	itemId := uuid.NewString()
