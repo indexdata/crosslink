@@ -20,6 +20,13 @@ type CustomTime time.Time
 
 const customTimeLayout = "2006-01-02T15:04:05.999999"
 
+var postgresTimeLayouts = []string{
+	"2006-01-02T15:04:05.999999",
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05.999999",
+	"2006-01-02 15:04:05",
+}
+
 func (ct CustomTime) MarshalJSON() ([]byte, error) {
 	t := time.Time(ct)
 	return []byte(`"` + t.Format(customTimeLayout) + `"`), nil
@@ -27,12 +34,16 @@ func (ct CustomTime) MarshalJSON() ([]byte, error) {
 
 func (ct *CustomTime) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), `"`)
-	t, err := time.Parse(customTimeLayout, s)
-	if err != nil {
-		return err
+	var t time.Time
+	var err error
+	for _, layout := range postgresTimeLayouts {
+		t, err = time.Parse(layout, s)
+		if err == nil {
+			*ct = CustomTime(t)
+			return nil
+		}
 	}
-	*ct = CustomTime(t)
-	return nil
+	return err
 }
 
 type PrItem struct {

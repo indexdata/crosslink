@@ -42,9 +42,9 @@ BEGIN
         COALESCE(NEW.ill_request->'bibliographicInfo'->>'author', '') || ' ' ||
         COALESCE(
             (SELECT string_agg(
-                COALESCE(item->>'itemId', '') || ' ' ||
+                COALESCE(item->>'item_id', '') || ' ' ||
                 COALESCE(item->>'barcode', '') || ' ' ||
-                COALESCE(item->>'callnum', ''), ' '
+                COALESCE(item->>'call_number', ''), ' '
             )
             FROM jsonb_array_elements(NEW.items) AS item), ''
         )
@@ -85,3 +85,38 @@ SELECT
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
     immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at
 FROM patron_request pr;
+
+-- One-time backfill of items for existing patron_request rows
+UPDATE patron_request pr
+SET items = COALESCE(
+        (
+            SELECT jsonb_agg(to_jsonb(i) - 'pr_id')
+            FROM item i
+            WHERE i.pr_id = pr.id
+        ),
+        '[]'::jsonb
+            );
+-- One-time backfill of search tsvector for existing patron_request rows
+UPDATE patron_request pr
+SET search = to_tsvector(
+        pr.language,
+        COALESCE(pr.requester_req_id, '') || ' ' ||
+        COALESCE(pr.patron, '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'givenName', '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'surname', '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'patronId', '') || ' ' ||
+        COALESCE(pr.ill_request->'bibliographicInfo'->>'title', '') || ' ' ||
+        COALESCE(pr.ill_request->'bibliographicInfo'->>'author', '') || ' ' ||
+        COALESCE(
+                (
+                    SELECT string_agg(
+                                   COALESCE(item->>'item_id', '') || ' ' ||
+                                   COALESCE(item->>'barcode', '') || ' ' ||
+                                   COALESCE(item->>'call_number', ''),
+                                   ' '
+                           )
+                    FROM jsonb_array_elements(pr.items) AS item
+                ),
+                ''
+        )
+             );

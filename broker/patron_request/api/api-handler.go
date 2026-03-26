@@ -564,7 +564,7 @@ func addNotFoundError(w http.ResponseWriter) {
 }
 
 func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
-	var items []proapi.PrItem
+	items := []proapi.PrItem{}
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
