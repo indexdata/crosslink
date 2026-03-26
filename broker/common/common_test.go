@@ -33,8 +33,8 @@ func TestStructToMap(t *testing.T) {
 			name:  "Basic struct conversion",
 			input: User{ID: 1, Name: &alice, Active: true},
 			want: map[string]interface{}{
-				"id":     1,
-				"name":   &alice,
+				"id":     float64(1),
+				"name":   alice,
 				"Active": true,
 			},
 			wantErr: false,
@@ -43,8 +43,8 @@ func TestStructToMap(t *testing.T) {
 			name:  "Pointer to struct",
 			input: &User{ID: 2, Name: &bob, Active: false},
 			want: map[string]interface{}{
-				"id":     2,
-				"name":   &bob,
+				"id":     float64(2),
+				"name":   bob,
 				"Active": false,
 			},
 			wantErr: false,

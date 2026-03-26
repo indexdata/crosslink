@@ -30,7 +30,7 @@ vars:pre-request {
 script:post-response {
   const responseData = res.getBody();
   const eventsByAction = action => responseData.filter(pr => {
-    return pr.eventData.CommonEventData.action == action;
+    return pr.eventData.action == action;
   });
   
   const expectActionWithFirstSuccess = action => {
