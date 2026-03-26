@@ -367,6 +367,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		addInternalError(ctx, w, err)
 		return
 	}
+	fromState := string(pr.State)
 	if !actionMapping.IsActionAvailable(*pr, pr_db.PatronRequestAction(action.Action)) {
 		addBadRequestError(ctx, w, errors.New("Action "+action.Action+" is not allowed for patron request "+id+" in state "+string(pr.State)))
 		return
@@ -395,8 +396,17 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		addInternalError(ctx, w, err)
 		return
 	}
+	var message *string
+	if completedEvent.ResultData.EventError != nil {
+		message = &completedEvent.ResultData.EventError.Message
+	}
+	outcome := completedEvent.ResultData.ActionResult.Outcome
 	result := proapi.ActionResult{
-		ActionResult: string(completedEvent.EventStatus),
+		Result:    string(completedEvent.EventStatus),
+		Message:   message,
+		Outcome:   outcome,
+		FromState: fromState,
+		ToState:   completedEvent.ResultData.ActionResult.ToState,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note

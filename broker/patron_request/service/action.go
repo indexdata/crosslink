@@ -31,10 +31,9 @@ type PatronRequestActionService struct {
 }
 
 type actionExecutionResult struct {
-	status  events.EventStatus
-	result  *events.EventResult
-	outcome string
-	pr      pr_db.PatronRequest
+	status events.EventStatus
+	result *events.EventResult
+	pr     pr_db.PatronRequest
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -61,24 +60,30 @@ func (a *PatronRequestActionService) processInvokeActionTask(ctx common.Extended
 	return a.eventBus.ProcessTask(ctx, event, a.handleInvokeAction)
 }
 
+func (a *PatronRequestActionService) logErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
+	status, result := events.LogErrorAndReturnResult(ctx, message, err)
+	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+	return status, result
+}
+
 func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	if event.EventData.Action == nil {
-		return events.LogErrorAndReturnResult(ctx, "action not specified", errors.New("action not specified"))
+		return a.logErrorAndReturnResult(ctx, "action not specified", errors.New("action not specified"))
 	}
 	action := *event.EventData.Action
 	pr, err := a.prRepo.GetPatronRequestById(ctx, event.PatronRequestID)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to read patron request", err)
+		return a.logErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
 	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to load state model", err)
+		return a.logErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
 	if !actionMapping.IsActionSupported(pr, action) {
-		return events.LogErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
+		return a.logErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
 	if a.lmsCreator == nil {
-		return events.LogErrorAndReturnResult(ctx, "LMS creator not configured", nil)
+		return a.logErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
 	illRequest := pr.IllRequest
 	switch pr.Side {
@@ -89,28 +94,39 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	default:
-		return events.LogErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
+		return a.logErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
 }
 
 func (a *PatronRequestActionService) finalizeActionExecution(ctx common.ExtendedContext, event events.Event, actionMapping *ActionMapping, action pr_db.PatronRequestAction, currentPr pr_db.PatronRequest, execResult actionExecutionResult) (events.EventStatus, *events.EventResult) {
+	if execResult.result == nil {
+		execResult.result = &events.EventResult{}
+	}
+	if execResult.result.ActionResult == nil {
+		execResult.result.ActionResult = &events.ActionResult{}
+		outcome := ActionOutcomeSuccess
+		execResult.result.ActionResult.Outcome = outcome
+	}
+	outcome := execResult.result.ActionResult.Outcome
 	updatedPr := execResult.pr
 	updatedPr.LastAction = getDbText(string(action))
-	updatedPr.LastActionOutcome = getDbText(execResult.outcome)
+	updatedPr.LastActionOutcome = getDbText(outcome)
 	updatedPr.LastActionResult = getDbText(string(execResult.status))
-	if execResult.outcome == ActionOutcomeFailure {
+	if outcome == ActionOutcomeFailure {
 		updatedPr.NeedsAttention = true
 	}
 	stateChanged := false
-	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, execResult.outcome); ok && transitionState != updatedPr.State {
+	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
+		toState := string(transitionState)
+		execResult.result.ActionResult.ToState = &toState
 		stateChanged = true
 	}
 
 	var err error
 	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to update patron request", err)
+		return a.logErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
 
 	if stateChanged {
@@ -119,7 +135,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 			if !updatedPr.NeedsAttention {
 				a.setNeedsAttention(ctx, updatedPr)
 			}
-			return events.LogErrorAndReturnResult(ctx, "failed to execute auto action", err)
+			return a.logErrorAndReturnResult(ctx, "failed to execute auto action", err)
 		}
 	}
 
@@ -183,13 +199,13 @@ func autoActionErrorSuffix(event events.Event) string {
 
 func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, eventID *string) actionExecutionResult {
 	if !pr.RequesterSymbol.Valid {
-		status, result := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol.String)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
@@ -225,20 +241,20 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
-		status, result := events.LogErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 }
 
 func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{}, eventID *string) actionExecutionResult {
 	if !pr.SupplierSymbol.Valid {
-		status, result := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lms.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
 		status := events.EventStatusSuccess
@@ -272,8 +288,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionAcceptCancel:
 		return a.acceptCancelLenderRequest(ctx, pr)
 	default:
-		status, result := events.LogErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 }
 
@@ -284,13 +300,13 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	}
 	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	// change patron to canonical user id
 	// perhaps it would be better to have both original and canonical id stored?
 	pr.Patron = pgtype.Text{String: userId, Valid: true}
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) actionExecutionResult {
@@ -298,14 +314,14 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	// pr.RequesterSymbol is validated earlier in handleBorrowingAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	if len(requesterSymbol) != 2 {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "invalid requester symbol", nil)
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		status, eventResult := a.logErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 
 	illRequest, err := deepCopyISO18626Request(request)
 	if err != nil {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		status, eventResult := a.logErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
 		AgencyIdType: iso18626.TypeSchemeValuePair{
@@ -328,9 +344,10 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	result.IncomingMessage = w.IllMessage
 	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestConfirmation == nil ||
 		w.IllMessage.RequestConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error) {
@@ -352,8 +369,8 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	}
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		callNumber := ""
@@ -371,20 +388,22 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		requestedAction := "Hold For Pickup"
 		err = lmsAdapter.AcceptItem(itemId, pr.ID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived, "")
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
@@ -394,81 +413,82 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	}
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		itemId := item.Barcode
 		borrowerBarcode := patron
 		_, err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		itemId := item.Barcode
 		err = lmsAdapter.CheckInItem(itemId)
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		itemId := item.Barcode
 		err = lmsAdapter.DeleteItem(itemId)
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionShippedReturn, "")
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		status, eventResult := a.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
 	}
 	if !pr.SupplierSymbol.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		status, eventResult := a.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
 	}
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	if len(requesterSymbol) != 2 {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+		status, eventResult := a.logErrorAndReturnResult(ctx, "invalid requester symbol", nil)
 		return status, eventResult, nil
 	}
 	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
 	if len(supplierSymbol) != 2 {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
+		status, eventResult := a.logErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
 		return status, eventResult, nil
 	}
 	var illMessage = iso18626.ISO18626Message{
@@ -503,49 +523,55 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, "")
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionNotification, shim.RESHARE_LOAN_CONDITION_AGREE)
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, shim.RESHARE_LOAN_CONDITION_REJECT)
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: &result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
@@ -556,8 +582,8 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	itemLocation := lmsAdapter.ItemLocation()
 	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	if title == "" {
 		title = illRequest.BibliographicInfo.Title
@@ -572,8 +598,8 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		Barcode:    itemBarcode,
 	})
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "failed to save item", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "failed to save item", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
@@ -604,15 +630,15 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "no items for shipping in the request", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "no items for shipping in the request", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for i := range items {
 		item := &items[i]
 		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 		if title != "" {
 			item.Title = getDbText(title)
@@ -626,8 +652,8 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 				Barcode:    item.Barcode,
 			})
 			if err != nil {
-				status, result := events.LogErrorAndReturnResult(ctx, "failed to save item", err)
-				return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+				status, result := a.logErrorAndReturnResult(ctx, "failed to save item", err)
+				return actionExecutionResult{status: status, result: result, pr: pr}
 			}
 		}
 	}
@@ -658,14 +684,14 @@ func encodeItemsNote(items []pr_db.Item) string {
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := events.LogErrorAndReturnResult(ctx, "no items for check-in in the request", err)
-		return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		status, result := a.logErrorAndReturnResult(ctx, "no items for check-in in the request", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		err = lmsAdapter.CheckInItem(item.Barcode)
 		if err != nil {
-			status, result := events.LogErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
-			return actionExecutionResult{status: status, result: result, outcome: ActionOutcomeFailure, pr: pr}
+			status, result := a.logErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
 	result := events.EventResult{}
@@ -699,7 +725,7 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 
 func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
-		status, eventResult := events.LogErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		status, eventResult := a.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
 	}
 	// pr.SupplierSymbol is validated earlier in handleLenderAction
@@ -736,13 +762,15 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 
 func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventStatus, eventResult *events.EventResult, result *events.EventResult, httpStatus *int, pr pr_db.PatronRequest) actionExecutionResult {
 	if httpStatus == nil {
-		return actionExecutionResult{status: status, result: eventResult, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.SupplyingAgencyMessageConfirmation == nil ||
 		result.IncomingMessage.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
-		return actionExecutionResult{status: events.EventStatusProblem, result: result, outcome: ActionOutcomeFailure, pr: pr}
+		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
+		return actionExecutionResult{status: events.EventStatusProblem, result: result, pr: pr}
 	}
-	return actionExecutionResult{status: events.EventStatusSuccess, result: nil, outcome: ActionOutcomeSuccess, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
 func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContext, pr pr_db.PatronRequest) {
