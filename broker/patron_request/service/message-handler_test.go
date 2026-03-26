@@ -3,6 +3,7 @@ package prservice
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -67,6 +68,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 	mockEventBus := new(MockEventBus)
 	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)}
 
 	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
 		Request: &iso18626.Request{
@@ -79,6 +81,7 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
 					AgencyIdValue: "SUP1",
 				},
+				Timestamp:                 inTimestamp,
 				RequestingAgencyRequestId: "req-id-1",
 			},
 		},
@@ -86,6 +89,8 @@ func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.RequestConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.RequestConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Len(t, mockEventBus.createdTaskData, 1)
 	assert.NotNil(t, mockEventBus.createdTaskData[0].IncomingMessage)
 }
@@ -141,10 +146,12 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 	}, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 	handler.SetAutoActionRunner(mockAutoActionRunner)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 1, 0, 0, time.UTC)}
 
 	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
 		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
 			Header: iso18626.Header{
+				Timestamp:                 inTimestamp,
 				RequestingAgencyRequestId: patronRequestId,
 			},
 			MessageInfo: iso18626.MessageInfo{
@@ -156,6 +163,8 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
 	assert.Len(t, mockEventBus.createdTaskIDs, 1)
 	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
@@ -178,10 +187,12 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 	}, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 	handler.SetAutoActionRunner(mockAutoActionRunner)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 2, 0, 0, time.UTC)}
 
 	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
 		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
 			Header: iso18626.Header{
+				Timestamp:                inTimestamp,
 				SupplyingAgencyRequestId: "lender-pr-id-1",
 			},
 			Action: iso18626.TypeActionReceived,
@@ -190,6 +201,8 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 
 	assert.NoError(t, err)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
 	assert.Len(t, mockEventBus.createdTaskIDs, 1)
 	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
