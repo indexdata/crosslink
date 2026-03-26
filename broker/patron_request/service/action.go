@@ -793,25 +793,6 @@ func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventS
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContext, pr pr_db.PatronRequest) {
-	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
-		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, pr.ID)
-		if err != nil {
-			return err
-		}
-		if prToUpdate.NeedsAttention {
-			return nil
-		}
-		prToUpdate.NeedsAttention = true
-		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
-		return err
-	})
-	if err != nil {
-		ctx.Logger().Error("failed to set needs attention", "pr_id", pr.ID, "error", err)
-		return
-	}
-}
-
 func (a *PatronRequestActionService) markActionChainFailure(ctx common.ExtendedContext, prID string, fallbackAction pr_db.PatronRequestAction) {
 	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
 		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, prID)

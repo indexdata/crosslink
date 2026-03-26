@@ -86,19 +86,6 @@ func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, 
 	return response, handleErr
 }
 
-func (m *PatronRequestMessageHandler) createPatronRequestMessageNotice(prID string, incoming *iso18626.ISO18626Message, status events.EventStatus, outgoing *iso18626.ISO18626Message, handleErr error) (string, error) {
-	eventData := events.EventData{
-		CommonEventData: events.CommonEventData{
-			IncomingMessage: incoming,
-			OutgoingMessage: outgoing,
-		},
-	}
-	if handleErr != nil {
-		eventData.EventError = &events.EventError{Message: handleErr.Error()}
-	}
-	return m.eventBus.CreateNotice(prID, events.EventNamePatronRequestMessage, eventData, status, events.EventDomainPatronRequest)
-}
-
 func (m *PatronRequestMessageHandler) getPatronRequestForRequestingAgencyMessage(ctx common.ExtendedContext, ram *iso18626.RequestingAgencyMessage) (pr_db.PatronRequest, error) {
 	if ram.Header.SupplyingAgencyRequestId != "" {
 		return m.prRepo.GetPatronRequestByIdAndSide(ctx, ram.Header.SupplyingAgencyRequestId, SideLending)
@@ -107,38 +94,52 @@ func (m *PatronRequestMessageHandler) getPatronRequestForRequestingAgencyMessage
 	return m.prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx, symbol, ram.Header.RequestingAgencyRequestId)
 }
 
-func (m *PatronRequestMessageHandler) getCompletionNoticeStatus(ctx common.ExtendedContext, prID string, fallback events.EventStatus) events.EventStatus {
-	pr, err := m.prRepo.GetPatronRequestById(ctx, prID)
-	if err != nil || !pr.LastActionResult.Valid {
-		return fallback
+func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
+	ctx common.ExtendedContext,
+	prID string,
+	incoming *iso18626.ISO18626Message,
+	handler func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error),
+) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
+	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil)
+	if err != nil {
+		return events.EventStatusError, nil, err
 	}
-	switch events.EventStatus(strings.ToUpper(pr.LastActionResult.String)) {
-	case events.EventStatusNew, events.EventStatusProcessing, events.EventStatusSuccess, events.EventStatusProblem, events.EventStatusError:
-		return events.EventStatus(strings.ToUpper(pr.LastActionResult.String))
-	default:
-		return fallback
+
+	var (
+		handlerStatus events.EventStatus
+		response      *iso18626.ISO18626Message
+		handleErr     error
+	)
+
+	_, err = m.eventBus.ProcessTask(ctx, events.Event{
+		ID:              eventID,
+		PatronRequestID: prID,
+		EventData:       data,
+	}, func(taskCtx common.ExtendedContext, task events.Event) (events.EventStatus, *events.EventResult) {
+		handlerStatus, response, handleErr = handler(taskCtx, taskParentID(&task))
+		result := &events.EventResult{
+			CommonEventData: events.CommonEventData{
+				IncomingMessage: incoming,
+				OutgoingMessage: response,
+			},
+		}
+		if handleErr != nil {
+			result.EventError = &events.EventError{Message: handleErr.Error()}
+		}
+		return handlerStatus, result
+	})
+	if err != nil {
+		return events.EventStatusError, nil, err
 	}
+	return handlerStatus, response, handleErr
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestMessageNotice(ctx common.ExtendedContext, noticeID string, status events.EventStatus, outgoing *iso18626.ISO18626Message, handleErr error) error {
-	if m.eventRepo == nil {
+func taskParentID(task *events.Event) *string {
+	if task == nil {
 		return nil
 	}
-	return m.eventRepo.WithTxFunc(ctx, func(repo events.EventRepo) error {
-		notice, err := repo.GetEventForUpdate(ctx, noticeID)
-		if err != nil {
-			return err
-		}
-		notice.EventStatus = status
-		notice.EventData.OutgoingMessage = outgoing
-		if handleErr != nil {
-			notice.EventData.EventError = &events.EventError{Message: handleErr.Error()}
-		} else {
-			notice.EventData.EventError = nil
-		}
-		_, err = repo.SaveEvent(ctx, events.SaveEventParams(notice))
-		return err
-	})
+	return &task.ID
 }
 
 func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
@@ -147,30 +148,18 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		noticeID, err := m.createPatronRequestMessageNotice(pr.ID, msg, events.EventStatusSuccess, nil, nil)
-		if err != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
-		}
-		status, response, err := m.handleSupplyingAgencyMessageWithParent(ctx, *msg.SupplyingAgencyMessage, pr, &noticeID)
-		completionStatus := m.getCompletionNoticeStatus(ctx, pr.ID, status)
-		if noticeErr := m.updatePatronRequestMessageNotice(ctx, noticeID, completionStatus, response, err); noticeErr != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
-		}
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			return m.handleSupplyingAgencyMessageWithParent(execCtx, *msg.SupplyingAgencyMessage, pr, parentEventID)
+		})
 		return status, response, pr, err
 	} else if msg.RequestingAgencyMessage != nil {
 		pr, err := m.getPatronRequestForRequestingAgencyMessage(ctx, msg.RequestingAgencyMessage)
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		noticeID, err := m.createPatronRequestMessageNotice(pr.ID, msg, events.EventStatusSuccess, nil, nil)
-		if err != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
-		}
-		status, response, err := m.handleRequestingAgencyMessageWithParent(ctx, *msg.RequestingAgencyMessage, pr, &noticeID)
-		completionStatus := m.getCompletionNoticeStatus(ctx, pr.ID, status)
-		if noticeErr := m.updatePatronRequestMessageNotice(ctx, noticeID, completionStatus, response, err); noticeErr != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
-		}
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			return m.handleRequestingAgencyMessageWithParent(execCtx, *msg.RequestingAgencyMessage, pr, parentEventID)
+		})
 		return status, response, pr, err
 	} else if msg.Request != nil {
 		status, response, pr, err := m.handleRequestMessage(ctx, *msg.Request)
@@ -370,17 +359,13 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			return status, response, pr_db.PatronRequest{}, handleErr
 		}
 	} else {
-		noticeID, noticeErr := m.createPatronRequestMessageNotice(existingPr.ID, &iso18626.ISO18626Message{Request: &request}, events.EventStatusSuccess, nil, nil)
-		if noticeErr != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
-		}
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-			ErrorValue: "there is already request with this id " + raRequestId,
-		}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
-		if noticeErr := m.updatePatronRequestMessageNotice(ctx, noticeID, status, response, handleErr); noticeErr != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
-		}
+			status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, &iso18626.ISO18626Message{Request: &request},
+				func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+					return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+						ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
+						ErrorValue: "there is already request with this id " + raRequestId,
+				}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
+			})
 		return status, response, existingPr, handleErr
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
@@ -405,26 +390,19 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	if err != nil {
 		ctx.Logger().Error("failed to save request notifications", "error", err)
 	}
-	noticeID, err := m.createPatronRequestMessageNotice(pr.ID, &iso18626.ISO18626Message{Request: &request}, events.EventStatusSuccess, nil, nil)
-	if err != nil {
-		return events.EventStatusError, nil, pr_db.PatronRequest{}, err
-	}
-	err = m.runAutoActionsOnStateEntry(ctx, pr, &noticeID)
-	if err != nil {
-		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
-			ErrorValue: err.Error(),
-		}, err)
-		completionStatus := m.getCompletionNoticeStatus(ctx, pr.ID, status)
-		if noticeErr := m.updatePatronRequestMessageNotice(ctx, noticeID, completionStatus, response, handleErr); noticeErr != nil {
-			return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
-		}
+	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, &iso18626.ISO18626Message{Request: &request},
+		func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID)
+			if err != nil {
+				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+					ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+					ErrorValue: err.Error(),
+				}, err)
+			}
+			return createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
+		})
+	if handleErr != nil {
 		return status, response, pr_db.PatronRequest{}, handleErr
-	}
-	status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusOK, nil, nil)
-	completionStatus := m.getCompletionNoticeStatus(ctx, pr.ID, status)
-	if noticeErr := m.updatePatronRequestMessageNotice(ctx, noticeID, completionStatus, response, handleErr); noticeErr != nil {
-		return events.EventStatusError, nil, pr_db.PatronRequest{}, noticeErr
 	}
 	return status, response, pr, handleErr
 }

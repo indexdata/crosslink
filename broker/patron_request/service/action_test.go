@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -1170,9 +1171,12 @@ type MockEventBus struct {
 	mock.Mock
 	events.EventBus
 	createdTaskData     []events.EventData
+	createdTaskIDs      []string
+	createdTaskNames    []events.EventName
 	createdNoticeIDs    []string
 	createdNoticeData   []events.EventData
 	createdNoticeStatus []events.EventStatus
+	processedTaskEvents []events.Event
 	runTaskHandler      bool
 }
 
@@ -1185,16 +1189,30 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 		}
 		return event, nil
 	}
-	args := m.Called(event.ID)
-	return args.Get(0).(events.Event), args.Error(1)
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "ProcessTask" {
+			args := m.Called(event.ID)
+			return args.Get(0).(events.Event), args.Error(1)
+		}
+	}
+	status, result := h(ctx, event)
+	event.EventStatus = status
+	if result != nil {
+		event.ResultData = *result
+	}
+	m.processedTaskEvents = append(m.processedTaskEvents, event)
+	return event, nil
 }
 
 func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
 	m.createdTaskData = append(m.createdTaskData, data)
+	m.createdTaskNames = append(m.createdTaskNames, eventName)
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}
-	return id, nil
+	taskID := fmt.Sprintf("%s-task-%d", id, len(m.createdTaskData))
+	m.createdTaskIDs = append(m.createdTaskIDs, taskID)
+	return taskID, nil
 }
 
 func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain) (string, error) {
