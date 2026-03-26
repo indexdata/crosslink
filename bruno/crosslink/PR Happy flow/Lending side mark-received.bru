@@ -29,6 +29,13 @@ body:json {
   }
 }
 
+script:post-response {
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
 settings {
   encodeUrl: true
   timeout: 0

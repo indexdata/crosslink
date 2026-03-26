@@ -531,14 +531,25 @@ components:
     ActionResult:
       type: object
       properties:
-        actionResult:
+        result:
           type: string
           description: Action result
         message:
           type: string
           description: Action message
+        outcome:
+          type: string
+          description: Action outcome ("success", "failure")
+        fromState:
+          type: string
+          description: State before action execution
+        toState:
+          type: string
+          description: State after action execution
       required:
-        - actionResult
+        - result
+        - outcome
+        - fromState
 
     SseResult:
       type: object

@@ -128,7 +128,7 @@ func TestHandleInvokeActionValidateOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateValidated, mockPrRepo.savedPr.State)
 }
 
@@ -284,7 +284,7 @@ func TestHandleInvokeActionCheckOutOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateCheckedOut, mockPrRepo.savedPr.State)
 }
 
@@ -334,7 +334,7 @@ func TestHandleInvokeActionCheckInOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateCheckedIn, mockPrRepo.savedPr.State)
 }
 
@@ -719,7 +719,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 	assert.Len(t, mockEventBus.createdTaskData, 1)
 	assert.NotNil(t, mockEventBus.createdTaskData[0].Action)
@@ -777,7 +777,7 @@ func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 1)
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
@@ -799,7 +799,7 @@ func TestHandleInvokeLenderActionWillSupplyUseRequestItemTitleWhenAvailableOK(t 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 1)
 	assert.Equal(t, "1", mockPrRepo.savedItems[0].Barcode)
@@ -831,7 +831,7 @@ func TestHandleInvokeLenderActionRejectCancel(t *testing.T) {
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateWillSupply, mockPrRepo.savedPr.State)
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
@@ -887,7 +887,7 @@ func TestHandleInvokeLenderActionCannotSupply(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateUnfilled, mockPrRepo.savedPr.State)
 }
 
@@ -904,7 +904,7 @@ func TestHandleInvokeLenderActionAddCondition(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateConditionPending, mockPrRepo.savedPr.State)
 }
 
@@ -937,7 +937,7 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 0)
 }
@@ -972,7 +972,7 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateShipped, mockPrRepo.savedPr.State)
 	assert.Len(t, mockPrRepo.savedItems, 2)
 	assert.Equal(t, "item1", mockPrRepo.savedItems[0].ID)
@@ -1079,7 +1079,7 @@ func TestHandleInvokeLenderActionMarkReceivedOK(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateCompleted, mockPrRepo.savedPr.State)
 }
 
@@ -1130,7 +1130,7 @@ func TestHandleInvokeLenderActionAcceptCancel(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.Nil(t, resultData)
+	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateCancelled, mockPrRepo.savedPr.State)
 	assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 	assert.Equal(t, iso18626.TypeReasonForMessageCancelResponse, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonForMessage)
