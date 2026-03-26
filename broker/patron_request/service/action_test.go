@@ -752,13 +752,22 @@ func TestHandleInvokeLenderActionValidateAutoActionError(t *testing.T) {
 	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(validatedPR, nil).Once()
 	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
 
-	status, _ := prAction.handleInvokeAction(appCtx, events.Event{
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
 		PatronRequestID: patronRequestId,
 		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}},
 	})
 
-	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Equal(t, "auto action will-supply failed with status ERROR: failed to read patron request", *resultData.ActionResult.ChildActionError)
+	}
+	assert.True(t, mockPrRepo.savedPr.LastAction.Valid)
+	assert.Equal(t, string(LenderActionWillSupply), mockPrRepo.savedPr.LastAction.String)
+	assert.True(t, mockPrRepo.savedPr.LastActionOutcome.Valid)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.True(t, mockPrRepo.savedPr.LastActionResult.Valid)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
 	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
@@ -1202,8 +1211,16 @@ func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventN
 	if parentId == nil || id == "error" {
 		return "", errors.New("event bus error")
 	}
-	args := m.Called(*parentId)
-	return args.Get(0).(string), args.Error(1)
+	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
+	m.createdNoticeData = append(m.createdNoticeData, data)
+	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "CreateNoticeWithParent" {
+			args := m.Called(*parentId)
+			return args.Get(0).(string), args.Error(1)
+		}
+	}
+	return id, nil
 }
 
 type MockPrRepo struct {
@@ -1220,8 +1237,16 @@ func (r *MockPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.P
 }
 
 func (r *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
-	args := r.Called(id)
-	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+	for _, call := range r.ExpectedCalls {
+		if call.Method == "GetPatronRequestById" {
+			args := r.Called(id)
+			return args.Get(0).(pr_db.PatronRequest), args.Error(1)
+		}
+	}
+	if r.savedPr.ID == id {
+		return r.savedPr, nil
+	}
+	return pr_db.PatronRequest{}, errors.New("db error")
 }
 
 func (r *MockPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {

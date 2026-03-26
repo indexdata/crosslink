@@ -36,6 +36,15 @@ type actionExecutionResult struct {
 	pr     pr_db.PatronRequest
 }
 
+type autoActionFailure struct {
+	action pr_db.PatronRequestAction
+	msg    string
+}
+
+func (e *autoActionFailure) Error() string {
+	return e.msg
+}
+
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
 	return &PatronRequestActionService{
 		prRepo:               prRepo,
@@ -132,10 +141,15 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if stateChanged {
 		err := a.RunAutoActionsOnStateEntry(ctx, updatedPr, &event.ID)
 		if err != nil {
-			if !updatedPr.NeedsAttention {
-				a.setNeedsAttention(ctx, updatedPr)
+			failedAction := action
+			var autoErr *autoActionFailure
+			if errors.As(err, &autoErr) {
+				failedAction = autoErr.action
 			}
-			return a.logErrorAndReturnResult(ctx, "failed to execute auto action", err)
+			a.markActionChainFailure(ctx, updatedPr.ID, failedAction)
+			autoActionErr := err.Error()
+			execResult.result.ActionResult.ChildActionError = &autoActionErr
+			return execResult.status, execResult.result
 		}
 	}
 
@@ -168,10 +182,16 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		// Auto actions execute inline here to preserve synchronous state-transition semantics.
 		completedEvent, err := a.processInvokeActionTask(ctx, autoEvent)
 		if err != nil {
-			return err
+			return &autoActionFailure{action: action, msg: err.Error()}
 		}
 		if completedEvent.EventStatus != events.EventStatusSuccess {
-			return fmt.Errorf("auto action %s failed with status %s%s", action, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent))
+			return &autoActionFailure{
+				action: action,
+				msg:    fmt.Sprintf("auto action %s failed with status %s%s", action, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
+			}
+		}
+		if completedEvent.ResultData.ActionResult != nil && completedEvent.ResultData.ActionResult.ChildActionError != nil {
+			return &autoActionFailure{action: action, msg: *completedEvent.ResultData.ActionResult.ChildActionError}
 		}
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
@@ -789,6 +809,26 @@ func (a *PatronRequestActionService) setNeedsAttention(ctx common.ExtendedContex
 	if err != nil {
 		ctx.Logger().Error("failed to set needs attention", "pr_id", pr.ID, "error", err)
 		return
+	}
+}
+
+func (a *PatronRequestActionService) markActionChainFailure(ctx common.ExtendedContext, prID string, fallbackAction pr_db.PatronRequestAction) {
+	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		prToUpdate, err := repo.GetPatronRequestByIdForUpdate(ctx, prID)
+		if err != nil {
+			return err
+		}
+		prToUpdate.NeedsAttention = true
+		if !prToUpdate.LastAction.Valid || prToUpdate.LastAction.String == "" {
+			prToUpdate.LastAction = getDbText(string(fallbackAction))
+		}
+		prToUpdate.LastActionOutcome = getDbText(ActionOutcomeFailure)
+		prToUpdate.LastActionResult = getDbText(string(events.EventStatusError))
+		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))
+		return err
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to mark action chain failure", "pr_id", prID, "error", err)
 	}
 }
 
