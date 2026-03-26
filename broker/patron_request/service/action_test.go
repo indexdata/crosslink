@@ -773,6 +773,51 @@ func TestHandleInvokeLenderActionValidateAutoActionError(t *testing.T) {
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
+func TestHandleInvokeLenderActionValidateAutoActionCreateTaskError(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.createTaskErr = errors.New("event bus error")
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(createLmsAdapterMockLog(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+
+	initialPR := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           LenderStateNew,
+		Side:            SideLending,
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+	}
+	validatedPR := initialPR
+	validatedPR.State = LenderStateValidated
+
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(validatedPR, nil).Once()
+	mockEventBus.On("CreateNoticeWithParent", "invoke-validate").Return("", nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              "invoke-validate",
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Equal(t, "event bus error", *resultData.ActionResult.ChildActionError)
+	}
+	assert.True(t, mockPrRepo.savedPr.LastAction.Valid)
+	assert.Equal(t, string(LenderActionWillSupply), mockPrRepo.savedPr.LastAction.String)
+	assert.True(t, mockPrRepo.savedPr.LastActionOutcome.Valid)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.True(t, mockPrRepo.savedPr.LastActionResult.Valid)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+}
+
 func TestHandleInvokeLenderActionWillSupplyUseIllTitleWhenRequestItemEmptyOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -1177,6 +1222,7 @@ type MockEventBus struct {
 	createdNoticeData   []events.EventData
 	createdNoticeStatus []events.EventStatus
 	processedTaskEvents []events.Event
+	createTaskErr       error
 	runTaskHandler      bool
 }
 
@@ -1207,6 +1253,9 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
 	m.createdTaskData = append(m.createdTaskData, data)
 	m.createdTaskNames = append(m.createdTaskNames, eventName)
+	if m.createTaskErr != nil {
+		return "", m.createTaskErr
+	}
 	if id == "error" {
 		return "", errors.New("event bus error")
 	}

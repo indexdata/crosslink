@@ -171,7 +171,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action}}
 		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID)
 		if err != nil {
-			return err
+			return &autoActionFailure{action: action, msg: err.Error()}
 		}
 
 		autoEvent := events.Event{
@@ -196,7 +196,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
 		if err != nil {
-			return err
+			return &autoActionFailure{action: action, msg: err.Error()}
 		}
 		stateChanged := updatedPr.State != currentState
 		if stateChanged {
@@ -800,9 +800,7 @@ func (a *PatronRequestActionService) markActionChainFailure(ctx common.ExtendedC
 			return err
 		}
 		prToUpdate.NeedsAttention = true
-		if !prToUpdate.LastAction.Valid || prToUpdate.LastAction.String == "" {
-			prToUpdate.LastAction = getDbText(string(fallbackAction))
-		}
+		prToUpdate.LastAction = getDbText(string(fallbackAction))
 		prToUpdate.LastActionOutcome = getDbText(ActionOutcomeFailure)
 		prToUpdate.LastActionResult = getDbText(string(events.EventStatusError))
 		_, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(prToUpdate))

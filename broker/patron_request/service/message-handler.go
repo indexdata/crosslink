@@ -114,6 +114,7 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 
 	_, err = m.eventBus.ProcessTask(ctx, events.Event{
 		ID:              eventID,
+		EventName:       events.EventNamePatronRequestMessage,
 		PatronRequestID: prID,
 		EventData:       data,
 	}, func(taskCtx common.ExtendedContext, task events.Event) (events.EventStatus, *events.EventResult) {
