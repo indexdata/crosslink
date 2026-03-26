@@ -359,11 +359,11 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			return status, response, pr_db.PatronRequest{}, handleErr
 		}
 	} else {
-			status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, &iso18626.ISO18626Message{Request: &request},
-				func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
-					return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
-						ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
-						ErrorValue: "there is already request with this id " + raRequestId,
+		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, &iso18626.ISO18626Message{Request: &request},
+			func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+					ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
+					ErrorValue: "there is already request with this id " + raRequestId,
 				}, errors.New("duplicate request: there is already a request with this id "+raRequestId))
 			})
 		return status, response, existingPr, handleErr

@@ -135,8 +135,8 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 		},
 	}
 	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{
-		ID:   patronRequestId,
-		Side: SideBorrowing,
+		ID:    patronRequestId,
+		Side:  SideBorrowing,
 		State: BorrowerStateSent,
 	}, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
@@ -172,8 +172,8 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 		},
 	}
 	mockPrRepo.On("GetPatronRequestByIdAndSide", "lender-pr-id-1", SideLending).Return(pr_db.PatronRequest{
-		ID:   "lender-pr-id-1",
-		Side: SideLending,
+		ID:    "lender-pr-id-1",
+		Side:  SideLending,
 		State: LenderStateShipped,
 	}, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
@@ -317,8 +317,8 @@ func TestHandleMessageRequestTaskStatusUsesHandlerStatusWhenAutoActionFails(t *t
 	_, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
 		Request: &iso18626.Request{
 			Header: iso18626.Header{
-				RequestingAgencyId: iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
-				SupplyingAgencyId:  iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
+				RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
+				SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
 				RequestingAgencyRequestId: "req-id-1",
 			},
 		},
@@ -736,7 +736,6 @@ func (m *MockAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedCon
 	}
 	return m.err
 }
-
 
 func TestHandleSupplyingAgencyMessageCancelledFailToSave(t *testing.T) {
 	handler := CreatePatronRequestMessageHandler(new(MockPrRepo), *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
