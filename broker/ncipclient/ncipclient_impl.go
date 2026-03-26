@@ -1,12 +1,12 @@
 package ncipclient
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/http"
 	"reflect"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/ncip"
 )
@@ -202,12 +202,12 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		hideSensitive(message)
 		var outgoing map[string]any
 		var err1 error
-		outgoing, err1 = toJSONObj(message)
+		outgoing, err1 = common.StructToMap(message)
 
 		hideSensitive(&respMessage)
 		var incoming map[string]any
 		var err2 error
-		incoming, err2 = toJSONObj(&respMessage)
+		incoming, err2 = common.StructToMap(&respMessage)
 
 		logErr := err
 		if logErr == nil {
@@ -228,19 +228,6 @@ func (n *NcipClientImpl) sendReceiveMessage(message *ncip.NCIPMessage) (*ncip.NC
 		}
 	}
 	return &respMessage, nil
-}
-
-func toJSONObj(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	var obj map[string]any
-	err = json.Unmarshal(b, &obj)
-	if err != nil {
-		return nil, err
-	}
-	return obj, nil
 }
 
 func hideSensitive(message *ncip.NCIPMessage) {

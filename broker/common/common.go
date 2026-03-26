@@ -1,6 +1,7 @@
 package common
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -9,36 +10,31 @@ import (
 const MULTIPLE_ITEMS = "#MultipleItems#"
 const MULTIPLE_ITEMS_END = "#MultipleItemsEnd#"
 
-func StructToMap(obj interface{}) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+func StructToMap(obj any) (map[string]any, error) {
 	val := reflect.ValueOf(obj)
-	typ := reflect.TypeOf(obj)
+	if !val.IsValid() {
+		return nil, fmt.Errorf("input is not a struct")
+	}
 
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return nil, fmt.Errorf("input is not a struct")
+		}
 		val = val.Elem()
-		typ = typ.Elem()
 	}
 
 	if val.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input is not a struct")
 	}
 
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		fieldName := typ.Field(i).Name
-		jsonTag, ok := typ.Field(i).Tag.Lookup("json")
-		if ok {
-			before, _, found := strings.Cut(jsonTag, ",")
-			if before == "-" {
-				continue
-			}
-			if found {
-				fieldName = before
-			} else {
-				fieldName = jsonTag
-			}
-		}
-		result[fieldName] = field.Interface()
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(b, &result); err != nil {
+		return nil, err
 	}
 
 	return result, nil
