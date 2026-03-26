@@ -671,6 +671,11 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	sam.MessageInfo.ReasonForMessage = guessReason(reason, trCtx.transaction.LastRequesterAction.String, trCtx.transaction.LastSupplierStatus.String, target.status)
 	sam.StatusInfo.Status = target.status
 	sam.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
+	if sam.StatusInfo.Status == iso18626.TypeStatusLoaned &&
+		sam.DeliveryInfo != nil &&
+		sam.DeliveryInfo.DateSent.IsZero() {
+		sam.DeliveryInfo.DateSent = utils.XSDDateTime{Time: time.Now()}
+	}
 
 	if target.status == iso18626.TypeStatusLoaned && appendReturnInfo {
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)

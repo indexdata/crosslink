@@ -3,6 +3,7 @@ package prservice
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -62,13 +63,51 @@ func TestHandleMessageFetchEventError(t *testing.T) {
 	assert.Equal(t, "event bus error", err.Error())
 }
 
-func TestHandleMessageRequestCreatesNoticeForCreatedPatronRequest(t *testing.T) {
+func TestHandleMessageRequestCreatesTaskForCreatedPatronRequest(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
 	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)}
 
 	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		Request: &iso18626.Request{
+			Header: iso18626.Header{
+				RequestingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+					AgencyIdValue: "REQ1",
+				},
+				SupplyingAgencyId: iso18626.TypeAgencyId{
+					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+					AgencyIdValue: "SUP1",
+				},
+				Timestamp:                 inTimestamp,
+				RequestingAgencyRequestId: "req-id-1",
+			},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.RequestConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.RequestConfirmation.ConfirmationHeader.Timestamp.IsZero())
+	assert.Len(t, mockEventBus.createdTaskData, 1)
+	assert.NotNil(t, mockEventBus.createdTaskData[0].IncomingMessage)
+}
+
+func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockAutoActionRunner := &MockAutoActionRunner{
+		onRun: func(_ pr_db.PatronRequest) {
+			assert.Len(t, mockEventBus.createdTaskData, 1)
+		},
+	}
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	handler.SetAutoActionRunner(mockAutoActionRunner)
+
+	_, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
 		Request: &iso18626.Request{
 			Header: iso18626.Header{
 				RequestingAgencyId: iso18626.TypeAgencyId{
@@ -85,15 +124,162 @@ func TestHandleMessageRequestCreatesNoticeForCreatedPatronRequest(t *testing.T) 
 	})
 
 	assert.NoError(t, err)
-	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Len(t, mockEventBus.createdNoticeIDs, 1)
-	assert.Equal(t, mockPrRepo.savedPr.ID, mockEventBus.createdNoticeIDs[0])
+	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Len(t, mockEventBus.createdTaskIDs, 1)
+	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
+		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
+	}
 }
 
-func TestHandleMessageDuplicateRequestCreatesNoticeOnExistingPatronRequest(t *testing.T) {
+func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	mockEventBus := new(MockEventBus)
-	existingPr := pr_db.PatronRequest{ID: "existing-lending-id", Side: SideLending}
+	mockAutoActionRunner := &MockAutoActionRunner{
+		onRun: func(_ pr_db.PatronRequest) {
+			assert.Len(t, mockEventBus.createdTaskData, 1)
+		},
+	}
+	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{
+		ID:    patronRequestId,
+		Side:  SideBorrowing,
+		State: BorrowerStateSent,
+	}, nil)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	handler.SetAutoActionRunner(mockAutoActionRunner)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 1, 0, 0, time.UTC)}
+
+	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			Header: iso18626.Header{
+				Timestamp:                 inTimestamp,
+				RequestingAgencyRequestId: patronRequestId,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			},
+			StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
+	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Len(t, mockEventBus.createdTaskIDs, 1)
+	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
+		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
+	}
+}
+
+func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockAutoActionRunner := &MockAutoActionRunner{
+		onRun: func(_ pr_db.PatronRequest) {
+			assert.Len(t, mockEventBus.createdTaskData, 1)
+		},
+	}
+	mockPrRepo.On("GetPatronRequestByIdAndSide", "lender-pr-id-1", SideLending).Return(pr_db.PatronRequest{
+		ID:    "lender-pr-id-1",
+		Side:  SideLending,
+		State: LenderStateShipped,
+	}, nil)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	handler.SetAutoActionRunner(mockAutoActionRunner)
+	inTimestamp := utils.XSDDateTime{Time: time.Date(2026, 3, 26, 10, 2, 0, 0, time.UTC)}
+
+	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				Timestamp:                inTimestamp,
+				SupplyingAgencyRequestId: "lender-pr-id-1",
+			},
+			Action: iso18626.TypeActionReceived,
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, inTimestamp, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
+	assert.False(t, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
+	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Len(t, mockEventBus.createdTaskIDs, 1)
+	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
+		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
+	}
+}
+
+func TestHandleMessageSupplyingAgencyTaskResultIncludesOutgoingAndNoErrorOnSuccess(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockPrRepo.On("GetPatronRequestByIdAndSide", patronRequestId, SideBorrowing).Return(pr_db.PatronRequest{
+		ID:    patronRequestId,
+		Side:  SideBorrowing,
+		State: BorrowerStateSent,
+	}, nil)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+
+	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
+			Header: iso18626.Header{
+				RequestingAgencyRequestId: patronRequestId,
+			},
+			MessageInfo: iso18626.MessageInfo{
+				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			},
+			StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		},
+	})
+
+	assert.NoError(t, err)
+	assert.NotNil(t, resp)
+	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
+		last := mockEventBus.processedTaskEvents[len(mockEventBus.processedTaskEvents)-1]
+		assert.Equal(t, events.EventStatusSuccess, last.EventStatus)
+		assert.NotNil(t, last.ResultData.OutgoingMessage)
+		assert.Nil(t, last.ResultData.EventError)
+	}
+}
+
+func TestHandleMessageRequestingAgencyTaskResultIncludesOutgoingAndErrorOnFailure(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockPrRepo.On("GetPatronRequestByIdAndSide", "lender-pr-id-2", SideLending).Return(pr_db.PatronRequest{
+		ID:    "lender-pr-id-2",
+		Side:  SideLending,
+		State: LenderStateShipped,
+	}, nil)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+
+	resp, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
+			Header: iso18626.Header{
+				SupplyingAgencyRequestId: "lender-pr-id-2",
+			},
+		},
+	})
+
+	assert.Error(t, err)
+	assert.NotNil(t, resp)
+	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
+		last := mockEventBus.processedTaskEvents[len(mockEventBus.processedTaskEvents)-1]
+		assert.Equal(t, events.EventStatusProblem, last.EventStatus)
+		assert.NotNil(t, last.ResultData.OutgoingMessage)
+		if assert.NotNil(t, last.ResultData.EventError) {
+			assert.Equal(t, "unsupported action: ", last.ResultData.EventError.Message)
+		}
+	}
+}
+
+func TestHandleMessageDuplicateRequestCreatesTaskOnExistingPatronRequest(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	existingPr := pr_db.PatronRequest{
+		ID:               "existing-lending-id",
+		Side:             SideLending,
+		LastActionResult: getDbText(string(events.EventStatusSuccess)),
+	}
 	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(existingPr, nil)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
@@ -117,13 +303,51 @@ func TestHandleMessageDuplicateRequestCreatesNoticeOnExistingPatronRequest(t *te
 		assert.Equal(t, "duplicate request: there is already a request with this id req-id-1", err.Error())
 	}
 	assert.Equal(t, iso18626.TypeMessageStatusERROR, resp.RequestConfirmation.ConfirmationHeader.MessageStatus)
-	assert.Len(t, mockEventBus.createdNoticeIDs, 1)
-	assert.Equal(t, existingPr.ID, mockEventBus.createdNoticeIDs[0])
+	assert.Len(t, mockEventBus.createdTaskData, 1)
+	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
+		last := mockEventBus.processedTaskEvents[len(mockEventBus.processedTaskEvents)-1]
+		assert.Equal(t, events.EventStatusProblem, last.EventStatus)
+		assert.NotNil(t, last.ResultData.OutgoingMessage)
+		if assert.NotNil(t, last.ResultData.EventError) {
+			assert.Equal(t, "duplicate request: there is already a request with this id req-id-1", last.ResultData.EventError.Message)
+		}
+	}
+}
+
+func TestHandleMessageRequestTaskStatusUsesHandlerStatusWhenAutoActionFails(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(pr_db.PatronRequest{}, pgx.ErrNoRows)
+	mockAutoActionRunner := &MockAutoActionRunner{
+		err: errors.New("auto action failed"),
+		onRun: func(_ pr_db.PatronRequest) {
+			mockPrRepo.savedPr.LastActionResult = getDbText(string(events.EventStatusError))
+		},
+	}
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
+	handler.SetAutoActionRunner(mockAutoActionRunner)
+
+	_, err := handler.HandleMessage(appCtx, &iso18626.ISO18626Message{
+		Request: &iso18626.Request{
+			Header: iso18626.Header{
+				RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "REQ1"},
+				SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdType: iso18626.TypeSchemeValuePair{Text: "ISIL"}, AgencyIdValue: "SUP1"},
+				RequestingAgencyRequestId: "req-id-1",
+			},
+		},
+	})
+
+	assert.Error(t, err)
+	if assert.NotEmpty(t, mockEventBus.processedTaskEvents) {
+		last := mockEventBus.processedTaskEvents[len(mockEventBus.processedTaskEvents)-1]
+		assert.Equal(t, events.EventStatusProblem, last.EventStatus)
+	}
 }
 
 func TestHandlePatronRequestMessage(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	mockEventBus := new(MockEventBus)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 
 	status, resp, _, err := handler.handlePatronRequestMessage(appCtx, &iso18626.ISO18626Message{})
 	assert.Equal(t, events.EventStatusError, status)
@@ -154,7 +378,8 @@ func TestHandlePatronRequestMessage(t *testing.T) {
 
 func TestHandlePatronRequestMessageRequestingAgencyMessageFallbackLookup(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+	mockEventBus := new(MockEventBus)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), mockEventBus)
 	lendingPr := pr_db.PatronRequest{ID: "lend-id-1", State: LenderStateWillSupply, Side: SideLending}
 	mockPrRepo.On("GetLendingRequestBySupplierSymbolAndRequesterReqId", "ISIL:SUP1", "req-id-1").Return(lendingPr, nil)
 
@@ -508,14 +733,20 @@ type MockIllRepo struct {
 }
 
 type MockAutoActionRunner struct {
-	err       error
-	callCount int
-	lastPr    pr_db.PatronRequest
+	err               error
+	callCount         int
+	lastPr            pr_db.PatronRequest
+	lastParentEventID *string
+	onRun             func(pr_db.PatronRequest)
 }
 
 func (m *MockAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
 	m.callCount++
 	m.lastPr = pr
+	m.lastParentEventID = parentEventID
+	if m.onRun != nil {
+		m.onRun(pr)
+	}
 	return m.err
 }
 

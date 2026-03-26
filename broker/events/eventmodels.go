@@ -75,8 +75,9 @@ type CommonEventData struct {
 }
 
 type ActionResult struct {
-	Outcome string  `json:"outcome"`
-	ToState *string `json:"toState,omitempty"`
+	Outcome          string  `json:"outcome"`
+	ToState          *string `json:"toState,omitempty"`
+	ChildActionError *string `json:"childActionError,omitempty"`
 }
 
 type EventError struct {
