@@ -649,7 +649,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			Note:             actionParams.Note + shim.RESHARE_ADD_LOAN_CONDITION,
+			Note:             actionParams.Note,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		nil)
@@ -696,7 +696,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			Note:             actionParams.Note,
+			Note:             actionParams.Note + shim.RESHARE_ADD_LOAN_CONDITION,
 			OfferedCosts:     offeredCosts,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
