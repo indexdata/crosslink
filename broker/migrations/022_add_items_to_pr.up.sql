@@ -5,7 +5,13 @@ RETURNS TRIGGER AS $$
 BEGIN
 UPDATE patron_request
 SET items = (
-    SELECT jsonb_agg(to_jsonb(i) - 'pr_id')
+    SELECT jsonb_agg(
+                   (to_jsonb(i) - 'pr_id') ||
+                   jsonb_build_object(
+                           'created_at',
+                           to_char(i.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US') || to_char(i.created_at, 'TZH:TZM')
+                   )
+           )
     FROM item i
     WHERE i.pr_id = NEW.pr_id
 )
@@ -90,7 +96,13 @@ FROM patron_request pr;
 UPDATE patron_request pr
 SET items = COALESCE(
         (
-            SELECT jsonb_agg(to_jsonb(i) - 'pr_id')
+            SELECT jsonb_agg(
+                           (to_jsonb(i) - 'pr_id') ||
+                           jsonb_build_object(
+                                   'created_at',
+                                   to_char(i.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US') || to_char(i.created_at, 'TZH:TZM')
+                           )
+                   )
             FROM item i
             WHERE i.pr_id = pr.id
         ),
