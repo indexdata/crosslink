@@ -985,6 +985,7 @@ func TestHandleInvokeLenderActionAddCondition(t *testing.T) {
 			"loanCondition": "my condition",
 			"note":          "Condition note",
 			"cost":          12.34,
+			"currency":      "DKK",
 		},
 	}})
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -997,6 +998,7 @@ func TestHandleInvokeLenderActionAddCondition(t *testing.T) {
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts) {
 			assert.Equal(t, 1234, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Base)
 			assert.Equal(t, 2, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+			assert.Equal(t, "DKK", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text)
 		}
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
 			assert.Equal(t, "my condition", mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
