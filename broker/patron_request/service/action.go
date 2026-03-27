@@ -670,7 +670,6 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams ActionParams) actionExecutionResult {
-	// TODO supply condition, cost, currency in SAM
 	var offeredCosts *iso18626.TypeCosts
 	if actionParams.Cost != nil {
 		_, costBase, costExp := utils.ExtractDecimal(strconv.FormatFloat(*actionParams.Cost, 'f', -1, 64), -1)
@@ -731,7 +730,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
-	note := encodeItemsNote(items) + actionParams.Note
+	note := actionParams.Note + encodeItemsNote(items)
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
