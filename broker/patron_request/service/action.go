@@ -649,7 +649,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			Note:             actionParams.Note,
+			Note:             actionParams.Note + shim.RESHARE_ADD_LOAN_CONDITION,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		nil)
@@ -658,11 +658,15 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 
 func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams ActionParams) actionExecutionResult {
 	result := events.EventResult{}
+	var reasonUnfilled *iso18626.TypeSchemeValuePair
+	if actionParams.ReasonUnfilled != "" {
+		reasonUnfilled = &iso18626.TypeSchemeValuePair{Text: actionParams.ReasonUnfilled}
+	}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             actionParams.Note,
-			ReasonUnfilled:   &iso18626.TypeSchemeValuePair{Text: actionParams.ReasonUnfilled},
+			ReasonUnfilled:   reasonUnfilled,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
 		nil)
@@ -672,6 +676,10 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams ActionParams) actionExecutionResult {
 	var offeredCosts *iso18626.TypeCosts
 	if actionParams.Cost != nil {
+		if actionParams.Currency == "" {
+			status, result := a.logErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		_, costBase, costExp := utils.ExtractDecimal(strconv.FormatFloat(*actionParams.Cost, 'f', -1, 64), -1)
 		offeredCosts = &iso18626.TypeCosts{
 			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: actionParams.Currency},
