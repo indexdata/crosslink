@@ -301,13 +301,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		}
 	})
 
-	bytes, err := json.Marshal(actionCustomData)
-	if err != nil {
-		status, result := a.logErrorAndReturnResult(ctx, "failed to marshal action parameters", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
 	var actionParams ActionParams
-	err = json.Unmarshal(bytes, &actionParams)
+	err = common.MapToStruct(actionCustomData, &actionParams)
 	if err != nil {
 		status, result := a.logErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
