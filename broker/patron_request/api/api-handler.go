@@ -215,7 +215,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
-	pr, err := a.prRepo.CreatePatronRequest(ctx, (pr_db.CreatePatronRequestParams)(dbreq))
+	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgerrcode.IsIntegrityConstraintViolation(pgErr.Code) {
@@ -548,6 +548,10 @@ func addNotFoundError(w http.ResponseWriter) {
 }
 
 func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
+	items := []proapi.PrItem{}
+	for _, item := range request.Items {
+		items = append(items, toApiPrItem(item))
+	}
 	return proapi.PatronRequest{
 		Id:                 request.ID,
 		Timestamp:          request.Timestamp.Time,
@@ -562,6 +566,7 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		LastAction:         toString(request.LastAction),
 		LastActionOutcome:  toString(request.LastActionOutcome),
 		LastActionResult:   toString(request.LastActionResult),
+		Items:              &items,
 	}
 }
 
@@ -691,6 +696,8 @@ func buildDbPatronRequest(
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
 		RequesterReqID:  getDbText(&requesterReqId),
+		Language:        pr_db.LANGUAGE,
+		Items:           []pr_db.PrItem{},
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}
@@ -713,6 +720,17 @@ func toApiItem(item pr_db.Item) proapi.PrItem {
 		ItemId:     toString(item.ItemID),
 		Title:      toString(item.Title),
 		CreatedAt:  item.CreatedAt.Time,
+	}
+}
+
+func toApiPrItem(item pr_db.PrItem) proapi.PrItem {
+	return proapi.PrItem{
+		Id:         item.ID,
+		Barcode:    item.Barcode,
+		CallNumber: item.CallNumber,
+		ItemId:     item.ItemID,
+		Title:      item.Title,
+		CreatedAt:  time.Time(item.CreatedAt),
 	}
 }
 

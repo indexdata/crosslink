@@ -82,7 +82,7 @@ Configuration is provided via environment variables:
 | `DB_DATABASE`             | Database name                                                                         | `crosslink`                               |
 | `DB_PORT`                 | Database port                                                                         | `25432`                                   |
 | `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
-| `DB_PROVISION`            | Should app create DB role/schema (`true`/`false`)                                    | `false`                                   |
+| `DB_PROVISION`            | Should app create DB role/schema (`true`/`false`)                                     | `false`                                   |
 | `DB_MIGRATE`              | Should app run DB migrations (`true`/`false`)                                         | `true`                                    |
 | `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
 | `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
@@ -108,6 +108,7 @@ Configuration is provided via environment variables:
 | `TENANT_TO_SYMBOL`        | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,          | (empty value)                             |
 |                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value                 |                                           |
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
+| `LANGUAGE`                | Language parameter used for ts_vector search in DB                                    | `english`                                 |
 
 # Build
 
