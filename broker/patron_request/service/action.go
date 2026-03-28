@@ -47,7 +47,7 @@ func (e *autoActionFailure) Error() string {
 	return e.msg
 }
 
-type ActionParams struct {
+type actionParams struct {
 	Note           string   `json:"note,omitempty"`
 	LoanCondition  string   `json:"loanCondition,omitempty"`
 	Cost           *float64 `json:"cost,omitempty"`
@@ -301,7 +301,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		}
 	})
 
-	var actionParams ActionParams
+	var actionParams actionParams
 	err = common.MapToStruct(actionCustomData, &actionParams)
 	if err != nil {
 		status, result := a.logErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
@@ -613,7 +613,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionParams ActionParams) actionExecutionResult {
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionParams actionParams) actionExecutionResult {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
@@ -651,7 +651,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams ActionParams) actionExecutionResult {
+func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams actionParams) actionExecutionResult {
 	result := events.EventResult{}
 	var reasonUnfilled *iso18626.TypeSchemeValuePair
 	if actionParams.ReasonUnfilled != "" {
@@ -668,7 +668,7 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams ActionParams) actionExecutionResult {
+func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams actionParams) actionExecutionResult {
 	var offeredCosts *iso18626.TypeCosts
 	if actionParams.Cost != nil {
 		if actionParams.Currency == "" {
@@ -711,7 +711,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionParams ActionParams) actionExecutionResult {
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, actionParams actionParams) actionExecutionResult {
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
