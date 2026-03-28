@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -674,10 +675,16 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 			status, result := a.logErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		costBase, costExp := common.MonetaryBaseExp(*actionParams.Cost)
+		var monetaryValue utils.XSDDecimal
+		// (xd *XSDDecimal) UnmarshalText always returns nil
+		err := monetaryValue.UnmarshalText([]byte(strconv.FormatFloat(*actionParams.Cost, 'f', -1, 64)))
+		if err != nil {
+			status, result := a.logErrorAndReturnResult(ctx, "failed to parse cost", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
 		offeredCosts = &iso18626.TypeCosts{
 			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: actionParams.Currency},
-			MonetaryValue: utils.XSDDecimal{Base: costBase, Exp: costExp},
+			MonetaryValue: monetaryValue,
 		}
 	}
 	var deliveryInfo *iso18626.DeliveryInfo

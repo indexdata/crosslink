@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
-
-	"github.com/indexdata/go-utils/utils"
 )
 
 const MULTIPLE_ITEMS = "#MultipleItems#"
@@ -119,19 +116,4 @@ func UnpackItemNote(input string) []string {
 	}
 	result = append(result, current.String())
 	return result
-}
-
-func MonetaryBaseExp(f float64) (base int, exp int) {
-	// utils.ExtractDecimal does not handle negative numbers
-	sign := 1
-	if f < 0 {
-		sign = -1
-		f = -f
-	}
-	_, costBase, costExp := utils.ExtractDecimal(strconv.FormatFloat(f, 'f', -1, 64), -1)
-	for costExp < 2 {
-		costBase = costBase * 10
-		costExp = costExp + 1
-	}
-	return sign * costBase, -costExp
 }

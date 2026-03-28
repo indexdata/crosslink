@@ -163,27 +163,3 @@ func TestPackItemsNote(t *testing.T) {
 	assert.Equal(t, items, result)
 	assert.Equal(t, [][]string{{"T1", "CallNumber1", "Barcode1"}, {"T2", "CallNumber2", "Barcode2"}, {"Barcode3"}}, result)
 }
-
-func TestFloatToBaseExp(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    float64
-		wantBase int
-		wantExp  int
-	}{
-		{"Simple integer", 42.0, 4200, -2},
-		{"Decimal with two places", 3.14, 314, -2},
-		{"Small decimal", 0.001, 1, -3},
-		{"Large number", 123456789.0, 12345678900, -2},
-		{"100", 100.0, 10000, -2},
-		{"-100", -100.0, -10000, -2},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			base, exp := MonetaryBaseExp(tt.input)
-			assert.Equal(t, tt.wantBase, base)
-			assert.Equal(t, tt.wantExp, exp)
-		})
-	}
-}
