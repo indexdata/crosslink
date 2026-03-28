@@ -14,9 +14,24 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
-	assert.True(t, slices.Contains(c.RequesterActions, string(BorrowerActionSendRequest)))
-	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionWillSupply)))
-	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionRejectCancel)))
+
+	found := false
+	for _, action := range c.RequesterActions {
+		if action.Name == string(BorrowerActionReceive) {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected to find built-in action "+string(BorrowerActionReceive))
+
+	found = false
+	for _, action := range c.SupplierActions {
+		if action.Name == string(LenderActionWillSupply) {
+			assert.True(t, slices.Contains(action.Parameters, "note"))
+			found = true
+		}
+	}
+	assert.True(t, found, "expected to find built-in action "+string(LenderActionWillSupply))
+
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))

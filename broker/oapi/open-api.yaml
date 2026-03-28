@@ -617,11 +617,11 @@ components:
         requesterActions:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/ActionCapability'
         supplierActions:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/ActionCapability'
         requesterMessageEvents:
           type: array
           items:
@@ -637,7 +637,26 @@ components:
         - supplierActions
         - requesterMessageEvents
         - supplierMessageEvents
-
+    ActionCapability:
+      title: ActionCapability
+      type: object
+      description: Definition of an action and its parameters supported by the broker.
+        Action parameters are defined separately from actions because the same parameters
+        can be used for multiple actions, for example note parameter is supported for
+        multiple actions but is not required for all of them.
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Name of the action parameter
+        parameters:
+          type: array
+          description: List of parameter names for this action parameter
+          items:
+            type: string
+      required:
+        - name
+        - parameters
     ModelState:
       title: State
       type: object
