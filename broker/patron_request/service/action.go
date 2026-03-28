@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -675,7 +674,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 			status, result := a.logErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
-		_, costBase, costExp := utils.ExtractDecimal(strconv.FormatFloat(*actionParams.Cost, 'f', -1, 64), -1)
+		costBase, costExp := common.MonetaryBaseExp(*actionParams.Cost)
 		offeredCosts = &iso18626.TypeCosts{
 			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: actionParams.Currency},
 			MonetaryValue: utils.XSDDecimal{Base: costBase, Exp: costExp},

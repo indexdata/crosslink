@@ -1064,7 +1064,7 @@ func TestHandleInvokeLenderActionAddConditionWithCurrency(t *testing.T) {
 		assert.Equal(t, "Condition note\n#ReShareAddLoanCondition#", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts) {
 			assert.Equal(t, 1234, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Base)
-			assert.Equal(t, 2, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+			assert.Equal(t, -2, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.MonetaryValue.Exp)
 			assert.Equal(t, "DKK", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts.CurrencyCode.Text)
 		}
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
