@@ -1137,7 +1137,7 @@ func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	assert.Len(t, mockPrRepo.savedItems, 0)
 	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
 		assert.Equal(t, iso18626.TypeStatusLoaned, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
-		assert.Equal(t, "my note#MultipleItems#\n1234||\n5678||\n#MultipleItemsEnd#", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
+		assert.Equal(t, "my note\n#MultipleItems#\n1234||\n5678||\n#MultipleItemsEnd#", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
 		assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.LastChange.IsZero())
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
 			assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero())
@@ -1184,6 +1184,14 @@ func TestHandleInvokeLenderActionShipNewTitleOK(t *testing.T) {
 	assert.Equal(t, "item2", mockPrRepo.savedItems[1].ID)
 	assert.Equal(t, "5678", mockPrRepo.savedItems[1].Barcode)
 	assert.Equal(t, "new title", mockPrRepo.savedItems[1].Title.String)
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeStatusLoaned, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, "#MultipleItems#\n1234||new title\n5678||new title\n#MultipleItemsEnd#", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
+		assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.LastChange.IsZero())
+		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
+			assert.False(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.DateSent.IsZero())
+		}
+	}
 }
 
 func TestHandleInvokeLenderActionShipNewTitleFail(t *testing.T) {

@@ -745,8 +745,12 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
-	// encodeItemsNote starts already with a newline
-	note := actionParams.Note + encodeItemsNote(items)
+	var note string
+	if actionParams.Note == "" {
+		note = encodeItemsNote(items)
+	} else {
+		note = actionParams.Note + "\n" + encodeItemsNote(items)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
