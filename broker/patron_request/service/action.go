@@ -793,7 +793,8 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange},
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted},
 		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
