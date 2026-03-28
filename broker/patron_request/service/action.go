@@ -688,10 +688,16 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 		}
 	}
 	result := events.EventResult{}
+	var note string
+	if actionParams.Note == "" {
+		note = shim.RESHARE_ADD_LOAN_CONDITION
+	} else {
+		note = actionParams.Note + "\n" + shim.RESHARE_ADD_LOAN_CONDITION
+	}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			Note:             actionParams.Note + shim.RESHARE_ADD_LOAN_CONDITION,
+			Note:             note,
 			OfferedCosts:     offeredCosts,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
@@ -733,6 +739,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
+	// encodeItemsNote starts already with a newline
 	note := actionParams.Note + encodeItemsNote(items)
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
