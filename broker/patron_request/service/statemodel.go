@@ -109,7 +109,7 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 
 	// Pass 2: validate actions/events and their transitions.
 	for _, state := range stateModel.States {
-		var allowedActions []string
+		var allowedActions []proapi.ActionCapability
 		var allowedEvents []string
 		var allowedEventsSide string
 		allowedTransitionTargets := definedStates[state.Side]
@@ -124,7 +124,13 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		}
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				if !slices.Contains(allowedActions, action.Name) {
+				found := false
+				for _, allowedAction := range allowedActions {
+					if action.Name == allowedAction.Name {
+						found = true
+					}
+				}
+				if !found {
 					return fmt.Errorf("action %s in state %s is not a built-in %s action", action.Name, state.Name, strings.ToLower(string(state.Side)))
 				}
 				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets); err != nil {

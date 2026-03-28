@@ -124,31 +124,81 @@ func supplierBuiltInStates() []string {
 	})
 }
 
-func requesterBuiltInActions() []string {
-	return uniqueSorted([]string{
-		string(BorrowerActionValidate),
-		string(BorrowerActionSendRequest),
-		string(BorrowerActionCancelRequest),
-		string(BorrowerActionAcceptCondition),
-		string(BorrowerActionRejectCondition),
-		string(BorrowerActionReceive),
-		string(BorrowerActionCheckOut),
-		string(BorrowerActionCheckIn),
-		string(BorrowerActionShipReturn),
-	})
+func requesterBuiltInActions() []proapi.ActionCapability {
+	return []proapi.ActionCapability{
+		{
+			Name: string(BorrowerActionValidate),
+		},
+		{
+			Name: string(BorrowerActionSendRequest),
+		},
+		{
+			Name: string(BorrowerActionCancelRequest),
+		},
+		{
+			Name: string(BorrowerActionAcceptCondition),
+		},
+		{
+			Name: string(BorrowerActionRejectCondition),
+		},
+		{
+			Name: string(BorrowerActionReceive),
+		},
+		{
+			Name: string(BorrowerActionCheckOut),
+		},
+		{
+			Name: string(BorrowerActionCheckIn),
+		},
+		{
+			Name: string(BorrowerActionShipReturn),
+		},
+	}
 }
 
-func supplierBuiltInActions() []string {
-	return uniqueSorted([]string{
-		string(LenderActionValidate),
-		string(LenderActionWillSupply),
-		string(LenderActionRejectCancel),
-		string(LenderActionCannotSupply),
-		string(LenderActionAddCondition),
-		string(LenderActionShip),
-		string(LenderActionMarkReceived),
-		string(LenderActionAcceptCancel),
-	})
+func supplierBuiltInActions() []proapi.ActionCapability {
+	return []proapi.ActionCapability{
+		{
+			Name: string(LenderActionValidate),
+		},
+		{
+			Name: string(LenderActionWillSupply),
+			Parameters: []string{
+				"note",
+			},
+		},
+		{
+			Name: string(LenderActionRejectCancel),
+		},
+		{
+			Name: string(LenderActionCannotSupply),
+			Parameters: []string{
+				"reasonUnfilled",
+				"note",
+			},
+		},
+		{
+			Name: string(LenderActionAddCondition),
+			Parameters: []string{
+				"note",
+				"loanCondition",
+				"cost",
+				"currency",
+			},
+		},
+		{
+			Name: string(LenderActionShip),
+			Parameters: []string{
+				"note",
+			},
+		},
+		{
+			Name: string(LenderActionMarkReceived),
+		},
+		{
+			Name: string(LenderActionAcceptCancel),
+		},
+	}
 }
 
 func requesterBuiltInMessageEvents() []string {
