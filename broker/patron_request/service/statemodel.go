@@ -124,13 +124,10 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		}
 		if state.Actions != nil {
 			for _, action := range *state.Actions {
-				found := false
-				for _, allowedAction := range allowedActions {
-					if action.Name == allowedAction.Name {
-						found = true
-					}
-				}
-				if !found {
+				if !slices.ContainsFunc(allowedActions,
+					func(a proapi.ActionCapability) bool {
+						return a.Name == action.Name
+					}) {
 					return fmt.Errorf("action %s in state %s is not a built-in %s action", action.Name, state.Name, strings.ToLower(string(state.Side)))
 				}
 				if err := validateActionTransitions(action, state.Name, allowedTransitionTargets); err != nil {
