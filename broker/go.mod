@@ -3,13 +3,10 @@ module github.com/indexdata/crosslink/broker
 go 1.26
 
 require (
-	github.com/indexdata/crosslink/directory v0.0.0
 	github.com/indexdata/crosslink/httpclient v0.0.0
 	github.com/indexdata/crosslink/illmock v0.0.0
 	github.com/indexdata/crosslink/iso18626 v0.0.0
-	github.com/indexdata/crosslink/marcxml v0.0.0
 	github.com/indexdata/crosslink/ncip v0.0.0
-	github.com/indexdata/crosslink/sru v0.0.0
 )
 
 replace (
@@ -31,9 +28,8 @@ require (
 	github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
-	github.com/lib/pq v1.12.0
+	github.com/lib/pq v1.12.1
 	github.com/oapi-codegen/oapi-codegen/v2 v2.6.0
-	github.com/oapi-codegen/runtime v1.3.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.41.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.41.0
@@ -43,7 +39,6 @@ require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -103,6 +98,7 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
