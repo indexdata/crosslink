@@ -14,7 +14,8 @@ MAIN_PACKAGE=cmd/broker
 MODULE=broker
 COMMIT_ID=vcs/commit.txt
 COVERAGE=coverage.out
-
+RETURNABLES_JSON=patron_request/service/statemodels/returnables.json
+RETURNABLES_YAML=../misc/returnables.yaml
 
 # SQLC
 SQLC ?= sqlc
@@ -43,13 +44,17 @@ all: $(BINARY) archive
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc generate-api
+generate: generate-commit-id generate-sqlc generate-api $(RETURNABLES_JSON)
 
 generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
 generate-api: $(OAPI_GEN) $(PR_OAPI_GEN)
+
+$(RETURNABLES_JSON): $(RETURNABLES_YAML)
+	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
+	mv -f $@.tmp $@
 
 $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
 	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
@@ -63,10 +68,10 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 $(COMMIT_ID):
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES)
+$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES) $(RETURNABLES_JSON)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES)
+archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES) $(RETURNABLES_JSON)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
