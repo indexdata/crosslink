@@ -40,6 +40,14 @@ func StructToMap(obj any) (map[string]any, error) {
 	return result, nil
 }
 
+func MapToStruct(obj map[string]any, v any) error {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
+}
+
 func UnpackItemsNote(note string) ([][]string, int, int) {
 	startIdx := strings.Index(note, MULTIPLE_ITEMS)
 	endIdx := strings.Index(note, MULTIPLE_ITEMS_END)

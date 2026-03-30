@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,14 @@ type autoActionFailure struct {
 
 func (e *autoActionFailure) Error() string {
 	return e.msg
+}
+
+type actionParams struct {
+	Note           string   `json:"note,omitempty"`
+	LoanCondition  string   `json:"loanCondition,omitempty"`
+	Cost           *float64 `json:"cost,omitempty"`
+	Currency       string   `json:"currency,omitempty"`
+	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -267,7 +276,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	}
 }
 
-func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionParams map[string]interface{}, eventID *string) actionExecutionResult {
+func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionCustomData map[string]any, eventID *string) actionExecutionResult {
 	if !pr.SupplierSymbol.Valid {
 		status, result := a.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -291,21 +300,28 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
 	})
+
+	var params actionParams
+	err = common.MapToStruct(actionCustomData, &params)
+	if err != nil {
+		status, result := a.logErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	switch action {
 	case LenderActionValidate:
 		return a.validateLenderRequest(ctx, pr, lms)
 	case LenderActionWillSupply:
-		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest)
+		return a.willSupplyLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionRejectCancel:
 		return a.rejectCancelLenderRequest(ctx, pr)
 	case LenderActionCannotSupply:
-		return a.cannotSupplyLenderRequest(ctx, pr)
+		return a.cannotSupplyLenderRequest(ctx, pr, params)
 	case LenderActionAddCondition:
-		return a.addConditionsLenderRequest(ctx, pr, actionParams)
+		return a.addConditionsLenderRequest(ctx, pr, params)
 	case LenderActionShip:
-		return a.shipLenderRequest(ctx, pr, lms, illRequest)
+		return a.shipLenderRequest(ctx, pr, lms, illRequest, params)
 	case LenderActionMarkReceived:
-		return a.markReceivedLenderRequest(ctx, pr, lms, illRequest)
+		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
 		return a.acceptCancelLenderRequest(ctx, pr)
 	default:
@@ -597,7 +613,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
 }
 
-func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	itemId := illRequest.BibliographicInfo.SupplierUniqueRecordId
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
@@ -625,28 +641,76 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled})
+	var reasonUnfilled *iso18626.TypeSchemeValuePair
+	if params.ReasonUnfilled != "" {
+		reasonUnfilled = &iso18626.TypeSchemeValuePair{Text: params.ReasonUnfilled}
+	}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+			ReasonUnfilled:   reasonUnfilled,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, actionParams map[string]interface{}) actionExecutionResult {
+func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	var offeredCosts *iso18626.TypeCosts
+	if params.Cost != nil {
+		if params.Currency == "" {
+			status, result := a.logErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		var monetaryValue utils.XSDDecimal
+		err := monetaryValue.UnmarshalText([]byte(strconv.FormatFloat(*params.Cost, 'f', -1, 64)))
+		if err != nil {
+			status, result := a.logErrorAndReturnResult(ctx, "failed to parse cost", err)
+			return actionExecutionResult{status: status, result: result, pr: pr}
+		}
+		offeredCosts = &iso18626.TypeCosts{
+			CurrencyCode:  iso18626.TypeSchemeValuePair{Text: params.Currency},
+			MonetaryValue: monetaryValue,
+		}
+	}
+	var deliveryInfo *iso18626.DeliveryInfo
+	if params.LoanCondition != "" {
+		deliveryInfo = &iso18626.DeliveryInfo{
+			LoanCondition: &iso18626.TypeSchemeValuePair{Text: params.LoanCondition},
+		}
+	}
 	result := events.EventResult{}
+	var note string
+	if params.Note == "" {
+		note = shim.RESHARE_ADD_LOAN_CONDITION
+	} else {
+		note = params.Note + "\n" + shim.RESHARE_ADD_LOAN_CONDITION
+	}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			Note:             shim.RESHARE_ADD_LOAN_CONDITION, // TODO add action params
+			Note:             note,
+			OfferedCosts:     offeredCosts,
 		},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		deliveryInfo)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
 	requestId := illRequest.Header.RequestingAgencyRequestId
 	userId := lmsAdapter.InstitutionalPatron(pr.RequesterSymbol.String)
 	externalReferenceValue := ""
@@ -680,11 +744,20 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 			}
 		}
 	}
-	note := encodeItemsNote(items)
+	var note string
+	if params.Note == "" {
+		note = encodeItemsNote(items)
+	} else {
+		note = params.Note + "\n" + encodeItemsNote(items)
+	}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
-		iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange, Note: note},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned})
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
@@ -704,7 +777,7 @@ func encodeItemsNote(items []pr_db.Item) string {
 	return common.PackItemsNote(list)
 }
 
-func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
+func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
 		status, result := a.logErrorAndReturnResult(ctx, "no items for check-in in the request", err)
@@ -718,7 +791,12 @@ func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.Extend
 		}
 	}
 	result := events.EventResult{}
-	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result, iso18626.MessageInfo{ReasonForMessage: iso18626.TypeReasonForMessageStatusChange}, iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted})
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusLoanCompleted},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
@@ -730,7 +808,8 @@ func (a *PatronRequestActionService) rejectCancelLenderRequest(ctx common.Extend
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 			AnswerYesNo:      &no,
 		},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply})
+		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
@@ -742,11 +821,12 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 			AnswerYesNo:      &yes,
 		},
-		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled})
+		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
+		nil)
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
-func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo) (events.EventStatus, *events.EventResult, *int) {
+func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo, deliveryInfo *iso18626.DeliveryInfo) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
 		status, eventResult := a.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
@@ -773,8 +853,9 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 				RequestingAgencyRequestId: pr.RequesterReqID.String,
 				SupplyingAgencyRequestId:  pr.ID,
 			},
-			MessageInfo: messageInfo,
-			StatusInfo:  statusInfo,
+			MessageInfo:  messageInfo,
+			StatusInfo:   statusInfo,
+			DeliveryInfo: deliveryInfo,
 		},
 	}
 	if illMessage.SupplyingAgencyMessage.StatusInfo.LastChange.IsZero() {

@@ -85,6 +85,46 @@ func TestStructToMap(t *testing.T) {
 	}
 }
 
+func TestMapToStruct(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   map[string]interface{}
+		want    User
+		wantErr bool
+	}{
+		{
+			name: "Basic map conversion",
+			input: map[string]interface{}{
+				"id":     float64(1),
+				"name":   "Alice",
+				"Active": true,
+			},
+			want:    User{ID: 1, Name: &alice, Active: true},
+			wantErr: false,
+		},
+		{
+			name:    "42 as string instead of int",
+			input:   map[string]interface{}{"id": "42"},
+			want:    User{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var got User
+			err := MapToStruct(tt.input, &got)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("MapToStruct() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MapToStruct() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUnpackItemsNote(t *testing.T) {
 	// Just ID
 	note := MULTIPLE_ITEMS + "\n1\n" + MULTIPLE_ITEMS_END

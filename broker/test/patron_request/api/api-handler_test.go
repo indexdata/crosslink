@@ -567,7 +567,6 @@ func TestGetStateModelCapabilities(t *testing.T) {
 	err := json.Unmarshal(respBytes, &capabilities)
 	assert.NoError(t, err, "failed to unmarshal state model capabilities")
 	assert.True(t, slices.Contains(capabilities.RequesterStates, string(prservice.BorrowerStateValidated)))
-	assert.True(t, slices.Contains(capabilities.SupplierActions, string(prservice.LenderActionRejectCancel)))
 	assert.True(t, slices.Contains(capabilities.SupplierMessageEvents, string(prservice.SupplierWillSupply)))
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterCancelRequest)))
 	assert.True(t, slices.Contains(capabilities.RequesterMessageEvents, string(prservice.RequesterReceived)))

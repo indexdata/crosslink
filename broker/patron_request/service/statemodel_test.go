@@ -14,9 +14,21 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.RequesterStates, string(BorrowerStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateValidated)))
 	assert.True(t, slices.Contains(c.SupplierStates, string(LenderStateReceived)))
-	assert.True(t, slices.Contains(c.RequesterActions, string(BorrowerActionSendRequest)))
-	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionWillSupply)))
-	assert.True(t, slices.Contains(c.SupplierActions, string(LenderActionRejectCancel)))
+
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionValidate)
+	}))
+	assert.True(t, slices.ContainsFunc(c.RequesterActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(BorrowerActionReceive)
+	}))
+
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionWillSupply)
+	}))
+	assert.True(t, slices.ContainsFunc(c.SupplierActions, func(a proapi.ActionCapability) bool {
+		return a.Name == string(LenderActionWillSupply) && slices.Contains(a.Parameters, "note")
+	}))
+
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierWillSupply)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterCancelRequest)))
 	assert.True(t, slices.Contains(c.RequesterMessageEvents, string(RequesterReceived)))
