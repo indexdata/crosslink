@@ -63,6 +63,10 @@
                         "SUPPLIER"
                     ]
                 },
+                "primaryAction": {
+                    "type": "string",
+                    "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
+                },
                 "actions": {
                     "type": "array",
                     "description": "List of all actions that may be performed on the request when in this state",

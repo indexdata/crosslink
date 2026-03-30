@@ -678,6 +678,9 @@ components:
           enum:
             - REQUESTER
             - SUPPLIER
+        primaryAction:
+          type: string
+          description: Name of the primary action for this state. Should be one of the actions defined in actions array.
         actions:
           type: array
           description: List of all actions that may be performed on the request when in this state

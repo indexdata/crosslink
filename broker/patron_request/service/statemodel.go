@@ -135,6 +135,12 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 				}
 			}
 		}
+		if state.PrimaryAction != nil && (state.Actions == nil || !slices.ContainsFunc(*state.Actions, func(a proapi.ModelAction) bool {
+			return a.Name == string(*state.PrimaryAction)
+		})) {
+			return fmt.Errorf("primary action %s undefined in state %s side %s", *state.PrimaryAction, state.Name, state.Side)
+		}
+
 		if state.Events != nil {
 			for _, event := range *state.Events {
 				if !slices.Contains(allowedEvents, event.Name) {

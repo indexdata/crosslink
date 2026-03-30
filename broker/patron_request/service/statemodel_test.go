@@ -35,6 +35,72 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
 }
 
+func TestValidateStateModelOK(t *testing.T) {
+	s := "validate"
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: "NEW",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+				PrimaryAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.NoError(t, err)
+}
+
+func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
+	s := "other"
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: "NEW",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: "validate"},
+				},
+				PrimaryAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
+}
+
+func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
+	s := "other"
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:          "NEW",
+				Side:          proapi.REQUESTER,
+				Actions:       nil,
+				PrimaryAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
+}
+
 func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
