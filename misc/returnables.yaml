@@ -12,6 +12,7 @@ states:
     actions:
       - name: validate
         desc: Validate the request (e.g. check patron via NCIP LookupUser, if enabled)
+        primary: true
         transitions:
           success: VALIDATED
 

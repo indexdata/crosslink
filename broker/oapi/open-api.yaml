@@ -722,6 +722,9 @@ components:
             - auto
             - manual
           default: manual
+        primary:
+          type: boolean
+          description: Indicates if the action is a primary action
         transitions:
           type: object
           description: Action outcome to state transition mapping. When no transition is defined, the action is considered to be non-state-changing.
