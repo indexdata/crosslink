@@ -15,6 +15,7 @@ states:
         primary: true
         transitions:
           success: VALIDATED
+        trigger: auto
 
   - name: VALIDATED
     display: Validated
@@ -187,6 +188,7 @@ states:
         desc: Validate the request, e.g institutional patron via NCIP LookupUser, if enabled
         transitions:
           success: VALIDATED
+        trigger: auto
 
   - name: VALIDATED
     display: Validated
@@ -197,6 +199,7 @@ states:
         desc: Indicate supplier will supply and send ISO18626 WillSupply
         transitions:
           success: WILL_SUPPLY
+        trigger: auto
       - name: cannot-supply
         desc: Indicate cannot supply and send ISO18626 Unfilled
         transitions:
