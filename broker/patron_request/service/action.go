@@ -137,6 +137,9 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
+		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk && config.terminal {
+			updatedPr.TerminalState = true
+		}
 		toState := string(transitionState)
 		execResult.result.ActionResult.ToState = &toState
 		stateChanged = true

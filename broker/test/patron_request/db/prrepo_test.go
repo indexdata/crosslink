@@ -75,8 +75,9 @@ func TestItem(t *testing.T) {
 			Time:  time.Now(),
 			Valid: true,
 		},
-		Language: "english",
-		Items:    []pr_db.PrItem{},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
 	})
 	assert.NoError(t, err)
 
@@ -165,8 +166,9 @@ func TestNotification(t *testing.T) {
 			Time:  time.Now(),
 			Valid: true,
 		},
-		Language: "english",
-		Items:    []pr_db.PrItem{},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
 	})
 	assert.NoError(t, err)
 

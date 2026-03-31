@@ -55,6 +55,7 @@ type stateConfig struct {
 	actions     map[pr_db.PatronRequestAction]proapi.ModelAction
 	events      map[string]proapi.ModelEvent
 	autoActions []pr_db.PatronRequestAction
+	terminal    bool
 }
 
 // Constructor function to initialize the mappings for given StateModel
@@ -72,8 +73,12 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 	for _, state := range stateModel.States {
 		stateName := pr_db.PatronRequestState(state.Name)
 		currentStateConfig := stateConfig{
-			actions: make(map[pr_db.PatronRequestAction]proapi.ModelAction),
-			events:  make(map[string]proapi.ModelEvent),
+			actions:  make(map[pr_db.PatronRequestAction]proapi.ModelAction),
+			events:   make(map[string]proapi.ModelEvent),
+			terminal: false,
+		}
+		if state.Terminal != nil && *state.Terminal {
+			currentStateConfig.terminal = true
 		}
 		actionEntries := make([]PatronRequestAction, 0)
 		if state.Actions != nil {

@@ -483,6 +483,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, string(prservice.BorrowerStateCompleted), foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 
 	// Check requester patron request event count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/events"+queryParams, []byte{}, 200)
@@ -511,6 +512,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, supPr.ID, foundPr.Id)
 	assert.Equal(t, string(prservice.LenderStateCompleted), foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 
 	// Check supplier patron request event count
 	respBytes = httpRequest(t, "GET", supplierPrPath+"/events"+supQueryParams, []byte{}, 200)
@@ -608,7 +610,8 @@ func TestServerChoice(t *testing.T) {
 				PatronId:  "PP-789",
 			},
 		},
-		Items: []pr_db.PrItem{},
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
 	})
 	assert.NoError(t, err)
 	itemId := uuid.NewString()
