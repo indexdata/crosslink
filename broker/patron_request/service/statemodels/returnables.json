@@ -9,6 +9,7 @@
       "display": "New",
       "desc": "Initial state after Patron Request is created (POST)",
       "side": "REQUESTER",
+      "primaryAction": "validate",
       "actions": [
         {
           "name": "validate",
@@ -25,6 +26,7 @@
       "display": "Validated",
       "desc": "Patron Request is valid",
       "side": "REQUESTER",
+      "primaryAction": "send-request",
       "actions": [
         {
           "name": "send-request",
@@ -73,6 +75,7 @@
       "display": "Supplier Located",
       "desc": "After receiving ISO ExpectToSupply",
       "side": "REQUESTER",
+      "primaryAction": "cancel-request",
       "actions": [
         {
           "name": "cancel-request",
@@ -105,6 +108,7 @@
       "display": "Condition Pending",
       "desc": "Received supply conditions",
       "side": "REQUESTER",
+      "primaryAction": "accept-condition",
       "actions": [
         {
           "name": "accept-condition",
@@ -127,6 +131,7 @@
       "display": "Will Supply",
       "desc": "Received ISO18626 WillSupply (without condition)",
       "side": "REQUESTER",
+      "primaryAction": "cancel-request",
       "actions": [
         {
           "name": "cancel-request",
@@ -154,6 +159,7 @@
       "display": "Shipped",
       "desc": "After receiving ISO18626 Loaned",
       "side": "REQUESTER",
+      "primaryAction": "receive",
       "actions": [
         {
           "name": "receive",
@@ -169,6 +175,7 @@
       "display": "Received",
       "desc": "Item received and accepted into local ILS.",
       "side": "REQUESTER",
+      "primaryAction": "check-out",
       "actions": [
         {
           "name": "check-out",
@@ -184,6 +191,7 @@
       "display": "Checked Out",
       "desc": "Item is checked out to patron",
       "side": "REQUESTER",
+      "primaryAction": "check-in",
       "actions": [
         {
           "name": "check-in",
@@ -199,6 +207,7 @@
       "display": "Checked In",
       "desc": "Item is checked back in to the local ILS",
       "side": "REQUESTER",
+      "primaryAction": "ship-return",
       "actions": [
         {
           "name": "ship-return",
@@ -266,6 +275,7 @@
       "display": "New",
       "desc": "Item is created on the supplier side for local fulfillment",
       "side": "SUPPLIER",
+      "primaryAction": "validate",
       "actions": [
         {
           "name": "validate",
@@ -282,6 +292,7 @@
       "display": "Validated",
       "desc": "Request is valid",
       "side": "SUPPLIER",
+      "primaryAction": "will-supply",
       "actions": [
         {
           "name": "will-supply",
@@ -319,6 +330,7 @@
       "display": "Will Supply",
       "desc": "After manual will-supply or successful auto-responder",
       "side": "SUPPLIER",
+      "primaryAction": "ship",
       "actions": [
         {
           "name": "add-condition",
@@ -355,6 +367,7 @@
       "display": "Condition Pending",
       "desc": "Conditions are sent with a special ISO WillSupply",
       "side": "SUPPLIER",
+      "primaryAction": "cannot-supply",
       "actions": [
         {
           "name": "cannot-supply",
@@ -387,6 +400,7 @@
       "display": "Condition Accepted",
       "desc": "After receiving conditions accepted notification",
       "side": "SUPPLIER",
+      "primaryAction": "ship",
       "actions": [
         {
           "name": "ship",
@@ -442,6 +456,7 @@
       "display": "Shipped Return",
       "desc": "After receiving ISO ShippedReturn message",
       "side": "SUPPLIER",
+      "primaryAction": "mark-received",
       "actions": [
         {
           "name": "mark-received",
@@ -457,6 +472,7 @@
       "display": "Cancel Requested",
       "desc": "After receiving ISO18626 Cancel from requester",
       "side": "SUPPLIER",
+      "primaryAction": "accept-cancel",
       "actions": [
         {
           "name": "accept-cancel",
