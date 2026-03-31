@@ -12,7 +12,7 @@ WHERE id = $1
     LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, COUNT(*) OVER () as full_count
+SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, terminal_state, COUNT(*) OVER () as full_count
 FROM patron_request_search_view
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
@@ -33,13 +33,14 @@ SET timestamp           = $2,
     last_action_outcome = $13,
     last_action_result  = $14,
     items               = $15,
-    language            = $16
+    language            = $16,
+    terminal_state     = $17
 WHERE id = $1
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+INSERT INTO patron_request (id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec

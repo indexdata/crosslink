@@ -16,7 +16,8 @@ CREATE TABLE patron_request
     last_action_outcome VARCHAR,
     last_action_result  VARCHAR,
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
-    language            regconfig NOT NULL DEFAULT 'english'
+    language            regconfig NOT NULL DEFAULT 'english',
+    terminal_state      BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

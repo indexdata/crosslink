@@ -71,6 +71,9 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	}
 	if hasTransition && transitionState != pr.State {
 		pr.State = transitionState
+		if config, configOk := actionMapping.getStateConfig(pr); configOk && config.terminal {
+			pr.TerminalState = true
+		}
 		return pr, true, true, nil
 	}
 	return pr, false, true, nil
@@ -385,6 +388,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		RequesterReqID:  getDbText(raRequestId),
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
+		TerminalState:   false,
 	})
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{

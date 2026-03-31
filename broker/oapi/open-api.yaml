@@ -482,6 +482,9 @@ components:
           description: List of patron request items
           items:
             $ref: '#/components/schemas/PrItem'
+        terminalState:
+          type: boolean
+          description: Indicates if the request is in terminal state
       required:
         - id
         - timestamp
@@ -489,6 +492,7 @@ components:
         - side
         - illRequest
         - needsAttention
+        - terminalState
     PatronRequests:
       type: object
       required:
@@ -1169,7 +1173,7 @@ paths:
         Query parameter cql can be used to filter the results.
         With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
         has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at, 
-        requester_req_id, title, patron, cql.serverChoice.
+        requester_req_id, title, patron, terminal_state, cql.serverChoice.
       tags:
         - patron-requests-api
       parameters:

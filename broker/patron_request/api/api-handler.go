@@ -567,6 +567,7 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		LastActionOutcome:  toString(request.LastActionOutcome),
 		LastActionResult:   toString(request.LastActionResult),
 		Items:              &items,
+		TerminalState:      request.TerminalState,
 	}
 }
 
@@ -698,6 +699,7 @@ func buildDbPatronRequest(
 		RequesterReqID:  getDbText(&requesterReqId),
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
+		TerminalState:   false,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}

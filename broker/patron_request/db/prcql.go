@@ -55,6 +55,9 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	fb = pgcql.NewFieldBool()
 	def.AddField("has_unread_notification", fb)
 
+	fb = pgcql.NewFieldBool()
+	def.AddField("terminal_state", fb)
+
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("service_type", f)
 
@@ -132,6 +135,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.LastActionResult,
 			&i.Language,
 			&i.Items,
+			&i.TerminalState,
 			&i.FullCount,
 		); err != nil {
 			return nil, err

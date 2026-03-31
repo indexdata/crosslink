@@ -185,7 +185,7 @@ func TestCrud(t *testing.T) {
 		"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20needs_attention%3Dfalse%20and%20"+
 		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
 		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
-		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round", []byte{}, 200)
+		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20terminal_state%3Dfalse", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
@@ -483,6 +483,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, string(prservice.BorrowerStateCompleted), foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 
 	// Check requester patron request event count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/events"+queryParams, []byte{}, 200)
@@ -511,6 +512,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, supPr.ID, foundPr.Id)
 	assert.Equal(t, string(prservice.LenderStateCompleted), foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 
 	// Check supplier patron request event count
 	respBytes = httpRequest(t, "GET", supplierPrPath+"/events"+supQueryParams, []byte{}, 200)
@@ -608,7 +610,8 @@ func TestServerChoice(t *testing.T) {
 				PatronId:  "PP-789",
 			},
 		},
-		Items: []pr_db.PrItem{},
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
 	})
 	assert.NoError(t, err)
 	itemId := uuid.NewString()
