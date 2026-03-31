@@ -135,6 +135,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.LastActionResult,
 			&i.Language,
 			&i.Items,
+			&i.TerminalState,
 			&i.FullCount,
 		); err != nil {
 			return nil, err
