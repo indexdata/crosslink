@@ -92,6 +92,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 					LastActionResult:  r.LastActionResult,
 					Language:          r.Language,
 					Items:             r.Items,
+					TerminalState:     r.TerminalState,
 				})
 			}
 		} else {

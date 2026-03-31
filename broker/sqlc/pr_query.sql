@@ -12,7 +12,7 @@ WHERE id = $1
     LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, COUNT(*) OVER () as full_count
+SELECT id, timestamp, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, terminal_state, COUNT(*) OVER () as full_count
 FROM patron_request_search_view
 ORDER BY timestamp
 LIMIT $1 OFFSET $2;
