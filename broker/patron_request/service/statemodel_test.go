@@ -35,7 +35,7 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
 }
 
-func TestValidateStateModelOK(t *testing.T) {
+func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 	s := "validate"
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
@@ -49,6 +49,27 @@ func TestValidateStateModelOK(t *testing.T) {
 					{Name: s},
 				},
 				PrimaryAction: &s,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.NoError(t, err)
+}
+
+func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
+	s := "validate"
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: "NEW",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
 			},
 		},
 	}
