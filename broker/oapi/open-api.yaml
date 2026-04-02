@@ -871,6 +871,41 @@ components:
         - side
         - createdAt
 
+    CreatePrNotification:
+      type: object
+      title: Create Notification
+      description: Create patron request notification body
+      properties:
+        fromSymbol:
+          type: string
+          description: Symbol of notification sender
+        toSymbol:
+          type: string
+          description: Symbol of notification receiver
+        side:
+          type: string
+          description: Patron request side
+        note:
+          type: string
+          description: Note of notification
+        cost:
+          type: number
+          format: double
+          description: Cost amount
+        currency:
+          type: string
+          description: Currency symbol
+        condition:
+          type: string
+          description: Condition of notification
+        receipt:
+          type: string
+          description: Receipt of notification
+      required:
+        - fromSymbol
+        - toSymbol
+        - side
+
 paths:
   /:
     get:
@@ -1509,6 +1544,50 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PrNotification'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found. Patron request not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create patron request notification
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrNotification'
+      responses:
+        '201':
+          description: Patron request notification created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrNotification'
         '400':
           description: Bad Request. Invalid query parameters.
           content:

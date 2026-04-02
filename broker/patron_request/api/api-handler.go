@@ -510,6 +510,50 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 	writeJsonResponse(w, responseList)
 }
 
+func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdNotificationsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	var newNotification proapi.CreatePrNotification
+	err = json.NewDecoder(r.Body).Decode(&newNotification)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+
+	dbNotification := toDbNotification(newNotification, pr.ID)
+	dbNotification, err = a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams(dbNotification))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	apiN, inErr := toApiNotification(dbNotification)
+	if inErr != nil {
+		addInternalError(ctx, w, inErr)
+		return
+	}
+
+	//w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+dbNotification.ID, ""))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(apiN)
+}
+
 func writeJsonResponse(w http.ResponseWriter, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -766,4 +810,43 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		CreatedAt:      notification.CreatedAt.Time,
 		AcknowledgedAt: ackAt,
 	}, nil
+}
+
+func toDbNotification(create proapi.CreatePrNotification, prId string) pr_db.Notification {
+	side := prservice.SideBorrowing
+	if create.Side == string(prservice.SideLending) {
+		side = prservice.SideLending
+	}
+	return pr_db.Notification{
+		ID:         uuid.NewString(),
+		PrID:       prId,
+		FromSymbol: create.FromSymbol,
+		ToSymbol:   create.ToSymbol,
+		Side:       side,
+		Note:       getDbText(create.Note),
+		Cost:       float64ToPgNumeric(create.Cost),
+		Currency:   getDbText(create.Currency),
+		Condition:  getDbText(create.Condition),
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		AcknowledgedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	}
+}
+
+func float64ToPgNumeric(f *float64) pgtype.Numeric {
+	var n pgtype.Numeric
+	if f == nil {
+		n.Valid = false
+		return n
+	}
+	s := fmt.Sprintf("%g", *f)
+	if err := n.Scan(s); err != nil {
+		n.Valid = false
+	}
+	return n
 }
