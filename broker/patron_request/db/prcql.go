@@ -34,19 +34,19 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("side", f)
 
-	f = pgcql.NewFieldString().WithExact()
+	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("requester_symbol", f)
 
-	f = pgcql.NewFieldString().WithExact()
+	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("supplier_symbol", f)
 
-	f = pgcql.NewFieldString().WithExact()
+	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("requester_req_id", f)
 
-	f = pgcql.NewFieldString().WithExact()
-	def.AddField("needs_attention", f)
-
 	fb := pgcql.NewFieldBool()
+	def.AddField("needs_attention", fb)
+
+	fb = pgcql.NewFieldBool()
 	def.AddField("has_notification", fb)
 
 	fb = pgcql.NewFieldBool()
@@ -70,10 +70,10 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	nf = pgcql.NewFieldDate()
 	def.AddField("needed_at", nf)
 
-	f = pgcql.NewFieldString().WithExact().WithColumn("ill_request->'bibliographicInfo'->>'title'")
+	f = pgcql.NewFieldString().WithLikeOps().WithColumn("ill_request->'bibliographicInfo'->>'title'")
 	def.AddField("title", f)
 
-	f = pgcql.NewFieldString().WithExact()
+	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
 
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
