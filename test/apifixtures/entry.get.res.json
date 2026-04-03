@@ -2,6 +2,7 @@
   "id":"00000000-0000-0000-0000-000000000002",
   "name":"An Institution",
   "contactName":"Bob",
+  "type":"Institution",
   "symbols": [
     {"authority":"TEST","id":"00000000-0000-0000-0000-000000000001","symbol":"ANINST"},
     {"authority":"TEST","id":"00000000-0000-0000-0000-000000000002","symbol":"ANINSTTOO"}
@@ -12,6 +13,20 @@
       "name": "Primary",
       "type": "ISO18626",
       "address": "https://whatever.host.tld/path"
+    }
+  ],
+  "lmsConfig": {
+    "address":"https://also.not.real",
+    "fromAgency":"rivendell",
+    "fromAgencyAuthentication":"pack_extra_lembas"
+  },
+  "closures": [
+    {
+      "entry":"00000000-0000-0000-0000-000000000002",
+      "id":"00000000-0000-0000-0000-000000000001",
+      "reason":"Winter break",
+      "startDate":"2024-01-01",
+      "endDate":"2024-01-15"
     }
   ]
 }

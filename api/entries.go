@@ -31,18 +31,31 @@ func getSymbolAuthority() string {
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
-		id            uuid.UUID
-		name          string
-		description   *string
-		contactName   *string
-		email         *string
-		symbolsJSON   [][]byte
-		endpointsJSON [][]byte
-		addressesJSON [][]byte
-		totalCount    int
+		id              uuid.UUID
+		name            string
+		description     *string
+		contactName     *string
+		organizationId  *string
+		email           *string
+		phoneNumber     *string
+		lmsLocationCode *string
+		lmsConfigJSON   []byte
+		hrid            *string
+		timeZone        *string
+		entryType       *string
+		parent          *uuid.UUID
+		symbolsJSON     [][]byte
+		endpointsJSON   [][]byte
+		addressesJSON   [][]byte
+		tiersJSON       [][]byte
+		networksJSON    [][]byte
+		closuresJSON    [][]byte
+		totalCount      int
 	)
 
-	if err := rows.Scan(&id, &name, &description, &contactName, &email, &symbolsJSON, &endpointsJSON, &addressesJSON, &totalCount); err != nil {
+	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &phoneNumber,
+		&lmsLocationCode, &lmsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, 0, err
 	}
 
@@ -61,6 +74,26 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		return Entry{}, 0, fmt.Errorf("unmarshalling addresses: %w", err)
 	}
 
+	closures, err := unmarshalJSONArray[Closure](closuresJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling closures: %w", err)
+	}
+
+	lmsConfig, err := unmarshalJSONObject[LmsConfig](lmsConfigJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling lms config: %w", err)
+	}
+
+	tiers, err := unmarshalJSONArray[Tier](tiersJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling tiers: %w", err)
+	}
+
+	networks, err := unmarshalJSONArray[Network](networksJSON)
+	if err != nil {
+		return Entry{}, 0, fmt.Errorf("unmarshalling networks config: %w", err)
+	}
+
 	// Use nil for empty arrays so they're omitted in JSON (omitempty)
 	var symbolsPtr *[]Symbol
 	if len(symbols) > 0 {
@@ -77,15 +110,45 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 		addressesPtr = &addresses
 	}
 
+	var closuresPtr *[]Closure
+	if len(closures) > 0 {
+		closuresPtr = &closures
+	}
+
+	var tiersPtr *[]Tier
+	if len(tiers) > 0 {
+		tiersPtr = &tiers
+	}
+
+	var networksPtr *[]Network
+	if len(networks) > 0 {
+		networksPtr = &networks
+	}
+
+	lmsConfigPtr := lmsConfig
+
+	typeValue := EntryType(*entryType)
+
 	return Entry{
-		Id:          &id,
-		Name:        name,
-		Description: description,
-		ContactName: contactName,
-		Email:       email,
-		Symbols:     symbolsPtr,
-		Endpoints:   endpointsPtr,
-		Addresses:   addressesPtr,
+		Id:              &id,
+		Name:            name,
+		Type:            &typeValue,
+		OrganizationId:  organizationId,
+		Description:     description,
+		ContactName:     contactName,
+		Email:           email,
+		Hrid:            hrid,
+		LmsLocationCode: lmsLocationCode,
+		PhoneNumber:     phoneNumber,
+		Parent:          parent,
+		Symbols:         symbolsPtr,
+		Endpoints:       endpointsPtr,
+		Addresses:       addressesPtr,
+		Closures:        closuresPtr,
+		LmsConfig:       lmsConfigPtr,
+		Tiers:           tiersPtr,
+		Networks:        networksPtr,
+		TimeZone:        timeZone,
 	}, totalCount, nil
 }
 
@@ -119,8 +182,34 @@ func buildEntrySQL(whereClause string) string {
 			e.id,
 			e.name,
 			e.description,
+			e.organization_id,
 			e.contact_name,
 			e.email,
+			e.phone_number,
+			e.lms_location_code,
+			(SELECT 
+				json_build_object(
+					'acceptItemEnabled', l.accept_item_enabled,
+					'address',l.address, 
+					'checkInItemEnabled', l.checkin_item_enabled,
+					'checkOutItemEnabled', l.checkout_item_enabled,
+					'fromAgency',l.from_agency,
+					'fromAgencyAuthentication', l.from_agency_authentication,
+					'itemLocation', l.item_location,
+					'lookupUserEnabled', l.lookup_user_enabled,
+					'requestItemBibIdCode', l.request_item_bib_code,
+					'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
+					'requestItemRequestScopeType', l.request_item_scope_type,
+					'requestItemRequestType', l.request_item_request_type,
+					'requesterPatronPattern', l.requester_patron_pattern,
+					'requesterPickupLocation', l.requester_pickup_location,
+					'supplierPickupLocation', l.supplier_pickup_location,
+					'toAgency', l.to_agency
+				) from lms_configs l WHERE l.entry = e.id) as lms_config,
+			e.hrid,
+			e.time_zone,
+			e.type,
+			e.parent,
 			ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
 			ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints,
 			ARRAY(
@@ -140,6 +229,26 @@ func buildEntrySQL(whereClause string) string {
 					ORDER BY a.id
 				) a_with_components
 			) as addresses,
+			ARRAY(SELECT row_to_json(t) FROM memberships m
+				JOIN membership_tiers mt on mt.membership = m.id
+				JOIN tiers t on t.id = mt.tier
+				WHERE m.institution = e.id) as tiers,
+            ARRAY(SELECT row_to_json(n) FROM memberships m
+				JOIN membership_networks mn on mn.membership = m.id
+				JOIN networks n on n.id = mn.network
+				WHERE m.institution = e.id) as networks,
+			ARRAY(
+				SELECT json_build_object(
+					'id', c.id,
+					'entry', c.entry,
+					'startDate', c.start_date::date,
+					'endDate', c.end_date::date,
+					'reason', c.reason
+				)
+				FROM closures c
+				WHERE c.entry = e.id
+				ORDER BY c.id
+			) as closures,
 			COUNT(*) OVER() as total_count
 		FROM entries e
 	`
@@ -258,8 +367,15 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 		return GetEntry401TextResponse("Access denied"), nil
 	}
 
-	ownedEntry, _ := a.queries.EntryBySymbol(ctx,
-		db.EntryBySymbolParams{Authority: getSymbolAuthority(), Symbol: authData.GetInstitution()})
+	ownSymbolInstitution := authData.GetInstitution()
+	ownSymbolAuthority := getSymbolAuthority()
+
+	ownedEntry, err := a.queries.EntryBySymbol(ctx,
+		db.EntryBySymbolParams{Authority: ownSymbolAuthority, Symbol: ownSymbolInstitution})
+
+	if err != nil {
+		slog.ErrorContext(ctx, "Unable to get entry by symbol", "authority", ownSymbolAuthority, "institution", ownSymbolInstitution, "error", err)
+	}
 
 	if request.Key == GetEntryParamsKeyById {
 		parsedId, perr := uuid.Parse(request.Value)
@@ -303,14 +419,19 @@ func (a ApiImpl) GetEntry(ctx context.Context, request GetEntryRequestObject) (G
 	}
 
 	if !seeSensitive {
-		sanitizeEntry(&entry)
+		err := sanitizeEntry(&entry)
+		if err != nil {
+			slog.ErrorContext(ctx, "error sanitizing protected fields", "error", err)
+			return GetEntry500TextResponse("Internal server error"), nil
+		}
 	}
 
 	return GetEntry200JSONResponse(entry), nil
 }
 
-func sanitizeEntry(entry *Entry) {
-	//do nada til we have some specifically sensitive fields
+func sanitizeEntry(entry *Entry) error {
+	return Sanitize(entry)
+
 }
 
 func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (AddEntryResponseObject, error) {
@@ -331,9 +452,15 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
-		Name:        request.Body.Name,
-		ContactName: request.Body.ContactName,
-		Email:       request.Body.Email,
+		Name:            request.Body.Name,
+		ContactName:     request.Body.ContactName,
+		Email:           request.Body.Email,
+		PhoneNumber:     request.Body.PhoneNumber,
+		TimeZone:        request.Body.TimeZone,
+		OrganizationID:  request.Body.OrganizationId,
+		Type:            string(derefOrDefault(request.Body.Type, "Institution")),
+		Parent:          request.Body.Parent,
+		LmsLocationCode: request.Body.LmsLocationCode,
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
@@ -405,6 +532,33 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 		}
 	}
 
+	if request.Body.LmsConfig != nil {
+		lmsConfig := request.Body.LmsConfig
+		_, err := qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+			Entry:                            &insertedEntry.ID,
+			Address:                          lmsConfig.Address,
+			FromAgency:                       lmsConfig.FromAgency,
+			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
+			ToAgency:                         lmsConfig.ToAgency,
+			LookupUserEnabled:                lmsConfig.LookupUserEnabled,
+			AcceptItemEnabled:                lmsConfig.AcceptItemEnabled,
+			CheckinItemEnabled:               lmsConfig.CheckInItemEnabled,
+			CheckoutItemEnabled:              lmsConfig.CheckOutItemEnabled,
+			ItemLocation:                     lmsConfig.ItemLocation,
+			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
+			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
+			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
+			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
+			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
+			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
+			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to create lmsConfig component", "error", err, "to_agency", lmsConfig.ToAgency)
+			return AddEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
 	var resp Id
 	resp.Id = insertedEntry.ID
 
@@ -465,12 +619,26 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		return UpdateEntry401TextResponse("Access denied"), nil
 	}
 
+	if request.Body.Type.IsSpecified() && request.Body.Type.IsNull() {
+		slog.ErrorContext(ctx, "type cannot be null")
+		return UpdateEntry400TextResponse("'type' cannot be set to null"), nil
+	}
+
+	origTypeEntryPatch := EntryPatchType(orig.Type)
+
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:        derefOrDefault(request.Body.Name, orig.Name),
-		Description: maybeUpdateCol(orig.Description, request.Body.Description),
-		ContactName: maybeUpdateCol(orig.ContactName, request.Body.ContactName),
-		Email:       maybeUpdateCol(orig.Email, request.Body.Email),
-		ID:          orig.ID,
+		Name:            derefOrDefault(request.Body.Name, orig.Name),
+		Description:     maybeUpdateCol(orig.Description, request.Body.Description),
+		ContactName:     maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		Email:           maybeUpdateCol(orig.Email, request.Body.Email),
+		PhoneNumber:     maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
+		Parent:          maybeUpdateCol(orig.Parent, request.Body.Parent),
+		LmsLocationCode: maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
+		Hrid:            maybeUpdateCol(orig.Hrid, request.Body.Hrid),
+		Type:            string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type)),
+		TimeZone:        maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
+		OrganizationID:  maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
+		ID:              orig.ID,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)
@@ -637,6 +805,41 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to delete all owned addresses", "error", err, "entry_id", orig.ID)
 			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+	}
+
+	if request.Body.LmsConfig.IsSpecified() && !request.Body.LmsConfig.IsNull() {
+		lmsConfig := request.Body.LmsConfig.MustGet()
+
+		if err != nil {
+			slog.ErrorContext(ctx, "unable to query original LMS Config", "error", err)
+			return UpdateEntry500TextResponse("Internal server error"), nil
+		}
+
+		originalLMSConfig, _ := qtx.GetLMSConfigByEntry(ctx, orig.ID)
+
+		_, err = qtx.UpsertLMSConfig(ctx, db.UpsertLMSConfigParams{
+			Entry:                            &orig.ID,
+			Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
+			FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
+			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
+			ToAgency:                         lmsConfig.ToAgency,
+			LookupUserEnabled:                lmsConfig.LookupUserEnabled,
+			AcceptItemEnabled:                lmsConfig.AcceptItemEnabled,
+			CheckinItemEnabled:               lmsConfig.CheckInItemEnabled,
+			CheckoutItemEnabled:              lmsConfig.CheckOutItemEnabled,
+			ItemLocation:                     lmsConfig.ItemLocation,
+			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
+			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
+			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
+			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
+			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
+			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
+			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)
+			return UpdateEntry500TextResponse(err.Error()), nil
 		}
 	}
 

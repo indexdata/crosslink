@@ -2,12 +2,27 @@
   "id":"00000000-0000-0000-0000-000000000002",
   "name":"An Institution",
   "email":"what@ever.tk",
+  "type": "Institution",
   "endpoints": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "Alternative",
       "type": "ISO18626",
       "address": "https://whatever.host.tld/path"
+    }
+  ],
+  "lmsConfig": {
+    "address":"https://also.not.real",
+    "fromAgency":"rivendell",
+    "fromAgencyAuthentication":""
+  },
+  "closures": [
+    {
+      "entry":"00000000-0000-0000-0000-000000000002",
+      "id":"00000000-0000-0000-0000-000000000001",
+      "reason":"Winter break",
+      "startDate":"2024-01-01",
+      "endDate":"2024-01-15"
     }
   ]
 }

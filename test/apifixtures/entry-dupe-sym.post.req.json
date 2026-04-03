@@ -1,5 +1,6 @@
 {
   "name":"New Institution",
+  "type":"Institution",
   "symbols": [
     {"authority":"TEST", "symbol":"ANINST"},
     {"authority":"TEST", "symbol":"NWINSTTOO"}

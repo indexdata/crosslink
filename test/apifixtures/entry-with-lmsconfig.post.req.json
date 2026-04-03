@@ -1,0 +1,8 @@
+{
+  "name":"Institution with LmsConfig",
+  "type":"Institution",
+  "lmsConfig" : {
+    "address" : "https://do.not.taunt.happy.fun.ball",
+    "fromAgency" : "happyfunballdotcom"
+  }
+}

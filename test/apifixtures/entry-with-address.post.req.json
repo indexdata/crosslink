@@ -1,5 +1,6 @@
 {
   "name":"Institution with Address",
+  "type":"Institution",
   "addresses": [
     {
       "type": "Default",

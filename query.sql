@@ -9,9 +9,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, contact_name, email
+  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code 
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
 
@@ -21,7 +21,15 @@ SET
   name = @name,
   description = @description,
   contact_name = @contact_name,
-  email = @email
+  email = @email,
+  phone_number = @phone_number,
+  time_zone = @time_zone,
+  organization_id = @organization_id,
+  type = @type,
+  parent = @parent,
+  lms_location_code = @lms_location_code,
+  hrid = @hrid
+
 WHERE id = @id;
 
 -- name: DeleteEntryById :exec
@@ -116,30 +124,184 @@ RETURNING *;
 -- name: DeleteAllOwnedAddressComponents :exec
 DELETE FROM address_components WHERE address = @address;
 
-
--- name: ListConsortia :many
-SELECT * FROM consortia
-WHERE
-  (id = sqlc.narg(id) OR sqlc.narg(id) IS NULL);
-
--- name: ConsortiumByIdForUpdate :one
-SELECT * FROM consortia
-WHERE id = $1 LIMIT 1 FOR UPDATE;
-
--- name: CreateConsortium :one
-INSERT INTO consortia (
-  name, entry
+-- name: CreateTier :one
+INSERT INTO tiers (
+  name
 ) VALUES (
-  @name, @entry
+  @name
 )
 RETURNING *;
 
--- name: UpdateConsortium :exec
-UPDATE consortia
+-- name: CreateNetwork :one
+INSERT INTO networks (
+  name
+) VALUES (
+  @name
+)
+RETURNING *;
+
+-- name: CreateMembership :one
+INSERT INTO memberships (
+  institution
+) VALUES (
+  @institution
+)
+RETURNING *;
+
+-- name: CreateNetworkMembership :one
+INSERT INTO membership_networks (
+  membership, network
+) VALUES (
+  @membership,
+  @network
+)
+RETURNING *;
+
+-- name: CreateTierMembership :one
+INSERT INTO membership_tiers (
+  membership, tier
+) VALUES (
+  @membership,
+  @tier
+)
+RETURNING *;
+
+-- name: CreateClosure :one
+INSERT INTO closures (
+  entry, start_date, end_date, reason
+) VALUES (
+  @entry,
+  @start_date,
+  @end_date,
+  @reason
+)
+RETURNING *;
+
+-- name: UpsertLMSConfig :one
+INSERT INTO  lms_configs (
+  id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled,
+  accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
+  request_item_request_type, request_item_scope_type, request_item_bib_code,
+  request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
+  requester_patron_pattern
+) VALUES (
+  coalesce(sqlc.narg('id'), gen_random_uuid()),
+  @entry,
+  @address,
+  @from_agency,
+  @from_agency_authentication,
+  @to_agency,
+  @lookup_user_enabled,
+  @accept_item_enabled,
+  @checkin_item_enabled,
+  @checkout_item_enabled,
+  @item_location,
+  @request_item_request_type,
+  @request_item_scope_type,
+  @request_item_bib_code,
+  @request_item_pickup_location_enabled,
+  @requester_pickup_location,
+  @supplier_pickup_location,
+  @requester_patron_pattern
+)
+ON CONFLICT (entry) DO UPDATE SET
+  address = @address,
+  from_agency = @from_agency,
+  from_agency_authentication = @from_agency_authentication,
+  to_agency = @to_agency,
+  lookup_user_enabled = @lookup_user_enabled,
+  accept_item_enabled = @accept_item_enabled,
+  checkin_item_enabled = @checkin_item_enabled,
+  checkout_item_enabled = @checkout_item_enabled,
+  item_location = @item_location,
+  request_item_request_type = @request_item_request_type,
+  request_item_scope_type = @request_item_scope_type,
+  request_item_bib_code = @request_item_bib_code,
+  request_item_pickup_location_enabled = @request_item_pickup_location_enabled,
+  requester_pickup_location = @requester_pickup_location,
+  supplier_pickup_location = @supplier_pickup_location,
+  requester_patron_pattern = @requester_patron_pattern
+WHERE lms_configs.entry = sqlc.narg('entry')
+RETURNING *;
+
+-- name: GetNetworkById :one
+SELECT * FROM networks WHERE id = $1 LIMIT 1;
+
+-- name: GetTierById :one
+SELECT * FROM tiers WHERE id = $1 LIMIT 1;
+
+-- name: GetMembershipById :one
+SELECT * FROM memberships WHERE id = $1 LIMIT 1;
+
+-- name: GetNetworkMembershipById :one
+SELECT * FROM membership_networks WHERE id = $1 LIMIT 1;
+
+-- name: GetTierMembershipById :one
+SELECT * FROM membership_tiers WHERE id = $1 LIMIT 1;
+
+-- name: GetClosureById :one
+SELECT * FROM closures WHERE id = $1 LIMIT 1;
+
+-- name: GetClosureByIdForUpdate :one
+SELECT * FROM closures WHERE id = $1 LIMIT 1 FOR UPDATE;
+
+-- name: DeleteNetworkById :exec
+DELETE from networks where id = @id;
+
+-- name: DeleteTierById :exec
+DELETE from tiers where id = @id;
+
+-- name: DeleteNetworkMembershipById :exec
+DELETE from membership_networks WHERE id = @id;
+
+-- name: DeleteTierMembershipById :exec
+DELETE from membership_tiers WHERE id = @id;
+
+-- name: DeleteClosureById :exec
+DELETE from closures where id = @id;
+
+-- name: DeleteMembershipById :exec
+DELETE from memberships where id = @id;
+
+-- name: UpdateClosure :exec
+UPDATE closures
 SET
-  name = @name,
-  entry = @entry
+  start_date = @start_date,
+  end_date = @end_date,
+  reason = @reason
 WHERE id = @id;
 
--- name: DeleteConsortium :exec
-DELETE from consortia where id = @id;
+-- name: ListNetworks :many
+SELECT * FROM networks
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+-- name: ListTiers :many
+SELECT * FROM tiers
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+-- name: ListClosures :many
+SELECT * FROM closures
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+-- name: ListMemberships :many
+SELECT * FROM memberships
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+-- name: ListNetworkMemberships :many
+SELECT * FROM membership_networks
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+-- name: ListTierMemberships :many
+SELECT * FROM membership_tiers
+  LIMIT sqlc.arg('limit')
+  OFFSET sqlc.arg('offset');
+
+
+-- name: GetLMSConfigByEntry :one
+SELECT * FROM lms_configs 
+  WHERE entry = @entry;

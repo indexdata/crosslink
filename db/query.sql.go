@@ -9,19 +9,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
-
-const consortiumByIdForUpdate = `-- name: ConsortiumByIdForUpdate :one
-SELECT id, entry, name FROM consortia
-WHERE id = $1 LIMIT 1 FOR UPDATE
-`
-
-func (q *Queries) ConsortiumByIdForUpdate(ctx context.Context, id uuid.UUID) (Consortium, error) {
-	row := q.db.QueryRow(ctx, consortiumByIdForUpdate, id)
-	var i Consortium
-	err := row.Scan(&i.ID, &i.Entry, &i.Name)
-	return i, err
-}
 
 const createAddressComponent = `-- name: CreateAddressComponent :one
 INSERT INTO address_components (
@@ -60,55 +49,185 @@ func (q *Queries) CreateAddressComponent(ctx context.Context, arg CreateAddressC
 	return i, err
 }
 
-const createConsortium = `-- name: CreateConsortium :one
-INSERT INTO consortia (
-  name, entry
+const createClosure = `-- name: CreateClosure :one
+INSERT INTO closures (
+  entry, start_date, end_date, reason
 ) VALUES (
-  $1, $2
+  $1,
+  $2,
+  $3,
+  $4
 )
-RETURNING id, entry, name
+RETURNING id, entry, start_date, end_date, reason
 `
 
-type CreateConsortiumParams struct {
-	Name  string
-	Entry *uuid.UUID
+type CreateClosureParams struct {
+	Entry     uuid.UUID
+	StartDate pgtype.Timestamp
+	EndDate   pgtype.Timestamp
+	Reason    string
 }
 
-func (q *Queries) CreateConsortium(ctx context.Context, arg CreateConsortiumParams) (Consortium, error) {
-	row := q.db.QueryRow(ctx, createConsortium, arg.Name, arg.Entry)
-	var i Consortium
-	err := row.Scan(&i.ID, &i.Entry, &i.Name)
+func (q *Queries) CreateClosure(ctx context.Context, arg CreateClosureParams) (Closure, error) {
+	row := q.db.QueryRow(ctx, createClosure,
+		arg.Entry,
+		arg.StartDate,
+		arg.EndDate,
+		arg.Reason,
+	)
+	var i Closure
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.StartDate,
+		&i.EndDate,
+		&i.Reason,
+	)
 	return i, err
 }
 
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
-  name, contact_name, email
+  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code 
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, parent, name, description, lms_location_code, contact_name, email, phone
+RETURNING id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone
 `
 
 type CreateEntryParams struct {
-	Name        string
-	ContactName *string
-	Email       *string
+	Name            string
+	Description     *string
+	ContactName     *string
+	Email           *string
+	PhoneNumber     *string
+	TimeZone        *string
+	OrganizationID  *string
+	Type            string
+	Parent          *uuid.UUID
+	LmsLocationCode *string
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
-	row := q.db.QueryRow(ctx, createEntry, arg.Name, arg.ContactName, arg.Email)
+	row := q.db.QueryRow(ctx, createEntry,
+		arg.Name,
+		arg.Description,
+		arg.ContactName,
+		arg.Email,
+		arg.PhoneNumber,
+		arg.TimeZone,
+		arg.OrganizationID,
+		arg.Type,
+		arg.Parent,
+		arg.LmsLocationCode,
+	)
 	var i Entry
 	err := row.Scan(
 		&i.ID,
 		&i.Parent,
 		&i.Name,
+		&i.Type,
 		&i.Description,
-		&i.LmsLocationCode,
+		&i.OrganizationID,
 		&i.ContactName,
 		&i.Email,
-		&i.Phone,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.Hrid,
+		&i.TimeZone,
 	)
+	return i, err
+}
+
+const createMembership = `-- name: CreateMembership :one
+INSERT INTO memberships (
+  institution
+) VALUES (
+  $1
+)
+RETURNING id, institution
+`
+
+func (q *Queries) CreateMembership(ctx context.Context, institution uuid.UUID) (Membership, error) {
+	row := q.db.QueryRow(ctx, createMembership, institution)
+	var i Membership
+	err := row.Scan(&i.ID, &i.Institution)
+	return i, err
+}
+
+const createNetwork = `-- name: CreateNetwork :one
+INSERT INTO networks (
+  name
+) VALUES (
+  $1
+)
+RETURNING id, name
+`
+
+func (q *Queries) CreateNetwork(ctx context.Context, name *string) (Network, error) {
+	row := q.db.QueryRow(ctx, createNetwork, name)
+	var i Network
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const createNetworkMembership = `-- name: CreateNetworkMembership :one
+INSERT INTO membership_networks (
+  membership, network
+) VALUES (
+  $1,
+  $2
+)
+RETURNING id, membership, network
+`
+
+type CreateNetworkMembershipParams struct {
+	Membership uuid.UUID
+	Network    uuid.UUID
+}
+
+func (q *Queries) CreateNetworkMembership(ctx context.Context, arg CreateNetworkMembershipParams) (MembershipNetwork, error) {
+	row := q.db.QueryRow(ctx, createNetworkMembership, arg.Membership, arg.Network)
+	var i MembershipNetwork
+	err := row.Scan(&i.ID, &i.Membership, &i.Network)
+	return i, err
+}
+
+const createTier = `-- name: CreateTier :one
+INSERT INTO tiers (
+  name
+) VALUES (
+  $1
+)
+RETURNING id, name
+`
+
+func (q *Queries) CreateTier(ctx context.Context, name *string) (Tier, error) {
+	row := q.db.QueryRow(ctx, createTier, name)
+	var i Tier
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const createTierMembership = `-- name: CreateTierMembership :one
+INSERT INTO membership_tiers (
+  membership, tier
+) VALUES (
+  $1,
+  $2
+)
+RETURNING id, membership, tier
+`
+
+type CreateTierMembershipParams struct {
+	Membership uuid.UUID
+	Tier       uuid.UUID
+}
+
+func (q *Queries) CreateTierMembership(ctx context.Context, arg CreateTierMembershipParams) (MembershipTier, error) {
+	row := q.db.QueryRow(ctx, createTierMembership, arg.Membership, arg.Tier)
+	var i MembershipTier
+	err := row.Scan(&i.ID, &i.Membership, &i.Tier)
 	return i, err
 }
 
@@ -148,12 +267,12 @@ func (q *Queries) DeleteAllOwnedSymbols(ctx context.Context, owner uuid.UUID) er
 	return err
 }
 
-const deleteConsortium = `-- name: DeleteConsortium :exec
-DELETE from consortia where id = $1
+const deleteClosureById = `-- name: DeleteClosureById :exec
+DELETE from closures where id = $1
 `
 
-func (q *Queries) DeleteConsortium(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteConsortium, id)
+func (q *Queries) DeleteClosureById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteClosureById, id)
 	return err
 }
 
@@ -180,6 +299,33 @@ type DeleteEntryBySymbolParams struct {
 
 func (q *Queries) DeleteEntryBySymbol(ctx context.Context, arg DeleteEntryBySymbolParams) error {
 	_, err := q.db.Exec(ctx, deleteEntryBySymbol, arg.Authority, arg.Symbol)
+	return err
+}
+
+const deleteMembershipById = `-- name: DeleteMembershipById :exec
+DELETE from memberships where id = $1
+`
+
+func (q *Queries) DeleteMembershipById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMembershipById, id)
+	return err
+}
+
+const deleteNetworkById = `-- name: DeleteNetworkById :exec
+DELETE from networks where id = $1
+`
+
+func (q *Queries) DeleteNetworkById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteNetworkById, id)
+	return err
+}
+
+const deleteNetworkMembershipById = `-- name: DeleteNetworkMembershipById :exec
+DELETE from membership_networks WHERE id = $1
+`
+
+func (q *Queries) DeleteNetworkMembershipById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteNetworkMembershipById, id)
 	return err
 }
 
@@ -225,8 +371,26 @@ func (q *Queries) DeleteOtherOwnedSymbols(ctx context.Context, arg DeleteOtherOw
 	return err
 }
 
+const deleteTierById = `-- name: DeleteTierById :exec
+DELETE from tiers where id = $1
+`
+
+func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTierById, id)
+	return err
+}
+
+const deleteTierMembershipById = `-- name: DeleteTierMembershipById :exec
+DELETE from membership_tiers WHERE id = $1
+`
+
+func (q *Queries) DeleteTierMembershipById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTierMembershipById, id)
+	return err
+}
+
 const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
-SELECT id, parent, name, description, lms_location_code, contact_name, email, phone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -236,17 +400,21 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 		&i.ID,
 		&i.Parent,
 		&i.Name,
+		&i.Type,
 		&i.Description,
-		&i.LmsLocationCode,
+		&i.OrganizationID,
 		&i.ContactName,
 		&i.Email,
-		&i.Phone,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.Hrid,
+		&i.TimeZone,
 	)
 	return i, err
 }
 
 const entryBySymbol = `-- name: EntryBySymbol :one
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
 `
 
 type EntryBySymbolParams struct {
@@ -261,17 +429,21 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 		&i.ID,
 		&i.Parent,
 		&i.Name,
+		&i.Type,
 		&i.Description,
-		&i.LmsLocationCode,
+		&i.OrganizationID,
 		&i.ContactName,
 		&i.Email,
-		&i.Phone,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.Hrid,
+		&i.TimeZone,
 	)
 	return i, err
 }
 
 const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
-SELECT e.id, e.parent, e.name, e.description, e.lms_location_code, e.contact_name, e.email, e.phone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `
 
 type EntryBySymbolForUpdateParams struct {
@@ -286,31 +458,166 @@ func (q *Queries) EntryBySymbolForUpdate(ctx context.Context, arg EntryBySymbolF
 		&i.ID,
 		&i.Parent,
 		&i.Name,
+		&i.Type,
 		&i.Description,
-		&i.LmsLocationCode,
+		&i.OrganizationID,
 		&i.ContactName,
 		&i.Email,
-		&i.Phone,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.Hrid,
+		&i.TimeZone,
 	)
 	return i, err
 }
 
-const listConsortia = `-- name: ListConsortia :many
-SELECT id, entry, name FROM consortia
-WHERE
-  (id = $1 OR $1 IS NULL)
+const getClosureById = `-- name: GetClosureById :one
+SELECT id, entry, start_date, end_date, reason FROM closures WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) ListConsortia(ctx context.Context, id *uuid.UUID) ([]Consortium, error) {
-	rows, err := q.db.Query(ctx, listConsortia, id)
+func (q *Queries) GetClosureById(ctx context.Context, id uuid.UUID) (Closure, error) {
+	row := q.db.QueryRow(ctx, getClosureById, id)
+	var i Closure
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.StartDate,
+		&i.EndDate,
+		&i.Reason,
+	)
+	return i, err
+}
+
+const getClosureByIdForUpdate = `-- name: GetClosureByIdForUpdate :one
+SELECT id, entry, start_date, end_date, reason FROM closures WHERE id = $1 LIMIT 1 FOR UPDATE
+`
+
+func (q *Queries) GetClosureByIdForUpdate(ctx context.Context, id uuid.UUID) (Closure, error) {
+	row := q.db.QueryRow(ctx, getClosureByIdForUpdate, id)
+	var i Closure
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.StartDate,
+		&i.EndDate,
+		&i.Reason,
+	)
+	return i, err
+}
+
+const getLMSConfigByEntry = `-- name: GetLMSConfigByEntry :one
+SELECT id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled, accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, request_item_request_type, request_item_scope_type, request_item_bib_code, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location, requester_patron_pattern FROM lms_configs 
+  WHERE entry = $1
+`
+
+func (q *Queries) GetLMSConfigByEntry(ctx context.Context, entry uuid.UUID) (LmsConfig, error) {
+	row := q.db.QueryRow(ctx, getLMSConfigByEntry, entry)
+	var i LmsConfig
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.Address,
+		&i.FromAgency,
+		&i.FromAgencyAuthentication,
+		&i.ToAgency,
+		&i.LookupUserEnabled,
+		&i.AcceptItemEnabled,
+		&i.CheckinItemEnabled,
+		&i.CheckoutItemEnabled,
+		&i.ItemLocation,
+		&i.RequestItemRequestType,
+		&i.RequestItemScopeType,
+		&i.RequestItemBibCode,
+		&i.RequestItemPickupLocationEnabled,
+		&i.RequesterPickupLocation,
+		&i.SupplierPickupLocation,
+		&i.RequesterPatronPattern,
+	)
+	return i, err
+}
+
+const getMembershipById = `-- name: GetMembershipById :one
+SELECT id, institution FROM memberships WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetMembershipById(ctx context.Context, id uuid.UUID) (Membership, error) {
+	row := q.db.QueryRow(ctx, getMembershipById, id)
+	var i Membership
+	err := row.Scan(&i.ID, &i.Institution)
+	return i, err
+}
+
+const getNetworkById = `-- name: GetNetworkById :one
+SELECT id, name FROM networks WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, error) {
+	row := q.db.QueryRow(ctx, getNetworkById, id)
+	var i Network
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const getNetworkMembershipById = `-- name: GetNetworkMembershipById :one
+SELECT id, membership, network FROM membership_networks WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetNetworkMembershipById(ctx context.Context, id uuid.UUID) (MembershipNetwork, error) {
+	row := q.db.QueryRow(ctx, getNetworkMembershipById, id)
+	var i MembershipNetwork
+	err := row.Scan(&i.ID, &i.Membership, &i.Network)
+	return i, err
+}
+
+const getTierById = `-- name: GetTierById :one
+SELECT id, name FROM tiers WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetTierById(ctx context.Context, id uuid.UUID) (Tier, error) {
+	row := q.db.QueryRow(ctx, getTierById, id)
+	var i Tier
+	err := row.Scan(&i.ID, &i.Name)
+	return i, err
+}
+
+const getTierMembershipById = `-- name: GetTierMembershipById :one
+SELECT id, membership, tier FROM membership_tiers WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetTierMembershipById(ctx context.Context, id uuid.UUID) (MembershipTier, error) {
+	row := q.db.QueryRow(ctx, getTierMembershipById, id)
+	var i MembershipTier
+	err := row.Scan(&i.ID, &i.Membership, &i.Tier)
+	return i, err
+}
+
+const listClosures = `-- name: ListClosures :many
+SELECT id, entry, start_date, end_date, reason FROM closures
+  LIMIT $2
+  OFFSET $1
+`
+
+type ListClosuresParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) ListClosures(ctx context.Context, arg ListClosuresParams) ([]Closure, error) {
+	rows, err := q.db.Query(ctx, listClosures, arg.Offset, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Consortium
+	var items []Closure
 	for rows.Next() {
-		var i Consortium
-		if err := rows.Scan(&i.ID, &i.Entry, &i.Name); err != nil {
+		var i Closure
+		if err := rows.Scan(
+			&i.ID,
+			&i.Entry,
+			&i.StartDate,
+			&i.EndDate,
+			&i.Reason,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -321,22 +628,184 @@ func (q *Queries) ListConsortia(ctx context.Context, id *uuid.UUID) ([]Consortiu
 	return items, nil
 }
 
-const updateConsortium = `-- name: UpdateConsortium :exec
-UPDATE consortia
-SET
-  name = $1,
-  entry = $2
-WHERE id = $3
+const listMemberships = `-- name: ListMemberships :many
+SELECT id, institution FROM memberships
+  LIMIT $2
+  OFFSET $1
 `
 
-type UpdateConsortiumParams struct {
-	Name  string
-	Entry *uuid.UUID
-	ID    uuid.UUID
+type ListMembershipsParams struct {
+	Offset int32
+	Limit  int32
 }
 
-func (q *Queries) UpdateConsortium(ctx context.Context, arg UpdateConsortiumParams) error {
-	_, err := q.db.Exec(ctx, updateConsortium, arg.Name, arg.Entry, arg.ID)
+func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]Membership, error) {
+	rows, err := q.db.Query(ctx, listMemberships, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Membership
+	for rows.Next() {
+		var i Membership
+		if err := rows.Scan(&i.ID, &i.Institution); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNetworkMemberships = `-- name: ListNetworkMemberships :many
+SELECT id, membership, network FROM membership_networks
+  LIMIT $2
+  OFFSET $1
+`
+
+type ListNetworkMembershipsParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) ListNetworkMemberships(ctx context.Context, arg ListNetworkMembershipsParams) ([]MembershipNetwork, error) {
+	rows, err := q.db.Query(ctx, listNetworkMemberships, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MembershipNetwork
+	for rows.Next() {
+		var i MembershipNetwork
+		if err := rows.Scan(&i.ID, &i.Membership, &i.Network); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNetworks = `-- name: ListNetworks :many
+SELECT id, name FROM networks
+  LIMIT $2
+  OFFSET $1
+`
+
+type ListNetworksParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]Network, error) {
+	rows, err := q.db.Query(ctx, listNetworks, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Network
+	for rows.Next() {
+		var i Network
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTierMemberships = `-- name: ListTierMemberships :many
+SELECT id, membership, tier FROM membership_tiers
+  LIMIT $2
+  OFFSET $1
+`
+
+type ListTierMembershipsParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) ListTierMemberships(ctx context.Context, arg ListTierMembershipsParams) ([]MembershipTier, error) {
+	rows, err := q.db.Query(ctx, listTierMemberships, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MembershipTier
+	for rows.Next() {
+		var i MembershipTier
+		if err := rows.Scan(&i.ID, &i.Membership, &i.Tier); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTiers = `-- name: ListTiers :many
+SELECT id, name FROM tiers
+  LIMIT $2
+  OFFSET $1
+`
+
+type ListTiersParams struct {
+	Offset int32
+	Limit  int32
+}
+
+func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, error) {
+	rows, err := q.db.Query(ctx, listTiers, arg.Offset, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tier
+	for rows.Next() {
+		var i Tier
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateClosure = `-- name: UpdateClosure :exec
+UPDATE closures
+SET
+  start_date = $1,
+  end_date = $2,
+  reason = $3
+WHERE id = $4
+`
+
+type UpdateClosureParams struct {
+	StartDate pgtype.Timestamp
+	EndDate   pgtype.Timestamp
+	Reason    string
+	ID        uuid.UUID
+}
+
+func (q *Queries) UpdateClosure(ctx context.Context, arg UpdateClosureParams) error {
+	_, err := q.db.Exec(ctx, updateClosure,
+		arg.StartDate,
+		arg.EndDate,
+		arg.Reason,
+		arg.ID,
+	)
 	return err
 }
 
@@ -346,16 +815,31 @@ SET
   name = $1,
   description = $2,
   contact_name = $3,
-  email = $4
-WHERE id = $5
+  email = $4,
+  phone_number = $5,
+  time_zone = $6,
+  organization_id = $7,
+  type = $8,
+  parent = $9,
+  lms_location_code = $10,
+  hrid = $11
+
+WHERE id = $12
 `
 
 type UpdateEntryParams struct {
-	Name        string
-	Description *string
-	ContactName *string
-	Email       *string
-	ID          uuid.UUID
+	Name            string
+	Description     *string
+	ContactName     *string
+	Email           *string
+	PhoneNumber     *string
+	TimeZone        *string
+	OrganizationID  *string
+	Type            string
+	Parent          *uuid.UUID
+	LmsLocationCode *string
+	Hrid            *string
+	ID              uuid.UUID
 }
 
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
@@ -364,6 +848,13 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.Description,
 		arg.ContactName,
 		arg.Email,
+		arg.PhoneNumber,
+		arg.TimeZone,
+		arg.OrganizationID,
+		arg.Type,
+		arg.Parent,
+		arg.LmsLocationCode,
+		arg.Hrid,
 		arg.ID,
 	)
 	return err
@@ -394,6 +885,120 @@ func (q *Queries) UpsertAddress(ctx context.Context, arg UpsertAddressParams) (A
 	row := q.db.QueryRow(ctx, upsertAddress, arg.ID, arg.Entry, arg.Type)
 	var i Address
 	err := row.Scan(&i.ID, &i.Entry, &i.Type)
+	return i, err
+}
+
+const upsertLMSConfig = `-- name: UpsertLMSConfig :one
+INSERT INTO  lms_configs (
+  id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled,
+  accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, 
+  request_item_request_type, request_item_scope_type, request_item_bib_code,
+  request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location,
+  requester_patron_pattern
+) VALUES (
+  coalesce($1, gen_random_uuid()),
+  $2,
+  $3,
+  $4,
+  $5,
+  $6,
+  $7,
+  $8,
+  $9,
+  $10,
+  $11,
+  $12,
+  $13,
+  $14,
+  $15,
+  $16,
+  $17,
+  $18
+)
+ON CONFLICT (entry) DO UPDATE SET
+  address = $3,
+  from_agency = $4,
+  from_agency_authentication = $5,
+  to_agency = $6,
+  lookup_user_enabled = $7,
+  accept_item_enabled = $8,
+  checkin_item_enabled = $9,
+  checkout_item_enabled = $10,
+  item_location = $11,
+  request_item_request_type = $12,
+  request_item_scope_type = $13,
+  request_item_bib_code = $14,
+  request_item_pickup_location_enabled = $15,
+  requester_pickup_location = $16,
+  supplier_pickup_location = $17,
+  requester_patron_pattern = $18
+WHERE lms_configs.entry = $2
+RETURNING id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled, accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, request_item_request_type, request_item_scope_type, request_item_bib_code, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location, requester_patron_pattern
+`
+
+type UpsertLMSConfigParams struct {
+	ID                               interface{}
+	Entry                            *uuid.UUID
+	Address                          string
+	FromAgency                       string
+	FromAgencyAuthentication         *string
+	ToAgency                         *string
+	LookupUserEnabled                *bool
+	AcceptItemEnabled                *bool
+	CheckinItemEnabled               *bool
+	CheckoutItemEnabled              *bool
+	ItemLocation                     *string
+	RequestItemRequestType           *string
+	RequestItemScopeType             *string
+	RequestItemBibCode               *string
+	RequestItemPickupLocationEnabled *bool
+	RequesterPickupLocation          *string
+	SupplierPickupLocation           *string
+	RequesterPatronPattern           *string
+}
+
+func (q *Queries) UpsertLMSConfig(ctx context.Context, arg UpsertLMSConfigParams) (LmsConfig, error) {
+	row := q.db.QueryRow(ctx, upsertLMSConfig,
+		arg.ID,
+		arg.Entry,
+		arg.Address,
+		arg.FromAgency,
+		arg.FromAgencyAuthentication,
+		arg.ToAgency,
+		arg.LookupUserEnabled,
+		arg.AcceptItemEnabled,
+		arg.CheckinItemEnabled,
+		arg.CheckoutItemEnabled,
+		arg.ItemLocation,
+		arg.RequestItemRequestType,
+		arg.RequestItemScopeType,
+		arg.RequestItemBibCode,
+		arg.RequestItemPickupLocationEnabled,
+		arg.RequesterPickupLocation,
+		arg.SupplierPickupLocation,
+		arg.RequesterPatronPattern,
+	)
+	var i LmsConfig
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.Address,
+		&i.FromAgency,
+		&i.FromAgencyAuthentication,
+		&i.ToAgency,
+		&i.LookupUserEnabled,
+		&i.AcceptItemEnabled,
+		&i.CheckinItemEnabled,
+		&i.CheckoutItemEnabled,
+		&i.ItemLocation,
+		&i.RequestItemRequestType,
+		&i.RequestItemScopeType,
+		&i.RequestItemBibCode,
+		&i.RequestItemPickupLocationEnabled,
+		&i.RequesterPickupLocation,
+		&i.SupplierPickupLocation,
+		&i.RequesterPatronPattern,
+	)
 	return i, err
 }
 

@@ -27,6 +27,16 @@ func TestEntryCases(t *testing.T) {
 			resFile:     "entry-nosym.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
+		/*
+			{
+				name:        "GET owned entry",
+				method:      http.MethodGet,
+				endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000001",
+				status:      http.StatusOK,
+				resFile:     "entry-diku.get.res.json",
+				addlHeaders: dikuPermissionHeaders,
+			},
+		*/
 		{
 			name:        "GET",
 			method:      http.MethodGet,
@@ -276,6 +286,14 @@ func TestEntryCases(t *testing.T) {
 			},
 		},
 		{
+			name:        "PATCH enty type to null",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			body:        `{"type":null}`,
+			status:      http.StatusBadRequest,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
 			name:        "POST entry with duplicate symbols in request",
 			method:      http.MethodPost,
 			endpoint:    "/entries",
@@ -351,6 +369,34 @@ func TestEntryCases(t *testing.T) {
 			endpoint:    "/entries?limit=-1",
 			status:      http.StatusBadRequest,
 			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:            "POST entry with embedded lmsConfig",
+			method:          http.MethodPost,
+			endpoint:        "/entries",
+			bodyFile:        "entry-with-lmsconfig.post.req.json",
+			status:          http.StatusCreated,
+			refetchEndpoint: "/entries/by-id",
+			refetchFile:     "entry-with-lmsconfig.post.refetch.json",
+			addlHeaders:     consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH entry with embedded lmsConfig",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			bodyFile:    "entry-with-lmsconfig.patch.req.json",
+			status:      http.StatusNoContent,
+			refetchFile: "entry-with-lmsconfig.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:     "PATCH entry with embedded lmsConfig, omit required fields",
+			method:   http.MethodPatch,
+			endpoint: "/entries/by-id/00000000-0000-0000-0000-000000000001",
+			bodyFile: "entry-with-lmsconfig-2.patch.req.json",
+			status:   http.StatusNoContent,
+			//refetchFile: "entry-with-lmsconfig.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
 		},
 	}
 	testCases(t, cases)

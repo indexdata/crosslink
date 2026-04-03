@@ -1,6 +1,7 @@
 {
   "id": "{{.id}}",
   "name":"Institution with Address",
+  "type":"Institution",
   "addresses": [
     "<<UNORDERED>>",
     {

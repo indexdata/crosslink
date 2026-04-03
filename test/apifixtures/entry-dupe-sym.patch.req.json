@@ -2,6 +2,7 @@
   "name":"Institution",
   "contactName":null,
   "email":"what@ever.tk",
+  "type":"Institution",
   "symbols": [
     {"authority":"TEST", "symbol":"ANINST"}
   ],

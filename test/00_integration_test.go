@@ -38,10 +38,8 @@ func jsonReq(t *testing.T, method string, endpoint string, bodyStr string, addlH
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	if addlHeaders != nil {
-		for key, val := range addlHeaders {
-			req.Header.Add(key, val)
-		}
+	for key, val := range addlHeaders {
+		req.Header.Add(key, val)
 	}
 
 	w := httptest.NewRecorder()
@@ -129,8 +127,13 @@ var standardHeaders = map[string]string{
 // where the db has no records
 func TestEmptyGet(t *testing.T) {
 	endpoints := map[string]string{
-		"/entries":   `{"about":{"count":0},"items":[]}`,
-		"/consortia": "[]",
+		"/entries":             `{"about":{"count":0},"items":[]}`,
+		"/tiers":               `{"about":{"count":0},"items":[]}`,
+		"/closures":            `{"about":{"count":0},"items":[]}`,
+		"/networks":            `{"about":{"count":0},"items":[]}`,
+		"/network-memberships": `{"about":{"count":0},"items":[]}`,
+		"/tier-memberships":    `{"about":{"count":0},"items":[]}`,
+		"/memberships":         `{"about":{"count":0},"items":[]}`,
 	}
 	for endpoint, expected := range endpoints {
 		res, data := jsonReq(t, http.MethodGet, endpoint, "", standardHeaders)
@@ -176,6 +179,7 @@ func testCase(t *testing.T, c httpTestCase) {
 			t.Errorf(pre+"expected error to be nil got %v", err)
 		}
 		ja.Assertf(data, expectedResponse)
+
 	} else if c.res != "" {
 		if data != c.res {
 			t.Errorf(pre+"Expected %v got %v", c.res, data)
@@ -258,6 +262,9 @@ type httpTestCase struct {
 
 func testCases(t *testing.T, cases []httpTestCase) {
 	for _, c := range cases {
-		testCase(t, c)
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			testCase(t, c)
+		})
 	}
 }

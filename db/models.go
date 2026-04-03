@@ -6,6 +6,7 @@ package db
 
 import (
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Address struct {
@@ -22,27 +23,53 @@ type AddressComponent struct {
 	Value   string
 }
 
-type Consortium struct {
-	ID    uuid.UUID
-	Entry *uuid.UUID
-	Name  string
+type Closure struct {
+	ID        uuid.UUID
+	Entry     uuid.UUID
+	StartDate pgtype.Timestamp
+	EndDate   pgtype.Timestamp
+	Reason    string
 }
 
 type Entry struct {
 	ID              uuid.UUID
 	Parent          *uuid.UUID
 	Name            string
+	Type            string
 	Description     *string
-	LmsLocationCode *string
+	OrganizationID  *string
 	ContactName     *string
 	Email           *string
-	Phone           *string
+	PhoneNumber     *string
+	LmsLocationCode *string
+	Hrid            *string
+	TimeZone        *string
+}
+
+type LmsConfig struct {
+	ID                               uuid.UUID
+	Entry                            uuid.UUID
+	Address                          string
+	FromAgency                       string
+	FromAgencyAuthentication         *string
+	ToAgency                         *string
+	LookupUserEnabled                *bool
+	AcceptItemEnabled                *bool
+	CheckinItemEnabled               *bool
+	CheckoutItemEnabled              *bool
+	ItemLocation                     *string
+	RequestItemRequestType           *string
+	RequestItemScopeType             *string
+	RequestItemBibCode               *string
+	RequestItemPickupLocationEnabled *bool
+	RequesterPickupLocation          *string
+	SupplierPickupLocation           *string
+	RequesterPatronPattern           *string
 }
 
 type Membership struct {
 	ID          uuid.UUID
 	Institution uuid.UUID
-	Consortium  uuid.UUID
 }
 
 type MembershipNetwork struct {

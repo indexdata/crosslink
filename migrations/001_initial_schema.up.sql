@@ -2,11 +2,15 @@ CREATE TABLE IF NOT EXISTS entries (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	parent uuid REFERENCES entries (id),
 	name varchar(255) NOT NULL,
+	type varchar(255) NOT NULL,
 	description varchar(255),
-	lms_location_code varchar(255),
+	organization_id varchar(255),
 	contact_name varchar(255),
 	email varchar(255),
-	phone varchar(255)
+	phone_number varchar(255),
+	lms_location_code varchar(255),
+	hrid varchar(255) UNIQUE,
+	time_zone varchar(128)
 );
 
 CREATE TABLE IF NOT EXISTS symbols (
@@ -24,7 +28,7 @@ CREATE TABLE IF NOT EXISTS service_endpoints (
 	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255) NOT NULL,
 	type varchar(255) NOT NULL,
-	address varchar(255) NOT NULL
+	address text NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS addresses (
@@ -41,10 +45,12 @@ CREATE TABLE IF NOT EXISTS address_components (
 	value text NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS consortia (
+CREATE TABLE IF NOT EXISTS closures (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	entry uuid REFERENCES entries (id) ON DELETE SET NULL,
-	name varchar(255) NOT NULL
+	entry uuid NOT NULL references entries (id) ON DELETE CASCADE,
+	start_date timestamp NOT NULL,
+	end_date timestamp NOT NULL,
+	reason text NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tiers (
@@ -59,18 +65,38 @@ CREATE TABLE IF NOT EXISTS networks (
 
 CREATE TABLE IF NOT EXISTS memberships (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	institution uuid NOT NULL REFERENCES entries (id),
-	consortium uuid NOT NULL REFERENCES consortia (id)
+	institution uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS membership_tiers (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	membership uuid NOT NULL REFERENCES memberships (id),
+	membership uuid NOT NULL REFERENCES memberships (id) ON DELETE CASCADE,
 	tier uuid NOT NULL REFERENCES tiers (id)
 );
 
 CREATE TABLE IF NOT EXISTS membership_networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	membership uuid NOT NULL REFERENCES memberships (id),
+	membership uuid NOT NULL REFERENCES memberships (id) ON DELETE CASCADE,
 	network uuid NOT NULL REFERENCES networks (id)
+);
+
+CREATE TABLE IF NOT EXISTS lms_configs (
+	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE UNIQUE,
+	address text NOT NULL,
+	from_agency varchar(128) NOT NULL,
+	from_agency_authentication text,
+	to_agency varchar(128),
+	lookup_user_enabled boolean,
+	accept_item_enabled boolean,
+	checkin_item_enabled boolean,
+	checkout_item_enabled boolean,
+	item_location varchar(255),
+	request_item_request_type varchar(32),
+	request_item_scope_type varchar(32),
+	request_item_bib_code varchar(128),
+	request_item_pickup_location_enabled boolean,
+	requester_pickup_location varchar(128),
+	supplier_pickup_location varchar(128),
+	requester_patron_pattern varchar(255)
 );

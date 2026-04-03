@@ -58,6 +58,18 @@ const (
 	AddressPropertiesTypeShipping AddressPropertiesType = "Shipping"
 )
 
+// Defines values for EntryType.
+const (
+	EntryTypeConsortium  EntryType = "Consortium"
+	EntryTypeInstitution EntryType = "Institution"
+)
+
+// Defines values for EntryPatchType.
+const (
+	EntryPatchTypeConsortium  EntryPatchType = "Consortium"
+	EntryPatchTypeInstitution EntryPatchType = "Institution"
+)
+
 // Defines values for EntryLookupKey.
 const (
 	EntryLookupKeyById     EntryLookupKey = "by-id"
@@ -97,6 +109,7 @@ type About struct {
 // Address defines model for Address.
 type Address struct {
 	AddressComponents *[]AddressComponent `json:"addressComponents,omitempty"`
+	Entry             *openapi_types.UUID `json:"entry,omitempty"`
 
 	// Id Unique id
 	Id   *openapi_types.UUID `json:"id,omitempty"`
@@ -138,23 +151,37 @@ type AddressProperties struct {
 // AddressPropertiesType defines model for AddressProperties.Type.
 type AddressPropertiesType string
 
-// Consortium defines model for Consortium.
-type Consortium struct {
-	Entry *openapi_types.UUID `json:"entry,omitempty"`
+// Closure defines model for Closure.
+type Closure struct {
+	// EndDate ISO8601 date
+	EndDate openapi_types.Date `json:"endDate"`
+	Entry   openapi_types.UUID `json:"entry"`
 
 	// Id Unique identifier
-	Id *openapi_types.UUID `json:"id,omitempty"`
+	Id     *openapi_types.UUID `json:"id,omitempty"`
+	Reason string              `json:"reason"`
 
-	// Name Display name
-	Name string `json:"name"`
+	// StartDate ISO8601 date
+	StartDate openapi_types.Date `json:"startDate"`
 }
 
-// ConsortiumPatch defines model for ConsortiumPatch.
-type ConsortiumPatch struct {
-	Entry nullable.Nullable[openapi_types.UUID] `json:"entry,omitempty"`
+// ClosurePatch defines model for ClosurePatch.
+type ClosurePatch struct {
+	// EndDate ISO8601 date
+	EndDate *openapi_types.Date `json:"endDate,omitempty"`
 
-	// Name Display name
-	Name *string `json:"name,omitempty"`
+	// Id Unique identifier
+	Id     *openapi_types.UUID `json:"id,omitempty"`
+	Reason *string             `json:"reason,omitempty"`
+
+	// StartDate ISO8601 date
+	StartDate *openapi_types.Date `json:"startDate,omitempty"`
+}
+
+// ClosuresResponse defines model for ClosuresResponse.
+type ClosuresResponse struct {
+	About About     `json:"about"`
+	Items []Closure `json:"items"`
 }
 
 // EntriesResponse defines model for EntriesResponse.
@@ -165,46 +192,176 @@ type EntriesResponse struct {
 
 // Entry defines model for Entry.
 type Entry struct {
-	// Addresses Addresses associated with this entry
-	Addresses *[]Address `json:"addresses,omitempty"`
-
-	// ContactName Name of contact person
-	ContactName *string `json:"contactName,omitempty"`
-
-	// Description Detailed description of the entity described by this entry
-	Description *string `json:"description,omitempty"`
-
-	// Email Main contact email
-	Email *string `json:"email,omitempty"`
-
-	// Endpoints Service endpoints associated with this entry
-	Endpoints *[]ServiceEndpoint `json:"endpoints,omitempty"`
+	Addresses   *[]Address         `json:"addresses,omitempty"`
+	Closures    *[]Closure         `json:"closures,omitempty"`
+	ContactName *string            `json:"contactName,omitempty"`
+	Description *string            `json:"description,omitempty"`
+	Email       *string            `json:"email,omitempty"`
+	Endpoints   *[]ServiceEndpoint `json:"endpoints,omitempty"`
+	Hrid        *string            `json:"hrid,omitempty"`
 
 	// Id Unique id
-	Id *openapi_types.UUID `json:"id,omitempty"`
-
-	// Name Name of the institution or branch this directory entry describes
-	Name string `json:"name"`
-
-	// Symbols Symbols associated with this entry
-	Symbols *[]Symbol `json:"symbols,omitempty"`
+	Id              *openapi_types.UUID `json:"id,omitempty"`
+	LmsConfig       *LmsConfig          `json:"lmsConfig,omitempty"`
+	LmsLocationCode *string             `json:"lmsLocationCode,omitempty"`
+	Name            string              `json:"name"`
+	Networks        *[]Network          `json:"networks,omitempty"`
+	OrganizationId  *string             `json:"organizationId,omitempty"`
+	Parent          *openapi_types.UUID `json:"parent,omitempty"`
+	PhoneNumber     *string             `json:"phoneNumber,omitempty"`
+	Symbols         *[]Symbol           `json:"symbols,omitempty"`
+	Tiers           *[]Tier             `json:"tiers,omitempty"`
+	TimeZone        *string             `json:"timeZone,omitempty"`
+	Type            *EntryType          `json:"type,omitempty"`
 }
+
+// EntryType defines model for Entry.Type.
+type EntryType string
 
 // EntryPatch defines model for EntryPatch.
 type EntryPatch struct {
-	Addresses   nullable.Nullable[[]AddressPatch]         `json:"addresses,omitempty"`
-	ContactName nullable.Nullable[string]                 `json:"contactName,omitempty"`
-	Description nullable.Nullable[string]                 `json:"description,omitempty"`
-	Email       nullable.Nullable[string]                 `json:"email,omitempty"`
-	Endpoints   nullable.Nullable[[]ServiceEndpointPatch] `json:"endpoints,omitempty"`
-	Name        *string                                   `json:"name,omitempty"`
-	Symbols     nullable.Nullable[[]SymbolPatch]          `json:"symbols,omitempty"`
+	Addresses       nullable.Nullable[[]AddressPatch]         `json:"addresses,omitempty"`
+	Closures        nullable.Nullable[[]ClosurePatch]         `json:"closures,omitempty"`
+	ContactName     nullable.Nullable[string]                 `json:"contactName,omitempty"`
+	Description     nullable.Nullable[string]                 `json:"description,omitempty"`
+	Email           nullable.Nullable[string]                 `json:"email,omitempty"`
+	Endpoints       nullable.Nullable[[]ServiceEndpointPatch] `json:"endpoints,omitempty"`
+	Hrid            nullable.Nullable[string]                 `json:"hrid,omitempty"`
+	LmsConfig       nullable.Nullable[LmsConfigPatch]         `json:"lmsConfig,omitempty"`
+	LmsLocationCode nullable.Nullable[string]                 `json:"lmsLocationCode,omitempty"`
+	Name            *string                                   `json:"name,omitempty"`
+	OrganizationId  nullable.Nullable[string]                 `json:"organizationId,omitempty"`
+	Parent          nullable.Nullable[openapi_types.UUID]     `json:"parent,omitempty"`
+	PhoneNumber     nullable.Nullable[string]                 `json:"phoneNumber,omitempty"`
+	Symbols         nullable.Nullable[[]SymbolPatch]          `json:"symbols,omitempty"`
+	TimeZone        nullable.Nullable[string]                 `json:"timeZone,omitempty"`
+	Type            nullable.Nullable[EntryPatchType]         `json:"type,omitempty"`
 }
+
+// EntryPatchType defines model for EntryPatch.Type.
+type EntryPatchType string
 
 // Id defines model for Id.
 type Id struct {
 	// Id Unique id
 	Id openapi_types.UUID `json:"id"`
+}
+
+// LmsConfig defines model for LmsConfig.
+type LmsConfig struct {
+	// AcceptItemEnabled Whether item acceptance is enabled
+	AcceptItemEnabled *bool `json:"acceptItemEnabled,omitempty"`
+
+	// Address Base URL of the LMS API
+	Address string `json:"address"`
+
+	// CheckInItemEnabled Whether item check-in is enabled
+	CheckInItemEnabled *bool `json:"checkInItemEnabled,omitempty"`
+
+	// CheckOutItemEnabled Whether item check-out is enabled
+	CheckOutItemEnabled *bool `json:"checkOutItemEnabled,omitempty"`
+
+	// FromAgency Agency code used when the entry is acting as the supplying agency
+	FromAgency string `json:"fromAgency"`
+
+	// FromAgencyAuthentication Authentication token or credentials for the fromAgency
+	FromAgencyAuthentication *string `json:"fromAgencyAuthentication,omitempty" protected:"true"`
+
+	// ItemLocation Location code to include in NCIP RequestItem messages
+	ItemLocation *string `json:"itemLocation,omitempty"`
+
+	// LookupUserEnabled Whether user lookup is enabled
+	LookupUserEnabled *bool `json:"lookupUserEnabled,omitempty"`
+
+	// RequestItemBibIdCode For Request Item requests, the code indicating how to interpret the bib id
+	RequestItemBibIdCode *string `json:"requestItemBibIdCode,omitempty"`
+
+	// RequestItemPickupLocationEnabled Whether to include a pickup location when making Request Item requests
+	RequestItemPickupLocationEnabled *bool `json:"requestItemPickupLocationEnabled,omitempty"`
+
+	// RequestItemRequestScopeType For Request Item requests, the scope type of request to create
+	RequestItemRequestScopeType *string `json:"requestItemRequestScopeType,omitempty"`
+
+	// RequestItemRequestType For Request Item requests, the type of request to create
+	RequestItemRequestType *string `json:"requestItemRequestType,omitempty"`
+
+	// RequesterPatronPattern '{requesterSymbol}' occurrences are replaced with requesting agency ISIL
+	RequesterPatronPattern *string `json:"requesterPatronPattern,omitempty"`
+
+	// RequesterPickupLocation Pickup location code used when acting as requesting agency
+	RequesterPickupLocation *string `json:"requesterPickupLocation,omitempty"`
+
+	// SupplierPickupLocation Pickup location code used when acting as supplying agency
+	SupplierPickupLocation *string `json:"supplierPickupLocation,omitempty"`
+
+	// ToAgency Agency code used when the entry is acting as the requesting agency
+	ToAgency *string `json:"toAgency,omitempty"`
+}
+
+// LmsConfigPatch defines model for LmsConfigPatch.
+type LmsConfigPatch struct {
+	AcceptItemEnabled                *bool   `json:"acceptItemEnabled,omitempty"`
+	Address                          *string `json:"address,omitempty"`
+	CheckInItemEnabled               *bool   `json:"checkInItemEnabled,omitempty"`
+	CheckOutItemEnabled              *bool   `json:"checkOutItemEnabled,omitempty"`
+	FromAgency                       *string `json:"fromAgency,omitempty"`
+	FromAgencyAuthentication         *string `json:"fromAgencyAuthentication,omitempty"`
+	ItemLocation                     *string `json:"itemLocation,omitempty"`
+	LookupUserEnabled                *bool   `json:"lookupUserEnabled,omitempty"`
+	RequestItemBibIdCode             *string `json:"requestItemBibIdCode,omitempty"`
+	RequestItemPickupLocationEnabled *bool   `json:"requestItemPickupLocationEnabled,omitempty"`
+	RequestItemRequestScopeType      *string `json:"requestItemRequestScopeType,omitempty"`
+	RequestItemRequestType           *string `json:"requestItemRequestType,omitempty"`
+	RequesterPatronPattern           *string `json:"requesterPatronPattern,omitempty"`
+	RequesterPickupLocation          *string `json:"requesterPickupLocation,omitempty"`
+	SupplierPickupLocation           *string `json:"supplierPickupLocation,omitempty"`
+	ToAgency                         *string `json:"toAgency,omitempty"`
+}
+
+// Membership defines model for Membership.
+type Membership struct {
+	// Id Unique identifier
+	Id *openapi_types.UUID `json:"id,omitempty"`
+
+	// Institution ID of institution
+	Institution openapi_types.UUID `json:"institution"`
+}
+
+// MembershipsResponse defines model for MembershipsResponse.
+type MembershipsResponse struct {
+	About About        `json:"about"`
+	Items []Membership `json:"items"`
+}
+
+// Network defines model for Network.
+type Network struct {
+	// Id Unique identifier
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Name *string             `json:"name,omitempty"`
+}
+
+// NetworkMembership defines model for NetworkMembership.
+type NetworkMembership struct {
+	// Id Unique identifier
+	Id *openapi_types.UUID `json:"id,omitempty"`
+
+	// Membership ID of membership
+	Membership openapi_types.UUID `json:"membership"`
+
+	// Network ID of membership
+	Network openapi_types.UUID `json:"network"`
+}
+
+// NetworkMembershipsResponse defines model for NetworkMembershipsResponse.
+type NetworkMembershipsResponse struct {
+	About About               `json:"about"`
+	Items []NetworkMembership `json:"items"`
+}
+
+// NetworksResponse defines model for NetworksResponse.
+type NetworksResponse struct {
+	About About     `json:"about"`
+	Items []Network `json:"items"`
 }
 
 // ServiceEndpoint defines model for ServiceEndpoint.
@@ -267,6 +424,37 @@ type SymbolProperties struct {
 	Symbol string `json:"symbol"`
 }
 
+// Tier defines model for Tier.
+type Tier struct {
+	// Id Unique identifier
+	Id   *openapi_types.UUID `json:"id,omitempty"`
+	Name *string             `json:"name,omitempty"`
+}
+
+// TierMembership defines model for TierMembership.
+type TierMembership struct {
+	// Id Unique identifier
+	Id *openapi_types.UUID `json:"id,omitempty"`
+
+	// Membership ID of membership
+	Membership openapi_types.UUID `json:"membership"`
+
+	// Tier ID of membership
+	Tier openapi_types.UUID `json:"tier"`
+}
+
+// TierMembershipsResponse defines model for TierMembershipsResponse.
+type TierMembershipsResponse struct {
+	About About            `json:"about"`
+	Items []TierMembership `json:"items"`
+}
+
+// TiersResponse defines model for TiersResponse.
+type TiersResponse struct {
+	About About  `json:"about"`
+	Items []Tier `json:"items"`
+}
+
 // Limit defines model for Limit.
 type Limit = int32
 
@@ -279,13 +467,16 @@ type EntryLookupKey string
 // EntryLookupValue defines model for entryLookupValue.
 type EntryLookupValue = string
 
-// GetConsortiaParams defines parameters for GetConsortia.
-type GetConsortiaParams struct {
+// GetClosuresParams defines parameters for GetClosures.
+type GetClosuresParams struct {
 	// Q keywords to filter by
 	Q *string `form:"q,omitempty" json:"q,omitempty"`
 
-	// Limit maximum number of results to return
-	Limit *int32 `form:"limit,omitempty" json:"limit,omitempty"`
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetEntriesParams defines parameters for GetEntries.
@@ -309,11 +500,71 @@ type GetEntryParamsKey string
 // UpdateEntryParamsKey defines parameters for UpdateEntry.
 type UpdateEntryParamsKey string
 
-// AddConsortiumJSONRequestBody defines body for AddConsortium for application/json ContentType.
-type AddConsortiumJSONRequestBody = Consortium
+// GetMembershipsParams defines parameters for GetMemberships.
+type GetMembershipsParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
 
-// UpdateConsortiumJSONRequestBody defines body for UpdateConsortium for application/json ContentType.
-type UpdateConsortiumJSONRequestBody = ConsortiumPatch
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetNetworkMembershipsParams defines parameters for GetNetworkMemberships.
+type GetNetworkMembershipsParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetNetworksParams defines parameters for GetNetworks.
+type GetNetworksParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetTierMembershipsParams defines parameters for GetTierMemberships.
+type GetTierMembershipsParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetTiersParams defines parameters for GetTiers.
+type GetTiersParams struct {
+	// Q keywords to filter by
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Limit Limit for pagination
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Offset for pagination (first item is 0)
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// AddClosureJSONRequestBody defines body for AddClosure for application/json ContentType.
+type AddClosureJSONRequestBody = Closure
+
+// UpdateClosureJSONRequestBody defines body for UpdateClosure for application/json ContentType.
+type UpdateClosureJSONRequestBody = ClosurePatch
 
 // AddEntryJSONRequestBody defines body for AddEntry for application/json ContentType.
 type AddEntryJSONRequestBody = Entry
@@ -321,23 +572,38 @@ type AddEntryJSONRequestBody = Entry
 // UpdateEntryJSONRequestBody defines body for UpdateEntry for application/json ContentType.
 type UpdateEntryJSONRequestBody = EntryPatch
 
+// AddMembershipJSONRequestBody defines body for AddMembership for application/json ContentType.
+type AddMembershipJSONRequestBody = Membership
+
+// AddNetworkMembershipJSONRequestBody defines body for AddNetworkMembership for application/json ContentType.
+type AddNetworkMembershipJSONRequestBody = NetworkMembership
+
+// AddNetworkJSONRequestBody defines body for AddNetwork for application/json ContentType.
+type AddNetworkJSONRequestBody = Network
+
+// AddTierMembershipJSONRequestBody defines body for AddTierMembership for application/json ContentType.
+type AddTierMembershipJSONRequestBody = TierMembership
+
+// AddTierJSONRequestBody defines body for AddTier for application/json ContentType.
+type AddTierJSONRequestBody = Tier
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Returns all consortia
-	// (GET /consortia)
-	GetConsortia(w http.ResponseWriter, r *http.Request, params GetConsortiaParams)
-	// Creates a new consortium
-	// (POST /consortia)
-	AddConsortium(w http.ResponseWriter, r *http.Request)
-	// Delete consortium by ID
-	// (DELETE /consortia/{id})
-	DeleteConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Returns a consortium by ID
-	// (GET /consortia/{id})
-	GetConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
-	// Update a consortium
-	// (PATCH /consortia/{id})
-	UpdateConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Get all Closures
+	// (GET /closures)
+	GetClosures(w http.ResponseWriter, r *http.Request, params GetClosuresParams)
+	// Create a new Closure
+	// (POST /closures)
+	AddClosure(w http.ResponseWriter, r *http.Request)
+	// Delete Closure by ID
+	// (DELETE /closures/{id})
+	DeleteClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Closure by ID
+	// (GET /closures/{id})
+	GetClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Update a Closure
+	// (PATCH /closures/{id})
+	UpdateClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(w http.ResponseWriter, r *http.Request, params GetEntriesParams)
@@ -353,6 +619,66 @@ type ServerInterface interface {
 	// Update an entry
 	// (PATCH /entries/{key}/{value})
 	UpdateEntry(w http.ResponseWriter, r *http.Request, key UpdateEntryParamsKey, value EntryLookupValue)
+	// Get all Memberships
+	// (GET /memberships)
+	GetMemberships(w http.ResponseWriter, r *http.Request, params GetMembershipsParams)
+	// Create a new Membership
+	// (POST /memberships)
+	AddMembership(w http.ResponseWriter, r *http.Request)
+	// Delete Membership by ID
+	// (DELETE /memberships/{id})
+	DeleteMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Membership by ID
+	// (GET /memberships/{id})
+	GetMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns all Network Memberships
+	// (GET /network-memberships)
+	GetNetworkMemberships(w http.ResponseWriter, r *http.Request, params GetNetworkMembershipsParams)
+	// Creates a new Network Membership
+	// (POST /network-memberships)
+	AddNetworkMembership(w http.ResponseWriter, r *http.Request)
+	// Delete Network Membership by ID
+	// (DELETE /network-memberships/{id})
+	DeleteNetworkMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Network Membership by ID
+	// (GET /network-memberships/{id})
+	GetNetworkMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Get all networks
+	// (GET /networks)
+	GetNetworks(w http.ResponseWriter, r *http.Request, params GetNetworksParams)
+	// Create a new network
+	// (POST /networks)
+	AddNetwork(w http.ResponseWriter, r *http.Request)
+	// Delete Network by ID
+	// (DELETE /networks/{id})
+	DeleteNetwork(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Network by ID
+	// (GET /networks/{id})
+	GetNetwork(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns all Tier Memberships
+	// (GET /tier-memberships)
+	GetTierMemberships(w http.ResponseWriter, r *http.Request, params GetTierMembershipsParams)
+	// Creates a new Tier Membership
+	// (POST /tier-memberships)
+	AddTierMembership(w http.ResponseWriter, r *http.Request)
+	// Delete Tier Membership by ID
+	// (DELETE /tier-memberships/{id})
+	DeleteTierMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Tier Membership by ID
+	// (GET /tier-memberships/{id})
+	GetTierMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Get all tiers
+	// (GET /tiers)
+	GetTiers(w http.ResponseWriter, r *http.Request, params GetTiersParams)
+	// Create a new Tier
+	// (POST /tiers)
+	AddTier(w http.ResponseWriter, r *http.Request)
+	// Delete Tier by ID
+	// (DELETE /tiers/{id})
+	DeleteTier(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Returns a Tier by ID
+	// (GET /tiers/{id})
+	GetTier(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -364,13 +690,13 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetConsortia operation middleware
-func (siw *ServerInterfaceWrapper) GetConsortia(w http.ResponseWriter, r *http.Request) {
+// GetClosures operation middleware
+func (siw *ServerInterfaceWrapper) GetClosures(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params GetConsortiaParams
+	var params GetClosuresParams
 
 	// ------------- Optional query parameter "q" -------------
 
@@ -388,8 +714,16 @@ func (siw *ServerInterfaceWrapper) GetConsortia(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetConsortia(w, r, params)
+		siw.Handler.GetClosures(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -399,11 +733,11 @@ func (siw *ServerInterfaceWrapper) GetConsortia(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// AddConsortium operation middleware
-func (siw *ServerInterfaceWrapper) AddConsortium(w http.ResponseWriter, r *http.Request) {
+// AddClosure operation middleware
+func (siw *ServerInterfaceWrapper) AddClosure(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AddConsortium(w, r)
+		siw.Handler.AddClosure(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -413,8 +747,8 @@ func (siw *ServerInterfaceWrapper) AddConsortium(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteConsortium operation middleware
-func (siw *ServerInterfaceWrapper) DeleteConsortium(w http.ResponseWriter, r *http.Request) {
+// DeleteClosure operation middleware
+func (siw *ServerInterfaceWrapper) DeleteClosure(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -428,7 +762,7 @@ func (siw *ServerInterfaceWrapper) DeleteConsortium(w http.ResponseWriter, r *ht
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteConsortium(w, r, id)
+		siw.Handler.DeleteClosure(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -438,8 +772,8 @@ func (siw *ServerInterfaceWrapper) DeleteConsortium(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
-// GetConsortium operation middleware
-func (siw *ServerInterfaceWrapper) GetConsortium(w http.ResponseWriter, r *http.Request) {
+// GetClosure operation middleware
+func (siw *ServerInterfaceWrapper) GetClosure(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -453,7 +787,7 @@ func (siw *ServerInterfaceWrapper) GetConsortium(w http.ResponseWriter, r *http.
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetConsortium(w, r, id)
+		siw.Handler.GetClosure(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -463,8 +797,8 @@ func (siw *ServerInterfaceWrapper) GetConsortium(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
-// UpdateConsortium operation middleware
-func (siw *ServerInterfaceWrapper) UpdateConsortium(w http.ResponseWriter, r *http.Request) {
+// UpdateClosure operation middleware
+func (siw *ServerInterfaceWrapper) UpdateClosure(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
@@ -478,7 +812,7 @@ func (siw *ServerInterfaceWrapper) UpdateConsortium(w http.ResponseWriter, r *ht
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateConsortium(w, r, id)
+		siw.Handler.UpdateClosure(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -647,6 +981,541 @@ func (siw *ServerInterfaceWrapper) UpdateEntry(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetMemberships operation middleware
+func (siw *ServerInterfaceWrapper) GetMemberships(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetMembershipsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMemberships(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddMembership operation middleware
+func (siw *ServerInterfaceWrapper) AddMembership(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddMembership(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMembership operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMembership operation middleware
+func (siw *ServerInterfaceWrapper) GetMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNetworkMemberships operation middleware
+func (siw *ServerInterfaceWrapper) GetNetworkMemberships(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNetworkMembershipsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNetworkMemberships(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddNetworkMembership operation middleware
+func (siw *ServerInterfaceWrapper) AddNetworkMembership(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddNetworkMembership(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNetworkMembership operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNetworkMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNetworkMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNetworkMembership operation middleware
+func (siw *ServerInterfaceWrapper) GetNetworkMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNetworkMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNetworks operation middleware
+func (siw *ServerInterfaceWrapper) GetNetworks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNetworksParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNetworks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddNetwork operation middleware
+func (siw *ServerInterfaceWrapper) AddNetwork(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddNetwork(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNetwork operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNetwork(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNetwork(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNetwork operation middleware
+func (siw *ServerInterfaceWrapper) GetNetwork(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNetwork(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTierMemberships operation middleware
+func (siw *ServerInterfaceWrapper) GetTierMemberships(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTierMembershipsParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTierMemberships(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddTierMembership operation middleware
+func (siw *ServerInterfaceWrapper) AddTierMembership(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddTierMembership(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTierMembership operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTierMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTierMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTierMembership operation middleware
+func (siw *ServerInterfaceWrapper) GetTierMembership(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTierMembership(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTiers operation middleware
+func (siw *ServerInterfaceWrapper) GetTiers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTiersParams
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTiers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddTier operation middleware
+func (siw *ServerInterfaceWrapper) AddTier(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddTier(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTier operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTier(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTier(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTier operation middleware
+func (siw *ServerInterfaceWrapper) GetTier(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTier(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -767,40 +1636,60 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("GET "+options.BaseURL+"/consortia", wrapper.GetConsortia)
-	m.HandleFunc("POST "+options.BaseURL+"/consortia", wrapper.AddConsortium)
-	m.HandleFunc("DELETE "+options.BaseURL+"/consortia/{id}", wrapper.DeleteConsortium)
-	m.HandleFunc("GET "+options.BaseURL+"/consortia/{id}", wrapper.GetConsortium)
-	m.HandleFunc("PATCH "+options.BaseURL+"/consortia/{id}", wrapper.UpdateConsortium)
+	m.HandleFunc("GET "+options.BaseURL+"/closures", wrapper.GetClosures)
+	m.HandleFunc("POST "+options.BaseURL+"/closures", wrapper.AddClosure)
+	m.HandleFunc("DELETE "+options.BaseURL+"/closures/{id}", wrapper.DeleteClosure)
+	m.HandleFunc("GET "+options.BaseURL+"/closures/{id}", wrapper.GetClosure)
+	m.HandleFunc("PATCH "+options.BaseURL+"/closures/{id}", wrapper.UpdateClosure)
 	m.HandleFunc("GET "+options.BaseURL+"/entries", wrapper.GetEntries)
 	m.HandleFunc("POST "+options.BaseURL+"/entries", wrapper.AddEntry)
 	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{key}/{value}", wrapper.DeleteEntry)
 	m.HandleFunc("GET "+options.BaseURL+"/entries/{key}/{value}", wrapper.GetEntry)
 	m.HandleFunc("PATCH "+options.BaseURL+"/entries/{key}/{value}", wrapper.UpdateEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/memberships", wrapper.GetMemberships)
+	m.HandleFunc("POST "+options.BaseURL+"/memberships", wrapper.AddMembership)
+	m.HandleFunc("DELETE "+options.BaseURL+"/memberships/{id}", wrapper.DeleteMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/memberships/{id}", wrapper.GetMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/network-memberships", wrapper.GetNetworkMemberships)
+	m.HandleFunc("POST "+options.BaseURL+"/network-memberships", wrapper.AddNetworkMembership)
+	m.HandleFunc("DELETE "+options.BaseURL+"/network-memberships/{id}", wrapper.DeleteNetworkMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/network-memberships/{id}", wrapper.GetNetworkMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/networks", wrapper.GetNetworks)
+	m.HandleFunc("POST "+options.BaseURL+"/networks", wrapper.AddNetwork)
+	m.HandleFunc("DELETE "+options.BaseURL+"/networks/{id}", wrapper.DeleteNetwork)
+	m.HandleFunc("GET "+options.BaseURL+"/networks/{id}", wrapper.GetNetwork)
+	m.HandleFunc("GET "+options.BaseURL+"/tier-memberships", wrapper.GetTierMemberships)
+	m.HandleFunc("POST "+options.BaseURL+"/tier-memberships", wrapper.AddTierMembership)
+	m.HandleFunc("DELETE "+options.BaseURL+"/tier-memberships/{id}", wrapper.DeleteTierMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/tier-memberships/{id}", wrapper.GetTierMembership)
+	m.HandleFunc("GET "+options.BaseURL+"/tiers", wrapper.GetTiers)
+	m.HandleFunc("POST "+options.BaseURL+"/tiers", wrapper.AddTier)
+	m.HandleFunc("DELETE "+options.BaseURL+"/tiers/{id}", wrapper.DeleteTier)
+	m.HandleFunc("GET "+options.BaseURL+"/tiers/{id}", wrapper.GetTier)
 
 	return m
 }
 
-type GetConsortiaRequestObject struct {
-	Params GetConsortiaParams
+type GetClosuresRequestObject struct {
+	Params GetClosuresParams
 }
 
-type GetConsortiaResponseObject interface {
-	VisitGetConsortiaResponse(w http.ResponseWriter) error
+type GetClosuresResponseObject interface {
+	VisitGetClosuresResponse(w http.ResponseWriter) error
 }
 
-type GetConsortia200JSONResponse []Consortium
+type GetClosures200JSONResponse ClosuresResponse
 
-func (response GetConsortia200JSONResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+func (response GetClosures200JSONResponse) VisitGetClosuresResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetConsortia400TextResponse string
+type GetClosures400TextResponse string
 
-func (response GetConsortia400TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+func (response GetClosures400TextResponse) VisitGetClosuresResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -808,9 +1697,9 @@ func (response GetConsortia400TextResponse) VisitGetConsortiaResponse(w http.Res
 	return err
 }
 
-type GetConsortia401TextResponse string
+type GetClosures401TextResponse string
 
-func (response GetConsortia401TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+func (response GetClosures401TextResponse) VisitGetClosuresResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
@@ -818,9 +1707,9 @@ func (response GetConsortia401TextResponse) VisitGetConsortiaResponse(w http.Res
 	return err
 }
 
-type GetConsortia500TextResponse string
+type GetClosures500TextResponse string
 
-func (response GetConsortia500TextResponse) VisitGetConsortiaResponse(w http.ResponseWriter) error {
+func (response GetClosures500TextResponse) VisitGetClosuresResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -828,26 +1717,26 @@ func (response GetConsortia500TextResponse) VisitGetConsortiaResponse(w http.Res
 	return err
 }
 
-type AddConsortiumRequestObject struct {
-	Body *AddConsortiumJSONRequestBody
+type AddClosureRequestObject struct {
+	Body *AddClosureJSONRequestBody
 }
 
-type AddConsortiumResponseObject interface {
-	VisitAddConsortiumResponse(w http.ResponseWriter) error
+type AddClosureResponseObject interface {
+	VisitAddClosureResponse(w http.ResponseWriter) error
 }
 
-type AddConsortium201JSONResponse Id
+type AddClosure201JSONResponse Id
 
-func (response AddConsortium201JSONResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+func (response AddClosure201JSONResponse) VisitAddClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type AddConsortium400TextResponse string
+type AddClosure400TextResponse string
 
-func (response AddConsortium400TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+func (response AddClosure400TextResponse) VisitAddClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -855,9 +1744,9 @@ func (response AddConsortium400TextResponse) VisitAddConsortiumResponse(w http.R
 	return err
 }
 
-type AddConsortium401TextResponse string
+type AddClosure401TextResponse string
 
-func (response AddConsortium401TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+func (response AddClosure401TextResponse) VisitAddClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
@@ -865,9 +1754,9 @@ func (response AddConsortium401TextResponse) VisitAddConsortiumResponse(w http.R
 	return err
 }
 
-type AddConsortium500TextResponse string
+type AddClosure500TextResponse string
 
-func (response AddConsortium500TextResponse) VisitAddConsortiumResponse(w http.ResponseWriter) error {
+func (response AddClosure500TextResponse) VisitAddClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -875,25 +1764,25 @@ func (response AddConsortium500TextResponse) VisitAddConsortiumResponse(w http.R
 	return err
 }
 
-type DeleteConsortiumRequestObject struct {
+type DeleteClosureRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
-type DeleteConsortiumResponseObject interface {
-	VisitDeleteConsortiumResponse(w http.ResponseWriter) error
+type DeleteClosureResponseObject interface {
+	VisitDeleteClosureResponse(w http.ResponseWriter) error
 }
 
-type DeleteConsortium204Response struct {
+type DeleteClosure204Response struct {
 }
 
-func (response DeleteConsortium204Response) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+func (response DeleteClosure204Response) VisitDeleteClosureResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type DeleteConsortium400TextResponse string
+type DeleteClosure400TextResponse string
 
-func (response DeleteConsortium400TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+func (response DeleteClosure400TextResponse) VisitDeleteClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -901,9 +1790,9 @@ func (response DeleteConsortium400TextResponse) VisitDeleteConsortiumResponse(w 
 	return err
 }
 
-type DeleteConsortium401TextResponse string
+type DeleteClosure401TextResponse string
 
-func (response DeleteConsortium401TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+func (response DeleteClosure401TextResponse) VisitDeleteClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
@@ -911,9 +1800,9 @@ func (response DeleteConsortium401TextResponse) VisitDeleteConsortiumResponse(w 
 	return err
 }
 
-type DeleteConsortium500TextResponse string
+type DeleteClosure500TextResponse string
 
-func (response DeleteConsortium500TextResponse) VisitDeleteConsortiumResponse(w http.ResponseWriter) error {
+func (response DeleteClosure500TextResponse) VisitDeleteClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -921,26 +1810,26 @@ func (response DeleteConsortium500TextResponse) VisitDeleteConsortiumResponse(w 
 	return err
 }
 
-type GetConsortiumRequestObject struct {
+type GetClosureRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
-type GetConsortiumResponseObject interface {
-	VisitGetConsortiumResponse(w http.ResponseWriter) error
+type GetClosureResponseObject interface {
+	VisitGetClosureResponse(w http.ResponseWriter) error
 }
 
-type GetConsortium200JSONResponse Consortium
+type GetClosure200JSONResponse Closure
 
-func (response GetConsortium200JSONResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+func (response GetClosure200JSONResponse) VisitGetClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetConsortium400TextResponse string
+type GetClosure400TextResponse string
 
-func (response GetConsortium400TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+func (response GetClosure400TextResponse) VisitGetClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -948,9 +1837,9 @@ func (response GetConsortium400TextResponse) VisitGetConsortiumResponse(w http.R
 	return err
 }
 
-type GetConsortium401TextResponse string
+type GetClosure401TextResponse string
 
-func (response GetConsortium401TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+func (response GetClosure401TextResponse) VisitGetClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
@@ -958,9 +1847,9 @@ func (response GetConsortium401TextResponse) VisitGetConsortiumResponse(w http.R
 	return err
 }
 
-type GetConsortium404TextResponse string
+type GetClosure404TextResponse string
 
-func (response GetConsortium404TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+func (response GetClosure404TextResponse) VisitGetClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(404)
 
@@ -968,9 +1857,9 @@ func (response GetConsortium404TextResponse) VisitGetConsortiumResponse(w http.R
 	return err
 }
 
-type GetConsortium500TextResponse string
+type GetClosure500TextResponse string
 
-func (response GetConsortium500TextResponse) VisitGetConsortiumResponse(w http.ResponseWriter) error {
+func (response GetClosure500TextResponse) VisitGetClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -978,26 +1867,26 @@ func (response GetConsortium500TextResponse) VisitGetConsortiumResponse(w http.R
 	return err
 }
 
-type UpdateConsortiumRequestObject struct {
+type UpdateClosureRequestObject struct {
 	Id   openapi_types.UUID `json:"id"`
-	Body *UpdateConsortiumJSONRequestBody
+	Body *UpdateClosureJSONRequestBody
 }
 
-type UpdateConsortiumResponseObject interface {
-	VisitUpdateConsortiumResponse(w http.ResponseWriter) error
+type UpdateClosureResponseObject interface {
+	VisitUpdateClosureResponse(w http.ResponseWriter) error
 }
 
-type UpdateConsortium204Response struct {
+type UpdateClosure204Response struct {
 }
 
-func (response UpdateConsortium204Response) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+func (response UpdateClosure204Response) VisitUpdateClosureResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type UpdateConsortium400TextResponse string
+type UpdateClosure400TextResponse string
 
-func (response UpdateConsortium400TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+func (response UpdateClosure400TextResponse) VisitUpdateClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(400)
 
@@ -1005,9 +1894,9 @@ func (response UpdateConsortium400TextResponse) VisitUpdateConsortiumResponse(w 
 	return err
 }
 
-type UpdateConsortium401TextResponse string
+type UpdateClosure401TextResponse string
 
-func (response UpdateConsortium401TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+func (response UpdateClosure401TextResponse) VisitUpdateClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
@@ -1015,9 +1904,9 @@ func (response UpdateConsortium401TextResponse) VisitUpdateConsortiumResponse(w 
 	return err
 }
 
-type UpdateConsortium404TextResponse string
+type UpdateClosure404TextResponse string
 
-func (response UpdateConsortium404TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+func (response UpdateClosure404TextResponse) VisitUpdateClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(404)
 
@@ -1025,9 +1914,9 @@ func (response UpdateConsortium404TextResponse) VisitUpdateConsortiumResponse(w 
 	return err
 }
 
-type UpdateConsortium500TextResponse string
+type UpdateClosure500TextResponse string
 
-func (response UpdateConsortium500TextResponse) VisitUpdateConsortiumResponse(w http.ResponseWriter) error {
+func (response UpdateClosure500TextResponse) VisitUpdateClosureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -1292,23 +2181,1008 @@ func (response UpdateEntry500TextResponse) VisitUpdateEntryResponse(w http.Respo
 	return err
 }
 
+type GetMembershipsRequestObject struct {
+	Params GetMembershipsParams
+}
+
+type GetMembershipsResponseObject interface {
+	VisitGetMembershipsResponse(w http.ResponseWriter) error
+}
+
+type GetMemberships200JSONResponse MembershipsResponse
+
+func (response GetMemberships200JSONResponse) VisitGetMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetMemberships400TextResponse string
+
+func (response GetMemberships400TextResponse) VisitGetMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMemberships401TextResponse string
+
+func (response GetMemberships401TextResponse) VisitGetMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMemberships500TextResponse string
+
+func (response GetMemberships500TextResponse) VisitGetMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddMembershipRequestObject struct {
+	Body *AddMembershipJSONRequestBody
+}
+
+type AddMembershipResponseObject interface {
+	VisitAddMembershipResponse(w http.ResponseWriter) error
+}
+
+type AddMembership201JSONResponse Id
+
+func (response AddMembership201JSONResponse) VisitAddMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddMembership400TextResponse string
+
+func (response AddMembership400TextResponse) VisitAddMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddMembership401TextResponse string
+
+func (response AddMembership401TextResponse) VisitAddMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddMembership500TextResponse string
+
+func (response AddMembership500TextResponse) VisitAddMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteMembershipResponseObject interface {
+	VisitDeleteMembershipResponse(w http.ResponseWriter) error
+}
+
+type DeleteMembership204Response struct {
+}
+
+func (response DeleteMembership204Response) VisitDeleteMembershipResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMembership400TextResponse string
+
+func (response DeleteMembership400TextResponse) VisitDeleteMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteMembership401TextResponse string
+
+func (response DeleteMembership401TextResponse) VisitDeleteMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteMembership500TextResponse string
+
+func (response DeleteMembership500TextResponse) VisitDeleteMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetMembershipResponseObject interface {
+	VisitGetMembershipResponse(w http.ResponseWriter) error
+}
+
+type GetMembership200JSONResponse Membership
+
+func (response GetMembership200JSONResponse) VisitGetMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetMembership400TextResponse string
+
+func (response GetMembership400TextResponse) VisitGetMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMembership401TextResponse string
+
+func (response GetMembership401TextResponse) VisitGetMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMembership404TextResponse string
+
+func (response GetMembership404TextResponse) VisitGetMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetMembership500TextResponse string
+
+func (response GetMembership500TextResponse) VisitGetMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMembershipsRequestObject struct {
+	Params GetNetworkMembershipsParams
+}
+
+type GetNetworkMembershipsResponseObject interface {
+	VisitGetNetworkMembershipsResponse(w http.ResponseWriter) error
+}
+
+type GetNetworkMemberships200JSONResponse NetworkMembershipsResponse
+
+func (response GetNetworkMemberships200JSONResponse) VisitGetNetworkMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNetworkMemberships400TextResponse string
+
+func (response GetNetworkMemberships400TextResponse) VisitGetNetworkMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMemberships401TextResponse string
+
+func (response GetNetworkMemberships401TextResponse) VisitGetNetworkMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMemberships500TextResponse string
+
+func (response GetNetworkMemberships500TextResponse) VisitGetNetworkMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkMembershipRequestObject struct {
+	Body *AddNetworkMembershipJSONRequestBody
+}
+
+type AddNetworkMembershipResponseObject interface {
+	VisitAddNetworkMembershipResponse(w http.ResponseWriter) error
+}
+
+type AddNetworkMembership201JSONResponse Id
+
+func (response AddNetworkMembership201JSONResponse) VisitAddNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddNetworkMembership400TextResponse string
+
+func (response AddNetworkMembership400TextResponse) VisitAddNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkMembership401TextResponse string
+
+func (response AddNetworkMembership401TextResponse) VisitAddNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkMembership500TextResponse string
+
+func (response AddNetworkMembership500TextResponse) VisitAddNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNetworkMembershipResponseObject interface {
+	VisitDeleteNetworkMembershipResponse(w http.ResponseWriter) error
+}
+
+type DeleteNetworkMembership204Response struct {
+}
+
+func (response DeleteNetworkMembership204Response) VisitDeleteNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNetworkMembership400TextResponse string
+
+func (response DeleteNetworkMembership400TextResponse) VisitDeleteNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkMembership401TextResponse string
+
+func (response DeleteNetworkMembership401TextResponse) VisitDeleteNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkMembership500TextResponse string
+
+func (response DeleteNetworkMembership500TextResponse) VisitDeleteNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetNetworkMembershipResponseObject interface {
+	VisitGetNetworkMembershipResponse(w http.ResponseWriter) error
+}
+
+type GetNetworkMembership200JSONResponse NetworkMembership
+
+func (response GetNetworkMembership200JSONResponse) VisitGetNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNetworkMembership400TextResponse string
+
+func (response GetNetworkMembership400TextResponse) VisitGetNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMembership401TextResponse string
+
+func (response GetNetworkMembership401TextResponse) VisitGetNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMembership404TextResponse string
+
+func (response GetNetworkMembership404TextResponse) VisitGetNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkMembership500TextResponse string
+
+func (response GetNetworkMembership500TextResponse) VisitGetNetworkMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworksRequestObject struct {
+	Params GetNetworksParams
+}
+
+type GetNetworksResponseObject interface {
+	VisitGetNetworksResponse(w http.ResponseWriter) error
+}
+
+type GetNetworks200JSONResponse NetworksResponse
+
+func (response GetNetworks200JSONResponse) VisitGetNetworksResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNetworks400TextResponse string
+
+func (response GetNetworks400TextResponse) VisitGetNetworksResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworks401TextResponse string
+
+func (response GetNetworks401TextResponse) VisitGetNetworksResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworks500TextResponse string
+
+func (response GetNetworks500TextResponse) VisitGetNetworksResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkRequestObject struct {
+	Body *AddNetworkJSONRequestBody
+}
+
+type AddNetworkResponseObject interface {
+	VisitAddNetworkResponse(w http.ResponseWriter) error
+}
+
+type AddNetwork201JSONResponse Id
+
+func (response AddNetwork201JSONResponse) VisitAddNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddNetwork400TextResponse string
+
+func (response AddNetwork400TextResponse) VisitAddNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetwork401TextResponse string
+
+func (response AddNetwork401TextResponse) VisitAddNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetwork500TextResponse string
+
+func (response AddNetwork500TextResponse) VisitAddNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNetworkResponseObject interface {
+	VisitDeleteNetworkResponse(w http.ResponseWriter) error
+}
+
+type DeleteNetwork204Response struct {
+}
+
+func (response DeleteNetwork204Response) VisitDeleteNetworkResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNetwork400TextResponse string
+
+func (response DeleteNetwork400TextResponse) VisitDeleteNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetwork401TextResponse string
+
+func (response DeleteNetwork401TextResponse) VisitDeleteNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetwork500TextResponse string
+
+func (response DeleteNetwork500TextResponse) VisitDeleteNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworkRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetNetworkResponseObject interface {
+	VisitGetNetworkResponse(w http.ResponseWriter) error
+}
+
+type GetNetwork200JSONResponse Network
+
+func (response GetNetwork200JSONResponse) VisitGetNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNetwork400TextResponse string
+
+func (response GetNetwork400TextResponse) VisitGetNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetwork401TextResponse string
+
+func (response GetNetwork401TextResponse) VisitGetNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetwork404TextResponse string
+
+func (response GetNetwork404TextResponse) VisitGetNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetwork500TextResponse string
+
+func (response GetNetwork500TextResponse) VisitGetNetworkResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMembershipsRequestObject struct {
+	Params GetTierMembershipsParams
+}
+
+type GetTierMembershipsResponseObject interface {
+	VisitGetTierMembershipsResponse(w http.ResponseWriter) error
+}
+
+type GetTierMemberships200JSONResponse TierMembershipsResponse
+
+func (response GetTierMemberships200JSONResponse) VisitGetTierMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTierMemberships400TextResponse string
+
+func (response GetTierMemberships400TextResponse) VisitGetTierMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMemberships401TextResponse string
+
+func (response GetTierMemberships401TextResponse) VisitGetTierMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMemberships500TextResponse string
+
+func (response GetTierMemberships500TextResponse) VisitGetTierMembershipsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierMembershipRequestObject struct {
+	Body *AddTierMembershipJSONRequestBody
+}
+
+type AddTierMembershipResponseObject interface {
+	VisitAddTierMembershipResponse(w http.ResponseWriter) error
+}
+
+type AddTierMembership201JSONResponse Id
+
+func (response AddTierMembership201JSONResponse) VisitAddTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddTierMembership400TextResponse string
+
+func (response AddTierMembership400TextResponse) VisitAddTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierMembership401TextResponse string
+
+func (response AddTierMembership401TextResponse) VisitAddTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierMembership500TextResponse string
+
+func (response AddTierMembership500TextResponse) VisitAddTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteTierMembershipResponseObject interface {
+	VisitDeleteTierMembershipResponse(w http.ResponseWriter) error
+}
+
+type DeleteTierMembership204Response struct {
+}
+
+func (response DeleteTierMembership204Response) VisitDeleteTierMembershipResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteTierMembership400TextResponse string
+
+func (response DeleteTierMembership400TextResponse) VisitDeleteTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierMembership401TextResponse string
+
+func (response DeleteTierMembership401TextResponse) VisitDeleteTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierMembership500TextResponse string
+
+func (response DeleteTierMembership500TextResponse) VisitDeleteTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMembershipRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetTierMembershipResponseObject interface {
+	VisitGetTierMembershipResponse(w http.ResponseWriter) error
+}
+
+type GetTierMembership200JSONResponse TierMembership
+
+func (response GetTierMembership200JSONResponse) VisitGetTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTierMembership400TextResponse string
+
+func (response GetTierMembership400TextResponse) VisitGetTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMembership401TextResponse string
+
+func (response GetTierMembership401TextResponse) VisitGetTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMembership404TextResponse string
+
+func (response GetTierMembership404TextResponse) VisitGetTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierMembership500TextResponse string
+
+func (response GetTierMembership500TextResponse) VisitGetTierMembershipResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiersRequestObject struct {
+	Params GetTiersParams
+}
+
+type GetTiersResponseObject interface {
+	VisitGetTiersResponse(w http.ResponseWriter) error
+}
+
+type GetTiers200JSONResponse TiersResponse
+
+func (response GetTiers200JSONResponse) VisitGetTiersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTiers400TextResponse string
+
+func (response GetTiers400TextResponse) VisitGetTiersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiers401TextResponse string
+
+func (response GetTiers401TextResponse) VisitGetTiersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiers500TextResponse string
+
+func (response GetTiers500TextResponse) VisitGetTiersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierRequestObject struct {
+	Body *AddTierJSONRequestBody
+}
+
+type AddTierResponseObject interface {
+	VisitAddTierResponse(w http.ResponseWriter) error
+}
+
+type AddTier201JSONResponse Id
+
+func (response AddTier201JSONResponse) VisitAddTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddTier400TextResponse string
+
+func (response AddTier400TextResponse) VisitAddTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTier401TextResponse string
+
+func (response AddTier401TextResponse) VisitAddTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTier500TextResponse string
+
+func (response AddTier500TextResponse) VisitAddTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteTierResponseObject interface {
+	VisitDeleteTierResponse(w http.ResponseWriter) error
+}
+
+type DeleteTier204Response struct {
+}
+
+func (response DeleteTier204Response) VisitDeleteTierResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteTier400TextResponse string
+
+func (response DeleteTier400TextResponse) VisitDeleteTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTier401TextResponse string
+
+func (response DeleteTier401TextResponse) VisitDeleteTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTier500TextResponse string
+
+func (response DeleteTier500TextResponse) VisitDeleteTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTierRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetTierResponseObject interface {
+	VisitGetTierResponse(w http.ResponseWriter) error
+}
+
+type GetTier200JSONResponse Tier
+
+func (response GetTier200JSONResponse) VisitGetTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTier400TextResponse string
+
+func (response GetTier400TextResponse) VisitGetTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTier401TextResponse string
+
+func (response GetTier401TextResponse) VisitGetTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTier404TextResponse string
+
+func (response GetTier404TextResponse) VisitGetTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTier500TextResponse string
+
+func (response GetTier500TextResponse) VisitGetTierResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// Returns all consortia
-	// (GET /consortia)
-	GetConsortia(ctx context.Context, request GetConsortiaRequestObject) (GetConsortiaResponseObject, error)
-	// Creates a new consortium
-	// (POST /consortia)
-	AddConsortium(ctx context.Context, request AddConsortiumRequestObject) (AddConsortiumResponseObject, error)
-	// Delete consortium by ID
-	// (DELETE /consortia/{id})
-	DeleteConsortium(ctx context.Context, request DeleteConsortiumRequestObject) (DeleteConsortiumResponseObject, error)
-	// Returns a consortium by ID
-	// (GET /consortia/{id})
-	GetConsortium(ctx context.Context, request GetConsortiumRequestObject) (GetConsortiumResponseObject, error)
-	// Update a consortium
-	// (PATCH /consortia/{id})
-	UpdateConsortium(ctx context.Context, request UpdateConsortiumRequestObject) (UpdateConsortiumResponseObject, error)
+	// Get all Closures
+	// (GET /closures)
+	GetClosures(ctx context.Context, request GetClosuresRequestObject) (GetClosuresResponseObject, error)
+	// Create a new Closure
+	// (POST /closures)
+	AddClosure(ctx context.Context, request AddClosureRequestObject) (AddClosureResponseObject, error)
+	// Delete Closure by ID
+	// (DELETE /closures/{id})
+	DeleteClosure(ctx context.Context, request DeleteClosureRequestObject) (DeleteClosureResponseObject, error)
+	// Returns a Closure by ID
+	// (GET /closures/{id})
+	GetClosure(ctx context.Context, request GetClosureRequestObject) (GetClosureResponseObject, error)
+	// Update a Closure
+	// (PATCH /closures/{id})
+	UpdateClosure(ctx context.Context, request UpdateClosureRequestObject) (UpdateClosureResponseObject, error)
 	// Returns all entries
 	// (GET /entries)
 	GetEntries(ctx context.Context, request GetEntriesRequestObject) (GetEntriesResponseObject, error)
@@ -1324,6 +3198,66 @@ type StrictServerInterface interface {
 	// Update an entry
 	// (PATCH /entries/{key}/{value})
 	UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error)
+	// Get all Memberships
+	// (GET /memberships)
+	GetMemberships(ctx context.Context, request GetMembershipsRequestObject) (GetMembershipsResponseObject, error)
+	// Create a new Membership
+	// (POST /memberships)
+	AddMembership(ctx context.Context, request AddMembershipRequestObject) (AddMembershipResponseObject, error)
+	// Delete Membership by ID
+	// (DELETE /memberships/{id})
+	DeleteMembership(ctx context.Context, request DeleteMembershipRequestObject) (DeleteMembershipResponseObject, error)
+	// Returns a Membership by ID
+	// (GET /memberships/{id})
+	GetMembership(ctx context.Context, request GetMembershipRequestObject) (GetMembershipResponseObject, error)
+	// Returns all Network Memberships
+	// (GET /network-memberships)
+	GetNetworkMemberships(ctx context.Context, request GetNetworkMembershipsRequestObject) (GetNetworkMembershipsResponseObject, error)
+	// Creates a new Network Membership
+	// (POST /network-memberships)
+	AddNetworkMembership(ctx context.Context, request AddNetworkMembershipRequestObject) (AddNetworkMembershipResponseObject, error)
+	// Delete Network Membership by ID
+	// (DELETE /network-memberships/{id})
+	DeleteNetworkMembership(ctx context.Context, request DeleteNetworkMembershipRequestObject) (DeleteNetworkMembershipResponseObject, error)
+	// Returns a Network Membership by ID
+	// (GET /network-memberships/{id})
+	GetNetworkMembership(ctx context.Context, request GetNetworkMembershipRequestObject) (GetNetworkMembershipResponseObject, error)
+	// Get all networks
+	// (GET /networks)
+	GetNetworks(ctx context.Context, request GetNetworksRequestObject) (GetNetworksResponseObject, error)
+	// Create a new network
+	// (POST /networks)
+	AddNetwork(ctx context.Context, request AddNetworkRequestObject) (AddNetworkResponseObject, error)
+	// Delete Network by ID
+	// (DELETE /networks/{id})
+	DeleteNetwork(ctx context.Context, request DeleteNetworkRequestObject) (DeleteNetworkResponseObject, error)
+	// Returns a Network by ID
+	// (GET /networks/{id})
+	GetNetwork(ctx context.Context, request GetNetworkRequestObject) (GetNetworkResponseObject, error)
+	// Returns all Tier Memberships
+	// (GET /tier-memberships)
+	GetTierMemberships(ctx context.Context, request GetTierMembershipsRequestObject) (GetTierMembershipsResponseObject, error)
+	// Creates a new Tier Membership
+	// (POST /tier-memberships)
+	AddTierMembership(ctx context.Context, request AddTierMembershipRequestObject) (AddTierMembershipResponseObject, error)
+	// Delete Tier Membership by ID
+	// (DELETE /tier-memberships/{id})
+	DeleteTierMembership(ctx context.Context, request DeleteTierMembershipRequestObject) (DeleteTierMembershipResponseObject, error)
+	// Returns a Tier Membership by ID
+	// (GET /tier-memberships/{id})
+	GetTierMembership(ctx context.Context, request GetTierMembershipRequestObject) (GetTierMembershipResponseObject, error)
+	// Get all tiers
+	// (GET /tiers)
+	GetTiers(ctx context.Context, request GetTiersRequestObject) (GetTiersResponseObject, error)
+	// Create a new Tier
+	// (POST /tiers)
+	AddTier(ctx context.Context, request AddTierRequestObject) (AddTierResponseObject, error)
+	// Delete Tier by ID
+	// (DELETE /tiers/{id})
+	DeleteTier(ctx context.Context, request DeleteTierRequestObject) (DeleteTierResponseObject, error)
+	// Returns a Tier by ID
+	// (GET /tiers/{id})
+	GetTier(ctx context.Context, request GetTierRequestObject) (GetTierResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1355,25 +3289,25 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetConsortia operation middleware
-func (sh *strictHandler) GetConsortia(w http.ResponseWriter, r *http.Request, params GetConsortiaParams) {
-	var request GetConsortiaRequestObject
+// GetClosures operation middleware
+func (sh *strictHandler) GetClosures(w http.ResponseWriter, r *http.Request, params GetClosuresParams) {
+	var request GetClosuresRequestObject
 
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetConsortia(ctx, request.(GetConsortiaRequestObject))
+		return sh.ssi.GetClosures(ctx, request.(GetClosuresRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetConsortia")
+		handler = middleware(handler, "GetClosures")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetConsortiaResponseObject); ok {
-		if err := validResponse.VisitGetConsortiaResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetClosuresResponseObject); ok {
+		if err := validResponse.VisitGetClosuresResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1381,11 +3315,11 @@ func (sh *strictHandler) GetConsortia(w http.ResponseWriter, r *http.Request, pa
 	}
 }
 
-// AddConsortium operation middleware
-func (sh *strictHandler) AddConsortium(w http.ResponseWriter, r *http.Request) {
-	var request AddConsortiumRequestObject
+// AddClosure operation middleware
+func (sh *strictHandler) AddClosure(w http.ResponseWriter, r *http.Request) {
+	var request AddClosureRequestObject
 
-	var body AddConsortiumJSONRequestBody
+	var body AddClosureJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -1393,18 +3327,18 @@ func (sh *strictHandler) AddConsortium(w http.ResponseWriter, r *http.Request) {
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.AddConsortium(ctx, request.(AddConsortiumRequestObject))
+		return sh.ssi.AddClosure(ctx, request.(AddClosureRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "AddConsortium")
+		handler = middleware(handler, "AddClosure")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(AddConsortiumResponseObject); ok {
-		if err := validResponse.VisitAddConsortiumResponse(w); err != nil {
+	} else if validResponse, ok := response.(AddClosureResponseObject); ok {
+		if err := validResponse.VisitAddClosureResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1412,25 +3346,25 @@ func (sh *strictHandler) AddConsortium(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeleteConsortium operation middleware
-func (sh *strictHandler) DeleteConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	var request DeleteConsortiumRequestObject
+// DeleteClosure operation middleware
+func (sh *strictHandler) DeleteClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteClosureRequestObject
 
 	request.Id = id
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteConsortium(ctx, request.(DeleteConsortiumRequestObject))
+		return sh.ssi.DeleteClosure(ctx, request.(DeleteClosureRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteConsortium")
+		handler = middleware(handler, "DeleteClosure")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteConsortiumResponseObject); ok {
-		if err := validResponse.VisitDeleteConsortiumResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteClosureResponseObject); ok {
+		if err := validResponse.VisitDeleteClosureResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1438,25 +3372,25 @@ func (sh *strictHandler) DeleteConsortium(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// GetConsortium operation middleware
-func (sh *strictHandler) GetConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	var request GetConsortiumRequestObject
+// GetClosure operation middleware
+func (sh *strictHandler) GetClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetClosureRequestObject
 
 	request.Id = id
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetConsortium(ctx, request.(GetConsortiumRequestObject))
+		return sh.ssi.GetClosure(ctx, request.(GetClosureRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetConsortium")
+		handler = middleware(handler, "GetClosure")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetConsortiumResponseObject); ok {
-		if err := validResponse.VisitGetConsortiumResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetClosureResponseObject); ok {
+		if err := validResponse.VisitGetClosureResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1464,13 +3398,13 @@ func (sh *strictHandler) GetConsortium(w http.ResponseWriter, r *http.Request, i
 	}
 }
 
-// UpdateConsortium operation middleware
-func (sh *strictHandler) UpdateConsortium(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	var request UpdateConsortiumRequestObject
+// UpdateClosure operation middleware
+func (sh *strictHandler) UpdateClosure(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateClosureRequestObject
 
 	request.Id = id
 
-	var body UpdateConsortiumJSONRequestBody
+	var body UpdateClosureJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -1478,18 +3412,18 @@ func (sh *strictHandler) UpdateConsortium(w http.ResponseWriter, r *http.Request
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.UpdateConsortium(ctx, request.(UpdateConsortiumRequestObject))
+		return sh.ssi.UpdateClosure(ctx, request.(UpdateClosureRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "UpdateConsortium")
+		handler = middleware(handler, "UpdateClosure")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(UpdateConsortiumResponseObject); ok {
-		if err := validResponse.VisitUpdateConsortiumResponse(w); err != nil {
+	} else if validResponse, ok := response.(UpdateClosureResponseObject); ok {
+		if err := validResponse.VisitUpdateClosureResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1642,42 +3576,611 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, key
 	}
 }
 
+// GetMemberships operation middleware
+func (sh *strictHandler) GetMemberships(w http.ResponseWriter, r *http.Request, params GetMembershipsParams) {
+	var request GetMembershipsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMemberships(ctx, request.(GetMembershipsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMemberships")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMembershipsResponseObject); ok {
+		if err := validResponse.VisitGetMembershipsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddMembership operation middleware
+func (sh *strictHandler) AddMembership(w http.ResponseWriter, r *http.Request) {
+	var request AddMembershipRequestObject
+
+	var body AddMembershipJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddMembership(ctx, request.(AddMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddMembershipResponseObject); ok {
+		if err := validResponse.VisitAddMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMembership operation middleware
+func (sh *strictHandler) DeleteMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMembership(ctx, request.(DeleteMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMembershipResponseObject); ok {
+		if err := validResponse.VisitDeleteMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMembership operation middleware
+func (sh *strictHandler) GetMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMembership(ctx, request.(GetMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMembershipResponseObject); ok {
+		if err := validResponse.VisitGetMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNetworkMemberships operation middleware
+func (sh *strictHandler) GetNetworkMemberships(w http.ResponseWriter, r *http.Request, params GetNetworkMembershipsParams) {
+	var request GetNetworkMembershipsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNetworkMemberships(ctx, request.(GetNetworkMembershipsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNetworkMemberships")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNetworkMembershipsResponseObject); ok {
+		if err := validResponse.VisitGetNetworkMembershipsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddNetworkMembership operation middleware
+func (sh *strictHandler) AddNetworkMembership(w http.ResponseWriter, r *http.Request) {
+	var request AddNetworkMembershipRequestObject
+
+	var body AddNetworkMembershipJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddNetworkMembership(ctx, request.(AddNetworkMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddNetworkMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddNetworkMembershipResponseObject); ok {
+		if err := validResponse.VisitAddNetworkMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNetworkMembership operation middleware
+func (sh *strictHandler) DeleteNetworkMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNetworkMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNetworkMembership(ctx, request.(DeleteNetworkMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNetworkMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNetworkMembershipResponseObject); ok {
+		if err := validResponse.VisitDeleteNetworkMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNetworkMembership operation middleware
+func (sh *strictHandler) GetNetworkMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetNetworkMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNetworkMembership(ctx, request.(GetNetworkMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNetworkMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNetworkMembershipResponseObject); ok {
+		if err := validResponse.VisitGetNetworkMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNetworks operation middleware
+func (sh *strictHandler) GetNetworks(w http.ResponseWriter, r *http.Request, params GetNetworksParams) {
+	var request GetNetworksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNetworks(ctx, request.(GetNetworksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNetworks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNetworksResponseObject); ok {
+		if err := validResponse.VisitGetNetworksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddNetwork operation middleware
+func (sh *strictHandler) AddNetwork(w http.ResponseWriter, r *http.Request) {
+	var request AddNetworkRequestObject
+
+	var body AddNetworkJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddNetwork(ctx, request.(AddNetworkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddNetwork")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddNetworkResponseObject); ok {
+		if err := validResponse.VisitAddNetworkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNetwork operation middleware
+func (sh *strictHandler) DeleteNetwork(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNetworkRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNetwork(ctx, request.(DeleteNetworkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNetwork")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNetworkResponseObject); ok {
+		if err := validResponse.VisitDeleteNetworkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNetwork operation middleware
+func (sh *strictHandler) GetNetwork(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetNetworkRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNetwork(ctx, request.(GetNetworkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNetwork")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNetworkResponseObject); ok {
+		if err := validResponse.VisitGetNetworkResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTierMemberships operation middleware
+func (sh *strictHandler) GetTierMemberships(w http.ResponseWriter, r *http.Request, params GetTierMembershipsParams) {
+	var request GetTierMembershipsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTierMemberships(ctx, request.(GetTierMembershipsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTierMemberships")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTierMembershipsResponseObject); ok {
+		if err := validResponse.VisitGetTierMembershipsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddTierMembership operation middleware
+func (sh *strictHandler) AddTierMembership(w http.ResponseWriter, r *http.Request) {
+	var request AddTierMembershipRequestObject
+
+	var body AddTierMembershipJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddTierMembership(ctx, request.(AddTierMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddTierMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddTierMembershipResponseObject); ok {
+		if err := validResponse.VisitAddTierMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteTierMembership operation middleware
+func (sh *strictHandler) DeleteTierMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteTierMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteTierMembership(ctx, request.(DeleteTierMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteTierMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteTierMembershipResponseObject); ok {
+		if err := validResponse.VisitDeleteTierMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTierMembership operation middleware
+func (sh *strictHandler) GetTierMembership(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetTierMembershipRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTierMembership(ctx, request.(GetTierMembershipRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTierMembership")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTierMembershipResponseObject); ok {
+		if err := validResponse.VisitGetTierMembershipResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTiers operation middleware
+func (sh *strictHandler) GetTiers(w http.ResponseWriter, r *http.Request, params GetTiersParams) {
+	var request GetTiersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTiers(ctx, request.(GetTiersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTiers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTiersResponseObject); ok {
+		if err := validResponse.VisitGetTiersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddTier operation middleware
+func (sh *strictHandler) AddTier(w http.ResponseWriter, r *http.Request) {
+	var request AddTierRequestObject
+
+	var body AddTierJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddTier(ctx, request.(AddTierRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddTier")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddTierResponseObject); ok {
+		if err := validResponse.VisitAddTierResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteTier operation middleware
+func (sh *strictHandler) DeleteTier(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteTierRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteTier(ctx, request.(DeleteTierRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteTier")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteTierResponseObject); ok {
+		if err := validResponse.VisitDeleteTierResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTier operation middleware
+func (sh *strictHandler) GetTier(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetTierRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTier(ctx, request.(GetTierRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTier")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTierResponseObject); ok {
+		if err := validResponse.VisitGetTierResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"AP//Mvbv60QyAAA=",
+	"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",
+	"8KmQERV4db/6fwAAAP//j/yyVV2FAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
