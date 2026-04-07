@@ -3,13 +3,14 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"sync"
+
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/iso18626"
-	"net/http"
-	"sync"
 )
 
 type SseBroker struct {
@@ -140,8 +141,8 @@ type SseMessage struct {
 }
 
 type SseIsoMessageEvent struct {
-	Event events.EventName         `json:"event,omitempty"`
-	Data  iso18626.ISO18626Message `json:"data,omitempty"`
+	Event events.EventName           `json:"event,omitempty"`
+	Data  iso18626.Iso18626MessageNS `json:"data,omitempty"`
 }
 
 func (b *SseBroker) IncomingIsoMessage(ctx common.ExtendedContext, event events.Event) {

@@ -438,19 +438,25 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestSendHttpPost(t *testing.T) {
 	// Define test cases
+	var requestM = iso18626.NewIso18626MessageNS()
+	requestM.Request = &iso18626.Request{
+		Header: iso18626.Header{
+			SupplyingAgencyRequestId: "test\x00\x1Fdata\"<>&",
+		},
+	}
 	tests := []struct {
 		name           string
 		url            string
-		msg            *iso18626.ISO18626Message
+		msg            *iso18626.Iso18626MessageNS
 		mockResponse   *http.Response
 		mockError      error
-		expectedResult *iso18626.ISO18626Message
+		expectedResult *iso18626.Iso18626MessageNS
 		expectedError  string
 	}{
 		{
 			name: "successful post request",
 			url:  "https://test.com",
-			msg:  &iso18626.ISO18626Message{},
+			msg:  iso18626.NewIso18626MessageNS(),
 			mockResponse: &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"application/xml"}},
@@ -459,15 +465,13 @@ func TestSendHttpPost(t *testing.T) {
 				</ISO18626Message>`)),
 			},
 			mockError:      nil,
-			expectedResult: &iso18626.ISO18626Message{},
+			expectedResult: iso18626.NewIso18626MessageNS(),
 			expectedError:  "",
 		},
 		{
 			name: "server error",
 			url:  "https://test.com",
-			msg:  &iso18626.ISO18626Message{
-				// Fill in the fields with test data
-			},
+			msg:  iso18626.NewIso18626MessageNS(),
 			mockResponse: &http.Response{
 				StatusCode: http.StatusInternalServerError,
 				Body:       io.NopCloser(bytes.NewBufferString("Internal Server Error")),
@@ -477,11 +481,9 @@ func TestSendHttpPost(t *testing.T) {
 			expectedError:  "500: Internal Server Error",
 		},
 		{
-			name: "request error",
-			url:  "https://test.com",
-			msg:  &iso18626.ISO18626Message{
-				// Fill in the fields with test data
-			},
+			name:           "request error",
+			url:            "https://test.com",
+			msg:            iso18626.NewIso18626MessageNS(),
 			mockResponse:   nil,
 			mockError:      fmt.Errorf("mock request error"),
 			expectedResult: nil,
@@ -497,15 +499,9 @@ func TestSendHttpPost(t *testing.T) {
 			expectedError:  "marshal returned nil",
 		},
 		{
-			name: "Invalid address",
-			url:  "https://test.com/\x7f",
-			msg: &iso18626.ISO18626Message{
-				Request: &iso18626.Request{
-					Header: iso18626.Header{
-						SupplyingAgencyRequestId: "test\x00\x1Fdata\"<>&",
-					},
-				},
-			},
+			name:           "Invalid address",
+			url:            "https://test.com/\x7f",
+			msg:            requestM,
 			mockResponse:   nil,
 			mockError:      nil,
 			expectedResult: nil,
@@ -619,15 +615,15 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrans := requestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
+		},
+	}
 	_, err := eventBus.CreateNotice(illTrans.ID, events.EventNameSupplierMsgReceived, events.EventData{
 		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					StatusInfo: iso18626.StatusInfo{
-						Status: iso18626.TypeStatusLoaned,
-					},
-				},
-			},
+			IncomingMessage: message,
 		},
 	}, events.EventStatusSuccess, events.EventDomainIllTransaction)
 	assert.NoError(t, err)

@@ -13,22 +13,36 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func newSAM(sam *iso18626.SupplyingAgencyMessage) *iso18626.Iso18626MessageNS {
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = sam
+	return message
+}
+func newRAM(ram *iso18626.RequestingAgencyMessage) *iso18626.Iso18626MessageNS {
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestingAgencyMessage = ram
+	return message
+}
+func newReq(request *iso18626.Request) *iso18626.Iso18626MessageNS {
+	var message = iso18626.NewIso18626MessageNS()
+	message.Request = request
+	return message
+}
+
 func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoanCompleted,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note:             "thanks for sending it back",
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoanCompleted,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note:             "thanks for sending it back",
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
@@ -36,27 +50,25 @@ func TestIso18626AlmaShimLoanCompleted(t *testing.T) {
 }
 
 func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusCopyCompleted,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note:             "sending you the URL",
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				SentVia: &iso18626.TypeSchemeValuePair{
-					Text: "URL",
-				},
-				ItemId: "http://example.com/item/12345678",
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusCopyCompleted,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note:             "sending you the URL",
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			SentVia: &iso18626.TypeSchemeValuePair{
+				Text: "URL",
+			},
+			ItemId: "http://example.com/item/12345678",
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusCopyCompleted, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
@@ -66,7 +78,7 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 	//apply again that URL is added once
 	bytes, err = shim.ApplyToOutgoingRequest(&resmsg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg2 iso18626.ISO18626Message
+	var resmsg2 iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg2)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, URL_PRE+"http://example.com/item/12345678"+NOTE_FIELD_SEP+
@@ -74,26 +86,24 @@ func TestIso18626AlmaShimCopyCompleted(t *testing.T) {
 }
 
 func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusCopyCompleted,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note:             "sending you the email",
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				SentVia: &iso18626.TypeSchemeValuePair{
-					Text: "Email",
-				},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusCopyCompleted,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note:             "sending you the email",
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			SentVia: &iso18626.TypeSchemeValuePair{
+				Text: "Email",
 			},
 		},
-	}
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusCopyCompleted, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
@@ -102,48 +112,46 @@ func TestIso18626AlmaShimCopyCompletedEmail(t *testing.T) {
 }
 
 func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoaned,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-				Note:             "#seq:12#original note",
-			},
-			ReturnInfo: &iso18626.ReturnInfo{
-				Name: "University of Chicago (ISIL:US-IL-UC)",
-				PhysicalAddress: &iso18626.PhysicalAddress{
-					Line1:    "124 Main St",
-					Line2:    "",
-					Locality: "Chicago",
-					Region: &iso18626.TypeSchemeValuePair{
-						Text: "IL",
-					},
-					PostalCode: "60606",
-					Country: &iso18626.TypeSchemeValuePair{
-						Text: "US",
-					},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+			Note:             "#seq:12#original note",
+		},
+		ReturnInfo: &iso18626.ReturnInfo{
+			Name: "University of Chicago (ISIL:US-IL-UC)",
+			PhysicalAddress: &iso18626.PhysicalAddress{
+				Line1:    "124 Main St",
+				Line2:    "",
+				Locality: "Chicago",
+				Region: &iso18626.TypeSchemeValuePair{
+					Text: "IL",
 				},
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				LoanCondition: &iso18626.TypeSchemeValuePair{
-					Text: "libraryuseonly",
+				PostalCode: "60606",
+				Country: &iso18626.TypeSchemeValuePair{
+					Text: "US",
 				},
 			},
 		},
-	}
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			LoanCondition: &iso18626.TypeSchemeValuePair{
+				Text: "libraryuseonly",
+			},
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeReasonForMessageStatusChange,
 		resmsg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	//loaned message should not be changed if reasonForMessage is not request response
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageRenewResponse
-	bytes, err = shim.ApplyToOutgoingRequest(&msg)
+	bytes, err = shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
@@ -156,27 +164,25 @@ func TestIso18626AlmaShimLoanLoaned(t *testing.T) {
 }
 
 func TestIso18626AlmaShimIncoming(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoaned,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				DeliveryCosts: &iso18626.TypeCosts{
-					MonetaryValue: utils.XSDDecimal{
-						Base: 1010,
-						Exp:  2,
-					},
-					CurrencyCode: iso18626.TypeSchemeValuePair{
-						Text: "USD",
-					},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			DeliveryCosts: &iso18626.TypeCosts{
+				MonetaryValue: utils.XSDDecimal{
+					Base: 1010,
+					Exp:  2,
+				},
+				CurrencyCode: iso18626.TypeSchemeValuePair{
+					Text: "USD",
 				},
 			},
 		},
-	}
+	})
 	bytes, err := xml.Marshal(&msg)
 	if err != nil {
 		t.Errorf("failed to marshal xml")
@@ -189,7 +195,7 @@ func TestIso18626AlmaShimIncoming(t *testing.T) {
 	assert.Equal(t, 2, msg.SupplyingAgencyMessage.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp, "DeliveryCosts.Exp should be 2")
 	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.OfferedCosts, "OfferedCosts should be nil")
 
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	shim := GetShim(string(directory.Alma))
 	err = shim.ApplyToIncomingResponse(bytes, &resmsg)
 	if err != nil {
@@ -205,20 +211,18 @@ func TestIso18626AlmaShimIncoming(t *testing.T) {
 }
 
 func TestIso18626AlmaShimWillSupply(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusWillSupply,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusWillSupply,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
@@ -229,7 +233,7 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 			Text: "libraryuseonly",
 		},
 	}
-	bytes, err = shim.ApplyToOutgoingRequest(&msg)
+	bytes, err = shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
@@ -249,7 +253,7 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 			Text: "EUR",
 		},
 	}
-	bytes, err = shim.ApplyToOutgoingRequest(&msg)
+	bytes, err = shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
@@ -265,7 +269,7 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 	//change to loaned and verify that offered costs are moved to delivery costs
 	msg.SupplyingAgencyMessage.StatusInfo.Status = iso18626.TypeStatusLoaned
 	msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageStatusChange
-	bytes, err = shim.ApplyToOutgoingRequest(&msg)
+	bytes, err = shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
@@ -284,20 +288,18 @@ func TestIso18626AlmaShimWillSupply(t *testing.T) {
 }
 
 func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusExpectToSupply,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusExpectToSupply,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusWillSupply, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
@@ -305,20 +307,18 @@ func TestIso18626AlmaShimExpectToSupply(t *testing.T) {
 }
 
 func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusRequestReceived,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageNotification,
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusRequestReceived,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+		},
+	})
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err, "failed to apply outgoing")
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	assert.Nil(t, err, "failed to parse xml")
 	assert.Equal(t, iso18626.TypeStatusRequestReceived, resmsg.SupplyingAgencyMessage.StatusInfo.Status)
@@ -326,22 +326,20 @@ func TestIso18626AlmaShimNotificationRequestReceived(t *testing.T) {
 }
 
 func TestIso18626DefaultShim(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoaned,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+	})
 	shim := GetShim("other")
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
 	}
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = shim.ApplyToIncomingResponse(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to apply incoming")
@@ -349,58 +347,56 @@ func TestIso18626DefaultShim(t *testing.T) {
 }
 
 func TestIso18626AlmaShimRequest(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		Request: &iso18626.Request{
-			RequestingAgencyInfo: &iso18626.RequestingAgencyInfo{
-				Name: "University of Chicago (ISIL:US-IL-UC)",
-			},
-			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
-				{
-					Address: &iso18626.Address{
-						PhysicalAddress: &iso18626.PhysicalAddress{
-							Line1:    "124 Main St",
-							Line2:    "",
-							Locality: "Chicago",
-							Region: &iso18626.TypeSchemeValuePair{
-								Text: "IL",
-							},
-							PostalCode: "60606",
-							Country: &iso18626.TypeSchemeValuePair{
-								Text: "US",
-							},
+	msg := newReq(&iso18626.Request{
+		RequestingAgencyInfo: &iso18626.RequestingAgencyInfo{
+			Name: "University of Chicago (ISIL:US-IL-UC)",
+		},
+		RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+			{
+				Address: &iso18626.Address{
+					PhysicalAddress: &iso18626.PhysicalAddress{
+						Line1:    "124 Main St",
+						Line2:    "",
+						Locality: "Chicago",
+						Region: &iso18626.TypeSchemeValuePair{
+							Text: "IL",
+						},
+						PostalCode: "60606",
+						Country: &iso18626.TypeSchemeValuePair{
+							Text: "US",
 						},
 					},
 				},
 			},
-			ServiceInfo: &iso18626.ServiceInfo{
-				Note: "#seq:0#original note",
-				ServiceLevel: &iso18626.TypeSchemeValuePair{
-					Text: "secondarymail",
-				},
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			Note: "#seq:0#original note",
+			ServiceLevel: &iso18626.TypeSchemeValuePair{
+				Text: "secondarymail",
 			},
-			SupplierInfo: []iso18626.SupplierInfo{
-				{
-					SupplierDescription: RETURN_ADDRESS_BEGIN + "\nsome address\n" + RETURN_ADDRESS_END + "\n",
-				},
+		},
+		SupplierInfo: []iso18626.SupplierInfo{
+			{
+				SupplierDescription: RETURN_ADDRESS_BEGIN + "\nsome address\n" + RETURN_ADDRESS_END + "\n",
 			},
-			PublicationInfo: &iso18626.PublicationInfo{
-				PublicationType: &iso18626.TypeSchemeValuePair{
-					Text: "book",
-				},
+		},
+		PublicationInfo: &iso18626.PublicationInfo{
+			PublicationType: &iso18626.TypeSchemeValuePair{
+				Text: "book",
 			},
-			BillingInfo: &iso18626.BillingInfo{
-				MaximumCosts: &iso18626.TypeCosts{
-					MonetaryValue: utils.XSDDecimal{
-						Base: 1061,
-						Exp:  2,
-					},
-					CurrencyCode: iso18626.TypeSchemeValuePair{
-						Text: "USD",
-					},
+		},
+		BillingInfo: &iso18626.BillingInfo{
+			MaximumCosts: &iso18626.TypeCosts{
+				MonetaryValue: utils.XSDDecimal{
+					Base: 1061,
+					Exp:  2,
+				},
+				CurrencyCode: iso18626.TypeSchemeValuePair{
+					Text: "USD",
 				},
 			},
 		},
-	}
+	})
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
 	isbn := iso18626.BibliographicItemId{
 		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
@@ -429,11 +425,11 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 	}
 	msg.Request.BibliographicInfo.BibliographicRecordId = append(msg.Request.BibliographicInfo.BibliographicRecordId, lccn, badRecId)
 	shim := GetShim(string(directory.Alma))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
 	}
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = shim.ApplyToIncomingResponse(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to apply incoming")
@@ -458,16 +454,14 @@ func TestIso18626AlmaShimRequest(t *testing.T) {
 }
 
 func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Action: iso18626.TypeActionNotification,
-			Note:   "#seq:2#original note",
-		},
-	}
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionNotification,
+		Note:   "#seq:2#original note",
+	})
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
@@ -475,16 +469,14 @@ func TestIso18626AlmaShimStripReqSeqMsg(t *testing.T) {
 }
 
 func TestIso18626AlmaShimHumanizeReShareRequesterNote(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Action: iso18626.TypeActionNotification,
-			Note:   RESHARE_LOAN_CONDITION_AGREE + "Accept",
-		},
-	}
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionNotification,
+		Note:   RESHARE_LOAN_CONDITION_AGREE + "Accept",
+	})
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
 
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
@@ -492,17 +484,15 @@ func TestIso18626AlmaShimHumanizeReShareRequesterNote(t *testing.T) {
 }
 
 func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			MessageInfo: iso18626.MessageInfo{
-				Note: RESHARE_SUPPLIER_AWAITING_CONDITION + "#seq:1#",
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{
+			Note: RESHARE_SUPPLIER_AWAITING_CONDITION + "#seq:1#",
 		},
-	}
+	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
@@ -510,52 +500,48 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditions(t *testing.T) {
 }
 
 func TestIso18626AlmaShimSupplyingMessageAddLoanCondition(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			MessageInfo: iso18626.MessageInfo{
-				Note: RESHARE_ADD_LOAN_CONDITION + "#seq:1#",
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				LoanCondition: &iso18626.TypeSchemeValuePair{
-					Text: "libraryuseonly",
-				},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{
+			Note: RESHARE_ADD_LOAN_CONDITION + "#seq:1#",
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			LoanCondition: &iso18626.TypeSchemeValuePair{
+				Text: "libraryuseonly",
 			},
 		},
-	}
+	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 	assert.Equal(t, LOAN_CONDITION_PRE+string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
 func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			MessageInfo: iso18626.MessageInfo{
-				Note: RESHARE_ADD_LOAN_CONDITION + "staff note#seq:1#",
-				OfferedCosts: &iso18626.TypeCosts{
-					MonetaryValue: utils.XSDDecimal{
-						Base: 20,
-					},
-					CurrencyCode: iso18626.TypeSchemeValuePair{
-						Text: "EUR",
-					},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{
+			Note: RESHARE_ADD_LOAN_CONDITION + "staff note#seq:1#",
+			OfferedCosts: &iso18626.TypeCosts{
+				MonetaryValue: utils.XSDDecimal{
+					Base: 20,
 				},
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				LoanCondition: &iso18626.TypeSchemeValuePair{
-					Text: "libraryuseonly",
+				CurrencyCode: iso18626.TypeSchemeValuePair{
+					Text: "EUR",
 				},
 			},
 		},
-	}
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			LoanCondition: &iso18626.TypeSchemeValuePair{
+				Text: "libraryuseonly",
+			},
+		},
+	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
@@ -565,17 +551,15 @@ func TestIso18626AlmaShimSupplyingMessageAddLoanConditionWithNote(t *testing.T) 
 }
 
 func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			MessageInfo: iso18626.MessageInfo{
-				Note: RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED + "#seq:1#",
-			},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{
+			Note: RESHARE_SUPPLIER_CONDITIONS_ASSUMED_AGREED + "#seq:1#",
 		},
-	}
+	})
 
-	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(&msg)
+	msgBytes, err := GetShim(string(directory.Alma)).ApplyToOutgoingRequest(msg)
 	assert.Nil(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
 	assert.Nil(t, err)
 
@@ -583,48 +567,44 @@ func TestIso18626AlmaShimSupplyingMessageLoanConditionsAssumedAgreed(t *testing.
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionAccept(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: "ISL",
-					},
-					AgencyIdValue: "BROKER",
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISL",
 				},
+				AgencyIdValue: "BROKER",
 			},
-			Action: iso18626.TypeActionNotification,
-			Note:   "`Accept`",
 		},
-	}
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+		Action: iso18626.TypeActionNotification,
+		Note:   "`Accept`",
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_AGREE+"`Accept`", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 
 	msg.RequestingAgencyMessage.Note = "I will accept"
-	resmsg = GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+	resmsg = GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, "I will accept", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
 func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: "ISL",
-					},
-					AgencyIdValue: "BROKER",
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISL",
 				},
+				AgencyIdValue: "BROKER",
 			},
-			Action: iso18626.TypeActionNotification,
-			Note:   "--ReJeCT;",
 		},
-	}
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+		Action: iso18626.TypeActionNotification,
+		Note:   "--ReJeCT;",
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
@@ -635,20 +615,18 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 }
 
 func TestIso18626AlmaShimRequestingMessageOriginalCancelKeepsSupplyingAgencyId(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: "ISIL",
-					},
-					AgencyIdValue: "BROKER",
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
 				},
+				AgencyIdValue: "BROKER",
 			},
-			Action: iso18626.TypeActionCancel,
 		},
-	}
-	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(&msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+		Action: iso18626.TypeActionCancel,
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
@@ -659,27 +637,25 @@ func TestIso18626AlmaShimRequestingMessageOriginalCancelKeepsSupplyingAgencyId(t
 
 func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	OFFERED_COSTS = true // ensure that offered costs are enabled
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoaned,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				DeliveryCosts: &iso18626.TypeCosts{
-					MonetaryValue: utils.XSDDecimal{
-						Base: 1010,
-						Exp:  2,
-					},
-					CurrencyCode: iso18626.TypeSchemeValuePair{
-						Text: "USD",
-					},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			DeliveryCosts: &iso18626.TypeCosts{
+				MonetaryValue: utils.XSDDecimal{
+					Base: 1010,
+					Exp:  2,
+				},
+				CurrencyCode: iso18626.TypeSchemeValuePair{
+					Text: "USD",
 				},
 			},
 		},
-	}
+	})
 	assert.Equal(t, iso18626.TypeStatusLoaned, msg.SupplyingAgencyMessage.StatusInfo.Status)
 	assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage)
 	assert.NotNil(t, msg.SupplyingAgencyMessage.DeliveryInfo, "DeliveryInfo should not be nil")
@@ -690,11 +666,11 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 	assert.Nil(t, msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition, "LoanCondition should be nil")
 
 	shim := GetShim(string(directory.ReShare))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
 	}
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to unmarshal outgoing")
@@ -714,34 +690,32 @@ func TestIso18626AReShareShimSupplyingOutgoing(t *testing.T) {
 
 func TestIso18626AReShareShimSupplyingOutgoingZeroCost(t *testing.T) {
 	OFFERED_COSTS = true // ensure that offered costs are enabled
-	msg := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			StatusInfo: iso18626.StatusInfo{
-				Status: iso18626.TypeStatusLoaned,
-			},
-			MessageInfo: iso18626.MessageInfo{
-				ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-			},
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				DeliveryCosts: &iso18626.TypeCosts{
-					MonetaryValue: utils.XSDDecimal{
-						Base: 0,
-						Exp:  2,
-					},
-					CurrencyCode: iso18626.TypeSchemeValuePair{
-						Text: "USD",
-					},
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusLoaned,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			DeliveryCosts: &iso18626.TypeCosts{
+				MonetaryValue: utils.XSDDecimal{
+					Base: 0,
+					Exp:  2,
+				},
+				CurrencyCode: iso18626.TypeSchemeValuePair{
+					Text: "USD",
 				},
 			},
 		},
-	}
+	})
 
 	shim := GetShim(string(directory.ReShare))
-	bytes, err := shim.ApplyToOutgoingRequest(&msg)
+	bytes, err := shim.ApplyToOutgoingRequest(msg)
 	if err != nil {
 		t.Errorf("failed to apply outgoing")
 	}
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = xml.Unmarshal(bytes, &resmsg)
 	if err != nil {
 		t.Errorf("failed to unmarshal outgoing")
@@ -823,25 +797,23 @@ func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 func TestProcessItemIdOneItemSimpleReShare(t *testing.T) {
 	shimR := new(Iso18626ReShareShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "1|23\\",
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note: "send one item",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "1|23\\",
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send one item",
+		},
+	})
 
-	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimR.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "1|23\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send one item\n#MultipleItems#\n1\\|23\\\\\n#MultipleItemsEnd#", result.SupplyingAgencyMessage.MessageInfo.Note)
 
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
@@ -849,19 +821,17 @@ func TestProcessItemIdOneItemSimpleReShare(t *testing.T) {
 }
 
 func TestIso18626ReShareShimRequestingMessageSupplierCancelMarkedAsConditionReject(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-					AgencyIdValue: "SUP1",
-				},
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP1",
 			},
-			Action: iso18626.TypeActionCancel,
 		},
-	}
+		Action: iso18626.TypeActionCancel,
+	})
 
-	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(&msg, nil, nil)
+	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT, resmsg.RequestingAgencyMessage.Note)
@@ -869,19 +839,17 @@ func TestIso18626ReShareShimRequestingMessageSupplierCancelMarkedAsConditionReje
 }
 
 func TestIso18626ReShareShimRequestingMessageBrokerCancelNotMarkedAsConditionReject(t *testing.T) {
-	msg := iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-					AgencyIdValue: "BROKER",
-				},
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "BROKER",
 			},
-			Action: iso18626.TypeActionCancel,
 		},
-	}
+		Action: iso18626.TypeActionCancel,
+	})
 
-	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(&msg, nil, nil)
+	resmsg := GetShim(string(directory.ReShare)).ApplyToIncomingRequest(msg, nil, nil)
 
 	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
 	assert.Empty(t, resmsg.RequestingAgencyMessage.Note)
@@ -891,18 +859,16 @@ func TestIso18626ReShareShimRequestingMessageBrokerCancelNotMarkedAsConditionRej
 func TestProcessItemIdOneItemReShare(t *testing.T) {
 	shimR := new(Iso18626ReShareShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "name1|2,3\\,c|123,id|123",
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note: "send one item",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "name1|2,3\\,c|123,id|123",
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send one item",
+		},
+	})
 
-	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimR.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "name1|2,3\\,c|123,id|123", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send one item\n"+
 		"#MultipleItems#\n"+
@@ -912,7 +878,7 @@ func TestProcessItemIdOneItemReShare(t *testing.T) {
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "name1|2,3\\,c|123,id|123", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
@@ -922,18 +888,16 @@ func TestProcessItemIdOneItemReShare(t *testing.T) {
 func TestProcessItemIdMultipleItemsReShare(t *testing.T) {
 	shimR := new(Iso18626ReShareShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note: "send multiple items",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send multiple items",
+		},
+	})
 
-	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimR.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send multiple items\n"+
 		"#MultipleItems#\n"+
@@ -945,7 +909,7 @@ func TestProcessItemIdMultipleItemsReShare(t *testing.T) {
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
@@ -955,15 +919,13 @@ func TestProcessItemIdMultipleItemsReShare(t *testing.T) {
 func TestProcessItemIdMultipleItemsReShareNoNote(t *testing.T) {
 	shimR := new(Iso18626ReShareShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125",
 		},
-	}
+	})
 
-	result := shimR.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimR.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "#MultipleItems#\n"+
 		"name1\\|2,3\\\\|c\\|123|id\\|123\n"+
@@ -974,7 +936,7 @@ func TestProcessItemIdMultipleItemsReShareNoNote(t *testing.T) {
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimR.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "multivol:name1|2,3\\,c|123,id|123,multivol:name1|2,4\\,c|124,id|124,multivol:name1|2,5\\,c|125,id|125", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
@@ -984,18 +946,16 @@ func TestProcessItemIdMultipleItemsReShareNoNote(t *testing.T) {
 func TestProcessItemIdOneItemAlma(t *testing.T) {
 	shimA := new(Iso18626AlmaShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "1|23\\",
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note: "send one item",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "1|23\\",
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send one item",
+		},
+	})
 
-	result := shimA.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimA.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "1|23\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send one item\n"+
 		"#MultipleItems#\n"+
@@ -1005,7 +965,7 @@ func TestProcessItemIdOneItemAlma(t *testing.T) {
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimA.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
@@ -1015,18 +975,16 @@ func TestProcessItemIdOneItemAlma(t *testing.T) {
 func TestProcessItemIdMultipleItemsAlma(t *testing.T) {
 	shimA := new(Iso18626AlmaShim)
 
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			DeliveryInfo: &iso18626.DeliveryInfo{
-				ItemId: "1|23\\,1|24\\,1|25\\",
-			},
-			MessageInfo: iso18626.MessageInfo{
-				Note: "send multiple items",
-			},
+	sam := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "1|23\\,1|24\\,1|25\\",
 		},
-	}
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send multiple items",
+		},
+	})
 
-	result := shimA.ApplyToIncomingRequest(&sam, nil, nil)
+	result := shimA.ApplyToIncomingRequest(sam, nil, nil)
 	assert.Equal(t, "1|23\\,1|24\\,1|25\\", result.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 	assert.Equal(t, "send multiple items\n"+
 		"#MultipleItems#\n"+
@@ -1038,7 +996,7 @@ func TestProcessItemIdMultipleItemsAlma(t *testing.T) {
 	result.SupplyingAgencyMessage.DeliveryInfo.ItemId = ""
 	mesBytes, err := shimA.ApplyToOutgoingRequest(result)
 	assert.NoError(t, err)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err = new(Iso18626DefaultShim).ApplyToIncomingResponse(mesBytes, &resmsg)
 	assert.NoError(t, err)
 	assert.Equal(t, "1|23\\,1|24\\,1|25\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)

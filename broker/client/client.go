@@ -114,12 +114,12 @@ func (c *Iso18626Client) getSkippedSupplierAndPeer(ctx common.ExtendedContext, i
 	return &skipped, &skippedPeer, nil
 }
 
-func isNotification(msg *iso18626.ISO18626Message) bool {
+func isNotification(msg *iso18626.Iso18626MessageNS) bool {
 	return msg != nil && msg.SupplyingAgencyMessage != nil &&
 		msg.SupplyingAgencyMessage.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageNotification
 }
 
-func getSymbol(msg *iso18626.ISO18626Message) string {
+func getSymbol(msg *iso18626.Iso18626MessageNS) string {
 	symbol := ""
 	if msg != nil && msg.SupplyingAgencyMessage != nil {
 		symbol = msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
@@ -128,7 +128,7 @@ func getSymbol(msg *iso18626.ISO18626Message) string {
 	return symbol
 }
 
-func populateReturnAddress(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
+func populateReturnAddress(message *iso18626.Iso18626MessageNS, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
 	if message.SupplyingAgencyMessage.ReturnInfo == nil {
 		message.SupplyingAgencyMessage.ReturnInfo = &iso18626.ReturnInfo{}
 	}
@@ -172,7 +172,7 @@ func (c *Iso18626Client) updateSupplierStatus(ctx common.ExtendedContext, id str
 	return err
 }
 
-func populateRequesterInfo(message *iso18626.ISO18626Message, name string, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
+func populateRequesterInfo(message *iso18626.Iso18626MessageNS, name string, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
 	if message.Request.RequestingAgencyInfo == nil || message.Request.RequestingAgencyInfo.Name == "" {
 		if message.Request.RequestingAgencyInfo == nil {
 			message.Request.RequestingAgencyInfo = &iso18626.RequestingAgencyInfo{}
@@ -200,7 +200,7 @@ func populateRequesterInfo(message *iso18626.ISO18626Message, name string, addre
 	}
 }
 
-func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
+func populateDeliveryAddress(message *iso18626.Iso18626MessageNS, address iso18626.PhysicalAddress, email iso18626.ElectronicAddress) {
 	var hasAddress, hasEmail bool
 	for _, di := range message.Request.RequestedDeliveryInfo {
 		if di.Address != nil {
@@ -243,7 +243,7 @@ func populateDeliveryAddress(message *iso18626.ISO18626Message, address iso18626
 	}
 }
 
-func populateSupplierInfo(message *iso18626.ISO18626Message, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
+func populateSupplierInfo(message *iso18626.Iso18626MessageNS, name string, agencyId iso18626.TypeAgencyId, address iso18626.PhysicalAddress) {
 	if isEmptySupplierInfo(message.Request.SupplierInfo) {
 		var sb strings.Builder
 		shim.MarshalReturnLabel(&sb, name, &address)
@@ -357,7 +357,7 @@ func guessReason(reason iso18626.TypeReasonForMessage, requesterAction string, p
 	return expectedReason
 }
 
-func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, response *iso18626.ISO18626Message, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
+func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, response *iso18626.Iso18626MessageNS, defaultStatus events.EventStatus, result *events.EventResult) events.EventStatus {
 	status := defaultStatus
 	if response.RequestConfirmation != nil &&
 		response.RequestConfirmation.ConfirmationHeader.MessageStatus == iso18626.TypeMessageStatusERROR {
@@ -454,7 +454,7 @@ func (c *Iso18626Client) checkConfirmationError(ctx common.ExtendedContext, resp
 	return status
 }
 
-func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_db.Peer, msg *iso18626.Iso18626MessageNS) (*iso18626.Iso18626MessageNS, error) {
 	if peer == nil {
 		return nil, fmt.Errorf("peer is nil")
 	}
@@ -464,7 +464,7 @@ func (c *Iso18626Client) HandleIllMessage(ctx common.ExtendedContext, peer *ill_
 	return c.SendHttpPost(peer, msg)
 }
 
-func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.Iso18626MessageNS) (*iso18626.Iso18626MessageNS, error) {
 	httpClient := httpclient.NewClient().
 		WithMaxSize(int64(c.maxMsgSize)).
 		WithHeaders("User-Agent", vcs.GetSignature())
@@ -473,20 +473,20 @@ func (c *Iso18626Client) SendHttpPost(peer *ill_db.Peer, msg *iso18626.ISO18626M
 	}
 	time.Sleep(c.sendDelay)
 	iso18626Shim := shim.GetShim(peer.Vendor)
-	var resmsg iso18626.ISO18626Message
+	var resmsg iso18626.Iso18626MessageNS
 	err := httpClient.RequestResponse(c.client, http.MethodPost,
 		[]string{httpclient.ContentTypeApplicationXml, httpclient.ContentTypeTextXml},
 		peer.Url, msg, &resmsg, func(v any) ([]byte, error) {
-			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
+			if isoM, ok := v.(*iso18626.Iso18626MessageNS); ok {
 				return iso18626Shim.ApplyToOutgoingRequest(isoM)
 			} else {
-				return []byte{}, fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
+				return []byte{}, fmt.Errorf("v is not a *iso18626.Iso18626MessageNS: %v", v)
 			}
 		}, func(b []byte, v any) error {
-			if isoM, ok := v.(*iso18626.ISO18626Message); ok {
+			if isoM, ok := v.(*iso18626.Iso18626MessageNS); ok {
 				return iso18626Shim.ApplyToIncomingResponse(b, isoM)
 			} else {
-				return fmt.Errorf("v is not a *iso18626.ISO18626Message: %v", v)
+				return fmt.Errorf("v is not a *iso18626.Iso18626MessageNS: %v", v)
 			}
 		})
 	if err != nil {
@@ -652,14 +652,13 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 	return nil, fmt.Errorf(FailedToResolveStatus, lastReceivedStatus.String)
 }
 
-func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarget) *iso18626.ISO18626Message {
-	var message *iso18626.ISO18626Message
+func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarget) *iso18626.Iso18626MessageNS {
+	var message *iso18626.Iso18626MessageNS
 	if trCtx.event.EventData.IncomingMessage != nil && trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
 		message = trCtx.event.EventData.IncomingMessage
 	} else {
-		message = &iso18626.ISO18626Message{
-			SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
-		}
+		message = iso18626.NewIso18626MessageNS()
+		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 		if trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) && target.brokerMessage {
 			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
 		}
@@ -706,7 +705,7 @@ func prependSupplierSymbolNote(trCtx transactionContext, sam *iso18626.Supplying
 	}
 }
 
-func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) sendAndUpdateStatus(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.Iso18626MessageNS) (events.EventStatus, *events.EventResult) {
 	resData := &events.EventResult{}
 	resData.OutgoingMessage = message
 
@@ -747,7 +746,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 	// the action on the transaction is not relevant and we need to look at the new supplier's last action
 	// however, if requester sends a retry request it is captured on the transaction
 	var isRequest = trCtx.selectedSupplier.LastAction.String == "" || trCtx.transaction.LastRequesterAction.String == string(ill_db.RequestAction)
-	var message *iso18626.ISO18626Message
+	var message *iso18626.Iso18626MessageNS
 	var action iso18626.TypeAction
 	if isRequest {
 		message, action = createRequestMessage(trCtx)
@@ -760,8 +759,8 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 	return c.sendAndUpdateSupplier(ctx, trCtx, message, action)
 }
 
-func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
-	var message = &iso18626.ISO18626Message{}
+func createRequestMessage(trCtx transactionContext) (*iso18626.Iso18626MessageNS, iso18626.TypeAction) {
+	var message = iso18626.NewIso18626MessageNS()
 	message.Request = &iso18626.Request{
 		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedPeer.BrokerMode),
 		BibliographicInfo:     trCtx.transaction.IllTransactionData.BibliographicInfo,
@@ -786,8 +785,8 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	return message, ill_db.RequestAction
 }
 
-func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction, error) {
-	var message = &iso18626.ISO18626Message{}
+func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.Iso18626MessageNS, iso18626.TypeAction, error) {
+	var message = iso18626.NewIso18626MessageNS()
 	found, ok := iso18626.ActionMap[trCtx.transaction.LastRequesterAction.String]
 	if !ok {
 		return message, "", fmt.Errorf("failed to resolve action for value: %s", trCtx.transaction.LastRequesterAction.String)
@@ -804,7 +803,7 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 	return message, found, nil
 }
 
-func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.ISO18626Message, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
+func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx transactionContext, message *iso18626.Iso18626MessageNS, action iso18626.TypeAction) (events.EventStatus, *events.EventResult) {
 	eventStatus := events.EventStatusSuccess
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message

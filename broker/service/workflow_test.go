@@ -144,22 +144,22 @@ func TestRequesterMessageReceived_BrokerCancelSkipsNewSuppliers(t *testing.T) {
 		})).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionCancel,
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "BROKER",
+			},
+		},
+	}
 	manager.RequesterMessageReceived(appCtx, events.Event{
 		IllTransactionID: "1", // opaque mode in MockIllRepositoryRequester
 		EventStatus:      events.EventStatusSuccess,
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-						Action: iso18626.TypeActionCancel,
-						Header: iso18626.Header{
-							SupplyingAgencyId: iso18626.TypeAgencyId{
-								AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-								AgencyIdValue: "BROKER",
-							},
-						},
-					},
-				},
+				IncomingMessage: message,
 			},
 		},
 	})
@@ -175,28 +175,33 @@ func TestRequesterMessageReceived_SupplierCancelDoesNotSkipNewSuppliers(t *testi
 	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything, mock.Anything).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionCancel,
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP1",
+			},
+		},
+	}
 	manager.RequesterMessageReceived(appCtx, events.Event{
 		IllTransactionID: "1", // opaque mode in MockIllRepositoryRequester
 		EventStatus:      events.EventStatusSuccess,
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-						Action: iso18626.TypeActionCancel,
-						Header: iso18626.Header{
-							SupplyingAgencyId: iso18626.TypeAgencyId{
-								AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
-								AgencyIdValue: "SUP1",
-							},
-						},
-					},
-				},
+				IncomingMessage: message,
 			},
 		},
 	})
 
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 	assert.Equal(t, 1, eventBus.TasksCreated)
+}
+func messageFromSam(sam *iso18626.SupplyingAgencyMessage) *iso18626.Iso18626MessageNS {
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = sam
+	return message
 }
 
 func TestOnMessageRequesterComplete(t *testing.T) {
@@ -216,7 +221,7 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
-						IncomingMessage: &iso18626.ISO18626Message{},
+						IncomingMessage: messageFromSam(nil),
 					},
 				},
 			},
@@ -226,9 +231,7 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
-						IncomingMessage: &iso18626.ISO18626Message{
-							SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
-						},
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{}),
 					},
 				},
 			},
@@ -239,13 +242,11 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
-						IncomingMessage: &iso18626.ISO18626Message{
-							SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-								StatusInfo: iso18626.StatusInfo{
-									Status: iso18626.TypeStatusUnfilled,
-								},
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusUnfilled,
 							},
-						},
+						}),
 					},
 				},
 			},
@@ -257,13 +258,11 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
-						IncomingMessage: &iso18626.ISO18626Message{
-							SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-								MessageInfo: iso18626.MessageInfo{
-									ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
-								},
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 							},
-						},
+						}),
 					},
 				},
 			},
@@ -274,16 +273,14 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
-						IncomingMessage: &iso18626.ISO18626Message{
-							SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-								MessageInfo: iso18626.MessageInfo{
-									ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
-								},
-								StatusInfo: iso18626.StatusInfo{
-									Status: iso18626.TypeStatusCancelled,
-								},
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 							},
-						},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusCancelled,
+							},
+						}),
 					},
 				},
 			},
@@ -327,9 +324,7 @@ func (r *MockEventRepositoryIncorrect) GetLatestRequestEventByAction(ctx common.
 	return events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
-				},
+				IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{}),
 			},
 		},
 	}, nil
@@ -344,21 +339,21 @@ func (r *MockEventRepositoryCorrect) GetLatestRequestEventByAction(ctx common.Ex
 	if illTransId == "2" {
 		supId = "BROKER"
 	}
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: supId,
+			},
+		},
+	}
 	return events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-						Header: iso18626.Header{
-							SupplyingAgencyId: iso18626.TypeAgencyId{
-								AgencyIdType: iso18626.TypeSchemeValuePair{
-									Text: "ISIL",
-								},
-								AgencyIdValue: supId,
-							},
-						},
-					},
-				},
+				IncomingMessage: message,
 			},
 		},
 	}, nil
