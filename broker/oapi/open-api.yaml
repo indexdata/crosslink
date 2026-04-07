@@ -542,7 +542,7 @@ components:
       properties:
         name:
           type: string
-          description: Name of the action parameter
+          description: Name of the action
         parameters:
           type: array
           description: List of parameters for this action

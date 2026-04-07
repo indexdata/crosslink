@@ -344,7 +344,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait till action available
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionReceive)+"\"")
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionSendRequest)+"\"")
 	})
 
 	action := proapi.ExecuteAction{

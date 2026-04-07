@@ -135,12 +135,12 @@ func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) p
 	hasFailed := false
 	var actionEntries []PatronRequestAction
 	var builtInActions []proapi.ActionCapability
-	capabilitiles := BuiltInStateModelCapabilities()
+	capabilities := BuiltInStateModelCapabilities()
 	if pr.Side == SideBorrowing {
-		builtInActions = capabilitiles.RequesterActions
+		builtInActions = capabilities.RequesterActions
 		actionEntries = r.borrowerStateActionMapping[pr.State]
 	} else {
-		builtInActions = capabilitiles.SupplierActions
+		builtInActions = capabilities.SupplierActions
 		actionEntries = r.lenderStateActionMapping[pr.State]
 	}
 	infoActions := proapi.InfoActions{
@@ -158,7 +158,8 @@ func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) p
 			if capability.Name == name {
 				var primary *bool
 				if action.primary {
-					primary = &action.primary
+					primary = new(bool)
+					*primary = true
 				}
 				infoActions.Actions = append(infoActions.Actions,
 					proapi.InfoAction{

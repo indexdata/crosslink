@@ -184,8 +184,8 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 		{
 			Name: string(LenderActionCannotSupply),
 			Parameters: []string{
-				"reasonUnfilled",
 				"note",
+				"reasonUnfilled",
 			},
 		},
 		{
