@@ -127,31 +127,40 @@ func supplierBuiltInStates() []string {
 func requesterBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
-			Name: string(BorrowerActionValidate),
+			Name:       string(BorrowerActionValidate),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionSendRequest),
+			Name:       string(BorrowerActionSendRequest),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionCancelRequest),
+			Name:       string(BorrowerActionCancelRequest),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionAcceptCondition),
+			Name:       string(BorrowerActionAcceptCondition),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionRejectCondition),
+			Name:       string(BorrowerActionRejectCondition),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionReceive),
+			Name:       string(BorrowerActionReceive),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionCheckOut),
+			Name:       string(BorrowerActionCheckOut),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionCheckIn),
+			Name:       string(BorrowerActionCheckIn),
+			Parameters: []string{},
 		},
 		{
-			Name: string(BorrowerActionShipReturn),
+			Name:       string(BorrowerActionShipReturn),
+			Parameters: []string{},
 		},
 	}
 }
@@ -159,7 +168,8 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 func supplierBuiltInActions() []proapi.ActionCapability {
 	return []proapi.ActionCapability{
 		{
-			Name: string(LenderActionValidate),
+			Name:       string(LenderActionValidate),
+			Parameters: []string{},
 		},
 		{
 			Name: string(LenderActionWillSupply),
@@ -168,13 +178,14 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			},
 		},
 		{
-			Name: string(LenderActionRejectCancel),
+			Name:       string(LenderActionRejectCancel),
+			Parameters: []string{},
 		},
 		{
 			Name: string(LenderActionCannotSupply),
 			Parameters: []string{
-				"reasonUnfilled",
 				"note",
+				"reasonUnfilled",
 			},
 		},
 		{
@@ -193,10 +204,12 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			},
 		},
 		{
-			Name: string(LenderActionMarkReceived),
+			Name:       string(LenderActionMarkReceived),
+			Parameters: []string{},
 		},
 		{
-			Name: string(LenderActionAcceptCancel),
+			Name:       string(LenderActionAcceptCancel),
+			Parameters: []string{},
 		},
 	}
 }

@@ -537,6 +537,34 @@ components:
       required:
         - action
 
+    AllowedAction:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the action
+        parameters:
+          type: array
+          description: List of parameters for this action
+          items:
+            type: string
+        primary:
+          type: boolean
+          description: Indicates if this action is primary action for the state
+      required:
+        - name
+        - parameters
+
+    AllowedActions:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedAction'
+      required:
+        - actions
+
     ActionResult:
       type: object
       properties:
@@ -1312,9 +1340,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: '#/components/schemas/AllowedActions'
         '404':
           description: Patron request not found
           content:

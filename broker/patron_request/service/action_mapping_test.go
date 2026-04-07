@@ -6,6 +6,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -92,10 +93,27 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
 }
 
+func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
+	mapping := mustActionMapping(t)
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}}, mapping.GetAllowedActionsForPatronRequest(
+		pr_db.PatronRequest{
+			Side: SideBorrowing, State: BorrowerStateNew}))
+
+	tt := true
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt}}},
+		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
+		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}},
+		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt},
+		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}},
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+}
+
 func TestGetActionTransitionMissingCases(t *testing.T) {
 	mapping := mustActionMapping(t)
 
-	// Supported action, but failure transition is not defined in state model.
+	// Supported action, but failure transition is not defined in state model	.
 	_, ok := mapping.GetActionTransition(
 		pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew},
 		BorrowerActionValidate,

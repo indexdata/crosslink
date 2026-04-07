@@ -220,10 +220,10 @@ func TestCrud(t *testing.T) {
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\"send-request\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\"send-request\"")
 	})
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-	assert.Equal(t, "[\"send-request\"]\n", string(respBytes))
+	assert.Equal(t, "{\"actions\":[{\"name\":\"send-request\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
 
 	// POST execute action
 	action := proapi.ExecuteAction{
@@ -252,7 +252,7 @@ func TestCrud(t *testing.T) {
 	// Wait till requester response processed
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\"receive\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\"receive\"")
 	})
 
 	// POST blocking action
@@ -345,7 +345,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait till action available
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.BorrowerActionSendRequest)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionSendRequest)+"\"")
 	})
 
 	action := proapi.ExecuteAction{
@@ -374,7 +374,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	supQueryParams := "?side=lending&symbol=" + supplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.LenderActionShip)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.LenderActionShip)+"\"")
 	})
 
 	// Ship
@@ -392,7 +392,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.BorrowerActionReceive)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionReceive)+"\"")
 	})
 
 	// Receive
@@ -410,7 +410,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.BorrowerActionCheckOut)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionCheckOut)+"\"")
 	})
 
 	// Check out
@@ -428,7 +428,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.BorrowerActionCheckIn)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionCheckIn)+"\"")
 	})
 
 	// Check in
@@ -446,7 +446,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/actions"+queryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.BorrowerActionShipReturn)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionShipReturn)+"\"")
 	})
 
 	// Ship return
@@ -464,7 +464,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	// Wait for action
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
-		return string(respBytes) == "[\""+string(prservice.LenderActionMarkReceived)+"\"]\n"
+		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.LenderActionMarkReceived)+"\"")
 	})
 
 	// Ship return
