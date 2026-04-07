@@ -376,12 +376,11 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	}
 	illRequest.PatronInfo.PatronId = pr.Patron.String
 
-	var illMessage = iso18626.ISO18626Message{
-		Request: &illRequest,
-	}
+	var illMessage = iso18626.NewIso18626MessageNS()
+	illMessage.Request = &illRequest
 	w := NewResponseCaptureWriter()
-	a.iso18626Handler.HandleRequest(ctx, &illMessage, w)
-	result.OutgoingMessage = &illMessage
+	a.iso18626Handler.HandleRequest(ctx, illMessage, w)
+	result.OutgoingMessage = illMessage
 	result.IncomingMessage = w.IllMessage
 	if w.StatusCode != http.StatusOK || w.IllMessage == nil || w.IllMessage.RequestConfirmation == nil ||
 		w.IllMessage.RequestConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
@@ -532,31 +531,30 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 		status, eventResult := a.logErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	var illMessage = iso18626.ISO18626Message{
-		RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-			Header: iso18626.Header{
-				RequestingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: requesterSymbol[0],
-					},
-					AgencyIdValue: requesterSymbol[1],
+	var illMessage = iso18626.NewIso18626MessageNS()
+	illMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: requesterSymbol[0],
 				},
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: supplierSymbol[0],
-					},
-					AgencyIdValue: supplierSymbol[1],
-				},
-				Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-				RequestingAgencyRequestId: pr.ID,
+				AgencyIdValue: requesterSymbol[1],
 			},
-			Action: action,
-			Note:   note,
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: supplierSymbol[0],
+				},
+				AgencyIdValue: supplierSymbol[1],
+			},
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+			RequestingAgencyRequestId: pr.ID,
 		},
+		Action: action,
+		Note:   note,
 	}
 	w := NewResponseCaptureWriter()
-	a.iso18626Handler.HandleRequestingAgencyMessage(ctx, &illMessage, w)
-	result.OutgoingMessage = &illMessage
+	a.iso18626Handler.HandleRequestingAgencyMessage(ctx, illMessage, w)
+	result.OutgoingMessage = illMessage
 	result.IncomingMessage = w.IllMessage
 	return "", nil, &w.StatusCode
 }
@@ -837,29 +835,28 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 	// pr.SupplierSymbol is validated earlier in handleLenderAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
-	var illMessage = iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			Header: iso18626.Header{
-				RequestingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: requesterSymbol[0],
-					},
-					AgencyIdValue: requesterSymbol[1],
+	var illMessage = iso18626.NewIso18626MessageNS()
+	illMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: requesterSymbol[0],
 				},
-				SupplyingAgencyId: iso18626.TypeAgencyId{
-					AgencyIdType: iso18626.TypeSchemeValuePair{
-						Text: supplierSymbol[0],
-					},
-					AgencyIdValue: supplierSymbol[1],
-				},
-				Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-				RequestingAgencyRequestId: pr.RequesterReqID.String,
-				SupplyingAgencyRequestId:  pr.ID,
+				AgencyIdValue: requesterSymbol[1],
 			},
-			MessageInfo:  messageInfo,
-			StatusInfo:   statusInfo,
-			DeliveryInfo: deliveryInfo,
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: supplierSymbol[0],
+				},
+				AgencyIdValue: supplierSymbol[1],
+			},
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+			RequestingAgencyRequestId: pr.RequesterReqID.String,
+			SupplyingAgencyRequestId:  pr.ID,
 		},
+		MessageInfo:  messageInfo,
+		StatusInfo:   statusInfo,
+		DeliveryInfo: deliveryInfo,
 	}
 	if illMessage.SupplyingAgencyMessage.StatusInfo.LastChange.IsZero() {
 		illMessage.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
@@ -873,8 +870,8 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 		}
 	}
 	w := NewResponseCaptureWriter()
-	a.iso18626Handler.HandleSupplyingAgencyMessage(ctx, &illMessage, w)
-	result.OutgoingMessage = &illMessage
+	a.iso18626Handler.HandleSupplyingAgencyMessage(ctx, illMessage, w)
+	result.OutgoingMessage = illMessage
 	result.IncomingMessage = w.IllMessage
 	return "", nil, &w.StatusCode
 }
@@ -911,7 +908,7 @@ func (a *PatronRequestActionService) markActionChainFailure(ctx common.ExtendedC
 }
 
 type ResponseCaptureWriter struct {
-	IllMessage *iso18626.ISO18626Message
+	IllMessage *iso18626.Iso18626MessageNS
 	StatusCode int
 }
 

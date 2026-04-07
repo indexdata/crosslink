@@ -79,7 +79,7 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	return pr, false, true, nil
 }
 
-func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (*iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) HandleMessage(ctx common.ExtendedContext, msg *iso18626.Iso18626MessageNS) (*iso18626.Iso18626MessageNS, error) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP_MESSAGE))
 	if msg == nil {
 		return nil, errors.New("cannot process nil message")
@@ -100,9 +100,9 @@ func (m *PatronRequestMessageHandler) getPatronRequestForRequestingAgencyMessage
 func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 	ctx common.ExtendedContext,
 	prID string,
-	incoming *iso18626.ISO18626Message,
-	handler func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error),
-) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	incoming *iso18626.Iso18626MessageNS,
+	handler func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error),
+) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
 	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil)
 	if err != nil {
@@ -111,7 +111,7 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 
 	var (
 		handlerStatus events.EventStatus
-		response      *iso18626.ISO18626Message
+		response      *iso18626.Iso18626MessageNS
 		handleErr     error
 	)
 
@@ -146,13 +146,13 @@ func taskParentID(task *events.Event) *string {
 	return &task.ID
 }
 
-func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.ISO18626Message) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.ExtendedContext, msg *iso18626.Iso18626MessageNS) (events.EventStatus, *iso18626.Iso18626MessageNS, pr_db.PatronRequest, error) {
 	if msg.SupplyingAgencyMessage != nil {
 		pr, err := m.prRepo.GetPatronRequestByIdAndSide(ctx, msg.SupplyingAgencyMessage.Header.RequestingAgencyRequestId, SideBorrowing)
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 			return m.handleSupplyingAgencyMessageWithParent(execCtx, *msg.SupplyingAgencyMessage, pr, parentEventID)
 		})
 		return status, response, pr, err
@@ -161,7 +161,7 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 		if err != nil {
 			return events.EventStatusError, nil, pr_db.PatronRequest{}, err
 		}
-		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+		status, response, err := m.processPatronRequestMessageTask(ctx, pr.ID, msg, func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 			return m.handleRequestingAgencyMessageWithParent(execCtx, *msg.RequestingAgencyMessage, pr, parentEventID)
 		})
 		return status, response, pr, err
@@ -173,26 +173,26 @@ func (m *PatronRequestMessageHandler) handlePatronRequestMessage(ctx common.Exte
 	}
 }
 
-func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessage(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	return m.handleSupplyingAgencyMessageWithParent(ctx, sam, pr, nil)
 }
 
-func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	unsupportedReason := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
+	unsupportedReason := func() (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 		err := fmt.Errorf("unsupported reason for message: %s", sam.MessageInfo.ReasonForMessage)
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnsupportedReasonForMessageType,
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	statusChangeNotAllowed := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+	statusChangeNotAllowed := func() (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 		err := fmt.Errorf("status change not allowed: %s", sam.StatusInfo.Status)
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
 	}
-	contradictoryCancelResponse := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+	contradictoryCancelResponse := func() (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 		err := fmt.Errorf("contradictory cancel response: status=%s answerYesNo=%v", sam.StatusInfo.Status, sam.MessageInfo.AnswerYesNo)
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -279,7 +279,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -303,50 +303,48 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 	return createSAMResponse(sam, iso18626.TypeMessageStatusOK, nil, nil)
 }
 
-func createSAMResponse(sam iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func createSAMResponse(sam iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	eventStatus := events.EventStatusSuccess
 	if messageStatus != iso18626.TypeMessageStatusOK {
 		eventStatus = events.EventStatusProblem
 	}
-	return eventStatus, &iso18626.ISO18626Message{
-			SupplyingAgencyMessageConfirmation: &iso18626.SupplyingAgencyMessageConfirmation{
-				ConfirmationHeader: iso18626.ConfirmationHeader{
-					SupplyingAgencyId:         &sam.Header.SupplyingAgencyId,
-					RequestingAgencyId:        &sam.Header.RequestingAgencyId,
-					RequestingAgencyRequestId: sam.Header.RequestingAgencyRequestId,
-					TimestampReceived:         sam.Header.Timestamp,
-					Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-					MessageStatus:             messageStatus,
-				},
-				ReasonForMessage: &sam.MessageInfo.ReasonForMessage,
-				ErrorData:        errorData,
-			},
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			SupplyingAgencyId:         &sam.Header.SupplyingAgencyId,
+			RequestingAgencyId:        &sam.Header.RequestingAgencyId,
+			RequestingAgencyRequestId: sam.Header.RequestingAgencyRequestId,
+			TimestampReceived:         sam.Header.Timestamp,
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+			MessageStatus:             messageStatus,
 		},
-		err
+		ReasonForMessage: &sam.MessageInfo.ReasonForMessage,
+		ErrorData:        errorData,
+	}
+	return eventStatus, message, err
 }
 
-func createRequestResponse(request iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func createRequestResponse(request iso18626.Request, messageStatus iso18626.TypeMessageStatus, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	eventStatus := events.EventStatusSuccess
 	if messageStatus != iso18626.TypeMessageStatusOK {
 		eventStatus = events.EventStatusProblem
 	}
-	return eventStatus, &iso18626.ISO18626Message{
-			RequestConfirmation: &iso18626.RequestConfirmation{
-				ConfirmationHeader: iso18626.ConfirmationHeader{
-					SupplyingAgencyId:         &request.Header.SupplyingAgencyId,
-					RequestingAgencyId:        &request.Header.RequestingAgencyId,
-					RequestingAgencyRequestId: request.Header.RequestingAgencyRequestId,
-					TimestampReceived:         request.Header.Timestamp,
-					Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-					MessageStatus:             messageStatus,
-				},
-				ErrorData: errorData,
-			},
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestConfirmation = &iso18626.RequestConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			SupplyingAgencyId:         &request.Header.SupplyingAgencyId,
+			RequestingAgencyId:        &request.Header.RequestingAgencyId,
+			RequestingAgencyRequestId: request.Header.RequestingAgencyRequestId,
+			TimestampReceived:         request.Header.Timestamp,
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+			MessageStatus:             messageStatus,
 		},
-		err
+		ErrorData: errorData,
+	}
+	return eventStatus, message, err
 }
 
-func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.ISO18626Message, pr_db.PatronRequest, error) {
+func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedContext, request iso18626.Request) (events.EventStatus, *iso18626.Iso18626MessageNS, pr_db.PatronRequest, error) {
 	raRequestId := request.Header.RequestingAgencyRequestId
 	if raRequestId == "" {
 		status, response, err := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -367,8 +365,10 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			return status, response, pr_db.PatronRequest{}, handleErr
 		}
 	} else {
-		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, &iso18626.ISO18626Message{Request: &request},
-			func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+		var message = iso18626.NewIso18626MessageNS()
+		message.Request = &request
+		status, response, handleErr := m.processPatronRequestMessageTask(ctx, existingPr.ID, message,
+			func(_ common.ExtendedContext, _ *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 					ErrorType:  iso18626.TypeErrorTypeBadlyFormedMessage,
 					ErrorValue: "there is already request with this id " + raRequestId,
@@ -401,8 +401,10 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	if err != nil {
 		ctx.Logger().Error("failed to save request notifications", "error", err)
 	}
-	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, &iso18626.ISO18626Message{Request: &request},
-		func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+	var message = iso18626.NewIso18626MessageNS()
+	message.Request = &request
+	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, message,
+		func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID)
 			if err != nil {
 				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
@@ -434,12 +436,12 @@ func getDbTextPtr(value *string) pgtype.Text {
 	return getDbText(*value)
 }
 
-func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handleRequestingAgencyMessage(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	return m.handleRequestingAgencyMessageWithParent(ctx, ram, pr, nil)
 }
 
-func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
-	unsupported := func() (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ctx common.ExtendedContext, ram iso18626.RequestingAgencyMessage, pr pr_db.PatronRequest, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
+	unsupported := func() (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 		err := errors.New("unsupported action: " + string(ram.Action))
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, &ram.Action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnsupportedActionType,
@@ -490,29 +492,28 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged, parentEventID)
 }
 
-func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	eventStatus := events.EventStatusSuccess
 	if messageStatus != iso18626.TypeMessageStatusOK {
 		eventStatus = events.EventStatusProblem
 	}
-	return eventStatus, &iso18626.ISO18626Message{
-			RequestingAgencyMessageConfirmation: &iso18626.RequestingAgencyMessageConfirmation{
-				ConfirmationHeader: iso18626.ConfirmationHeader{
-					SupplyingAgencyId:         &ram.Header.SupplyingAgencyId,
-					RequestingAgencyId:        &ram.Header.RequestingAgencyId,
-					RequestingAgencyRequestId: ram.Header.RequestingAgencyRequestId,
-					TimestampReceived:         ram.Header.Timestamp,
-					Timestamp:                 utils.XSDDateTime{Time: time.Now()},
-					MessageStatus:             messageStatus,
-				},
-				Action:    action,
-				ErrorData: errorData,
-			},
+	var message = iso18626.NewIso18626MessageNS()
+	message.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			SupplyingAgencyId:         &ram.Header.SupplyingAgencyId,
+			RequestingAgencyId:        &ram.Header.RequestingAgencyId,
+			RequestingAgencyRequestId: ram.Header.RequestingAgencyRequestId,
+			TimestampReceived:         ram.Header.Timestamp,
+			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
+			MessageStatus:             messageStatus,
 		},
-		err
+		Action:    action,
+		ErrorData: errorData,
+	}
+	return eventStatus, message, err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.Iso18626MessageNS, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{

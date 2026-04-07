@@ -39,9 +39,9 @@ var edgeNonWord = regexp.MustCompile(`^\W+|\W+$`)
 var reshareItemRegex = regexp.MustCompile(`(.*),(.*),(.*)`)
 
 type Iso18626Shim interface {
-	ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error)
-	ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error
-	ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message
+	ApplyToOutgoingRequest(message *iso18626.Iso18626MessageNS) ([]byte, error)
+	ApplyToIncomingResponse(bytes []byte, message *iso18626.Iso18626MessageNS) error
+	ApplyToIncomingRequest(message *iso18626.Iso18626MessageNS, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.Iso18626MessageNS
 }
 
 // factory method
@@ -61,15 +61,15 @@ func GetShim(vendor string) Iso18626Shim {
 type Iso18626DefaultShim struct {
 }
 
-func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.Iso18626MessageNS) ([]byte, error) {
 	return xml.Marshal(message)
 }
 
-func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso18626.ISO18626Message) error {
+func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso18626.Iso18626MessageNS) error {
 	return xml.Unmarshal(bytes, message)
 }
 
-func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.Iso18626MessageNS, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.Iso18626MessageNS {
 	return message
 }
 
@@ -77,7 +77,7 @@ type Iso18626AlmaShim struct {
 	Iso18626DefaultShim
 }
 
-func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.Iso18626MessageNS, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.Iso18626MessageNS {
 	if message == nil {
 		return message
 	}
@@ -102,7 +102,7 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 	return &copyMessage
 }
 
-func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.Iso18626MessageNS) ([]byte, error) {
 	if message != nil {
 		if message.SupplyingAgencyMessage != nil {
 			suppMsg := message.SupplyingAgencyMessage
@@ -572,7 +572,7 @@ type Iso18626ReShareShim struct {
 	Iso18626DefaultShim
 }
 
-func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+func (i *Iso18626ReShareShim) ApplyToOutgoingRequest(message *iso18626.Iso18626MessageNS) ([]byte, error) {
 	if message.SupplyingAgencyMessage != nil {
 		i.transferDeliveryCostsToOfferedCosts(message.SupplyingAgencyMessage)
 		i.setItemId(message.SupplyingAgencyMessage)
@@ -600,7 +600,7 @@ func (i *Iso18626ReShareShim) transferDeliveryCostsToOfferedCosts(suppMsg *iso18
 	}
 }
 
-func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+func (i *Iso18626ReShareShim) ApplyToIncomingRequest(message *iso18626.Iso18626MessageNS, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.Iso18626MessageNS {
 	if message == nil {
 		return message
 	}
