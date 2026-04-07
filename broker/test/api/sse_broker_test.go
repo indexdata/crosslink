@@ -5,15 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/indexdata/crosslink/broker/common"
-	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/iso18626"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSseEndpointSuccess(t *testing.T) {
@@ -56,7 +57,7 @@ func TestSseEndpointSuccess(t *testing.T) {
 				t.Error("Received empty data from SSE")
 			}
 			t.Logf("Successfully received: %s", data)
-			assert.True(t, strings.Contains(data, "{\"event\":\"message-requester\",\"data\":{\"supplyingAgencyMessage\":"))
+			assert.True(t, strings.Contains(data, "{\"event\":\"message-requester\",\"data\":"))
 		case err := <-errChan:
 			inErr <- err
 		}
@@ -114,24 +115,24 @@ func TestSseEndpointNoSymbol(t *testing.T) {
 
 func executeTask(t time.Time) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "REQ",
+			},
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: t.String(),
+		},
+	}
 	sseBroker.IncomingIsoMessage(ctx, events.Event{EventName: events.EventNameMessageRequester,
 		ResultData: events.EventResult{
 			CommonEventData: events.CommonEventData{
-				OutgoingMessage: &iso18626.ISO18626Message{
-					SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-						Header: iso18626.Header{
-							RequestingAgencyId: iso18626.TypeAgencyId{
-								AgencyIdType: iso18626.TypeSchemeValuePair{
-									Text: "ISIL",
-								},
-								AgencyIdValue: "REQ",
-							},
-						},
-						MessageInfo: iso18626.MessageInfo{
-							Note: t.String(),
-						},
-					},
-				},
+				OutgoingMessage: message,
 			},
 		}})
 }

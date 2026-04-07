@@ -548,30 +548,30 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: strings.Split(supSymbol, ":")[0],
+				},
+				AgencyIdValue: strings.Split(supSymbol, ":")[1],
+			},
+		},
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note:             "All books reserved",
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+			ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+				Text: "Currently no books available",
+			},
+		},
+	}
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					Header: iso18626.Header{
-						SupplyingAgencyId: iso18626.TypeAgencyId{
-							AgencyIdType: iso18626.TypeSchemeValuePair{
-								Text: strings.Split(supSymbol, ":")[0],
-							},
-							AgencyIdValue: strings.Split(supSymbol, ":")[1],
-						},
-					},
-					StatusInfo: iso18626.StatusInfo{
-						Status: iso18626.TypeStatusUnfilled,
-					},
-					MessageInfo: iso18626.MessageInfo{
-						Note:             "All books reserved",
-						ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-						ReasonUnfilled: &iso18626.TypeSchemeValuePair{
-							Text: "Currently no books available",
-						},
-					},
-				},
-			},
+			IncomingMessage: message,
 		},
 	}
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)
@@ -629,30 +629,30 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
+	var message = iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: strings.Split(supSymbol, ":")[0],
+				},
+				AgencyIdValue: strings.Split(supSymbol, ":")[1],
+			},
+		},
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note:             "All books reserved",
+			ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+			ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+				Text: "Currently no books available",
+			},
+		},
+	}
 	eventData := events.EventData{
 		CommonEventData: events.CommonEventData{
-			IncomingMessage: &iso18626.ISO18626Message{
-				SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-					Header: iso18626.Header{
-						SupplyingAgencyId: iso18626.TypeAgencyId{
-							AgencyIdType: iso18626.TypeSchemeValuePair{
-								Text: strings.Split(supSymbol, ":")[0],
-							},
-							AgencyIdValue: strings.Split(supSymbol, ":")[1],
-						},
-					},
-					StatusInfo: iso18626.StatusInfo{
-						Status: iso18626.TypeStatusUnfilled,
-					},
-					MessageInfo: iso18626.MessageInfo{
-						Note:             "All books reserved",
-						ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
-						ReasonUnfilled: &iso18626.TypeSchemeValuePair{
-							Text: "Currently no books available",
-						},
-					},
-				},
-			},
+			IncomingMessage: message,
 		},
 	}
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)

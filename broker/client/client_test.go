@@ -66,7 +66,7 @@ func TestSendHttpPost(t *testing.T) {
 		for k, v := range headers {
 			assert.Equal(t, v, r.Header.Get(k))
 		}
-		msg := &iso18626.ISO18626Message{}
+		msg := iso18626.NewIso18626MessageNS()
 		buf, err := xml.Marshal(msg)
 		assert.NoError(t, err)
 		_, err = w.Write(buf)
@@ -77,7 +77,7 @@ func TestSendHttpPost(t *testing.T) {
 
 	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), *new(prservice.PatronRequestMessageHandler), 0, 0*time.Second)
 
-	msg := &iso18626.ISO18626Message{}
+	msg := iso18626.NewIso18626MessageNS()
 	peer := ill_db.Peer{
 		Url:         server.URL,
 		HttpHeaders: headers,
@@ -115,9 +115,8 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 }
 
 func TestPopulateRequesterInfo(t *testing.T) {
-	message := iso18626.ISO18626Message{
-		Request: &iso18626.Request{},
-	}
+	message := iso18626.NewIso18626MessageNS()
+	message.Request = &iso18626.Request{}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
@@ -128,22 +127,21 @@ func TestPopulateRequesterInfo(t *testing.T) {
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		},
 	}
-	populateRequesterInfo(&message, name, address, email)
+	populateRequesterInfo(message, name, address, email)
 
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line1, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestingAgencyInfo.Address[1].ElectronicAddress.ElectronicAddressData)
 	// does not override if already set
-	populateRequesterInfo(&message, "other", iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
+	populateRequesterInfo(message, "other", iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
 	assert.Equal(t, name, message.Request.RequestingAgencyInfo.Name)
 	assert.Equal(t, address.Line1, message.Request.RequestingAgencyInfo.Address[0].PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestingAgencyInfo.Address[1].ElectronicAddress.ElectronicAddressData)
 }
 
 func TestPopulateDeliveryAddress(t *testing.T) {
-	message := iso18626.ISO18626Message{
-		Request: &iso18626.Request{},
-	}
+	message := iso18626.NewIso18626MessageNS()
+	message.Request = &iso18626.Request{}
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
 	}
@@ -153,12 +151,12 @@ func TestPopulateDeliveryAddress(t *testing.T) {
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		},
 	}
-	populateDeliveryAddress(&message, address, email)
+	populateDeliveryAddress(message, address, email)
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
 	// does override if already set
-	populateDeliveryAddress(&message, iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
+	populateDeliveryAddress(message, iso18626.PhysicalAddress{Line2: "Home 2"}, iso18626.ElectronicAddress{ElectronicAddressData: "me2@box.com"})
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, address.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, email.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
@@ -166,23 +164,22 @@ func TestPopulateDeliveryAddress(t *testing.T) {
 
 func TestPopulateDeliveryAddressPatron(t *testing.T) {
 	yes := iso18626.TypeYesNoY
-	message := iso18626.ISO18626Message{
-		Request: &iso18626.Request{
-			PatronInfo: &iso18626.PatronInfo{
-				GivenName:    "Patron 1",
-				SendToPatron: &yes,
-				Address: []iso18626.Address{
-					{
-						PhysicalAddress: &iso18626.PhysicalAddress{
-							Line1: "Patron Home 1",
-						},
+	message := iso18626.NewIso18626MessageNS()
+	message.Request = &iso18626.Request{
+		PatronInfo: &iso18626.PatronInfo{
+			GivenName:    "Patron 1",
+			SendToPatron: &yes,
+			Address: []iso18626.Address{
+				{
+					PhysicalAddress: &iso18626.PhysicalAddress{
+						Line1: "Patron Home 1",
 					},
-					{
-						ElectronicAddress: &iso18626.ElectronicAddress{
-							ElectronicAddressData: "patron@email.com",
-							ElectronicAddressType: iso18626.TypeSchemeValuePair{
-								Text: string(iso18626.ElectronicAddressTypeEmail),
-							},
+				},
+				{
+					ElectronicAddress: &iso18626.ElectronicAddress{
+						ElectronicAddressData: "patron@email.com",
+						ElectronicAddressType: iso18626.TypeSchemeValuePair{
+							Text: string(iso18626.ElectronicAddressTypeEmail),
 						},
 					},
 				},
@@ -198,16 +195,15 @@ func TestPopulateDeliveryAddressPatron(t *testing.T) {
 			Text: string(iso18626.ElectronicAddressTypeEmail),
 		},
 	}
-	populateDeliveryAddress(&message, address, email)
+	populateDeliveryAddress(message, address, email)
 	assert.Equal(t, 2, len(message.Request.RequestedDeliveryInfo))
 	assert.Equal(t, message.Request.PatronInfo.Address[0].PhysicalAddress.Line1, message.Request.RequestedDeliveryInfo[0].Address.PhysicalAddress.Line1)
 	assert.Equal(t, message.Request.PatronInfo.Address[1].ElectronicAddress.ElectronicAddressData, message.Request.RequestedDeliveryInfo[1].Address.ElectronicAddress.ElectronicAddressData)
 }
 
 func TestPopulateSupplierAddress(t *testing.T) {
-	message := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
-	}
+	message := iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
@@ -218,7 +214,7 @@ func TestPopulateSupplierAddress(t *testing.T) {
 			Text: "ISIL",
 		},
 	}
-	populateReturnAddress(&message, name, agencyId, address)
+	populateReturnAddress(message, name, agencyId, address)
 	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
 	assert.Equal(t, name, message.SupplyingAgencyMessage.ReturnInfo.Name)
@@ -235,7 +231,7 @@ func TestPopulateSupplierAddress(t *testing.T) {
 		},
 	}
 	// Don't override if already set
-	populateReturnAddress(&message, name, agencyId, address)
+	populateReturnAddress(message, name, agencyId, address)
 	assert.Equal(t, "SUP1", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.SupplyingAgencyMessage.ReturnInfo.ReturnAgencyId.AgencyIdType.Text)
 	assert.Equal(t, "Requester 1", message.SupplyingAgencyMessage.ReturnInfo.Name)
@@ -243,11 +239,10 @@ func TestPopulateSupplierAddress(t *testing.T) {
 }
 
 func TestPopulateSupplierInfo(t *testing.T) {
-	message := iso18626.ISO18626Message{
-		Request: &iso18626.Request{
-			SupplierInfo: []iso18626.SupplierInfo{
-				{XMLName: xml.Name{Local: "supplierInfo"}},
-			},
+	message := iso18626.NewIso18626MessageNS()
+	message.Request = &iso18626.Request{
+		SupplierInfo: []iso18626.SupplierInfo{
+			{XMLName: xml.Name{Local: "supplierInfo"}},
 		},
 	}
 	name := "Supplier 1"
@@ -261,7 +256,7 @@ func TestPopulateSupplierInfo(t *testing.T) {
 		},
 	}
 	desc := shim.RETURN_ADDRESS_BEGIN + "\n" + name + "\n" + address.Line1 + "\n" + shim.RETURN_ADDRESS_END + "\n"
-	populateSupplierInfo(&message, name, agencyId, address)
+	populateSupplierInfo(message, name, agencyId, address)
 	assert.Equal(t, 1, len(message.Request.SupplierInfo))
 	assert.Equal(t, "SUP1", message.Request.SupplierInfo[0].SupplierCode.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.Request.SupplierInfo[0].SupplierCode.AgencyIdType.Text)
@@ -280,7 +275,7 @@ func TestPopulateSupplierInfo(t *testing.T) {
 		},
 	}
 	// Don't override if already set
-	populateSupplierInfo(&message, name2, agencyId2, address2)
+	populateSupplierInfo(message, name2, agencyId2, address2)
 	assert.Equal(t, 1, len(message.Request.SupplierInfo))
 	assert.Equal(t, "SUP1", message.Request.SupplierInfo[0].SupplierCode.AgencyIdValue)
 	assert.Equal(t, "ISIL", message.Request.SupplierInfo[0].SupplierCode.AgencyIdType.Text)
@@ -360,9 +355,8 @@ func TestValidateReason(t *testing.T) {
 }
 
 func TestPrependVendorInNote(t *testing.T) {
-	message := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{},
-	}
+	message := iso18626.NewIso18626MessageNS()
+	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	message.SupplyingAgencyMessage.MessageInfo.Note = ""
 	prependVendorNote(message.SupplyingAgencyMessage, "Alma")
 	assert.Equal(t, message.SupplyingAgencyMessage.MessageInfo.Note, "Vendor: Alma")
@@ -405,24 +399,24 @@ func createSupplyingAgencyMessageEvent(notification bool) events.Event {
 	if notification {
 		reason = iso18626.TypeReasonForMessageNotification
 	}
+	var iMessage = iso18626.NewIso18626MessageNS()
+	iMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "isil",
+				},
+				AgencyIdValue: "sup1",
+			},
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: reason,
+		},
+	}
 	return events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-						Header: iso18626.Header{
-							SupplyingAgencyId: iso18626.TypeAgencyId{
-								AgencyIdType: iso18626.TypeSchemeValuePair{
-									Text: "isil",
-								},
-								AgencyIdValue: "sup1",
-							},
-						},
-						MessageInfo: iso18626.MessageInfo{
-							ReasonForMessage: reason,
-						},
-					},
-				},
+				IncomingMessage: iMessage,
 			},
 		},
 	}
@@ -734,14 +728,14 @@ func TestCreateRequestingAgencyMessage(t *testing.T) {
 		Name:   "isil:sup1",
 		Vendor: string(directory.Alma),
 	}
+	var iMessage = iso18626.NewIso18626MessageNS()
+	iMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Note: "This is note",
+	}
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				IncomingMessage: &iso18626.ISO18626Message{
-					RequestingAgencyMessage: &iso18626.RequestingAgencyMessage{
-						Note: "This is note",
-					},
-				},
+				IncomingMessage: iMessage,
 			},
 		},
 	}
@@ -802,7 +796,7 @@ func TestBlockUnfilled(t *testing.T) {
 	}, requester: &requester}
 	assert.False(t, blockUnfilled(trCtx))
 
-	trCtx.event.EventData.IncomingMessage = &iso18626.ISO18626Message{}
+	trCtx.event.EventData.IncomingMessage = iso18626.NewIso18626MessageNS()
 	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
@@ -866,26 +860,25 @@ func TestHandleIllMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), mockPrMessageHandler, 1, 0*time.Second)
-	sam := iso18626.ISO18626Message{
-		SupplyingAgencyMessage: &iso18626.SupplyingAgencyMessage{
-			Header: iso18626.Header{
-				RequestingAgencyRequestId: "req-1",
-			},
+	sam := iso18626.NewIso18626MessageNS()
+	sam.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: "req-1",
 		},
 	}
 
-	_, err := client.HandleIllMessage(appCtx, nil, &sam)
+	_, err := client.HandleIllMessage(appCtx, nil, sam)
 	assert.EqualError(t, err, "peer is nil")
 
 	// To internal peer
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(directory.CrossLink)}, &sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: string(directory.CrossLink)}, sam)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
 	// Internal, case insensitive
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: "crosslinK"}, &sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{Vendor: "crosslinK"}, sam)
 	assert.EqualError(t, err, "searching pr with id=req-1")
 
-	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, &sam)
+	_, err = client.HandleIllMessage(appCtx, &ill_db.Peer{}, sam)
 	assert.EqualError(t, err, "Post \"\": unsupported protocol scheme \"\"")
 }
 

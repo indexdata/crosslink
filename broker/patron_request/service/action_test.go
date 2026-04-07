@@ -1583,16 +1583,15 @@ type MockIso18626Handler struct {
 	lastSupplyingAgencyMessage  *iso18626.SupplyingAgencyMessage
 }
 
-func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.Request.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR
 	}
-	var resmsg = &iso18626.ISO18626Message{
-		RequestConfirmation: &iso18626.RequestConfirmation{
-			ConfirmationHeader: iso18626.ConfirmationHeader{
-				MessageStatus: status,
-			},
+	var resmsg = iso18626.NewIso18626MessageNS()
+	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			MessageStatus: status,
 		},
 	}
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
@@ -1605,17 +1604,16 @@ func (h *MockIso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessa
 	w.Write(output)
 }
 
-func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	h.lastRequestingAgencyMessage = illMessage.RequestingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.RequestingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR
 	}
-	var resmsg = &iso18626.ISO18626Message{
-		RequestingAgencyMessageConfirmation: &iso18626.RequestingAgencyMessageConfirmation{
-			ConfirmationHeader: iso18626.ConfirmationHeader{
-				MessageStatus: status,
-			},
+	var resmsg = iso18626.NewIso18626MessageNS()
+	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			MessageStatus: status,
 		},
 	}
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
@@ -1627,17 +1625,16 @@ func (h *MockIso18626Handler) HandleRequestingAgencyMessage(ctx common.ExtendedC
 	w.WriteHeader(http.StatusOK)
 	w.Write(output)
 }
-func (h *MockIso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
+func (h *MockIso18626Handler) HandleSupplyingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
 	h.lastSupplyingAgencyMessage = illMessage.SupplyingAgencyMessage
 	status := iso18626.TypeMessageStatusOK
 	if illMessage.SupplyingAgencyMessage.Header.RequestingAgencyRequestId == "error" {
 		status = iso18626.TypeMessageStatusERROR
 	}
-	var resmsg = &iso18626.ISO18626Message{
-		SupplyingAgencyMessageConfirmation: &iso18626.SupplyingAgencyMessageConfirmation{
-			ConfirmationHeader: iso18626.ConfirmationHeader{
-				MessageStatus: status,
-			},
+	var resmsg = iso18626.NewIso18626MessageNS()
+	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
+		ConfirmationHeader: iso18626.ConfirmationHeader{
+			MessageStatus: status,
 		},
 	}
 	output, err := xml.MarshalIndent(resmsg, "  ", "  ")
