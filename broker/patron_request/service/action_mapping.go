@@ -121,7 +121,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	info := r.GetInfoActionsForPatronRequest(pr)
+	info := r.GetAllowedActionsForPatronRequest(pr)
 	actions := make([]pr_db.PatronRequestAction, 0, len(info.Actions))
 	for _, action := range info.Actions {
 		actions = append(actions, pr_db.PatronRequestAction(action.Name))
@@ -129,7 +129,7 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	return actions
 }
 
-func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) proapi.InfoActions {
+func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest) proapi.AllowedActions {
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
@@ -143,8 +143,8 @@ func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) p
 		builtInActions = capabilities.SupplierActions
 		actionEntries = r.lenderStateActionMapping[pr.State]
 	}
-	infoActions := proapi.InfoActions{
-		Actions: []proapi.InfoAction{},
+	allowedActions := proapi.AllowedActions{
+		Actions: []proapi.AllowedAction{},
 	}
 	for _, action := range actionEntries {
 		name := string(action.actionName)
@@ -161,8 +161,8 @@ func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) p
 					primary = new(bool)
 					*primary = true
 				}
-				infoActions.Actions = append(infoActions.Actions,
-					proapi.InfoAction{
+				allowedActions.Actions = append(allowedActions.Actions,
+					proapi.AllowedAction{
 						Name:       capability.Name,
 						Parameters: capability.Parameters,
 						Primary:    primary,
@@ -170,7 +170,7 @@ func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) p
 			}
 		}
 	}
-	return infoActions
+	return allowedActions
 }
 
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {

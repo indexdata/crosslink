@@ -335,7 +335,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 		addInternalError(ctx, w, err)
 		return
 	}
-	actions := actionMapping.GetInfoActionsForPatronRequest(*pr)
+	actions := actionMapping.GetAllowedActionsForPatronRequest(*pr)
 	writeJsonResponse(w, actions)
 }
 

@@ -537,7 +537,7 @@ components:
       required:
         - action
 
-    InfoAction:
+    AllowedAction:
       type: object
       properties:
         name:
@@ -555,13 +555,13 @@ components:
         - name
         - parameters
 
-    InfoActions:
+    AllowedActions:
       type: object
       properties:
         actions:
           type: array
           items:
-            $ref: '#/components/schemas/InfoAction'
+            $ref: '#/components/schemas/AllowedAction'
       required:
         - actions
 
@@ -1340,7 +1340,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InfoActions'
+                $ref: '#/components/schemas/AllowedActions'
         '404':
           description: Patron request not found
           content:

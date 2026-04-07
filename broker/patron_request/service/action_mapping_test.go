@@ -93,21 +93,21 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
 }
 
-func TestGetInfoActionsForPatronRequest1(t *testing.T) {
+func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 	mapping := mustActionMapping(t)
-	assert.Equal(t, proapi.InfoActions{Actions: []proapi.InfoAction{}}, mapping.GetInfoActionsForPatronRequest(
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}}, mapping.GetAllowedActionsForPatronRequest(
 		pr_db.PatronRequest{
 			Side: SideBorrowing, State: BorrowerStateNew}))
 
 	tt := true
-	assert.Equal(t, proapi.InfoActions{Actions: []proapi.InfoAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt}}},
-		mapping.GetInfoActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt}}},
+		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
 
-	assert.Equal(t, proapi.InfoActions{Actions: []proapi.InfoAction{
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
 		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}},
 		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt},
 		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}},
-	}}, mapping.GetInfoActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
 }
 
 func TestGetActionTransitionMissingCases(t *testing.T) {
