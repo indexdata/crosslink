@@ -106,7 +106,15 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	if pos == -1 {
 		return nil, fmt.Errorf("CQL query must contain an ORDER BY clause")
 	}
-	sql := orgSql[:pos] + whereClause + orgSql[pos:]
+	limitPos := strings.Index(orgSql, "LIMIT")
+	if limitPos == -1 {
+		return nil, fmt.Errorf("base query missing LIMIT")
+	}
+	orderBy := orgSql[pos:limitPos]
+	if res.GetOrderByClause() != "" {
+		orderBy = res.GetOrderByClause() + " "
+	}
+	sql := orgSql[:pos] + whereClause + orderBy + orgSql[limitPos:]
 	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
 	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)
