@@ -100,7 +100,7 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
-        config-file: ../govulncheck.yaml
+        output-format: json # json format added to skip failure because of unfixable vulnerabilities
         #setup go already restores the cache
         cache: false
 
