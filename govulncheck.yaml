@@ -1,0 +1,5 @@
+ignore:
+  - id: GO-2026-4887
+    reason: "Ignore till there is fix for this issue."
+  - id: GO-2026-4883
+    reason: "Ignore till there is fix for this issue."
