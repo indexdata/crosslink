@@ -42,6 +42,7 @@ func (r *ActionMappingService) getStateModelService() *StateModelService {
 type PatronRequestAction struct {
 	actionName pr_db.PatronRequestAction
 	auto       bool
+	primary    bool
 }
 
 type ActionMapping struct {
@@ -89,6 +90,9 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
 					entry.auto = true
 				}
+				if state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name {
+					entry.primary = true
+				}
 				actionEntries = append(actionEntries, entry)
 			}
 		}
@@ -117,27 +121,55 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	actions := make([]pr_db.PatronRequestAction, 0)
+	info := r.GetInfoActionsForPatronRequest(pr)
+	actions := make([]pr_db.PatronRequestAction, 0, len(info.Actions))
+	for _, action := range info.Actions {
+		actions = append(actions, pr_db.PatronRequestAction(action.Name))
+	}
+	return actions
+}
 
+func (r *ActionMapping) GetInfoActionsForPatronRequest(pr pr_db.PatronRequest) proapi.InfoActions {
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
 	var actionEntries []PatronRequestAction
+	var builtInActions []proapi.ActionCapability
+	capabilitiles := BuiltInStateModelCapabilities()
 	if pr.Side == SideBorrowing {
+		builtInActions = capabilitiles.RequesterActions
 		actionEntries = r.borrowerStateActionMapping[pr.State]
 	} else {
+		builtInActions = capabilitiles.SupplierActions
 		actionEntries = r.lenderStateActionMapping[pr.State]
 	}
+	infoActions := proapi.InfoActions{
+		Actions: []proapi.InfoAction{},
+	}
 	for _, action := range actionEntries {
-		if pr.LastAction.String == string(action.actionName) && prLastActionFailed {
+		name := string(action.actionName)
+		if pr.LastAction.String == name && prLastActionFailed {
 			hasFailed = true
 		}
-		if !action.auto || hasFailed {
-			actionName := pr_db.PatronRequestAction(action.actionName)
-			actions = append(actions, actionName)
+		if action.auto && !hasFailed {
+			continue
+		}
+		for _, capability := range builtInActions {
+			if capability.Name == name {
+				var primary *bool
+				if action.primary {
+					primary = &action.primary
+				}
+				infoActions.Actions = append(infoActions.Actions,
+					proapi.InfoAction{
+						Name:       capability.Name,
+						Parameters: capability.Parameters,
+						Primary:    primary,
+					})
+			}
 		}
 	}
-	return actions
+	return infoActions
 }
 
 func (r *ActionMapping) IsActionAvailable(pr pr_db.PatronRequest, action pr_db.PatronRequestAction) bool {
