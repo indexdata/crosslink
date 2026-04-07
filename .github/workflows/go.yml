@@ -100,7 +100,7 @@ jobs:
         repo-checkout: false
         go-package: ./...
         work-dir: ${{ matrix.modules }}
-        config-file: ${{ github.workspace }}/govulncheck.yaml
+        config-file: ../govulncheck.yaml
         #setup go already restores the cache
         cache: false
 
