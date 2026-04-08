@@ -107,6 +107,21 @@ func TestIso18626MessageNSMarshalAfterJSONRoundtrip(t *testing.T) {
 	if err := json.Unmarshal(jsonBytes, &roundtripped); err != nil {
 		t.Fatalf("json unmarshal failed: %v", err)
 	}
+	if roundtripped.Namespace == nil || roundtripped.Namespace.Value != IllNs {
+		t.Fatalf("roundtrip @xmlns not preserved: %+v", roundtripped.Namespace)
+	}
+	if roundtripped.NsIllPx == nil || roundtripped.NsIllPx.Value != IllNs {
+		t.Fatalf("roundtrip @xmlns:ill not preserved: %+v", roundtripped.NsIllPx)
+	}
+	if roundtripped.NsXsiPx == nil || roundtripped.NsXsiPx.Value != XsiNs {
+		t.Fatalf("roundtrip @xmlns:xsi not preserved: %+v", roundtripped.NsXsiPx)
+	}
+	if roundtripped.XsiSchemaLoc == nil || roundtripped.XsiSchemaLoc.Value != expectedSchemaLocationJSON {
+		t.Fatalf("roundtrip @xsi:schemaLocation not preserved: %+v", roundtripped.XsiSchemaLoc)
+	}
+	if roundtripped.Version.Value != IllV1_2 {
+		t.Fatalf("roundtrip @version not preserved: %+v", roundtripped.Version)
+	}
 
 	xmlBytes, err := xml.Marshal(&roundtripped)
 	if err != nil {

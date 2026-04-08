@@ -115,8 +115,8 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 			http.Error(w, "failure reading request", http.StatusBadRequest)
 			return
 		}
-		var illMessage iso18626.Iso18626MessageNS
-		err = xml.Unmarshal(byteReq, &illMessage)
+		illMessage := iso18626.NewIso18626MessageNS()
+		err = xml.Unmarshal(byteReq, illMessage)
 		if err != nil {
 			ctx.Logger().Error("failure parsing request", "error", err, "body", string(byteReq))
 			http.Error(w, "failure parsing request", http.StatusBadRequest)
@@ -124,11 +124,11 @@ func Iso18626PostHandler(repo ill_db.IllRepo, eventBus events.EventBus, dirAdapt
 		}
 
 		if illMessage.Request != nil {
-			handleRequest(ctx, &illMessage, w, repo, eventBus, dirAdapter)
+			handleRequest(ctx, illMessage, w, repo, eventBus, dirAdapter)
 		} else if illMessage.RequestingAgencyMessage != nil {
-			handleRequestingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
+			handleRequestingAgencyMessage(ctx, illMessage, w, repo, eventBus)
 		} else if illMessage.SupplyingAgencyMessage != nil {
-			handleSupplyingAgencyMessage(ctx, &illMessage, w, repo, eventBus)
+			handleSupplyingAgencyMessage(ctx, illMessage, w, repo, eventBus)
 		} else {
 			ctx.Logger().Error("invalid ISO18626 message", "error", err, "body", string(byteReq))
 			http.Error(w, "invalid ISO18626 message", http.StatusBadRequest)
