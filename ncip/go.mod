@@ -3,7 +3,7 @@ module github.com/indexdata/crosslink/ncip
 go 1.26
 
 require (
-	github.com/indexdata/go-utils v0.0.0-20260218142542-28abe67711aa
+	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
 	github.com/stretchr/testify v1.11.1
 )
 
