@@ -1514,23 +1514,7 @@ func (r *MockPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params pr_d
 	if strings.Contains(params.ID, "error") || strings.Contains(params.RequesterReqID.String, "error") {
 		return pr_db.PatronRequest{}, errors.New("db error")
 	}
-	r.savedPr = pr_db.PatronRequest{
-		ID:                params.ID,
-		Timestamp:         params.Timestamp,
-		IllRequest:        params.IllRequest,
-		State:             params.State,
-		Side:              params.Side,
-		Patron:            params.Patron,
-		RequesterSymbol:   params.RequesterSymbol,
-		SupplierSymbol:    params.SupplierSymbol,
-		Tenant:            params.Tenant,
-		RequesterReqID:    params.RequesterReqID,
-		NeedsAttention:    params.NeedsAttention,
-		LastAction:        params.LastAction,
-		LastActionOutcome: params.LastActionOutcome,
-		LastActionResult:  params.LastActionResult,
-		Language:          params.Language,
-	}
+	r.savedPr = pr_db.PatronRequest(params)
 	return r.savedPr, nil
 }
 
@@ -1538,23 +1522,7 @@ func (r *MockPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params pr_d
 	if strings.Contains(params.ID, "error") || strings.Contains(params.RequesterReqID.String, "error") {
 		return pr_db.PatronRequest{}, errors.New("db error")
 	}
-	r.savedPr = pr_db.PatronRequest{
-		ID:                params.ID,
-		Timestamp:         params.Timestamp,
-		IllRequest:        params.IllRequest,
-		State:             params.State,
-		Side:              params.Side,
-		Patron:            params.Patron,
-		RequesterSymbol:   params.RequesterSymbol,
-		SupplierSymbol:    params.SupplierSymbol,
-		Tenant:            params.Tenant,
-		RequesterReqID:    params.RequesterReqID,
-		NeedsAttention:    params.NeedsAttention,
-		LastAction:        params.LastAction,
-		LastActionOutcome: params.LastActionOutcome,
-		LastActionResult:  params.LastActionResult,
-		Language:          params.Language,
-	}
+	r.savedPr = pr_db.PatronRequest(params)
 	return r.savedPr, nil
 }
 

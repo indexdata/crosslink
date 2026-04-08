@@ -440,10 +440,14 @@ components:
         id:
           type: string
           description: Unique identifier of the patron request
-        timestamp:
+        createdAt:
           type: string
           format: date-time
-          description: Timestamp of the patron reuqest
+          description: Timestamp of the patron request creation
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of the patron request last update
         illRequest:
           type: object
           description: JSON of ISO18626 request
@@ -487,7 +491,7 @@ components:
           description: Indicates if the request is in terminal state
       required:
         - id
-        - timestamp
+        - createdAt
         - state
         - side
         - illRequest
@@ -1201,7 +1205,7 @@ paths:
         Query parameter cql can be used to filter the results.
         With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
         has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at, 
-        requester_req_id, title, patron, terminal_state, cql.serverChoice.
+        requester_req_id, title, author, patron, terminal_state, updated_at, cql.serverChoice.
       tags:
         - patron-requests-api
       parameters:

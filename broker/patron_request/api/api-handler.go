@@ -552,9 +552,9 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
-	return proapi.PatronRequest{
+	pr := proapi.PatronRequest{
 		Id:                 request.ID,
-		Timestamp:          request.Timestamp.Time,
+		CreatedAt:          request.CreatedAt.Time,
 		State:              string(request.State),
 		Side:               string(request.Side),
 		Patron:             toString(request.Patron),
@@ -569,6 +569,10 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		Items:              &items,
 		TerminalState:      request.TerminalState,
 	}
+	if request.UpdatedAt.Valid {
+		pr.UpdatedAt = &request.UpdatedAt.Time
+	}
+	return pr
 }
 
 func toString(text pgtype.Text) *string {
@@ -688,7 +692,7 @@ func buildDbPatronRequest(
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
 		ID:              requesterReqId,
-		Timestamp:       creationTime,
+		CreatedAt:       creationTime,
 		State:           prservice.BorrowerStateNew,
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
