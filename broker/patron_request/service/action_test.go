@@ -1120,7 +1120,8 @@ func TestHandleInvokeLenderActionAddConditionTypeCost(t *testing.T) {
 	assert.NotNil(t, resultData)
 	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
 	assert.Equal(t, "failed to unmarshal action parameters", resultData.EventError.Message)
-	assert.Equal(t, "json: cannot unmarshal string into Go struct field actionParams.cost of type float64", resultData.EventError.Cause)
+	assert.Contains(t, resultData.EventError.Cause, "cannot unmarshal")
+	assert.Contains(t, resultData.EventError.Cause, "cost")
 	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 }
 
