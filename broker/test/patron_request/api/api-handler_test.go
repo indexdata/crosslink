@@ -104,6 +104,7 @@ func TestCrud(t *testing.T) {
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "WILLSUPPLY_LOANED",
 			Title:                  "Typed request round trip",
+			Author:                 "John Wick",
 		},
 		ServiceInfo: &iso18626.ServiceInfo{
 			ServiceLevel: &iso18626.TypeSchemeValuePair{
@@ -187,7 +188,7 @@ func TestCrud(t *testing.T) {
 		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
 		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
 		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
-		"terminal_state%3Dfalse%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
+		"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
@@ -582,7 +583,7 @@ func TestServerChoice(t *testing.T) {
 	prId := uuid.NewString()
 	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
-		Timestamp: pgtype.Timestamp{
+		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
 			Valid: true,
 		},

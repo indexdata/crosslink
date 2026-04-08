@@ -417,7 +417,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.Equal(t, id, requesterReqID)
 	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest)
 	assert.Equal(t, id, pr.ID)
-	assert.True(t, pr.Timestamp.Valid)
+	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
 	assert.Equal(t, id, pr.RequesterReqID.String)
 	assert.False(t, pr.SupplierSymbol.Valid)

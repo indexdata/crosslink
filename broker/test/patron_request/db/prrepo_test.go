@@ -71,7 +71,7 @@ func TestItem(t *testing.T) {
 	prId := uuid.NewString()
 	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
-		Timestamp: pgtype.Timestamp{
+		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
 			Valid: true,
 		},
@@ -162,7 +162,7 @@ func TestNotification(t *testing.T) {
 	prId := uuid.NewString()
 	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
 		ID: prId,
-		Timestamp: pgtype.Timestamp{
+		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),
 			Valid: true,
 		},

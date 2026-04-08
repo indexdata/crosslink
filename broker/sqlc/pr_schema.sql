@@ -2,7 +2,7 @@
 CREATE TABLE patron_request
 (
     id                  VARCHAR PRIMARY KEY,
-    timestamp           TIMESTAMP NOT NULL DEFAULT now(),
+    created_at          TIMESTAMP NOT NULL DEFAULT now(),
     ill_request         jsonb,
     state               VARCHAR NOT NULL,
     side                VARCHAR NOT NULL,
@@ -17,7 +17,8 @@ CREATE TABLE patron_request
     last_action_result  VARCHAR,
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
-    terminal_state      BOOLEAN NOT NULL DEFAULT false
+    terminal_state      BOOLEAN NOT NULL DEFAULT false,
+    updated_at          TIMESTAMP
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

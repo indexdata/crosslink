@@ -378,7 +378,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
-		Timestamp:       pgtype.Timestamp{Valid: true, Time: time.Now()},
+		CreatedAt:       pgtype.Timestamp{Valid: true, Time: time.Now()},
 		State:           LenderStateNew,
 		Side:            SideLending,
 		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),

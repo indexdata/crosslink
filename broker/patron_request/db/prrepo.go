@@ -81,7 +81,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 				fullCount = r.FullCount
 				list = append(list, PatronRequest{
 					ID:                r.ID,
-					Timestamp:         r.Timestamp,
+					CreatedAt:         r.CreatedAt,
 					IllRequest:        r.IllRequest,
 					State:             PatronRequestState(r.State),
 					Side:              PatronRequestSide(r.Side),
@@ -97,6 +97,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 					Language:          r.Language,
 					Items:             r.Items,
 					TerminalState:     r.TerminalState,
+					UpdatedAt:         r.UpdatedAt,
 				})
 			}
 		} else {
