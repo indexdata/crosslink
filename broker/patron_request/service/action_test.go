@@ -1098,7 +1098,7 @@ func TestHandleInvokeLenderActionAddConditionMissingCurrency(t *testing.T) {
 	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 }
 
-func TestHandleInvokeLenderActionAddConditionTypeCurrency(t *testing.T) {
+func TestHandleInvokeLenderActionAddConditionTypeCost(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
