@@ -139,7 +139,7 @@ func lineDiff(sampleXML, actualXML string) string {
 		if s == a {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("-%d %s\n+%d %s\n", i+1, s, i+1, a))
+		fmt.Fprintf(&b, "-%d %s\n+%d %s\n", i+1, s, i+1, a)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
