@@ -19,8 +19,7 @@ LIMIT $1 OFFSET $2;
 
 -- name: UpdatePatronRequest :one
 UPDATE patron_request
-SET created_at          = $2,
-    ill_request         = $3,
+SET ill_request         = $3,
     state               = $4,
     side                = $5,
     patron              = $6,
@@ -36,7 +35,7 @@ SET created_at          = $2,
     language            = $16,
     terminal_state      = $17,
     updated_at          = now()
-WHERE id = $1 AND (updated_at is null OR updated_at = $18)
+WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
