@@ -61,6 +61,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	app.DB_EXPLAIN_ANALYZE = true
 	mockPort := utils.Must(test.GetFreePort())
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")

@@ -30,7 +30,8 @@ type PrRepo interface {
 
 type PgPrRepo struct {
 	repo.PgBaseRepo[PrRepo]
-	queries Queries
+	queries        Queries
+	ExplainAnalyze bool
 }
 
 // delegate transaction handling to Base
@@ -67,10 +68,13 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 }
 
 func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
-	rows, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.ExplainAnalyze)
 	var list []PatronRequest
 	var fullCount int64
 	if err == nil {
+		for _, line := range explainResult {
+			ctx.Logger().Info("explain", "line", line)
+		}
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
@@ -98,7 +102,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
+			rows, _, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}

@@ -47,6 +47,7 @@ var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
+var DB_EXPLAIN_ANALYZE, _ = utils.GetEnvBool("DB_EXPLAIN_ANALYZE", false)
 var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE, DB_SCHEMA)
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
@@ -155,7 +156,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := CreateIllRepo(pool)
-	prRepo := CreatePrRepo(pool)
+	prRepo := CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
@@ -340,10 +341,11 @@ func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
 	return illRepo
 }
 
-func CreatePrRepo(dbPool *pgxpool.Pool) pr_db.PrRepo {
-	illRepo := new(pr_db.PgPrRepo)
-	illRepo.Pool = dbPool
-	return illRepo
+func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool) pr_db.PrRepo {
+	prRepo := new(pr_db.PgPrRepo)
+	prRepo.Pool = dbPool
+	prRepo.ExplainAnalyze = explainAnalyze
+	return prRepo
 }
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
