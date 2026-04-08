@@ -1098,6 +1098,33 @@ func TestHandleInvokeLenderActionAddConditionMissingCurrency(t *testing.T) {
 	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
 }
 
+func TestHandleInvokeLenderActionAddConditionTypeCost(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionAddCondition
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"loanCondition": "my condition",
+			"note":          "Condition note",
+			"cost":          "12.34", // string instead of number
+		},
+	}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.Equal(t, "failed to unmarshal action parameters", resultData.EventError.Message)
+	assert.Contains(t, resultData.EventError.Cause, "cannot unmarshal")
+	assert.Contains(t, resultData.EventError.Cause, "cost")
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+}
+
 func TestHandleInvokeLenderActionShipOK(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
