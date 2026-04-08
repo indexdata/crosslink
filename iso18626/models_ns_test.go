@@ -81,6 +81,27 @@ func TestIso18626MessageNSMarshalAfterJSONRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json marshal failed: %v", err)
 	}
+	var jsonPayload map[string]any
+	if err := json.Unmarshal(jsonBytes, &jsonPayload); err != nil {
+		t.Fatalf("json unmarshal for assertion failed: %v", err)
+	}
+
+	if got, _ := jsonPayload["@version"].(string); got != IllV1_2 {
+		t.Fatalf("unexpected @version: %v", jsonPayload["@version"])
+	}
+	if got, _ := jsonPayload["@xmlns"].(string); got != IllNs {
+		t.Fatalf("unexpected @xmlns: %v", jsonPayload["@xmlns"])
+	}
+	if got, _ := jsonPayload["@xmlns:ill"].(string); got != IllNs {
+		t.Fatalf("unexpected @xmlns:ill: %v", jsonPayload["@xmlns:ill"])
+	}
+	if got, _ := jsonPayload["@xmlns:xsi"].(string); got != XsiNs {
+		t.Fatalf("unexpected @xmlns:xsi: %v", jsonPayload["@xmlns:xsi"])
+	}
+	expectedSchemaLocationJSON := fmt.Sprintf("%s %s", IllNs, IllSl)
+	if got, _ := jsonPayload["@xsi:schemaLocation"].(string); got != expectedSchemaLocationJSON {
+		t.Fatalf("unexpected @xsi:schemaLocation: %v", jsonPayload["@xsi:schemaLocation"])
+	}
 
 	var roundtripped Iso18626MessageNS
 	if err := json.Unmarshal(jsonBytes, &roundtripped); err != nil {
@@ -99,10 +120,12 @@ func TestIso18626MessageNSMarshalAfterJSONRoundtrip(t *testing.T) {
 	if !strings.Contains(xmlText, `ill:version="1.2"`) {
 		t.Fatalf("version attribute not generated correctly: %s", xmlText)
 	}
+	if !strings.Contains(xmlText, `ill:scheme="RESHARE"`) {
+		t.Fatalf("scheme attribute not generated correctly: %s", xmlText)
+	}
 	if strings.Contains(xmlText, `="RESHARE"`) && !strings.Contains(xmlText, `scheme="RESHARE"`) {
 		t.Fatalf("scheme attribute has malformed name: %s", xmlText)
 	}
-
 	var parsed struct {
 		XMLName xml.Name `xml:"ISO18626Message"`
 	}

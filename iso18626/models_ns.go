@@ -20,11 +20,11 @@ func InitNs() {
 }
 
 type Iso18626MessageNS struct {
-	Namespace *utils.PrefixAttr `xml:"xmlns,attr"`
+	Namespace *utils.PrefixAttr `xml:"xmlns,attr" json:"@xmlns,omitempty"`
 	ISO18626Message
-	NsIllPx      *utils.PrefixAttr `xml:"xmlns ill,attr"`
-	NsXsiPx      *utils.PrefixAttr `xml:"xmlns xsi,attr"`
-	XsiSchemaLoc *utils.PrefixAttr `xml:"http://www.w3.org/2001/XMLSchema-instance schemaLocation,attr"`
+	NsIllPx      *utils.PrefixAttr `xml:"xmlns ill,attr" json:"@xmlns:ill,omitempty"`
+	NsXsiPx      *utils.PrefixAttr `xml:"xmlns xsi,attr" json:"@xmlns:xsi,omitempty"`
+	XsiSchemaLoc *utils.PrefixAttr `xml:"http://www.w3.org/2001/XMLSchema-instance schemaLocation,attr" json:"@xsi:schemaLocation,omitempty"`
 }
 
 func NewIso18626MessageNS() *Iso18626MessageNS {
