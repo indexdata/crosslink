@@ -1113,7 +1113,7 @@ func TestHandleInvokeLenderActionAddConditionTypeCost(t *testing.T) {
 		CustomData: map[string]any{
 			"loanCondition": "my condition",
 			"note":          "Condition note",
-			"cost":          "12.34", // string instaed of number
+			"cost":          "12.34", // string instead of number
 		},
 	}})
 	assert.Equal(t, events.EventStatusError, status)
