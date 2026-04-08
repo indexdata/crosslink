@@ -132,6 +132,27 @@ func TestIso18626MessageNSMarshalAfterJSONRoundtrip(t *testing.T) {
 	if err := xml.Unmarshal(xmlBytes, &parsed); err != nil {
 		t.Fatalf("generated XML is not parseable: %v\n%s", err, xmlText)
 	}
+
+	var parsedMsg Iso18626MessageNS
+	if err := xml.Unmarshal(xmlBytes, &parsedMsg); err != nil {
+		t.Fatalf("generated XML cannot be unmarshalled into Iso18626MessageNS: %v\n%s", err, xmlText)
+	}
+	if parsedMsg.Request == nil || parsedMsg.Request.ServiceInfo == nil || parsedMsg.Request.ServiceInfo.ServiceLevel == nil {
+		t.Fatalf("serviceLevel missing after xml unmarshal: %+v", parsedMsg.Request)
+	}
+	scheme := parsedMsg.Request.ServiceInfo.ServiceLevel.Scheme
+	if scheme == nil {
+		t.Fatalf("serviceLevel scheme attribute missing after xml unmarshal")
+	}
+	if scheme.Value != "RESHARE" {
+		t.Fatalf("unexpected serviceLevel scheme value: %+v", scheme)
+	}
+	if scheme.Name.Local != "scheme" {
+		t.Fatalf("unexpected serviceLevel scheme local name: %+v", scheme.Name)
+	}
+	if scheme.Name.Space != IllNs {
+		t.Fatalf("unexpected serviceLevel scheme namespace: %+v", scheme.Name)
+	}
 }
 
 func diffXML(sampleXML, actualXML string) string {
