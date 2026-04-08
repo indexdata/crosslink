@@ -64,14 +64,20 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("service_level", f)
 
-	nf := pgcql.NewFieldDate().WithColumn("timestamp")
+	nf := pgcql.NewFieldDate()
 	def.AddField("created_at", nf)
+
+	nf = pgcql.NewFieldDate()
+	def.AddField("updated_at", nf)
 
 	nf = pgcql.NewFieldDate()
 	def.AddField("needed_at", nf)
 
-	f = pgcql.NewFieldString().WithLikeOps().WithColumn("ill_request->'bibliographicInfo'->>'title'")
+	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'title'")
 	def.AddField("title", f)
+
+	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'author'")
+	def.AddField("author", f)
 
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
@@ -128,7 +134,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 		var i ListPatronRequestsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Timestamp,
+			&i.CreatedAt,
 			&i.IllRequest,
 			&i.State,
 			&i.Side,
@@ -144,6 +150,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.Language,
 			&i.Items,
 			&i.TerminalState,
+			&i.UpdatedAt,
 			&i.FullCount,
 		); err != nil {
 			return nil, err
