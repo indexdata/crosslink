@@ -129,7 +129,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	if explainAnalyze {
 		explainRows, err := db.Query(ctx, "EXPLAIN ANALYZE "+sql, sqlArguments...)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to convert CQL to SQL: %w", err)
+			return nil, nil, fmt.Errorf("failed to run query with EXPLAIN ANALYZE: %w", err)
 		}
 		defer explainRows.Close()
 		for explainRows.Next() {
