@@ -47,6 +47,7 @@ const (
 	EventNamePatronRequestMessage EventName = "patron-request-message"
 	EventNameLmsRequesterMessage  EventName = "lms-requester-message"
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
+	EventNameSendNotification     EventName = "send-notification"
 )
 
 type Signal string
