@@ -15,7 +15,7 @@ generate: generate-schema
 generate-schema: $(GEN_SCHEMA_OUT)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl@v1.5.1 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
+	$(GO) run github.com/indexdata/xsd2goxsl@v1.6.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 	dateTimeType=utils.XSDDateTime \
 	decimalType=utils.XSDDecimal \
