@@ -1,14 +1,14 @@
-<NCIPMessage xmlns="http://www.niso.org/2008/ncip" xmlns:ncip="http://www.niso.org/2008/ncip" ncip:version="http://www.niso.org/ncip/v2_02/imp1/xsd/ncip_v2_02.xsd">
-  <AcceptItem xmlns="http://www.niso.org/2008/ncip">
-    <InitiationHeader xmlns="http://www.niso.org/2008/ncip">
-      <FromAgencyId xmlns="http://www.niso.org/2008/ncip">
+<NCIPMessage xmlns="http://www.niso.org/2008/ncip" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.niso.org/2008/ncip http://www.niso.org/schemas/ncip/v2_02/ncip_v2_02.xsd" xmlns:ncip="http://www.niso.org/2008/ncip" ncip:version="http://www.niso.org/ncip/v2_02/imp1/xsd/ncip_v2_02.xsd">
+  <AcceptItem>
+    <InitiationHeader>
+      <FromAgencyId>
         <AgencyId></AgencyId>
       </FromAgencyId>
-      <ToAgencyId xmlns="http://www.niso.org/2008/ncip">
+      <ToAgencyId>
         <AgencyId ncip:Scheme="urn:any">toAgency</AgencyId>
       </ToAgencyId>
     </InitiationHeader>
-    <RequestId xmlns="http://www.niso.org/2008/ncip">
+    <RequestId>
       <RequestIdentifierValue></RequestIdentifierValue>
     </RequestId>
     <RequestedActionType></RequestedActionType>

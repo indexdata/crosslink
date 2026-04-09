@@ -8,7 +8,7 @@ GEN_SCHEMA_OUT=ncip_gen.go
 COVERAGE=coverage.out
 
 .PHONY: all generate generate-schema lint check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.6.0
 
 all: generate
 
@@ -21,7 +21,9 @@ $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 	dateTimeType=utils.XSDDateTime \
 	json=yes \
-	namespaced=yes
+	namespaced=yes \
+	root=NCIPMessage \
+	schemaLocation=http://www.niso.org/schemas/ncip/v2_02/ncip_v2_02.xsd
 	$(GO) fmt $@
 
 clean:
