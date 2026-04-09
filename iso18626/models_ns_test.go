@@ -3,7 +3,6 @@ package iso18626
 import (
 	"encoding/json"
 	"encoding/xml"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -135,37 +134,4 @@ func TestISO18626MessageMarshalAfterJSONRoundtrip(t *testing.T) {
 	if *scheme != "RESHARE" {
 		t.Fatalf("unexpected serviceLevel scheme value: %+v", scheme)
 	}
-}
-
-func diffXML(sampleXML, actualXML string) string {
-	if sampleXML == actualXML {
-		return ""
-	}
-	return lineDiff(sampleXML, actualXML)
-}
-
-func lineDiff(sampleXML, actualXML string) string {
-	sampleLines := strings.Split(sampleXML, "\n")
-	actualLines := strings.Split(actualXML, "\n")
-	maxLines := len(sampleLines)
-	if len(actualLines) > maxLines {
-		maxLines = len(actualLines)
-	}
-
-	var b strings.Builder
-	b.WriteString("--- sample\n+++ actual\n")
-	for i := 0; i < maxLines; i++ {
-		var s, a string
-		if i < len(sampleLines) {
-			s = sampleLines[i]
-		}
-		if i < len(actualLines) {
-			a = actualLines[i]
-		}
-		if s == a {
-			continue
-		}
-		fmt.Fprintf(&b, "-%d %s\n+%d %s\n", i+1, s, i+1, a)
-	}
-	return strings.TrimRight(b.String(), "\n")
 }
