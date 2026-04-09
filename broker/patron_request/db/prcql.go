@@ -94,14 +94,15 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 }
 
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,
-	cqlString *string) ([]ListPatronRequestsRow, error) {
+	cqlString *string, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
 	if cqlString == nil {
-		return q.ListPatronRequests(ctx, db, arg)
+		rows, err := q.ListPatronRequests(ctx, db, arg)
+		return rows, nil, err
 	}
 	noBaseArgs := 2 // we have two base arguments: limit and offset
 	res, err := handlePatronRequestsQuery(*cqlString, noBaseArgs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	whereClause := ""
 	if res.GetWhereClause() != "" {
@@ -110,11 +111,11 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	orgSql := listPatronRequests
 	pos := strings.Index(orgSql, "ORDER BY")
 	if pos == -1 {
-		return nil, fmt.Errorf("CQL query must contain an ORDER BY clause")
+		return nil, nil, fmt.Errorf("CQL query must contain an ORDER BY clause")
 	}
 	limitPos := strings.Index(orgSql, "LIMIT")
 	if limitPos == -1 {
-		return nil, fmt.Errorf("base query missing LIMIT")
+		return nil, nil, fmt.Errorf("base query missing LIMIT")
 	}
 	orderBy := orgSql[pos:limitPos]
 	if res.GetOrderByClause() != "" {
@@ -124,9 +125,27 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
 	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)
+	explainResult := []string{}
+	if explainAnalyze {
+		explainRows, err := db.Query(ctx, "EXPLAIN ANALYZE "+sql, sqlArguments...)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to run query with EXPLAIN ANALYZE: %w", err)
+		}
+		defer explainRows.Close()
+		for explainRows.Next() {
+			var line string
+			if err := explainRows.Scan(&line); err != nil {
+				return nil, nil, fmt.Errorf("failed to read EXPLAIN ANALYZE output: %w", err)
+			}
+			explainResult = append(explainResult, line)
+		}
+		if err := explainRows.Err(); err != nil {
+			return nil, nil, fmt.Errorf("error reading EXPLAIN ANALYZE output: %w", err)
+		}
+	}
 	rows, err := db.Query(ctx, sql, sqlArguments...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert CQL to SQL: %w", err)
+		return nil, nil, fmt.Errorf("failed to convert CQL to SQL: %w", err)
 	}
 	defer rows.Close()
 	var items []ListPatronRequestsRow
@@ -153,12 +172,12 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.UpdatedAt,
 			&i.FullCount,
 		); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return items, nil
+	return items, explainResult, nil
 }

@@ -16,6 +16,7 @@ import (
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,7 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	app.DB_EXPLAIN_ANALYZE = true
 	mockPort := utils.Must(test.GetFreePort())
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
@@ -156,6 +158,12 @@ func TestItem(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, itemId, items[0].ID)
+
+	err = prRepo.DeleteItemById(appCtx, itemId)
+	assert.NoError(t, err)
+
+	err = prRepo.DeletePatronRequest(appCtx, prId)
+	assert.NoError(t, err)
 }
 
 func TestNotification(t *testing.T) {
@@ -285,4 +293,97 @@ func TestNotification(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, notificaitonId, notifications[0].ID)
+
+	err = prRepo.DeleteNotificationById(appCtx, notificaitonId)
+	assert.NoError(t, err)
+
+	err = prRepo.DeletePatronRequest(appCtx, prId)
+	assert.NoError(t, err)
+}
+
+func TestListPatronRequests(t *testing.T) {
+	prIds := []string{}
+
+	// Create 2 requests
+	for i := 0; i < 2; i++ {
+		prId := uuid.NewString()
+		prIds = append(prIds, prId)
+		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+			ID: prId,
+			CreatedAt: pgtype.Timestamp{
+				Time:  time.Now(),
+				Valid: true,
+			},
+			Side: prservice.SideBorrowing,
+			RequesterSymbol: pgtype.Text{
+				String: "ISIL:REQ",
+				Valid:  true,
+			},
+			State:    prservice.BorrowerStateValidated,
+			Language: "english",
+			RequesterReqID: pgtype.Text{
+				String: "REQ-123",
+				Valid:  true,
+			},
+			Patron: pgtype.Text{
+				String: "P456",
+				Valid:  true,
+			},
+			IllRequest: iso18626.Request{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					Title:  "Do Androids Dream of Electric Sheep?",
+					Author: "Ray Bradbury",
+				},
+				PatronInfo: &iso18626.PatronInfo{
+					GivenName: "John",
+					Surname:   "Doe",
+					PatronId:  "PP-789",
+				},
+			},
+			Items:         []pr_db.PrItem{},
+			TerminalState: false,
+		})
+		assert.NoError(t, err)
+	}
+	cql := "title = Androids"
+	list, fullCount, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  1,
+		Offset: 0,
+	}, &cql)
+
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, int64(2), fullCount)
+
+	// not found
+	cql = "title = banners"
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+
+	assert.NoError(t, err)
+	assert.Len(t, list, 0)
+	assert.Equal(t, int64(0), fullCount)
+
+	// no CQL
+	_, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  1,
+		Offset: 0,
+	}, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot scan NULL into *iso18626.Request")
+
+	cql = "cql.allRecords=1"
+	_, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  1,
+		Offset: 0,
+	}, &cql)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot scan NULL into *iso18626.Request")
+
+	for _, prId := range prIds {
+		err = prRepo.DeletePatronRequest(appCtx, prId)
+		assert.NoError(t, err)
+	}
 }
