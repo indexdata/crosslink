@@ -58,7 +58,7 @@ func TestMain(m *testing.M) {
 
 	eventRepo = app.CreateEventRepo(dbPool)
 	eventBus = app.CreateEventBus(eventRepo)
-	illRepo = app.CreateIllRepo(dbPool)
+	illRepo = ill_db.CreateIllRepo(dbPool)
 	err = app.StartEventBus(ctx, eventBus)
 	test.Expect(err, "failed to start event bus")
 

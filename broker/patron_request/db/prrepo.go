@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PrRepo interface {
@@ -31,7 +32,7 @@ type PrRepo interface {
 type PgPrRepo struct {
 	repo.PgBaseRepo[PrRepo]
 	queries        Queries
-	ExplainAnalyze bool
+	explainAnalyze bool
 }
 
 // delegate transaction handling to Base
@@ -39,10 +40,18 @@ func (r *PgPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(PrRepo) error)
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 
+func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool) PrRepo {
+	prRepo := new(PgPrRepo)
+	prRepo.Pool = dbPool
+	prRepo.explainAnalyze = explainAnalyze
+	return prRepo
+}
+
 // DerivedRepo
 func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
 	prRepo := new(PgPrRepo)
 	prRepo.PgBaseRepo = *base
+	prRepo.explainAnalyze = r.explainAnalyze
 	return prRepo
 }
 
@@ -68,7 +77,7 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 }
 
 func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
-	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.ExplainAnalyze)
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.explainAnalyze)
 	var list []PatronRequest
 	var fullCount int64
 	if err == nil {

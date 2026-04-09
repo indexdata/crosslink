@@ -155,8 +155,8 @@ func Init(ctx context.Context) (Context, error) {
 
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
-	illRepo := CreateIllRepo(pool)
-	prRepo := CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
+	illRepo := ill_db.CreateIllRepo(pool)
+	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
@@ -333,19 +333,6 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
 	return nil
-}
-
-func CreateIllRepo(dbPool *pgxpool.Pool) ill_db.IllRepo {
-	illRepo := new(ill_db.PgIllRepo)
-	illRepo.Pool = dbPool
-	return illRepo
-}
-
-func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool) pr_db.PrRepo {
-	prRepo := new(pr_db.PgPrRepo)
-	prRepo.Pool = dbPool
-	prRepo.ExplainAnalyze = explainAnalyze
-	return prRepo
 }
 
 func HandleHealthz(w http.ResponseWriter, r *http.Request) {
