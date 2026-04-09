@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PrRepo interface {
@@ -26,11 +27,14 @@ type PrRepo interface {
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error)
+	DeleteNotificationById(ctx common.ExtendedContext, id string) error
+	DeleteItemById(ctx common.ExtendedContext, id string) error
 }
 
 type PgPrRepo struct {
 	repo.PgBaseRepo[PrRepo]
-	queries Queries
+	queries        Queries
+	explainAnalyze bool
 }
 
 // delegate transaction handling to Base
@@ -38,10 +42,18 @@ func (r *PgPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(PrRepo) error)
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 
+func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool) PrRepo {
+	prRepo := new(PgPrRepo)
+	prRepo.Pool = dbPool
+	prRepo.explainAnalyze = explainAnalyze
+	return prRepo
+}
+
 // DerivedRepo
 func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
 	prRepo := new(PgPrRepo)
 	prRepo.PgBaseRepo = *base
+	prRepo.explainAnalyze = r.explainAnalyze
 	return prRepo
 }
 
@@ -67,10 +79,13 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 }
 
 func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
-	rows, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.explainAnalyze)
 	var list []PatronRequest
 	var fullCount int64
 	if err == nil {
+		for _, line := range explainResult {
+			ctx.Logger().Info("explain", "line", line)
+		}
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
@@ -99,7 +114,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql)
+			rows, _, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}
@@ -175,4 +190,12 @@ func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, prId strin
 		list = append(list, row.Notification)
 	}
 	return list, err
+}
+
+func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string) error {
+	return r.queries.DeleteNotificationById(ctx, r.GetConnOrTx(), id)
+}
+
+func (r *PgPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {
+	return r.queries.DeleteItemById(ctx, r.GetConnOrTx(), id)
 }

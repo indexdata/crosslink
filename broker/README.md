@@ -84,6 +84,7 @@ Configuration is provided via environment variables:
 | `DB_SCHEMA`               | Database schema to use                                                                | `crosslink_broker`                        |
 | `DB_PROVISION`            | Should app create DB role/schema (`true`/`false`)                                     | `false`                                   |
 | `DB_MIGRATE`              | Should app run DB migrations (`true`/`false`)                                         | `true`                                    |
+| `DB_EXPLAIN_ANALYZE`      | Whether to run `EXPLAIN ANALYZE` on patron requests limited by CQL                    | `false`                                   |
 | `LOG_LEVEL`               | Log level: `ERROR`, `WARN`, `INFO`, `DEBUG`                                           | `INFO`                                    |
 | `ENABLE_JSON_LOG`         | Should JSON log format be enabled                                                     | `false`                                   |
 | `BROKER_MODE`             | Default broker mode if not configured for a peer: `opaque` or `transparent`           | `opaque`                                  |
