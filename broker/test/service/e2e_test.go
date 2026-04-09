@@ -164,7 +164,7 @@ func TestRequestUNFILLED(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	body, err := io.ReadAll(res.Body)
 	assert.Nil(t, err)
-	var msg iso18626.Iso18626MessageNS
+	var msg iso18626.ISO18626Message
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.RequestConfirmation)
@@ -223,7 +223,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	body, err := io.ReadAll(res.Body)
 	assert.Nil(t, err)
-	var msg iso18626.Iso18626MessageNS
+	var msg iso18626.ISO18626Message
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.SupplyingAgencyMessageConfirmation)
@@ -296,7 +296,7 @@ func TestMessageSkipped(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	body, err := io.ReadAll(res.Body)
 	assert.Nil(t, err)
-	var msg iso18626.Iso18626MessageNS
+	var msg iso18626.ISO18626Message
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.SupplyingAgencyMessageConfirmation)
@@ -640,7 +640,7 @@ func TestRequestRETRY_NON_EXISTING(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	body, err := io.ReadAll(res.Body)
 	assert.Nil(t, err)
-	var msg iso18626.Iso18626MessageNS
+	var msg iso18626.ISO18626Message
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.RequestConfirmation)
@@ -661,7 +661,7 @@ func TestRequestREMINDER(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 	body, err := io.ReadAll(res.Body)
 	assert.Nil(t, err)
-	var msg iso18626.Iso18626MessageNS
+	var msg iso18626.ISO18626Message
 	err = xml.Unmarshal(body, &msg)
 	assert.Nil(t, err)
 	assert.NotNil(t, msg.RequestConfirmation)

@@ -202,14 +202,14 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	}
 }
 
-func createSupplyingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = iso18626.NewIso18626MessageNS()
+func createSupplyingAgencyMessage() *iso18626.ISO18626Message {
+	var msg = iso18626.NewISO18626Message()
 	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	msg.SupplyingAgencyMessage.StatusInfo.LastChange = utils.XSDDateTime{Time: time.Now()}
 	return msg
 }
 
-func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.Iso18626MessageNS) bool {
+func (app *MockApp) sendSupplyingAgencyMessage(header *iso18626.Header, state *supplierInfo, msg *iso18626.ISO18626Message) bool {
 	msg.SupplyingAgencyMessage.Header = *header
 	msg.SupplyingAgencyMessage.Header.SupplyingAgencyRequestId = state.supplierRequestId
 	msg.SupplyingAgencyMessage.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
@@ -357,7 +357,7 @@ func (app *MockApp) handleRequestingAgencyMessageError(request *iso18626.Request
 	app.writeIso18626Response(resmsg, w, role, &request.Header)
 }
 
-func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626RequestingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	requestingAgencyMessage := illMessage.RequestingAgencyMessage
 	app.logIncomingReq(role.Supplier, &requestingAgencyMessage.Header, illMessage)
 	err := validateHeader(&requestingAgencyMessage.Header)

@@ -5,7 +5,7 @@
         <AgencyId></AgencyId>
       </FromAgencyId>
       <ToAgencyId xmlns="http://www.niso.org/2008/ncip">
-        <AgencyId></AgencyId>
+        <AgencyId ncip:Scheme="urn:any">toAgency</AgencyId>
       </ToAgencyId>
     </InitiationHeader>
     <RequestId xmlns="http://www.niso.org/2008/ncip">

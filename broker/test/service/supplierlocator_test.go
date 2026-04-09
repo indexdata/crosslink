@@ -548,7 +548,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			SupplyingAgencyId: iso18626.TypeAgencyId{
@@ -629,7 +629,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 			completedTask = append(completedTask, event)
 		}
 	})
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			SupplyingAgencyId: iso18626.TypeAgencyId{

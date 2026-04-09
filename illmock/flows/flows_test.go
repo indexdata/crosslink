@@ -38,7 +38,7 @@ func TestFlowApiBadMethod(t *testing.T) {
 }
 
 func TestMarshalRequest(t *testing.T) {
-	illMessage := iso18626.NewIso18626MessageNS()
+	illMessage := iso18626.NewISO18626Message()
 	illMessage.Request = &iso18626.Request{}
 	illMessage.Request.Header.RequestingAgencyRequestId = "rid"
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage}
@@ -112,7 +112,7 @@ func TestGetFlows(t *testing.T) {
 	assert.NotNil(t, flows)
 	assert.Equal(t, 0, len(flows.Flows))
 
-	illMessage1 := iso18626.NewIso18626MessageNS()
+	illMessage1 := iso18626.NewISO18626Message()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	api.AddFlow(flow1)
@@ -122,7 +122,7 @@ func TestGetFlows(t *testing.T) {
 	assert.Equal(t, []Flow{flow1}, flowsR.Flows)
 	assert.Len(t, flowsR.Flows[0].Message, 1)
 
-	illMessage2 := iso18626.NewIso18626MessageNS()
+	illMessage2 := iso18626.NewISO18626Message()
 	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage2}
 	flow2 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Supplier, Supplier: "S2", Requester: "R2"}
 	api.AddFlow(flow2)
@@ -132,7 +132,7 @@ func TestGetFlows(t *testing.T) {
 	assert.Equal(t, []Flow{flow1, flow2}, flowsR.Flows)
 	assert.Len(t, flowsR.Flows[0].Message, 1)
 
-	illMessage3 := iso18626.NewIso18626MessageNS()
+	illMessage3 := iso18626.NewISO18626Message()
 	flowMessage = FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage3}
 	flow3 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid2", Role: role.Supplier, Supplier: "S3", Requester: "R3"}
 	api.AddFlow(flow3)
@@ -163,7 +163,7 @@ func TestGetFlows(t *testing.T) {
 	assert.Equal(t, []Flow(nil), flowsR.Flows)
 
 	// merged with flow1
-	illMessage4 := iso18626.NewIso18626MessageNS()
+	illMessage4 := iso18626.NewISO18626Message()
 	flowMessage = FlowMessage{Kind: "outgoing", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage4}
 	flow4 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	api.AddFlow(flow4)
@@ -186,7 +186,7 @@ func TestCleanerExpire(t *testing.T) {
 	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
-	illMessage1 := iso18626.NewIso18626MessageNS()
+	illMessage1 := iso18626.NewISO18626Message()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	api.AddFlow(flow1)
@@ -219,7 +219,7 @@ func TestCleanerKeep(t *testing.T) {
 	server := httptest.NewServer(api.HttpHandler())
 	defer server.Close()
 
-	illMessage1 := iso18626.NewIso18626MessageNS()
+	illMessage1 := iso18626.NewISO18626Message()
 	flowMessage := FlowMessage{Kind: "incoming", Timestamp: utils.XSDDateTime{Time: time.Now().UTC().Round(time.Millisecond)}, Message: *illMessage1}
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	api.AddFlow(flow1)

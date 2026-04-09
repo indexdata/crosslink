@@ -47,7 +47,7 @@ func TestReqForm(t *testing.T) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			var illMessage iso18626.Iso18626MessageNS
+			var illMessage iso18626.ISO18626Message
 			err = xml.Unmarshal(byteReq, &illMessage)
 			if err != nil {
 				http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)

@@ -49,13 +49,13 @@ func (s *Requester) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
-func createRequest() *iso18626.Iso18626MessageNS {
-	var msg = iso18626.NewIso18626MessageNS()
+func createRequest() *iso18626.ISO18626Message {
+	var msg = iso18626.NewISO18626Message()
 	msg.Request = &iso18626.Request{}
 	return msg
 }
 
-func (app *MockApp) handlePatronRequest(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func (app *MockApp) handlePatronRequest(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	illRequest := illMessage.Request
 
 	requester := &app.requester
@@ -184,8 +184,8 @@ func (app *MockApp) sendRequestingAgencyMessage(header *iso18626.Header, action 
 	}
 }
 
-func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = iso18626.NewIso18626MessageNS()
+func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = iso18626.NewISO18626Message()
 	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
@@ -200,14 +200,14 @@ func (app *MockApp) handleSupplyingAgencyError(illMessage *iso18626.SupplyingAge
 	app.writeIso18626Response(resmsg, w, role.Requester, &illMessage.Header)
 }
 
-func createRequestingAgencyMessage() *iso18626.Iso18626MessageNS {
-	var msg = iso18626.NewIso18626MessageNS()
+func createRequestingAgencyMessage() *iso18626.ISO18626Message {
+	var msg = iso18626.NewISO18626Message()
 	msg.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{}
 	return msg
 }
 
 func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo, prevId string, newId string) {
-	msg := &iso18626.Iso18626MessageNS{}
+	msg := &iso18626.ISO18626Message{}
 	msg.Request = &iso18626.Request{}
 	*msg.Request = *illRequest
 	msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
@@ -231,7 +231,7 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 	}
 }
 
-func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.Iso18626MessageNS, w http.ResponseWriter) {
+func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
 	requester := &app.requester
 	supplyingAgencyMessage := illMessage.SupplyingAgencyMessage
 	header := &supplyingAgencyMessage.Header
