@@ -12,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type IllRepo interface {
@@ -60,6 +61,12 @@ type PgIllRepo struct {
 // delegate transaction handling to Base
 func (r *PgIllRepo) WithTxFunc(ctx common.ExtendedContext, fn func(IllRepo) error) error {
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
+}
+
+func CreateIllRepo(dbPool *pgxpool.Pool) IllRepo {
+	illRepo := new(PgIllRepo)
+	illRepo.Pool = dbPool
+	return illRepo
 }
 
 // DerivedRepo
