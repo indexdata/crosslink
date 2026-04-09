@@ -61,7 +61,6 @@ func TestMain(m *testing.M) {
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../../migrations"
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	app.DB_EXPLAIN_ANALYZE = true
 	mockPort := utils.Must(test.GetFreePort())
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
@@ -637,12 +636,17 @@ func TestServerChoice(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cal=cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
 	var foundPrs proapi.PatronRequests
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	respBytes = httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20ddream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), foundPrs.About.Count)
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
