@@ -64,14 +64,14 @@ type EventData struct {
 }
 
 type CommonEventData struct {
-	IncomingMessage *iso18626.Iso18626MessageNS `json:"incomingMessage,omitempty"`
-	OutgoingMessage *iso18626.Iso18626MessageNS `json:"outgoingMessage,omitempty"`
-	Problem         *Problem                    `json:"problem,omitempty"`
-	HttpFailure     *httpclient.HttpError       `json:"httpFailure,omitempty"`
-	EventError      *EventError                 `json:"eventError,omitempty"`
-	Note            string                      `json:"note,omitempty"`
-	Action          *pr_db.PatronRequestAction  `json:"action,omitempty"`
-	ActionResult    *ActionResult               `json:"actionResult,omitempty"`
+	IncomingMessage *iso18626.ISO18626Message  `json:"incomingMessage,omitempty"`
+	OutgoingMessage *iso18626.ISO18626Message  `json:"outgoingMessage,omitempty"`
+	Problem         *Problem                   `json:"problem,omitempty"`
+	HttpFailure     *httpclient.HttpError      `json:"httpFailure,omitempty"`
+	EventError      *EventError                `json:"eventError,omitempty"`
+	Note            string                     `json:"note,omitempty"`
+	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
+	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
 }
 
 type ActionResult struct {

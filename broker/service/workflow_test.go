@@ -144,7 +144,7 @@ func TestRequesterMessageReceived_BrokerCancelSkipsNewSuppliers(t *testing.T) {
 		})).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Action: iso18626.TypeActionCancel,
 		Header: iso18626.Header{
@@ -175,7 +175,7 @@ func TestRequesterMessageReceived_SupplierCancelDoesNotSkipNewSuppliers(t *testi
 	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything, mock.Anything).Return()
 	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
 
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Action: iso18626.TypeActionCancel,
 		Header: iso18626.Header{
@@ -198,8 +198,8 @@ func TestRequesterMessageReceived_SupplierCancelDoesNotSkipNewSuppliers(t *testi
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 	assert.Equal(t, 1, eventBus.TasksCreated)
 }
-func messageFromSam(sam *iso18626.SupplyingAgencyMessage) *iso18626.Iso18626MessageNS {
-	var message = iso18626.NewIso18626MessageNS()
+func messageFromSam(sam *iso18626.SupplyingAgencyMessage) *iso18626.ISO18626Message {
+	var message = iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = sam
 	return message
 }
@@ -339,7 +339,7 @@ func (r *MockEventRepositoryCorrect) GetLatestRequestEventByAction(ctx common.Ex
 	if illTransId == "2" {
 		supId = "BROKER"
 	}
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Header: iso18626.Header{
 			SupplyingAgencyId: iso18626.TypeAgencyId{

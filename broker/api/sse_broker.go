@@ -141,8 +141,8 @@ type SseMessage struct {
 }
 
 type SseIsoMessageEvent struct {
-	Event events.EventName           `json:"event,omitempty"`
-	Data  iso18626.Iso18626MessageNS `json:"data,omitempty"`
+	Event events.EventName         `json:"event,omitempty"`
+	Data  iso18626.ISO18626Message `json:"data,omitempty"`
 }
 
 func (b *SseBroker) IncomingIsoMessage(ctx common.ExtendedContext, event events.Event) {

@@ -438,7 +438,7 @@ func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 func TestSendHttpPost(t *testing.T) {
 	// Define test cases
-	var requestM = iso18626.NewIso18626MessageNS()
+	var requestM = iso18626.NewISO18626Message()
 	requestM.Request = &iso18626.Request{
 		Header: iso18626.Header{
 			SupplyingAgencyRequestId: "test\x00\x1Fdata\"<>&",
@@ -447,31 +447,31 @@ func TestSendHttpPost(t *testing.T) {
 	tests := []struct {
 		name           string
 		url            string
-		msg            *iso18626.Iso18626MessageNS
+		msg            *iso18626.ISO18626Message
 		mockResponse   *http.Response
 		mockError      error
-		expectedResult *iso18626.Iso18626MessageNS
+		expectedResult *iso18626.ISO18626Message
 		expectedError  string
 	}{
 		{
 			name: "successful post request",
 			url:  "https://test.com",
-			msg:  iso18626.NewIso18626MessageNS(),
+			msg:  iso18626.NewISO18626Message(),
 			mockResponse: &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     http.Header{"Content-Type": []string{"application/xml"}},
-				Body: io.NopCloser(bytes.NewBufferString(`<ISO18626Message>
+				Body: io.NopCloser(bytes.NewBufferString(`<ISO18626Message xmlns="http://illtransactions.org/2013/iso18626">
 					<!-- Add your mock XML response -->
 				</ISO18626Message>`)),
 			},
 			mockError:      nil,
-			expectedResult: iso18626.NewIso18626MessageNS(),
+			expectedResult: iso18626.NewISO18626Message(),
 			expectedError:  "",
 		},
 		{
 			name: "server error",
 			url:  "https://test.com",
-			msg:  iso18626.NewIso18626MessageNS(),
+			msg:  iso18626.NewISO18626Message(),
 			mockResponse: &http.Response{
 				StatusCode: http.StatusInternalServerError,
 				Body:       io.NopCloser(bytes.NewBufferString("Internal Server Error")),
@@ -483,7 +483,7 @@ func TestSendHttpPost(t *testing.T) {
 		{
 			name:           "request error",
 			url:            "https://test.com",
-			msg:            iso18626.NewIso18626MessageNS(),
+			msg:            iso18626.NewISO18626Message(),
 			mockResponse:   nil,
 			mockError:      fmt.Errorf("mock request error"),
 			expectedResult: nil,
@@ -615,7 +615,7 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrans := requestLocallyAvailableSetup(t, appCtx, common.BrokerModeOpaque)
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		StatusInfo: iso18626.StatusInfo{
 			Status: iso18626.TypeStatusLoaned,

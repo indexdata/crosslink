@@ -115,7 +115,7 @@ func TestSseEndpointNoSymbol(t *testing.T) {
 
 func executeTask(t time.Time) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	var message = iso18626.NewIso18626MessageNS()
+	var message = iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{

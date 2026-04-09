@@ -238,7 +238,7 @@ func (w *WorkflowManager) skipAllSuppliersByStatus(ctx common.ExtendedContext, i
 	}
 }
 
-func getSymbol(msg *iso18626.Iso18626MessageNS) string {
+func getSymbol(msg *iso18626.ISO18626Message) string {
 	symbol := ""
 	if msg != nil && msg.SupplyingAgencyMessage != nil {
 		symbol = msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +

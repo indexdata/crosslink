@@ -15,13 +15,15 @@ generate: generate-schema
 generate-schema: $(GEN_SCHEMA_OUT)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl@v1.4.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
+	$(GO) run github.com/indexdata/xsd2goxsl@v1.5.1 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
-	qAttrType=utils.PrefixAttr \
 	dateTimeType=utils.XSDDateTime \
 	decimalType=utils.XSDDecimal \
 	json=yes \
-	validate=yes
+	validate=yes \
+	namespaced=yes \
+	root=ISO18626Message \
+	schemaLocation=http://illtransactions.org/schemas/ISO-18626-v1_2.xsd
 	$(GO) fmt $(GEN_SCHEMA_OUT)
 
 clean:

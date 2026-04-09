@@ -376,7 +376,7 @@ func (a *PatronRequestActionService) sendBorrowingRequest(ctx common.ExtendedCon
 	}
 	illRequest.PatronInfo.PatronId = pr.Patron.String
 
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.Request = &illRequest
 	w := NewResponseCaptureWriter()
 	a.iso18626Handler.HandleRequest(ctx, illMessage, w)
@@ -531,7 +531,7 @@ func (a *PatronRequestActionService) sendRequestingAgencyMessage(ctx common.Exte
 		status, eventResult := a.logErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
@@ -835,7 +835,7 @@ func (a *PatronRequestActionService) sendSupplyingAgencyMessage(ctx common.Exten
 	// pr.SupplierSymbol is validated earlier in handleLenderAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
@@ -908,7 +908,7 @@ func (a *PatronRequestActionService) markActionChainFailure(ctx common.ExtendedC
 }
 
 type ResponseCaptureWriter struct {
-	IllMessage *iso18626.Iso18626MessageNS
+	IllMessage *iso18626.ISO18626Message
 	StatusCode int
 }
 
@@ -918,7 +918,7 @@ func NewResponseCaptureWriter() *ResponseCaptureWriter {
 	}
 }
 func (rcw *ResponseCaptureWriter) Write(b []byte) (int, error) {
-	rcw.IllMessage = iso18626.NewIso18626MessageNS()
+	rcw.IllMessage = iso18626.NewISO18626Message()
 	err := xml.Unmarshal(b, rcw.IllMessage)
 	return 1, err
 }

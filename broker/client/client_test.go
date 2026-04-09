@@ -66,7 +66,7 @@ func TestSendHttpPost(t *testing.T) {
 		for k, v := range headers {
 			assert.Equal(t, v, r.Header.Get(k))
 		}
-		msg := iso18626.NewIso18626MessageNS()
+		msg := iso18626.NewISO18626Message()
 		buf, err := xml.Marshal(msg)
 		assert.NoError(t, err)
 		_, err = w.Write(buf)
@@ -77,7 +77,7 @@ func TestSendHttpPost(t *testing.T) {
 
 	var client = CreateIso18626Client(new(events.PostgresEventBus), new(ill_db.PgIllRepo), *new(prservice.PatronRequestMessageHandler), 0, 0*time.Second)
 
-	msg := iso18626.NewIso18626MessageNS()
+	msg := iso18626.NewISO18626Message()
 	peer := ill_db.Peer{
 		Url:         server.URL,
 		HttpHeaders: headers,
@@ -115,7 +115,7 @@ func TestGetPeerNameAndAddress(t *testing.T) {
 }
 
 func TestPopulateRequesterInfo(t *testing.T) {
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
@@ -140,7 +140,7 @@ func TestPopulateRequesterInfo(t *testing.T) {
 }
 
 func TestPopulateDeliveryAddress(t *testing.T) {
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{}
 	address := iso18626.PhysicalAddress{
 		Line1: "Home 1",
@@ -164,7 +164,7 @@ func TestPopulateDeliveryAddress(t *testing.T) {
 
 func TestPopulateDeliveryAddressPatron(t *testing.T) {
 	yes := iso18626.TypeYesNoY
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
 		PatronInfo: &iso18626.PatronInfo{
 			GivenName:    "Patron 1",
@@ -202,7 +202,7 @@ func TestPopulateDeliveryAddressPatron(t *testing.T) {
 }
 
 func TestPopulateSupplierAddress(t *testing.T) {
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	name := "Requester 1"
 	address := iso18626.PhysicalAddress{
@@ -239,7 +239,7 @@ func TestPopulateSupplierAddress(t *testing.T) {
 }
 
 func TestPopulateSupplierInfo(t *testing.T) {
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
 		SupplierInfo: []iso18626.SupplierInfo{
 			{XMLName: xml.Name{Local: "supplierInfo"}},
@@ -355,7 +355,7 @@ func TestValidateReason(t *testing.T) {
 }
 
 func TestPrependVendorInNote(t *testing.T) {
-	message := iso18626.NewIso18626MessageNS()
+	message := iso18626.NewISO18626Message()
 	message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
 	message.SupplyingAgencyMessage.MessageInfo.Note = ""
 	prependVendorNote(message.SupplyingAgencyMessage, "Alma")
@@ -399,7 +399,7 @@ func createSupplyingAgencyMessageEvent(notification bool) events.Event {
 	if notification {
 		reason = iso18626.TypeReasonForMessageNotification
 	}
-	var iMessage = iso18626.NewIso18626MessageNS()
+	var iMessage = iso18626.NewISO18626Message()
 	iMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			SupplyingAgencyId: iso18626.TypeAgencyId{
@@ -728,7 +728,7 @@ func TestCreateRequestingAgencyMessage(t *testing.T) {
 		Name:   "isil:sup1",
 		Vendor: string(directory.Alma),
 	}
-	var iMessage = iso18626.NewIso18626MessageNS()
+	var iMessage = iso18626.NewISO18626Message()
 	iMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Note: "This is note",
 	}
@@ -796,7 +796,7 @@ func TestBlockUnfilled(t *testing.T) {
 	}, requester: &requester}
 	assert.False(t, blockUnfilled(trCtx))
 
-	trCtx.event.EventData.IncomingMessage = iso18626.NewIso18626MessageNS()
+	trCtx.event.EventData.IncomingMessage = iso18626.NewISO18626Message()
 	assert.False(t, blockUnfilled(trCtx))
 
 	trCtx.event.EventData.IncomingMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
@@ -860,7 +860,7 @@ func TestHandleIllMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), mockPrMessageHandler, 1, 0*time.Second)
-	sam := iso18626.NewIso18626MessageNS()
+	sam := iso18626.NewISO18626Message()
 	sam.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyRequestId: "req-1",

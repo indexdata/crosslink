@@ -241,8 +241,8 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 }
 
 // largely copied from illmock/app/requester.go
-func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = iso18626.NewIso18626MessageNS()
+func createSupplyingAgencyResponse(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = iso18626.NewISO18626Message()
 	header := createConfirmationHeader(&supplyingAgencyMessage.Header, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{
@@ -269,7 +269,7 @@ func TestIso18626PostSupplyingMessageConfirm(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var illMessage iso18626.Iso18626MessageNS
+		var illMessage iso18626.ISO18626Message
 		err = xml.Unmarshal(byteReq, &illMessage)
 		assert.NoError(t, err)
 		supplyingAgencyMessage := illMessage.SupplyingAgencyMessage

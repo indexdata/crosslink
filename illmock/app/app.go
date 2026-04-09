@@ -54,7 +54,7 @@ func validateHeader(header *iso18626.Header) error {
 	return nil
 }
 
-func (app *MockApp) writeIso18626Response(resmsg *iso18626.Iso18626MessageNS, w http.ResponseWriter, role role.Role, header *iso18626.Header) {
+func (app *MockApp) writeIso18626Response(resmsg *iso18626.ISO18626Message, w http.ResponseWriter, role role.Role, header *iso18626.Header) {
 	buf := utils.Must(xml.MarshalIndent(resmsg, "  ", "  "))
 	if buf == nil {
 		http.Error(w, "marshal failed", http.StatusInternalServerError)
@@ -96,8 +96,8 @@ func createErrorData(errorMessage *string, errorType *iso18626.TypeErrorType) *i
 	return nil
 }
 
-func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = iso18626.NewIso18626MessageNS()
+func createRequestResponse(requestHeader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = iso18626.NewISO18626Message()
 	header := createConfirmationHeader(requestHeader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestConfirmation = &iso18626.RequestConfirmation{
@@ -112,8 +112,8 @@ func (app *MockApp) handleRequestError(requestHeader *iso18626.Header, role role
 	app.writeIso18626Response(resmsg, w, role, requestHeader)
 }
 
-func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.Iso18626MessageNS {
-	var resmsg = iso18626.NewIso18626MessageNS()
+func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus iso18626.TypeMessageStatus, errorMessage *string, errorType *iso18626.TypeErrorType) *iso18626.ISO18626Message {
+	var resmsg = iso18626.NewISO18626Message()
 	header := createConfirmationHeader(iheader, messageStatus)
 	errorData := createErrorData(errorMessage, errorType)
 	resmsg.RequestingAgencyMessageConfirmation = &iso18626.RequestingAgencyMessageConfirmation{
@@ -123,12 +123,12 @@ func createRequestingAgencyConfirmation(iheader *iso18626.Header, messageStatus 
 	return resmsg
 }
 
-func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, role role.Role, header *iso18626.Header) (*iso18626.Iso18626MessageNS, error) {
+func (app *MockApp) sendReceive(url string, msg *iso18626.ISO18626Message, role role.Role, header *iso18626.Header) (*iso18626.ISO18626Message, error) {
 	if url == "" {
 		return nil, fmt.Errorf("url cannot be empty")
 	}
 	app.logOutgoingReq(role, header, msg, url)
-	var response iso18626.Iso18626MessageNS
+	var response iso18626.ISO18626Message
 	err := app.client.PostXml(http.DefaultClient, url, msg, &response)
 	if err != nil {
 		status := 0
@@ -142,7 +142,7 @@ func (app *MockApp) sendReceive(url string, msg *iso18626.Iso18626MessageNS, rol
 	return &response, nil
 }
 
-func logMessage(lead string, illMessage *iso18626.Iso18626MessageNS) bool {
+func logMessage(lead string, illMessage *iso18626.ISO18626Message) bool {
 	buf := utils.Must(xml.MarshalIndent(illMessage, "  ", "  "))
 	if buf == nil {
 		return false
@@ -151,7 +151,7 @@ func logMessage(lead string, illMessage *iso18626.Iso18626MessageNS) bool {
 	return true
 }
 
-func (app *MockApp) logIso18626Message(role role.Role, kind string, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS, extra string) {
+func (app *MockApp) logIso18626Message(role role.Role, kind string, header *iso18626.Header, illMessage *iso18626.ISO18626Message, extra string) {
 	logmsg := fmt.Sprintf("%s role:%s id:%s req:%s sup:%s%s", kind, role, header.RequestingAgencyRequestId,
 		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, extra)
 	if logMessage(logmsg, illMessage) {
@@ -161,11 +161,11 @@ func (app *MockApp) logIso18626Message(role role.Role, kind string, header *iso1
 	}
 }
 
-func (app *MockApp) logIncomingReq(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+func (app *MockApp) logIncomingReq(role role.Role, header *iso18626.Header, illMessage *iso18626.ISO18626Message) {
 	app.logIso18626Message(role, "incoming-request", header, illMessage, "")
 }
 
-func (app *MockApp) logOutgoingReq(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
+func (app *MockApp) logOutgoingReq(role role.Role, header *iso18626.Header, illMessage *iso18626.ISO18626Message,
 	url string) {
 	app.logIso18626Message(role, "outgoing-request", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
@@ -175,12 +175,12 @@ func (app *MockApp) logOutgoingErr(role role.Role, header *iso18626.Header, url 
 		header.RequestingAgencyId.AgencyIdValue, header.SupplyingAgencyId.AgencyIdValue, url, status, error))
 }
 
-func (app *MockApp) logIncomingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS,
+func (app *MockApp) logIncomingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.ISO18626Message,
 	url string) {
 	app.logIso18626Message(role, "incoming-response", header, illMessage, fmt.Sprintf(" url:%s", url))
 }
 
-func (app *MockApp) logOutgoingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.Iso18626MessageNS) {
+func (app *MockApp) logOutgoingRes(role role.Role, header *iso18626.Header, illMessage *iso18626.ISO18626Message) {
 	app.logIso18626Message(role, "outgoing-response", header, illMessage, "")
 }
 
@@ -222,7 +222,7 @@ func iso18626Handler(app *MockApp) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		var illMessage iso18626.Iso18626MessageNS
+		var illMessage iso18626.ISO18626Message
 		err = xml.Unmarshal(byteReq, &illMessage)
 		if err != nil {
 			http.Error(w, "unmarshal: "+err.Error(), http.StatusBadRequest)
@@ -321,7 +321,6 @@ func (app *MockApp) Run() error {
 	if app.headers != nil {
 		app.client = *app.client.WithHeaders(app.headers...)
 	}
-	iso18626.InitNs()
 	log.Info("Mock starting")
 	if app.agencyType == "" {
 		app.agencyType = "MOCK"
