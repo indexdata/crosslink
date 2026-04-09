@@ -2,6 +2,7 @@ package shim
 
 import (
 	"encoding/xml"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -66,7 +67,15 @@ func (i *Iso18626DefaultShim) ApplyToOutgoingRequest(message *iso18626.Iso18626M
 }
 
 func (i *Iso18626DefaultShim) ApplyToIncomingResponse(bytes []byte, message *iso18626.Iso18626MessageNS) error {
-	return xml.Unmarshal(bytes, message)
+	if message == nil {
+		return fmt.Errorf("message is nil")
+	}
+	parsed := iso18626.NewIso18626MessageNS()
+	if err := xml.Unmarshal(bytes, parsed); err != nil {
+		return err
+	}
+	*message = *parsed
+	return nil
 }
 
 func (i *Iso18626DefaultShim) ApplyToIncomingRequest(message *iso18626.Iso18626MessageNS, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.Iso18626MessageNS {

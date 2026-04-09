@@ -918,7 +918,8 @@ func NewResponseCaptureWriter() *ResponseCaptureWriter {
 	}
 }
 func (rcw *ResponseCaptureWriter) Write(b []byte) (int, error) {
-	err := xml.Unmarshal(b, &rcw.IllMessage)
+	rcw.IllMessage = iso18626.NewIso18626MessageNS()
+	err := xml.Unmarshal(b, rcw.IllMessage)
 	return 1, err
 }
 func (rcw *ResponseCaptureWriter) WriteHeader(code int) {
