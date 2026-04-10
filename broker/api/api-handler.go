@@ -13,8 +13,6 @@ import (
 	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/directory"
 
-	"github.com/indexdata/go-utils/utils"
-
 	"github.com/google/uuid"
 	icql "github.com/indexdata/cql-go/cql"
 	"github.com/indexdata/cql-go/pgcql"
@@ -676,10 +674,8 @@ func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {
 		ParentID:         toString(event.ParentID),
 		PatronRequestID:  prId,
 	}
-	eventData := utils.Must(common.StructToMap(event.EventData))
-	api.EventData = &eventData
-	resultData := utils.Must(common.StructToMap(event.ResultData))
-	api.ResultData = &resultData
+	api.EventData = &event.EventData
+	api.ResultData = &event.ResultData
 	return api
 }
 
@@ -723,7 +719,7 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	if trans.RequesterID.Valid {
 		api.RequesterPeerLink = toLink(r, PEERS_PATH, trans.RequesterID.String, "")
 	}
-	api.IllTransactionData = utils.Must(common.StructToMap(trans.IllTransactionData))
+	api.IllTransactionData = trans.IllTransactionData
 	return api
 }
 
@@ -754,11 +750,7 @@ func toApiPeer(peer ill_db.Peer, symbols []ill_db.Symbol, branchSymbols []ill_db
 		peer.BrokerMode = string(adapter.GetBrokerMode(adapter.GetVendorFromUrl(peer.Url)))
 	}
 
-	var customData map[string]interface{}
-	if bytes, err := json.Marshal(peer.CustomData); err == nil {
-		// If unmarshalling fails, customData remains nil
-		_ = json.Unmarshal(bytes, &customData)
-	}
+	customData := peer.CustomData
 
 	return oapi.Peer{
 		Id:            peer.ID,
@@ -798,13 +790,7 @@ func toApiBrokerMode(brokerMode string) oapi.PeerBrokerMode {
 func toDbPeer(peer oapi.Peer) ill_db.Peer {
 	var entry directory.Entry
 	if peer.CustomData != nil {
-		bytes, err := json.Marshal(*peer.CustomData)
-		if err == nil {
-			err = json.Unmarshal(bytes, &entry)
-		}
-		if err != nil {
-			entry = directory.Entry{}
-		}
+		entry = *peer.CustomData
 	}
 	httpHeaders := make(map[string]string)
 	if peer.HttpHeaders != nil {

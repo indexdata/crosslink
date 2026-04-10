@@ -32,6 +32,7 @@ import (
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	mocks "github.com/indexdata/crosslink/broker/test/mocks"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -462,10 +463,10 @@ func TestPeersCRUD(t *testing.T) {
 		"X-Okapi-Tenant": "diku",
 		"X-Okapi-Url":    "http://localhost:1234",
 	}
-	custom := map[string]interface{}{
-		"name":  "v1",
-		"email": "v2",
-		"lost":  "value",
+	email := "v2"
+	custom := directory.Entry{
+		Name:  "v1",
+		Email: &email,
 	}
 	// Create peer
 	loanCount := int32(5)
@@ -503,9 +504,11 @@ func TestPeersCRUD(t *testing.T) {
 	assert.Equal(t, "https://url.com", respPeers.Items[0].Url)
 	assert.Equal(t, oapi.Opaque, respPeers.Items[0].BrokerMode)
 	assert.Equal(t, "Unknown", respPeers.Items[0].Vendor)
-	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["name"])
-	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["email"])
-	assert.Nil(t, (*respPeers.Items[0].CustomData)["lost"])
+	assert.NotNil(t, respPeers.Items[0].CustomData)
+	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 	assert.Equal(t, int32(5), *respPeers.Items[0].LoansCount)
 	assert.Equal(t, int32(10), *respPeers.Items[0].BorrowsCount)
@@ -576,8 +579,10 @@ func TestPeersCRUD(t *testing.T) {
 	assert.GreaterOrEqual(t, len(respPeers.Items), 1)
 	assert.Equal(t, toCreate.Id, respPeers.Items[0].Id)
 	assert.NotNil(t, respPeers.Items[0].CustomData)
-	assert.Equal(t, "v1", (*respPeers.Items[0].CustomData)["name"])
-	assert.Equal(t, "v2", (*respPeers.Items[0].CustomData)["email"])
+	assert.Equal(t, "v1", respPeers.Items[0].CustomData.Name)
+	if assert.NotNil(t, respPeers.Items[0].CustomData.Email) {
+		assert.Equal(t, "v2", *respPeers.Items[0].CustomData.Email)
+	}
 	assert.Equal(t, "http://localhost:1234", (*respPeers.Items[0].HttpHeaders)["X-Okapi-Url"])
 
 	// Delete peer
