@@ -1,0 +1,3 @@
+ALTER TABLE peer
+    ALTER COLUMN custom_data DROP NOT NULL,
+    ALTER COLUMN custom_data DROP DEFAULT;
