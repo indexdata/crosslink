@@ -3,6 +3,8 @@ output: patron_request/proapi/pr-openapi_gen.go
 output-options:
   include-tags:
     - patron-requests-api
+  overlay:
+    path: oapi/pr-overlay.yaml
 generate:
   models: true
   std-http-server: true

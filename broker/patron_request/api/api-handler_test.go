@@ -19,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,17 @@ var symbol = "ISIL:REQ"
 var lendingString = string(prservice.SideLending)
 var proapiBorrowingSide = proapi.Side(prservice.SideBorrowing)
 var proapiLendingSide = proapi.Side(prservice.SideLending)
+
+func validIllRequest() iso18626.Request {
+	return iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Test title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeCopy,
+		},
+	}
+}
 
 func TestGetId(t *testing.T) {
 	assert.True(t, getId("") != "")
@@ -117,14 +129,7 @@ func TestPostPatronRequests(t *testing.T) {
 	toCreate := proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"bibliographicInfo": map[string]interface{}{
-				"title": "test",
-			},
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -163,15 +168,11 @@ func TestPostPatronRequestsInvalidJson(t *testing.T) {
 
 func TestPostPatronRequestsInvalidIllRequestShape(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), 10)
-	toCreate := proapi.CreatePatronRequest{
-		Id:              ptr("1"),
-		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"header": "invalid",
-		},
-	}
-	jsonBytes, err := json.Marshal(toCreate)
-	assert.NoError(t, err, "failed to marshal patron request")
+	jsonBytes := []byte(`{
+		"id":"1",
+		"requesterSymbol":"` + symbol + `",
+		"illRequest":{"header":"invalid"}
+	}`)
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	assert.NoError(t, err, "failed to create request")
 	rr := httptest.NewRecorder()
@@ -402,14 +403,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	reqWithID := &proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-			"bibliographicInfo": map[string]interface{}{
-				"title": "Test title",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}
 
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
@@ -449,14 +443,7 @@ func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
 
 	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-			"bibliographicInfo": map[string]interface{}{
-				"title": "Test title",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}, time.Now())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid BROKER_SYMBOL")
