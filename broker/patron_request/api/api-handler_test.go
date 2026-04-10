@@ -512,7 +512,3 @@ type MockEventBus struct {
 	mock.Mock
 	events.EventBus
 }
-
-func ptr(value string) *string {
-	return &value
-}
