@@ -653,7 +653,7 @@ func prepareAndValidateIllRequest(
 	creationTime time.Time,
 ) (iso18626.Request, error) {
 	if reflect.ValueOf(rawIllRequest).IsZero() {
-		return iso18626.Request{}, fmt.Errorf("%w: missing required illRequest payload", errInvalidPatronRequest)
+		return iso18626.Request{}, fmt.Errorf("%w: illRequest must not be empty", errInvalidPatronRequest)
 	}
 	illRequest := rawIllRequest
 	suppSymbolType, suppSymbolValue, err := parseAgencySymbol(brokerSymbol)
