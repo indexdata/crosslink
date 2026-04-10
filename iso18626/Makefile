@@ -6,7 +6,7 @@ XSLT ?= xsltproc
 GEN_SCHEMA_IN=xsd/ISO-18626-v1_2.xsd
 GEN_SCHEMA_OUT=ill_gen.go
 
-.PHONY: all generate generate-schema lint check clean deps-update
+.PHONY: all generate generate-schema lint vulncheck check clean deps-update
 
 all: generate
 
@@ -33,6 +33,9 @@ check: generate
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+vulncheck: generate
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 deps-update:
 	$(GO) get -u ./...

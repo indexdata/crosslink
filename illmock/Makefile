@@ -10,7 +10,7 @@ COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
-.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update
+.PHONY: all check clean coverage docker fmt fmt-check generate run doc view-coverage deps-update lint vulncheck
 
 all: $(PROGRAMS)
 
@@ -42,6 +42,9 @@ fmt-check:
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+vulncheck: generate
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 doc: README.html
 

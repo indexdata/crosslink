@@ -3,7 +3,7 @@ GIT ?= git
 GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 COVERAGE=coverage.out
-.PHONY: all generate lint check clean deps-update
+.PHONY: all generate lint vulncheck check clean deps-update
 
 all:
 
@@ -15,6 +15,9 @@ view-coverage: check
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+vulncheck:
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 check-coverage: check
 	$(GO) run github.com/vladopajic/go-test-coverage/v2@latest --config=./.testcoverage.yaml

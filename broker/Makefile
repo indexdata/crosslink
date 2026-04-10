@@ -37,7 +37,7 @@ PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
 PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint check-coverage
+.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
@@ -88,6 +88,9 @@ fmt-check:
 
 lint: generate
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
+
+vulncheck: generate
+	$(GO) run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 view-coverage: check
 	$(GO) tool cover -html=$(COVERAGE)
