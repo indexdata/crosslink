@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -560,7 +561,7 @@ func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request
 		Patron:             toString(request.Patron),
 		RequesterSymbol:    toString(request.RequesterSymbol),
 		SupplierSymbol:     toString(request.SupplierSymbol),
-		IllRequest:         utils.Must(common.StructToMap(illRequest)),
+		IllRequest:         illRequest,
 		RequesterRequestId: toString(request.RequesterReqID),
 		NeedsAttention:     request.NeedsAttention,
 		LastAction:         toString(request.LastAction),
@@ -605,7 +606,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 		}
 		requesterReqId = hrid
 	}
-	illRequest, err := parseAndValidateIllRequestPayload(
+	illRequest, err := prepareAndValidateIllRequest(
 		request.IllRequest,
 		reqSymbolType,
 		reqSymbolValue,
@@ -644,25 +645,17 @@ func parseAgencySymbol(symbol string) (string, string, error) {
 	return scheme, value, nil
 }
 
-func parseAndValidateIllRequestPayload(
-	rawIllRequest map[string]interface{},
+func prepareAndValidateIllRequest(
+	rawIllRequest iso18626.Request,
 	reqSymbolType string,
 	reqSymbolValue string,
 	requesterReqId string,
 	creationTime time.Time,
 ) (iso18626.Request, error) {
-	var illRequest iso18626.Request
-	if rawIllRequest == nil {
-		return iso18626.Request{}, fmt.Errorf("%w: missing required illRequest payload", errInvalidPatronRequest)
+	if reflect.ValueOf(rawIllRequest).IsZero() {
+		return iso18626.Request{}, fmt.Errorf("%w: illRequest must not be empty", errInvalidPatronRequest)
 	}
-	illRequestBytes, err := json.Marshal(rawIllRequest)
-	if err != nil {
-		return iso18626.Request{}, fmt.Errorf("%w: illRequest: %w", errInvalidPatronRequest, err)
-	}
-	err = json.Unmarshal(illRequestBytes, &illRequest)
-	if err != nil {
-		return iso18626.Request{}, fmt.Errorf("%w: illRequest: %w", errInvalidPatronRequest, err)
-	}
+	illRequest := rawIllRequest
 	suppSymbolType, suppSymbolValue, err := parseAgencySymbol(brokerSymbol)
 	if err != nil {
 		return iso18626.Request{}, fmt.Errorf("invalid BROKER_SYMBOL %q: %w", brokerSymbol, err)

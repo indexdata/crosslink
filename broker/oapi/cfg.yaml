@@ -4,7 +4,8 @@ output-options:
   exclude-tags:
     - patron-requests-api
     - sse-api
+  overlay:
+    path: oapi/overlay.yaml
 generate:
   models: true
   std-http-server: true
-

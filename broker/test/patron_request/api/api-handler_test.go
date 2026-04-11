@@ -120,7 +120,7 @@ func TestCrud(t *testing.T) {
 		Id:              &id,
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
-		IllRequest:      utils.Must(common.StructToMap(request)),
+		IllRequest:      request,
 	}
 	newPrBytes, err := json.Marshal(newPr)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -287,17 +287,9 @@ func TestCrud(t *testing.T) {
 	//httpRequest(t, "DELETE", thisPrPath, []byte{}, 404)
 }
 
-func assertPatronRequestIllRequest(t *testing.T, payload map[string]interface{}, assertFn func(iso18626.Request)) {
+func assertPatronRequestIllRequest(t *testing.T, payload iso18626.Request, assertFn func(iso18626.Request)) {
 	t.Helper()
-
-	data, err := json.Marshal(payload)
-	assert.NoError(t, err)
-
-	var request iso18626.Request
-	err = json.Unmarshal(data, &request)
-	assert.NoError(t, err)
-
-	assertFn(request)
+	assertFn(payload)
 }
 
 func TestActionsToCompleteState(t *testing.T) {
@@ -328,7 +320,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	newPr := proapi.CreatePatronRequest{
 		RequesterSymbol: &requesterSymbol,
 		Patron:          &patron,
-		IllRequest:      utils.Must(common.StructToMap(request)),
+		IllRequest:      request,
 	}
 	newPrBytes, err := json.Marshal(newPr)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -537,12 +529,12 @@ func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 
 	newPr := proapi.CreatePatronRequest{
 		RequesterSymbol: &requesterSymbol,
-		IllRequest: map[string]interface{}{
-			"bibliographicInfo": map[string]interface{}{
-				"title": "Invalid request",
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				Title: "Invalid request",
 			},
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Broken",
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceType("Broken"),
 			},
 		},
 	}
