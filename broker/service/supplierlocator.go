@@ -76,8 +76,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	holdingsLog["entries"] = holdings
 	holdingsSymbols := make([]string, 0, len(holdings))
 	symbolToLocalId := make(map[string]string, len(holdings))
+	seenHoldingSymbols := make(map[string]struct{}, len(holdings))
 	potentialSuppliers := make([]adapter.Supplier, 0, len(holdings))
 	for _, holding := range holdings {
+		if _, ok := seenHoldingSymbols[holding.Symbol]; ok {
+			ctx.Logger().Warn("Ignoring additional holding for " + holding.Symbol + " with local ID " + holding.LocalIdentifier)
+			continue
+		}
+		seenHoldingSymbols[holding.Symbol] = struct{}{}
 		holdingsSymbols = append(holdingsSymbols, holding.Symbol)
 		symbolToLocalId[holding.Symbol] = holding.LocalIdentifier
 	}
