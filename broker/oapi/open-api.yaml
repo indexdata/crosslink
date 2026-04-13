@@ -1103,6 +1103,10 @@ paths:
       responses:
         '200':
           description: Peer updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Peer'
         '400':
           description: Bad request (e.g., invalid data)
           content:
@@ -1250,6 +1254,11 @@ paths:
       responses:
         '201':
           description: Patron request created successfully
+          headers:
+            Location:
+              description: URL of the created patron request
+              schema:
+                type: string
           content:
             application/json:
               schema:

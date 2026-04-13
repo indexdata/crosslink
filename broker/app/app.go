@@ -210,12 +210,22 @@ func StartServer(ctx Context) error {
 	})
 
 	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
-	oapi.HandlerFromMux(&apiHandler, ServeMux)
-	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
+	oapiStrictMiddleware := oapi.StrictMiddlewareFunc(func(f oapi.StrictHandlerFunc, _ string) oapi.StrictHandlerFunc {
+		return func(c context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+			return f(common.WithHTTPRequest(c, r), w, r, request)
+		}
+	})
+	proapiStrictMiddleware := proapi.StrictMiddlewareFunc(func(f proapi.StrictHandlerFunc, _ string) proapi.StrictHandlerFunc {
+		return func(c context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+			return f(common.WithHTTPRequest(c, r), w, r, request)
+		}
+	})
+	oapi.HandlerFromMux(oapi.NewStrictHandler(api.NewStrictApiHandler(&apiHandler), []oapi.StrictMiddlewareFunc{oapiStrictMiddleware}), ServeMux)
+	proapi.HandlerFromMux(proapi.NewStrictHandler(prapi.NewStrictPrApiHandler(&ctx.PrApiHandler), []proapi.StrictMiddlewareFunc{proapiStrictMiddleware}), ServeMux)
 	if TENANT_TO_SYMBOL != "" {
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
-		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
-		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
+		oapi.HandlerFromMuxWithBaseURL(oapi.NewStrictHandler(api.NewStrictApiHandler(&apiHandler), []oapi.StrictMiddlewareFunc{oapiStrictMiddleware}), ServeMux, "/broker")
+		proapi.HandlerFromMuxWithBaseURL(proapi.NewStrictHandler(prapi.NewStrictPrApiHandler(&ctx.PrApiHandler), []proapi.StrictMiddlewareFunc{proapiStrictMiddleware}), ServeMux, "/broker")
 	}
 
 	// SSE Incoming message handler
