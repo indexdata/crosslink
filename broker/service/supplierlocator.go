@@ -212,6 +212,14 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no suppliers with new status", nil)
 	}
 	eventData := map[string]any{}
+	supplierSymbols := make([]string, 0, len(suppliers))
+	for _, supplier := range suppliers {
+		supplierSymbols = append(supplierSymbols, supplier.SupplierSymbol)
+	}
+	_, query, err := s.illRepo.GetCachedPeersBySymbols(ctx, supplierSymbols, s.dirAdapter)
+	if err != nil {
+		ctx.Logger().Warn("failed to refresh supplier peers before selecting supplier", "symbols", supplierSymbols, "query", query, "error", err)
+	}
 	locSup, skippedSuppliers, err := s.getNextSupplier(ctx, suppliers)
 	if len(skippedSuppliers) > 0 {
 		eventData["skippedSuppliers"] = skippedSuppliers
