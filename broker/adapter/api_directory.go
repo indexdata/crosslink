@@ -325,7 +325,7 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 }
 
 func GetVendorFromUrl(url string) directory.EntryVendor {
-	if strings.Contains(url, "alma.exlibrisgroup.com") {
+	if strings.Contains(url, "alma.exlibrisgroup.com") || strings.Contains(url, "rapido.exlibrisgroup.com") {
 		return directory.Alma
 	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
 		return directory.ReShare
