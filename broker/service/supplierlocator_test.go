@@ -334,6 +334,7 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
 
 	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP"}}, mockIllRepo.refreshSymbols)
 	skipped, ok := result.CustomData["skippedSuppliers"].([]SkippedSupplier)
 	assert.True(t, ok)
 	assert.Len(t, skipped, 1)
@@ -343,6 +344,8 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 
 type MockIllRepoRequester struct {
 	mocks.MockIllRepositorySuccess
+	refreshSymbols [][]string
+	refreshErr     error
 }
 
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
@@ -355,4 +358,9 @@ func (r *MockIllRepoRequester) GetLocatedSuppliersByIllTransactionAndStatus(ctx 
 		return []ill_db.LocatedSupplier{{ID: "1", SupplierID: "p1", SupplierSymbol: "ISIL:SUP"}}, nil
 	}
 	return []ill_db.LocatedSupplier{}, nil
+}
+
+func (r *MockIllRepoRequester) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	r.refreshSymbols = append(r.refreshSymbols, symbols)
+	return []ill_db.Peer{}, "<refresh>", r.refreshErr
 }
