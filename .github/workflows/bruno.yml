@@ -36,7 +36,7 @@ jobs:
           illmock/go.sum
 
     - name : Ensure sqlc is installed
-      uses: sqlc-dev/setup-sqlc@v4
+      uses: sqlc-dev/setup-sqlc@v5
       with:
         sqlc-version: ${{ env.SQLC_VERSION }}
 
