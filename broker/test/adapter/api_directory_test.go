@@ -33,6 +33,41 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 	return adapter.CreateApiDirectory(http.DefaultClient, urls)
 }
 
+func TestGetVendorFromUrl(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected directory.EntryVendor
+	}{
+		{
+			name:     "alma",
+			url:      "https://example.alma.exlibrisgroup.com/view/uresolver/01TEST_INST/openurl",
+			expected: directory.Alma,
+		},
+		{
+			name:     "rapido",
+			url:      "https://example.rapido.exlibrisgroup.com/iso18626",
+			expected: directory.Alma,
+		},
+		{
+			name:     "reshare",
+			url:      "https://tenant-okapi.example.org/_/invoke/tenant/test/rs/externalApi/iso18626",
+			expected: directory.ReShare,
+		},
+		{
+			name:     "unknown",
+			url:      "https://example.org/iso18626",
+			expected: directory.Unknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, adapter.GetVendorFromUrl(tt.url))
+		})
+	}
+}
+
 func TestLookup400(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
