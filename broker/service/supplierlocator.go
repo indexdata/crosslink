@@ -82,13 +82,13 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	for _, holding := range holdings {
 		holdingSymbolCounts[holding.Symbol]++
 		if holdingSymbolCounts[holding.Symbol] > 1 {
-				if holdingSymbolCounts[holding.Symbol] == 2 {
-					ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
-						"symbol", holding.Symbol,
-						"localIdentifier", holding.LocalIdentifier,
-						"supplierUniqueRecordId", globalId,
-					)
-				}
+			if holdingSymbolCounts[holding.Symbol] == 2 {
+				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
+					"symbol", holding.Symbol,
+					"localIdentifier", holding.LocalIdentifier,
+					"supplierUniqueRecordId", globalId,
+				)
+			}
 			continue
 		}
 		holdingsSymbols = append(holdingsSymbols, holding.Symbol)
