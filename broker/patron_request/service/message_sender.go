@@ -3,7 +3,6 @@ package prservice
 import (
 	"encoding/xml"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -15,17 +14,21 @@ import (
 )
 
 type PatronRequestMessageSender struct {
-	iso18626Handler handler.Iso18626HandlerInterface
+	iso18626Handler         handler.Iso18626HandlerInterface
+	logErrorAndReturnResult func(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult)
 }
 
 func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo, deliveryInfo *iso18626.DeliveryInfo) (events.EventStatus, *events.EventResult, *int) {
-	if !pr.RequesterSymbol.Valid {
-		status, eventResult := logErrorAndReturnResult(ctx, "missing requester symbol", nil)
+	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	if err != nil {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
-	// pr.SupplierSymbol is validated earlier in handleLenderAction
-	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
-	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
+	supplierSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
+	if err != nil {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
+		return status, eventResult, nil
+	}
 	var illMessage = iso18626.NewISO18626Message()
 	illMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
@@ -69,21 +72,21 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 
 func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, action iso18626.TypeAction, note string) (events.EventStatus, *events.EventResult, *int) {
 	if !pr.RequesterSymbol.Valid {
-		status, eventResult := logErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return status, eventResult, nil
 	}
 	if !pr.SupplierSymbol.Valid {
-		status, eventResult := logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
-	if len(requesterSymbol) != 2 {
-		status, eventResult := logErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	if err != nil {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
-	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
-	if len(supplierSymbol) != 2 {
-		status, eventResult := logErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
+	supplierSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
+	if err != nil {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
 		return status, eventResult, nil
 	}
 	var illMessage = iso18626.NewISO18626Message()
@@ -116,16 +119,15 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 
 func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) actionExecutionResult {
 	result := events.EventResult{}
-	// pr.RequesterSymbol is validated earlier in handleBorrowingAction
-	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
-	if len(requesterSymbol) != 2 {
-		status, eventResult := logErrorAndReturnResult(ctx, "invalid requester symbol", nil)
+	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	if err != nil {
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 
 	illRequest, err := deepCopyISO18626Request(request)
 	if err != nil {
-		status, eventResult := logErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
+		status, eventResult := ms.logErrorAndReturnResult(ctx, "failed to clone outgoing ISO18626 request", err)
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{

@@ -15,7 +15,7 @@ const (
 	NotificationRejected     NotificationReceipt = "REJECTED"
 	NotificationSeen         NotificationReceipt = "SEEN"
 	NotificationSent         NotificationReceipt = "SENT"
-	NotificationFailedToSent NotificationReceipt = "FAILED_TO_SENT"
+	NotificationFailedToSend NotificationReceipt = "FAILED_TO_SEND"
 
 	NotificationDirectionSent     NotificationDirection = "sent"
 	NotificationDirectionReceived NotificationDirection = "received"

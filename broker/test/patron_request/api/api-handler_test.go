@@ -372,9 +372,7 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Send notification
 	notification := proapi.CreatePrNotification{
-		FromSymbol: supplierSymbol,
-		ToSymbol:   requesterSymbol,
-		Note:       "Will ship",
+		Note: "Will ship",
 	}
 	notificationBytes, err := json.Marshal(notification)
 	assert.NoError(t, err, "failed to marshal patron request notification")

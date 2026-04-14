@@ -555,7 +555,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		return
 	}
 
-	dbNotification := toDbNotification(newNotification, pr.ID)
+	dbNotification := toDbNotification(newNotification, *pr)
 	dbNotification, err = a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams(dbNotification))
 	if err != nil {
 		addInternalError(ctx, w, err)
@@ -893,12 +893,18 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 	}, nil
 }
 
-func toDbNotification(create proapi.CreatePrNotification, prId string) pr_db.Notification {
+func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest) pr_db.Notification {
+	fromSymbol := pr.RequesterSymbol.String
+	toSymbol := pr.SupplierSymbol.String
+	if pr.Side == prservice.SideLending {
+		fromSymbol = pr.SupplierSymbol.String
+		toSymbol = pr.RequesterSymbol.String
+	}
 	return pr_db.Notification{
 		ID:         uuid.NewString(),
-		PrID:       prId,
-		FromSymbol: create.FromSymbol,
-		ToSymbol:   create.ToSymbol,
+		PrID:       pr.ID,
+		FromSymbol: fromSymbol,
+		ToSymbol:   toSymbol,
 		Direction:  pr_db.NotificationDirectionSent,
 		Note:       getDbText(&create.Note),
 		CreatedAt: pgtype.Timestamp{

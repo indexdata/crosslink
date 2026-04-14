@@ -117,3 +117,11 @@ func UnpackItemNote(input string) []string {
 	result = append(result, current.String())
 	return result
 }
+
+func SplitSymbol(symbol string) ([]string, error) {
+	symbolParts := strings.SplitN(symbol, ":", 2)
+	if len(symbolParts) != 2 {
+		return nil, fmt.Errorf("invalid symbol: %s", symbol)
+	}
+	return symbolParts, nil
+}

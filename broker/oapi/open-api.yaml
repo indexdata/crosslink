@@ -890,18 +890,10 @@ components:
       title: Create Notification
       description: Create patron request notification body
       properties:
-        fromSymbol:
-          type: string
-          description: Symbol of notification sender
-        toSymbol:
-          type: string
-          description: Symbol of notification receiver
         note:
           type: string
           description: Note of notification
       required:
-        - fromSymbol
-        - toSymbol
         - note
 
     UpdateNotificationReceipt:
@@ -917,7 +909,7 @@ components:
             - REJECTED
             - SEEN
             - SENT
-            - FAILED_TO_SENT
+            - FAILED_TO_SEND
       required:
         - receipt
 
@@ -1558,9 +1550,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrNotifications'
+                $ref: '#/components/schemas/PrNotifications'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
@@ -1626,7 +1616,7 @@ paths:
 
   /patron_requests/{id}/notifications/{notificationId}/receipt:
     put:
-      summary: Create patron request notification
+      summary: Update patron request notification receipt
       parameters:
         - in: path
           name: id

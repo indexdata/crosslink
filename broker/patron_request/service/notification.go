@@ -19,14 +19,14 @@ type PatronRequestNotificationService struct {
 
 func CreatePatronRequestNotificationService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface) *PatronRequestNotificationService {
 	return &PatronRequestNotificationService{
-		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler},
+		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: events.LogErrorAndReturnResult},
 		prRepo:                     prRepo,
 		eventBus:                   eventBus,
 	}
 }
 
 func (n *PatronRequestNotificationService) SendPatronRequestNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, notification pr_db.Notification) error {
-	data := events.EventData{CustomData: map[string]any{"notification": notification}}
+	data := events.EventData{CommonEventData: events.CommonEventData{Notification: &notification}}
 	eventID, err := n.eventBus.CreateTask(pr.ID, events.EventNameSendNotification, data, events.EventDomainPatronRequest, nil)
 	if err != nil {
 		return errors.New("failed to create event for patron request notification(" + notification.ID + "): " + err.Error())
@@ -50,21 +50,16 @@ func (n *PatronRequestNotificationService) processInvokeNotificationTask(ctx com
 }
 
 func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	notMap, ok := event.EventData.CustomData["notification"].(map[string]any)
-	if !ok {
-		return logErrorAndReturnResult(ctx, "invalid event data: missing notification", nil)
-	}
-	notificationId, ok := notMap["ID"].(string)
-	if !ok {
-		return logErrorAndReturnResult(ctx, "invalid event data: missing id", nil)
+	if event.EventData.Notification == nil {
+		return logActionErrorAndReturnResult(ctx, "invalid event data: missing notification", nil)
 	}
 	pr, err := n.prRepo.GetPatronRequestById(ctx, event.PatronRequestID)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read patron request", err)
+		return logActionErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
-	notification, err := n.prRepo.GetNotificationById(ctx, notificationId)
+	notification, err := n.prRepo.GetNotificationById(ctx, event.EventData.Notification.ID)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read notification", err)
+		return logActionErrorAndReturnResult(ctx, "failed to read notification", err)
 	}
 	result := events.EventResult{}
 	var status events.EventStatus
@@ -85,7 +80,7 @@ func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.E
 	}
 
 	if httpStatus == nil {
-		notification.Receipt = pr_db.NotificationFailedToSent
+		notification.Receipt = pr_db.NotificationFailedToSend
 		return n.updateNotification(ctx, notification, status, eventResult)
 	}
 	if *httpStatus != http.StatusOK || failure {
@@ -93,7 +88,7 @@ func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.E
 			Message: "failed to send notification",
 			Cause:   "not successful response",
 		}
-		notification.Receipt = pr_db.NotificationFailedToSent
+		notification.Receipt = pr_db.NotificationFailedToSend
 		return n.updateNotification(ctx, notification, events.EventStatusProblem, &result)
 	}
 	notification.Receipt = pr_db.NotificationSent
@@ -103,7 +98,7 @@ func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.E
 func (n *PatronRequestNotificationService) updateNotification(ctx common.ExtendedContext, notification pr_db.Notification, status events.EventStatus, result *events.EventResult) (events.EventStatus, *events.EventResult) {
 	_, err := n.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams(notification))
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to update notification", err)
+		return logActionErrorAndReturnResult(ctx, "failed to update notification", err)
 	}
 	return status, result
 }

@@ -1393,7 +1393,7 @@ func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
+	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
 }
 
 type MockEventBus struct {

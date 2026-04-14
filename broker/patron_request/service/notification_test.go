@@ -49,7 +49,7 @@ func TestHandleInvokeNotificationParseError(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "1",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": "n1"}},
+		EventData:       events.EventData{},
 	}
 	service := CreatePatronRequestNotificationService(new(MockPrRepo), new(MockEventBus), new(MockIso18626Handler))
 
@@ -58,24 +58,11 @@ func TestHandleInvokeNotificationParseError(t *testing.T) {
 	assert.Equal(t, "invalid event data: missing notification", result.EventError.Message)
 }
 
-func TestHandleInvokeNotificationParseErrorId(t *testing.T) {
-	notificationEvent := events.Event{
-		ID:              "event-1",
-		PatronRequestID: "1",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": 1}}},
-	}
-	service := CreatePatronRequestNotificationService(new(MockPrRepo), new(MockEventBus), new(MockIso18626Handler))
-
-	status, result := service.handleInvokeNotification(appCtx, notificationEvent)
-	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "invalid event data: missing id", result.EventError.Message)
-}
-
 func TestHandleInvokeNotificationReadPrError(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "1",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	service := CreatePatronRequestNotificationService(new(MockPrRepo), new(MockEventBus), new(MockIso18626Handler))
 
@@ -88,7 +75,7 @@ func TestHandleInvokeNotificationReadNotificationError(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "2",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "n1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", "2").Return(pr_db.PatronRequest{ID: patronRequestId, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("req-1")}, nil)
@@ -104,7 +91,7 @@ func TestHandleInvokeNotificationSuccess(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "2",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "n1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", "2").Return(pr_db.PatronRequest{ID: patronRequestId, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("req-1")}, nil)
@@ -120,7 +107,7 @@ func TestHandleInvokeNotificationMissingSymbol(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "2",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "n1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", "2").Return(pr_db.PatronRequest{ID: patronRequestId, State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: pgtype.Text{}, RequesterReqID: getDbText("req-1")}, nil)
@@ -129,14 +116,14 @@ func TestHandleInvokeNotificationMissingSymbol(t *testing.T) {
 
 	status, result := service.handleInvokeNotification(appCtx, notificationEvent)
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing requester symbol", result.EventError.Message)
+	assert.Equal(t, "invalid requester symbol", result.EventError.Message)
 }
 
 func TestHandleInvokeNotificationHttpErrorResponse(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "error",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "n1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", "error").Return(pr_db.PatronRequest{ID: "error", State: LenderStateWillSupply, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("error")}, nil)
@@ -152,7 +139,7 @@ func TestHandleInvokeNotificationHttpErrorResponseRequester(t *testing.T) {
 	notificationEvent := events.Event{
 		ID:              "event-1",
 		PatronRequestID: "error",
-		EventData:       events.EventData{CustomData: map[string]any{"notification": map[string]any{"ID": "n1"}}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Notification: &pr_db.Notification{ID: "n1"}}},
 	}
 	mockPrRepo := new(MockPrRepo)
 	mockPrRepo.On("GetPatronRequestById", "error").Return(pr_db.PatronRequest{ID: "error", State: BorrowerStateReceived, Side: SideBorrowing, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1"), RequesterReqID: getDbText("error")}, nil)

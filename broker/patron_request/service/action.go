@@ -55,7 +55,7 @@ type actionParams struct {
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
 	return &PatronRequestActionService{
-		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler},
+		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: logActionErrorAndReturnResult},
 		prRepo:                     prRepo,
 		eventBus:                   eventBus,
 		lmsCreator:                 lmsCreator,
@@ -77,7 +77,7 @@ func (a *PatronRequestActionService) processInvokeActionTask(ctx common.Extended
 	return a.eventBus.ProcessTask(ctx, event, a.handleInvokeAction)
 }
 
-func logErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
+func logActionErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
 	status, result := events.LogErrorAndReturnResult(ctx, message, err)
 	result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 	return status, result
@@ -85,22 +85,22 @@ func logErrorAndReturnResult(ctx common.ExtendedContext, message string, err err
 
 func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	if event.EventData.Action == nil {
-		return logErrorAndReturnResult(ctx, "action not specified", errors.New("action not specified"))
+		return logActionErrorAndReturnResult(ctx, "action not specified", errors.New("action not specified"))
 	}
 	action := *event.EventData.Action
 	pr, err := a.prRepo.GetPatronRequestById(ctx, event.PatronRequestID)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to read patron request", err)
+		return logActionErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
 	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to load state model", err)
+		return logActionErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
 	if !actionMapping.IsActionSupported(pr, action) {
-		return logErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
+		return logActionErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
 	if a.lmsCreator == nil {
-		return logErrorAndReturnResult(ctx, "LMS creator not configured", nil)
+		return logActionErrorAndReturnResult(ctx, "LMS creator not configured", nil)
 	}
 	illRequest := pr.IllRequest
 	switch pr.Side {
@@ -111,7 +111,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	default:
-		return logErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
+		return logActionErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
 	}
 }
 
@@ -146,7 +146,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	var err error
 	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 	if err != nil {
-		return logErrorAndReturnResult(ctx, "failed to update patron request", err)
+		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
 
 	if stateChanged {
@@ -230,12 +230,12 @@ func autoActionErrorSuffix(event events.Event) string {
 
 func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, eventID *string) actionExecutionResult {
 	if !pr.RequesterSymbol.Valid {
-		status, result := logErrorAndReturnResult(ctx, "missing requester symbol", nil)
+		status, result := logActionErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter, err := a.lmsCreator.GetAdapter(ctx, pr.RequesterSymbol.String)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lmsAdapter.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
@@ -272,19 +272,19 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	default:
-		status, result := logErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
+		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 }
 
 func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionCustomData map[string]any, eventID *string) actionExecutionResult {
 	if !pr.SupplierSymbol.Valid {
-		status, result := logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
+		status, result := logActionErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lms, err := a.lmsCreator.GetAdapter(ctx, pr.SupplierSymbol.String)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to create LMS adapter", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	lms.SetLogFunc(func(outgoing map[string]any, incoming map[string]any, err error) {
@@ -305,7 +305,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	var params actionParams
 	err = common.MapToStruct(actionCustomData, &params)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	switch action {
@@ -326,7 +326,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	case LenderActionAcceptCancel:
 		return a.acceptCancelLenderRequest(ctx, pr)
 	default:
-		status, result := logErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
+		status, result := logActionErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 }
@@ -338,7 +338,7 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	}
 	userId, err := lmsAdapter.LookupUser(patron)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	// change patron to canonical user id
@@ -366,7 +366,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	}
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
+		status, result := logActionErrorAndReturnResult(ctx, "receiveBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
@@ -385,7 +385,7 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 		requestedAction := "Hold For Pickup"
 		err = lmsAdapter.AcceptItem(itemId, pr.ID, patron, author, title, isbn, callNumber, pickupLocation, requestedAction)
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS AcceptItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
@@ -409,7 +409,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 	}
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
+		status, result := logActionErrorAndReturnResult(ctx, "checkoutBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
@@ -417,7 +417,7 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 		borrowerBarcode := patron
 		_, err = lmsAdapter.CheckOutItem(pr.ID, itemId, borrowerBarcode, "externalReferenceValue")
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
@@ -427,14 +427,14 @@ func (a *PatronRequestActionService) checkoutBorrowingRequest(ctx common.Extende
 func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
+		status, result := logActionErrorAndReturnResult(ctx, "checkinBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		itemId := item.Barcode
 		err = lmsAdapter.CheckInItem(itemId)
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
@@ -444,14 +444,14 @@ func (a *PatronRequestActionService) checkinBorrowingRequest(ctx common.Extended
 func (a *PatronRequestActionService) shipReturnBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
+		status, result := logActionErrorAndReturnResult(ctx, "shipReturnBorrowingRequest failed to get items by PR ID", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		itemId := item.Barcode
 		err = lmsAdapter.DeleteItem(itemId)
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS DeleteItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
@@ -514,7 +514,7 @@ func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedCo
 	institutionalPatron := lms.InstitutionalPatron(pr.RequesterSymbol.String)
 	_, err := lms.LookupUser(institutionalPatron)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
+		status, result := logActionErrorAndReturnResult(ctx, "LMS LookupUser failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
@@ -528,7 +528,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 	itemLocation := lmsAdapter.ItemLocation()
 	itemBarcode, callNumber, title, err := lmsAdapter.RequestItem(requestId, itemId, userId, pickupLocation, itemLocation)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
+		status, result := logActionErrorAndReturnResult(ctx, "LMS RequestItem failed", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	if title == "" {
@@ -544,7 +544,7 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		Barcode:    itemBarcode,
 	})
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "failed to save item", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	result := events.EventResult{}
@@ -579,13 +579,13 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	var offeredCosts *iso18626.TypeCosts
 	if params.Cost != nil {
 		if params.Currency == "" {
-			status, result := logErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
+			status, result := logActionErrorAndReturnResult(ctx, "currency is required when cost is provided", nil)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 		var monetaryValue utils.XSDDecimal
 		err := monetaryValue.UnmarshalText([]byte(strconv.FormatFloat(*params.Cost, 'f', -1, 64)))
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "failed to parse cost", err)
+			status, result := logActionErrorAndReturnResult(ctx, "failed to parse cost", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 		offeredCosts = &iso18626.TypeCosts{
@@ -624,14 +624,14 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "no items for shipping in the request", err)
+		status, result := logActionErrorAndReturnResult(ctx, "no items for shipping in the request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for i := range items {
 		item := &items[i]
 		title, err := lmsAdapter.CheckOutItem(requestId, item.Barcode, userId, externalReferenceValue)
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckOutItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 		if title != "" {
@@ -646,7 +646,7 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 				Barcode:    item.Barcode,
 			})
 			if err != nil {
-				status, result := logErrorAndReturnResult(ctx, "failed to save item", err)
+				status, result := logActionErrorAndReturnResult(ctx, "failed to save item", err)
 				return actionExecutionResult{status: status, result: result, pr: pr}
 			}
 		}
@@ -687,13 +687,13 @@ func encodeItemsNote(items []pr_db.Item) string {
 func (a *PatronRequestActionService) markReceivedLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
 	items, err := a.getItems(ctx, pr)
 	if err != nil {
-		status, result := logErrorAndReturnResult(ctx, "no items for check-in in the request", err)
+		status, result := logActionErrorAndReturnResult(ctx, "no items for check-in in the request", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	for _, item := range items {
 		err = lmsAdapter.CheckInItem(item.Barcode)
 		if err != nil {
-			status, result := logErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
+			status, result := logActionErrorAndReturnResult(ctx, "LMS CheckInItem failed", err)
 			return actionExecutionResult{status: status, result: result, pr: pr}
 		}
 	}
