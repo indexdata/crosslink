@@ -1571,6 +1571,11 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 	return pr_db.Notification(params), nil
 }
 
+func (r *MockPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (pr_db.Notification, error) {
+	args := r.Called(id)
+	return args.Get(0).(pr_db.Notification), args.Error(1)
+}
+
 type MockIso18626Handler struct {
 	mock.Mock
 	handler.Iso18626Handler

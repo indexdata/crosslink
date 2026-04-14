@@ -392,7 +392,6 @@ func (a *PatronRequestActionService) receiveBorrowingRequest(ctx common.Extended
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionReceived, "")
 	if httpStatus == nil {
-		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
@@ -473,7 +472,6 @@ func (a *PatronRequestActionService) cancelBorrowingRequest(ctx common.ExtendedC
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, "")
 	if httpStatus == nil {
-		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
@@ -488,7 +486,6 @@ func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionNotification, shim.RESHARE_LOAN_CONDITION_AGREE)
 	if httpStatus == nil {
-		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
@@ -503,7 +500,6 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendRequestingAgencyMessage(ctx, pr, &result, iso18626.TypeActionCancel, shim.RESHARE_LOAN_CONDITION_REJECT)
 	if httpStatus == nil {
-		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.RequestingAgencyMessageConfirmation == nil ||
@@ -739,7 +735,6 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 
 func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventStatus, eventResult *events.EventResult, result *events.EventResult, httpStatus *int, pr pr_db.PatronRequest) actionExecutionResult {
 	if httpStatus == nil {
-		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
 	}
 	if *httpStatus != http.StatusOK || result.IncomingMessage == nil || result.IncomingMessage.SupplyingAgencyMessageConfirmation == nil ||

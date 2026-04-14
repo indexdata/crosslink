@@ -26,7 +26,7 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 	// pr.SupplierSymbol is validated earlier in handleLenderAction
 	requesterSymbol := strings.SplitN(pr.RequesterSymbol.String, ":", 2)
 	supplierSymbol := strings.SplitN(pr.SupplierSymbol.String, ":", 2)
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
@@ -86,7 +86,7 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 		status, eventResult := logErrorAndReturnResult(ctx, "invalid supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
@@ -141,7 +141,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	}
 	illRequest.PatronInfo.PatronId = pr.Patron.String
 
-	var illMessage = iso18626.NewIso18626MessageNS()
+	var illMessage = iso18626.NewISO18626Message()
 	illMessage.Request = &illRequest
 	w := NewResponseCaptureWriter()
 	ms.iso18626Handler.HandleRequest(ctx, illMessage, w)
@@ -156,7 +156,7 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 }
 
 type ResponseCaptureWriter struct {
-	IllMessage *iso18626.Iso18626MessageNS
+	IllMessage *iso18626.ISO18626Message
 	StatusCode int
 }
 
@@ -167,7 +167,7 @@ func NewResponseCaptureWriter() *ResponseCaptureWriter {
 }
 
 func (rcw *ResponseCaptureWriter) Write(b []byte) (int, error) {
-	rcw.IllMessage = iso18626.NewIso18626MessageNS()
+	rcw.IllMessage = iso18626.NewISO18626Message()
 	err := xml.Unmarshal(b, rcw.IllMessage)
 	return 1, err
 }

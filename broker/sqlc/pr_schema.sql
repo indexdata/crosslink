@@ -45,7 +45,7 @@ CREATE TABLE notification
     pr_id           VARCHAR   NOT NULL REFERENCES patron_request (id),
     from_symbol     VARCHAR   NOT NULL,
     to_symbol       VARCHAR   NOT NULL,
-    side            VARCHAR   NOT NULL,
+    direction       VARCHAR   NOT NULL DEFAULT 'sent',
     note            VARCHAR,
     cost            NUMERIC(19, 4),
     currency        VARCHAR,

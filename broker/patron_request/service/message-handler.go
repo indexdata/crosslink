@@ -580,7 +580,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 			Note:       getDbText(sam.MessageInfo.Note),
 			FromSymbol: supSymbol,
 			ToSymbol:   reqSymbol,
-			Side:       pr.Side,
+			Direction:  pr_db.NotificationDirectionReceived,
 			CreatedAt: pgtype.Timestamp{
 				Valid: true,
 				Time:  time.Now(),
@@ -601,7 +601,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 			PrID:       pr.ID,
 			FromSymbol: supSymbol,
 			ToSymbol:   reqSymbol,
-			Side:       pr.Side,
+			Direction:  pr_db.NotificationDirectionReceived,
 			Note:       getDbText("Offered costs"),
 			Currency:   getDbText(sam.MessageInfo.OfferedCosts.CurrencyCode.Text),
 			Cost: pgtype.Numeric{
@@ -630,7 +630,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 				PrID:       pr.ID,
 				FromSymbol: supSymbol,
 				ToSymbol:   reqSymbol,
-				Side:       pr.Side,
+				Direction:  pr_db.NotificationDirectionReceived,
 				Note:       getDbText("Delivery costs"),
 				Currency:   getDbText(sam.DeliveryInfo.DeliveryCosts.CurrencyCode.Text),
 				Cost: pgtype.Numeric{
@@ -654,7 +654,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 				PrID:       pr.ID,
 				FromSymbol: supSymbol,
 				ToSymbol:   reqSymbol,
-				Side:       pr.Side,
+				Direction:  pr_db.NotificationDirectionReceived,
 				Condition:  getDbText(sam.DeliveryInfo.LoanCondition.Text),
 				CreatedAt: pgtype.Timestamp{
 					Valid: true,
@@ -678,7 +678,7 @@ func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.Extende
 			Note:       getDbText(ram.Note),
 			FromSymbol: reqSymbol,
 			ToSymbol:   supSymbol,
-			Side:       pr.Side,
+			Direction:  pr_db.NotificationDirectionReceived,
 			CreatedAt: pgtype.Timestamp{
 				Valid: true,
 				Time:  time.Now(),
@@ -700,7 +700,7 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 			Note:       getDbText(request.ServiceInfo.Note),
 			FromSymbol: reqSymbol,
 			ToSymbol:   supSymbol,
-			Side:       pr.Side,
+			Direction:  pr_db.NotificationDirectionReceived,
 			CreatedAt: pgtype.Timestamp{
 				Valid: true,
 				Time:  time.Now(),
@@ -722,7 +722,7 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 			Note:       getDbText("Maximum costs"),
 			FromSymbol: reqSymbol,
 			ToSymbol:   supSymbol,
-			Side:       pr.Side,
+			Direction:  pr_db.NotificationDirectionReceived,
 			Currency:   getDbText(request.BillingInfo.MaximumCosts.CurrencyCode.Text),
 			Cost: pgtype.Numeric{
 				Valid: true,
