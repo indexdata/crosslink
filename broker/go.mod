@@ -27,7 +27,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20260409110920-42d335e997ef
+	github.com/indexdata/cql-go v1.0.1-0.20260413194109-3e1c0001d698
 	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
