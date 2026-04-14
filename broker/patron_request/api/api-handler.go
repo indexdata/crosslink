@@ -43,18 +43,18 @@ type PatronRequestApiHandler struct {
 	actionMappingService prservice.ActionMappingService
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
-	tenant               common.Tenant
+	symbolChecker        *api.SymbolChecker
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, symbolChecker *api.SymbolChecker, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
-		tenant:               tenant,
+		symbolChecker:        symbolChecker,
 	}
 }
 
@@ -87,18 +87,19 @@ func (a *PatronRequestApiHandler) GetStateModelCapabilities(w http.ResponseWrite
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.GetPatronRequestsParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequests", "symbol": symbol}
+	logParams := map[string]string{"method": "GetPatronRequests"}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
-		Other: logParams,
-	})
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
 	limit := a.limitDefault
 	if params.Limit != nil {
 		limit = *params.Limit
@@ -189,20 +190,21 @@ func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
-		Other: map[string]string{"method": "PostPatronRequests"},
-	})
+	logParams := map[string]string{"method": "PostPatronRequests"}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	var newPr proapi.CreatePatronRequest
 	err := json.NewDecoder(r.Body).Decode(&newPr)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, newPr.RequesterSymbol)
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, newPr.RequesterSymbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	newPr.RequesterSymbol = &symbol
 	creationTime := pgtype.Timestamp{Valid: true, Time: time.Now()}
 	illRequest, requesterReqId, err := a.parseAndValidateIllRequest(ctx, &newPr, creationTime.Time)
@@ -244,17 +246,18 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "DeletePatronRequestsId", "id": id, "symbol": symbol}
+	logParams := map[string]string{"method": "DeletePatronRequestsId", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -296,17 +299,18 @@ func isOwner(pr pr_db.PatronRequest, symbol string) bool {
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id, "symbol": symbol}
+	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -315,17 +319,20 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequestsIdActions", "id": id, "symbol": symbol}
+	logParams := map[string]string{"method": "GetPatronRequestsIdActions", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -340,17 +347,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdActionParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "PostPatronRequestsIdAction", "id": id, "symbol": symbol}
+	logParams := map[string]string{"method": "PostPatronRequestsIdAction", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -415,18 +424,19 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdEventsParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id, "symbol": symbol}
-
+	logParams := map[string]string{"method": "GetPatronRequestsIdEvents", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -445,18 +455,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdItemsParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequestsIdItems", "id": id, "symbol": symbol}
-
+	logParams := map[string]string{"method": "GetPatronRequestsIdItems", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -475,18 +486,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
-	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
-	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id, "symbol": symbol}
-
+	logParams := map[string]string{"method": "GetPatronRequestsIdNotifications", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return

@@ -166,11 +166,13 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
+	tenant := common.NewTenant(TENANT_TO_SYMBOL)
+	apiSymbolChecker := api.NewSymbolChecker(tenant).WithRepoCheck(illRepo).WithLookupAdapter(dirAdapter)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, apiSymbolChecker, API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 
-	sseBroker := api.NewSseBroker(appCtx, common.NewTenant(TENANT_TO_SYMBOL))
+	sseBroker := api.NewSseBroker(appCtx, tenant)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
