@@ -81,6 +81,41 @@ func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBroker bool, tenant 
 	return *symbol, nil
 }
 
+func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant string) []string {
+	if !s.tenantResolver.IsSpecified() {
+		return []string{}
+	}
+	if tenant == "" {
+		return []string{}
+	}
+	mainSymbol := s.tenantResolver.GetSymbol(tenant)
+	if s.illRepo == nil {
+		return []string{mainSymbol}
+	}
+	if s.illRepo == nil {
+		return []string{mainSymbol}
+	}
+	peers, _, err := (*s.illRepo).GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
+	if err != nil {
+		return []string{}
+	}
+	if len(peers) == 0 {
+		ctx.Logger().Error("no peers for symbol", "symbol", mainSymbol)
+		return []string{}
+	}
+	symbols := []string{mainSymbol}
+	for _, peer := range peers {
+		branchSymbols, err := (*s.illRepo).GetBranchSymbolsByPeerId(ctx, peer.ID)
+		if err != nil {
+			return []string{}
+		}
+		for _, branchSymbol := range branchSymbols {
+			symbols = append(symbols, branchSymbol.SymbolValue)
+		}
+	}
+	return symbols
+}
+
 func (s *SymbolChecker) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
 	return s.Check(ctx, strings.Contains(r.RequestURI, "/broker/"), tenant, symbol)
 }

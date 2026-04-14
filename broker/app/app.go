@@ -211,11 +211,17 @@ func StartServer(ctx Context) error {
 		_, _ = w.Write(oapi.OpenAPISpecYAML)
 	})
 
-	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(""), API_PAGE_SIZE)
+	tenant := common.NewTenant("")
+	symbolChecker := api.NewSymbolChecker(tenant).WithRepoCheck(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
+
+	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, *symbolChecker, API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, ServeMux)
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
-		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, common.NewTenant(TENANT_TO_SYMBOL), API_PAGE_SIZE)
+		tenant = common.NewTenant(TENANT_TO_SYMBOL)
+		symbolChecker = api.NewSymbolChecker(tenant).WithRepoCheck(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
+
+		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, *symbolChecker, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")
 		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, "/broker")
 	}

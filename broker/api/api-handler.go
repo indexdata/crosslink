@@ -37,32 +37,38 @@ var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
-	limitDefault int32
-	eventRepo    events.EventRepo
-	illRepo      ill_db.IllRepo
-	tenant       common.Tenant
+	limitDefault  int32
+	eventRepo     events.EventRepo
+	illRepo       ill_db.IllRepo
+	symbolChecker SymbolChecker
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenant common.Tenant, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, symbolChecker SymbolChecker, limitDefault int32) ApiHandler {
 	return ApiHandler{
-		eventRepo:    eventRepo,
-		illRepo:      illRepo,
-		tenant:       tenant,
-		limitDefault: limitDefault,
+		eventRepo:     eventRepo,
+		illRepo:       illRepo,
+		symbolChecker: symbolChecker,
+		limitDefault:  limitDefault,
 	}
 }
 
-func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
+func (a *ApiHandler) isOwner(ctx common.ExtendedContext, trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
 	}
-	if !a.tenant.IsSpecified() {
+	if !a.symbolChecker.tenantResolver.IsSpecified() {
 		return true
 	}
 	if tenant == nil {
 		return false
 	}
-	return trans.RequesterSymbol.String == a.tenant.GetSymbol(*tenant)
+	syms := a.symbolChecker.GetSymbolsForTenant(ctx, *tenant)
+	for _, sym := range syms {
+		if trans.RequesterSymbol.String == sym {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.ResponseWriter,
@@ -89,7 +95,7 @@ func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.Res
 		addInternalError(ctx, w, err)
 		return nil, err
 	}
-	if !a.isOwner(&tran, okapiTenant, requesterSymbol) {
+	if !a.isOwner(ctx, &tran, okapiTenant, requesterSymbol) {
 		return nil, nil
 	}
 	return &tran, nil
@@ -168,22 +174,23 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.tenant.IsSpecified() {
-		var symbol string
+	} else if a.symbolChecker.tenantResolver.IsSpecified() {
+		var symbols []string
 		if params.XOkapiTenant != nil {
-			symbol = a.tenant.GetSymbol(*params.XOkapiTenant)
+			symbols = a.symbolChecker.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
 		} else if params.RequesterSymbol != nil {
-			symbol = *params.RequesterSymbol
+			symbols = []string{*params.RequesterSymbol}
 		}
-		if symbol == "" {
+		if len(symbols) == 0 {
 			writeJsonResponse(w, resp)
 			return
 		}
+		// TODO handle multiple symbols properly instead of just using the first one in the list
 		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
 			Limit:  limit,
 			Offset: offset,
 			RequesterSymbol: pgtype.Text{
-				String: symbol,
+				String: symbols[0],
 				Valid:  true,
 			},
 		}
