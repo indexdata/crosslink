@@ -686,7 +686,3 @@ type MockEventBus struct {
 func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string) (string, error) {
 	return "", errors.New("DB error")
 }
-
-func ptr(value string) *string {
-	return &value
-}
