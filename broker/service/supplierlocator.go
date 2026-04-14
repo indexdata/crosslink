@@ -51,8 +51,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
+	globalId := illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId
 
-	if illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId == "" {
+	if globalId == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "ILL transaction missing SupplierUniqueRecordId", nil)
 	}
 
@@ -62,7 +63,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	holdings, query, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
-		Identifier: illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId,
+		Identifier: globalId,
 	})
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
@@ -71,13 +72,25 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	holdingsLog["lookupQuery"] = query
 	if len(holdings) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
-			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId})
+			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": globalId})
 	}
 	holdingsLog["entries"] = holdings
 	holdingsSymbols := make([]string, 0, len(holdings))
 	symbolToLocalId := make(map[string]string, len(holdings))
+	holdingSymbolCounts := make(map[string]int, len(holdings))
 	potentialSuppliers := make([]adapter.Supplier, 0, len(holdings))
 	for _, holding := range holdings {
+		holdingSymbolCounts[holding.Symbol]++
+		if holdingSymbolCounts[holding.Symbol] > 1 {
+			if holdingSymbolCounts[holding.Symbol] == 2 {
+				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
+					"symbol", holding.Symbol,
+					"localIdentifier", holding.LocalIdentifier,
+					"supplierUniqueRecordId", globalId,
+				)
+			}
+			continue
+		}
 		holdingsSymbols = append(holdingsSymbols, holding.Symbol)
 		symbolToLocalId[holding.Symbol] = holding.LocalIdentifier
 	}
