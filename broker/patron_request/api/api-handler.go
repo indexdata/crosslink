@@ -604,6 +604,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 		return
 	}
 
+	if err = validator.New().Struct(receipt); err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
@@ -616,6 +621,11 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 			return
 		}
 		addInternalError(ctx, w, err)
+		return
+	}
+
+	if notification.PrID != pr.ID {
+		addNotFoundError(w)
 		return
 	}
 

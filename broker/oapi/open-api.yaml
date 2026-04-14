@@ -833,7 +833,7 @@ components:
           $ref: '#/components/schemas/About'
         items:
           type: array
-          description: List of patron request
+          description: List of patron request notifications
           items:
             $ref: '#/components/schemas/PrNotification'
 

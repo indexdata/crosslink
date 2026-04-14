@@ -586,12 +586,22 @@ func TestPutPatronRequestsIdNotificationsNotificationIdReceiptErrorBecauseOfBody
 	assert.Contains(t, rr.Body.String(), "unexpected EOF")
 }
 
-func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *testing.T) {
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptPrDoesNotOwn(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), common.NewTenant(""), nil, 10)
 	body := "{\"receipt\": \"SEEN\"}"
 	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n4", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), common.NewTenant(""), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "4", "4", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
@@ -656,7 +666,7 @@ func (r *PrRepoError) GetNotificationsByPrId(ctx common.ExtendedContext, params 
 }
 
 func (r *PrRepoError) SaveNotification(ctx common.ExtendedContext, params pr_db.SaveNotificationParams) (pr_db.Notification, error) {
-	if params.ID == "n4" || params.PrID == "3" {
+	if params.ID == "4" || params.PrID == "3" {
 		return pr_db.Notification{}, errors.New("DB error")
 	}
 	return pr_db.Notification(params), nil
@@ -667,9 +677,9 @@ func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string)
 	case "n2":
 		return pr_db.Notification{}, pgx.ErrNoRows
 	case "n3":
-		return pr_db.Notification{ID: id}, errors.New("DB error")
+		return pr_db.Notification{}, errors.New("DB error")
 	default:
-		return pr_db.Notification{ID: id}, nil
+		return pr_db.Notification{ID: id, PrID: id}, nil
 	}
 }
 
