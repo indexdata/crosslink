@@ -86,8 +86,8 @@ github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/indexdata/cql-go v1.0.1-0.20260409110920-42d335e997ef h1:0YvhD4iOXkP7lPXvuy2RVrPNSByLCD9aWXBbLgBoH4Y=
-github.com/indexdata/cql-go v1.0.1-0.20260409110920-42d335e997ef/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
+github.com/indexdata/cql-go v1.0.1-0.20260413194109-3e1c0001d698 h1:VYAnLPgebMRjf7XKrQZDzp+ToesiCi7IsVml41ZjShc=
+github.com/indexdata/cql-go v1.0.1-0.20260413194109-3e1c0001d698/go.mod h1:zmSHcE8JyK94EWZrV7VyjLr2QfRoj+EeEOttl9wm64U=
 github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb h1:lUmnqtbe4uwBjYOogqOCsZ+9NeRjcYjg0o6XFdnuHp4=
 github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb/go.mod h1:0sW6Szxv8GNU3LBtK6mgBKDEUnlovPfghiG9xi+i0R8=
 github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6 h1:D/V0gu4zQ3cL2WKeVNVM4r2gLxGGf6McLwgXzRTo2RQ=
