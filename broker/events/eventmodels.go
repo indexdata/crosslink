@@ -47,6 +47,7 @@ const (
 	EventNamePatronRequestMessage EventName = "patron-request-message"
 	EventNameLmsRequesterMessage  EventName = "lms-requester-message"
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
+	EventNameSendNotification     EventName = "send-notification"
 )
 
 type Signal string
@@ -72,6 +73,7 @@ type CommonEventData struct {
 	Note            string                     `json:"note,omitempty"`
 	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
 	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
+	Notification    *pr_db.Notification        `json:"notification,omitempty"`
 }
 
 type ActionResult struct {

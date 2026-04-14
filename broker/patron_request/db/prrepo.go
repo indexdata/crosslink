@@ -26,7 +26,7 @@ type PrRepo interface {
 	GetItemsByPrId(ctx common.ExtendedContext, prId string) ([]Item, error)
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
-	GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error)
+	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
 }
@@ -183,13 +183,26 @@ func (r *PgPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (N
 	return row.Notification, err
 }
 
-func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]Notification, error) {
-	rows, err := r.queries.GetNotificationsByPrId(ctx, r.GetConnOrTx(), prId)
+func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error) {
+	rows, err := r.queries.GetNotificationsByPrId(ctx, r.GetConnOrTx(), params)
 	var list []Notification
-	for _, row := range rows {
-		list = append(list, row.Notification)
+	var fullCount int64
+	if err == nil {
+		if len(rows) > 0 {
+			for _, row := range rows {
+				list = append(list, row.Notification)
+				fullCount = row.FullCount
+			}
+		} else {
+			params.Limit = 1
+			params.Offset = 0
+			rows, err = r.queries.GetNotificationsByPrId(ctx, r.GetConnOrTx(), params)
+			if err == nil && len(rows) > 0 {
+				fullCount = rows[0].FullCount
+			}
+		}
 	}
-	return list, err
+	return list, fullCount, err
 }
 
 func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string) error {

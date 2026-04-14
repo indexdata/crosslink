@@ -187,7 +187,7 @@ func TestNotification(t *testing.T) {
 		PrID:       prId,
 		FromSymbol: "f123",
 		ToSymbol:   "t123",
-		Side:       prservice.SideBorrowing,
+		Direction:  pr_db.NotificationDirectionReceived,
 		Note: pgtype.Text{
 			String: "n123",
 			Valid:  true,
@@ -221,7 +221,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, prId, notification.PrID)
 	assert.Equal(t, "f123", notification.FromSymbol)
 	assert.Equal(t, "t123", notification.ToSymbol)
-	assert.Equal(t, prservice.SideBorrowing, notification.Side)
+	assert.Equal(t, pr_db.NotificationDirectionReceived, notification.Direction)
 	assert.Equal(t, "n123", notification.Note.String)
 	assert.Equal(t, "EUR", notification.Currency.String)
 	assert.Equal(t, "c123", notification.Condition.String)
@@ -238,7 +238,7 @@ func TestNotification(t *testing.T) {
 		PrID:       prId,
 		FromSymbol: "f12",
 		ToSymbol:   "t12",
-		Side:       prservice.SideLending,
+		Direction:  pr_db.NotificationDirectionSent,
 		Note: pgtype.Text{
 			String: "n12",
 			Valid:  true,
@@ -272,7 +272,7 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, prId, notification.PrID)
 	assert.Equal(t, "f12", notification.FromSymbol)
 	assert.Equal(t, "t12", notification.ToSymbol)
-	assert.Equal(t, prservice.SideLending, notification.Side)
+	assert.Equal(t, pr_db.NotificationDirectionSent, notification.Direction)
 	assert.Equal(t, "n12", notification.Note.String)
 	assert.Equal(t, "USD", notification.Currency.String)
 	assert.Equal(t, "c12", notification.Condition.String)
@@ -289,10 +289,12 @@ func TestNotification(t *testing.T) {
 	assert.Equal(t, notificaitonId, notification.ID)
 
 	// Get by pr id
-	notifications, err := prRepo.GetNotificationsByPrId(appCtx, prId)
+	var fullCount int64
+	notifications, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0})
 	assert.NoError(t, err)
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, notificaitonId, notifications[0].ID)
+	assert.Equal(t, int64(1), fullCount)
 
 	err = prRepo.DeleteNotificationById(appCtx, notificaitonId)
 	assert.NoError(t, err)

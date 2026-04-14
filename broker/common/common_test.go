@@ -163,3 +163,25 @@ func TestPackItemsNote(t *testing.T) {
 	assert.Equal(t, items, result)
 	assert.Equal(t, [][]string{{"T1", "CallNumber1", "Barcode1"}, {"T2", "CallNumber2", "Barcode2"}, {"Barcode3"}}, result)
 }
+
+func TestSplitSymbol(t *testing.T) {
+	authority, symbol, err := SplitSymbol("")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
+	authority, symbol, err = SplitSymbol("REQ")
+	assert.Error(t, err)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
+
+	authority, symbol, err = SplitSymbol("ISIL:REQ")
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL", authority)
+	assert.Equal(t, "REQ", symbol)
+
+	authority, symbol, err = SplitSymbol("ISIL:REQ:1")
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL", authority)
+	assert.Equal(t, "REQ:1", symbol)
+}

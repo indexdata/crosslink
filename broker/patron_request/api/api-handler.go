@@ -16,6 +16,7 @@ import (
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -45,10 +46,11 @@ type PatronRequestApiHandler struct {
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
 	tenant               common.Tenant
+	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, tenant common.Tenant, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, tenant common.Tenant, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
@@ -56,6 +58,7 @@ func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
 		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
 		tenant:               tenant,
+		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
 }
 
@@ -488,11 +491,20 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		addBadRequestError(ctx, w, err)
 		return
 	}
+	limit := a.limitDefault
+	if params.Limit != nil {
+		limit = *params.Limit
+	}
+	var offset int32 = 0
+	if params.Offset != nil {
+		offset = *params.Offset
+	}
+
 	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
 	if pr == nil {
 		return
 	}
-	list, err := a.prRepo.GetNotificationsByPrId(ctx, pr.ID)
+	list, fullCount, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: pr.ID, Limit: limit, Offset: offset})
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -507,7 +519,130 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		}
 		responseList = append(responseList, apiN)
 	}
-	writeJsonResponse(w, responseList)
+	resp := proapi.PrNotifications{Items: responseList}
+	resp.About = proapi.About(api.CollectAboutData(fullCount, offset, limit, r))
+	writeJsonResponse(w, resp)
+}
+
+func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdNotificationsParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "PostPatronRequestsIdNotifications", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	if r.Body == nil {
+		addBadRequestError(ctx, w, errors.New("body is required"))
+		return
+	}
+
+	var newNotification proapi.CreatePrNotification
+	err = json.NewDecoder(r.Body).Decode(&newNotification)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+
+	dbNotification := toDbNotification(newNotification, *pr)
+	dbNotification, err = a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams(dbNotification))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	apiN, inErr := toApiNotification(dbNotification)
+	if inErr != nil {
+		addInternalError(ctx, w, inErr)
+		return
+	}
+
+	err = a.notificationSender.SendPatronRequestNotification(ctx, *pr, dbNotification)
+	if err != nil {
+		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
+	}
+
+	//w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+dbNotification.ID, ""))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(apiN)
+}
+
+func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationIdReceipt(w http.ResponseWriter, r *http.Request, id string, notificationId string, params proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams) {
+	symbol, err := api.GetSymbolForRequest(r, a.tenant, params.XOkapiTenant, params.Symbol)
+	logParams := map[string]string{"method": "PutPatronRequestsIdNotificationsNotificationIdReceipt", "id": id, "symbol": symbol}
+
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	if r.Body == nil {
+		addBadRequestError(ctx, w, errors.New("body is required"))
+		return
+	}
+
+	var receipt proapi.UpdateNotificationReceipt
+	err = json.NewDecoder(r.Body).Decode(&receipt)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	if err = validator.New().Struct(receipt); err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	if pr == nil {
+		return
+	}
+
+	notification, err := a.prRepo.GetNotificationById(ctx, notificationId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			addNotFoundError(w)
+			return
+		}
+		addInternalError(ctx, w, err)
+		return
+	}
+
+	if notification.PrID != pr.ID {
+		addNotFoundError(w)
+		return
+	}
+
+	notification.Receipt = pr_db.NotificationReceipt(receipt.Receipt)
+	if !notification.AcknowledgedAt.Valid {
+		notification.AcknowledgedAt = pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		}
+	}
+	notification, err = a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams(notification))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJsonResponse(w http.ResponseWriter, resp any) {
@@ -757,7 +892,7 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		Id:             notification.ID,
 		FromSymbol:     notification.FromSymbol,
 		ToSymbol:       notification.ToSymbol,
-		Side:           string(notification.Side),
+		Direction:      string(notification.Direction),
 		Note:           toString(notification.Note),
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
@@ -766,4 +901,29 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		CreatedAt:      notification.CreatedAt.Time,
 		AcknowledgedAt: ackAt,
 	}, nil
+}
+
+func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest) pr_db.Notification {
+	fromSymbol := pr.RequesterSymbol.String
+	toSymbol := pr.SupplierSymbol.String
+	if pr.Side == prservice.SideLending {
+		fromSymbol = pr.SupplierSymbol.String
+		toSymbol = pr.RequesterSymbol.String
+	}
+	return pr_db.Notification{
+		ID:         uuid.NewString(),
+		PrID:       pr.ID,
+		FromSymbol: fromSymbol,
+		ToSymbol:   toSymbol,
+		Direction:  pr_db.NotificationDirectionSent,
+		Note:       getDbText(&create.Note),
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		AcknowledgedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	}
 }

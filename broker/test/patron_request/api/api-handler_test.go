@@ -362,13 +362,61 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, supPr.ID)
 
-	// Wait for action
+	// Wait for action Ship
 	supplierPrPath := basePath + "/" + supPr.ID
 	supQueryParams := "?side=lending&symbol=" + supplierSymbol
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", supplierPrPath+"/actions"+supQueryParams, []byte{}, 200)
 		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.LenderActionShip)+"\"")
 	})
+
+	// Send notification
+	notification := proapi.CreatePrNotification{
+		Note: "Will ship",
+	}
+	notificationBytes, err := json.Marshal(notification)
+	assert.NoError(t, err, "failed to marshal patron request notification")
+	httpRequest(t, "POST", supplierPrPath+"/notifications"+supQueryParams, notificationBytes, 201)
+
+	// Check notification supplier side
+	var notifications proapi.PrNotifications
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", supplierPrPath+"/notifications"+supQueryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &notifications)
+		assert.NoError(t, err, "failed to unmarshal patron request notifications")
+		return notifications.About.Count > 0
+	})
+	assert.Equal(t, "SENT", *notifications.Items[0].Receipt)
+	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
+
+	// Check notification requester side
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &notifications)
+		assert.NoError(t, err, "failed to unmarshal patron request notifications")
+		return notifications.About.Count > 2
+	})
+	assert.Equal(t, "Supplier: "+strings.SplitN(supplierSymbol, ":", 2)[1]+", Will ship", *notifications.Items[2].Note)
+	assert.Nil(t, notifications.Items[2].AcknowledgedAt)
+
+	// Set seen notification
+	receipt := proapi.UpdateNotificationReceipt{
+		Receipt: "SEEN",
+	}
+	receiptBytes, err := json.Marshal(receipt)
+	assert.NoError(t, err, "failed to marshal patron request notification")
+	httpRequest(t, "PUT", requesterPrPath+"/notifications/"+notifications.Items[2].Id+"/receipt"+queryParams, receiptBytes, 204)
+
+	// Check notification requester side
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &notifications)
+		assert.NoError(t, err, "failed to unmarshal patron request notifications")
+		return notifications.About.Count > 2
+	})
+	assert.Equal(t, "Supplier: "+strings.SplitN(supplierSymbol, ":", 2)[1]+", Will ship", *notifications.Items[2].Note)
+	assert.Equal(t, "SEEN", *notifications.Items[2].Receipt)
+	assert.NotNil(t, notifications.Items[2].AcknowledgedAt)
 
 	// Ship
 	action = proapi.ExecuteAction{
@@ -495,10 +543,10 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
-	var prNotifications []proapi.PrNotification
+	var prNotifications proapi.PrNotifications
 	err = json.Unmarshal(respBytes, &prNotifications)
 	assert.NoError(t, err, "failed to unmarshal patron request notifications")
-	assert.True(t, len(prNotifications) >= 4)
+	assert.True(t, prNotifications.About.Count >= 4)
 
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath+supQueryParams, []byte{}, 200)

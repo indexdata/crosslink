@@ -8,11 +8,17 @@ type PatronRequestState string
 type PatronRequestSide string
 type PatronRequestAction string
 type NotificationReceipt string
+type NotificationDirection string
 
 const (
-	NotificationAccepted NotificationReceipt = "ACCEPTED"
-	NotificationRejected NotificationReceipt = "REJECTED"
-	NotificationSeen     NotificationReceipt = "SEEN"
+	NotificationAccepted     NotificationReceipt = "ACCEPTED"
+	NotificationRejected     NotificationReceipt = "REJECTED"
+	NotificationSeen         NotificationReceipt = "SEEN"
+	NotificationSent         NotificationReceipt = "SENT"
+	NotificationFailedToSend NotificationReceipt = "FAILED_TO_SEND"
+
+	NotificationDirectionSent     NotificationDirection = "sent"
+	NotificationDirectionReceived NotificationDirection = "received"
 )
 
 type PrItem struct {

@@ -1393,7 +1393,7 @@ func TestHandleInvokeLenderActionAcceptCancelMissingRequesterSymbol(t *testing.T
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "missing requester symbol", resultData.EventError.Message)
+	assert.Equal(t, "invalid requester symbol", resultData.EventError.Message)
 }
 
 type MockEventBus struct {
@@ -1569,6 +1569,11 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 		return pr_db.Notification{}, errors.New("db error")
 	}
 	return pr_db.Notification(params), nil
+}
+
+func (r *MockPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (pr_db.Notification, error) {
+	args := r.Called(id)
+	return args.Get(0).(pr_db.Notification), args.Error(1)
 }
 
 type MockIso18626Handler struct {
