@@ -118,10 +118,10 @@ func UnpackItemNote(input string) []string {
 	return result
 }
 
-func SplitSymbol(symbol string) ([]string, error) {
+func SplitSymbol(symbol string) (string, string, error) {
 	symbolParts := strings.SplitN(symbol, ":", 2)
 	if len(symbolParts) != 2 {
-		return nil, fmt.Errorf("invalid symbol: %s", symbol)
+		return "", "", fmt.Errorf("invalid symbol: %s", symbol)
 	}
-	return symbolParts, nil
+	return symbolParts[0], symbolParts[1], nil
 }

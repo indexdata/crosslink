@@ -165,21 +165,23 @@ func TestPackItemsNote(t *testing.T) {
 }
 
 func TestSplitSymbol(t *testing.T) {
-	symbolParts, err := SplitSymbol("")
+	authority, symbol, err := SplitSymbol("")
 	assert.Error(t, err)
-	assert.Nil(t, symbolParts)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
 
-	symbolParts, err = SplitSymbol("REQ")
+	authority, symbol, err = SplitSymbol("REQ")
 	assert.Error(t, err)
-	assert.Nil(t, symbolParts)
+	assert.Equal(t, "", authority)
+	assert.Equal(t, "", symbol)
 
-	symbolParts, err = SplitSymbol("ISIL:REQ")
+	authority, symbol, err = SplitSymbol("ISIL:REQ")
 	assert.NoError(t, err)
-	assert.Equal(t, "ISIL", symbolParts[0])
-	assert.Equal(t, "REQ", symbolParts[1])
+	assert.Equal(t, "ISIL", authority)
+	assert.Equal(t, "REQ", symbol)
 
-	symbolParts, err = SplitSymbol("ISIL:REQ:1")
+	authority, symbol, err = SplitSymbol("ISIL:REQ:1")
 	assert.NoError(t, err)
-	assert.Equal(t, "ISIL", symbolParts[0])
-	assert.Equal(t, "REQ:1", symbolParts[1])
+	assert.Equal(t, "ISIL", authority)
+	assert.Equal(t, "REQ:1", symbol)
 }

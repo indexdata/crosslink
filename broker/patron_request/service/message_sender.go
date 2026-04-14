@@ -19,12 +19,12 @@ type PatronRequestMessageSender struct {
 }
 
 func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.ExtendedContext, pr pr_db.PatronRequest, result *events.EventResult, messageInfo iso18626.MessageInfo, statusInfo iso18626.StatusInfo, deliveryInfo *iso18626.DeliveryInfo) (events.EventStatus, *events.EventResult, *int) {
-	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
-	supplierSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
+	supAuthority, supSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
 		return status, eventResult, nil
@@ -34,15 +34,15 @@ func (ms *PatronRequestMessageSender) sendSupplyingAgencyMessage(ctx common.Exte
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
-					Text: requesterSymbol[0],
+					Text: reqAuthority,
 				},
-				AgencyIdValue: requesterSymbol[1],
+				AgencyIdValue: reqSymbol,
 			},
 			SupplyingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
-					Text: supplierSymbol[0],
+					Text: supAuthority,
 				},
-				AgencyIdValue: supplierSymbol[1],
+				AgencyIdValue: supSymbol,
 			},
 			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
 			RequestingAgencyRequestId: pr.RequesterReqID.String,
@@ -79,12 +79,12 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "missing supplier symbol", nil)
 		return status, eventResult, nil
 	}
-	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return status, eventResult, nil
 	}
-	supplierSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
+	supAuthority, supSymbol, err := common.SplitSymbol(pr.SupplierSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid supplier symbol", err)
 		return status, eventResult, nil
@@ -94,15 +94,15 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 		Header: iso18626.Header{
 			RequestingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
-					Text: requesterSymbol[0],
+					Text: reqAuthority,
 				},
-				AgencyIdValue: requesterSymbol[1],
+				AgencyIdValue: reqSymbol,
 			},
 			SupplyingAgencyId: iso18626.TypeAgencyId{
 				AgencyIdType: iso18626.TypeSchemeValuePair{
-					Text: supplierSymbol[0],
+					Text: supAuthority,
 				},
-				AgencyIdValue: supplierSymbol[1],
+				AgencyIdValue: supSymbol,
 			},
 			Timestamp:                 utils.XSDDateTime{Time: time.Now()},
 			RequestingAgencyRequestId: pr.ID,
@@ -119,7 +119,7 @@ func (ms *PatronRequestMessageSender) sendRequestingAgencyMessage(ctx common.Ext
 
 func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) actionExecutionResult {
 	result := events.EventResult{}
-	requesterSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
+	reqAuthority, reqSymbol, err := common.SplitSymbol(pr.RequesterSymbol.String)
 	if err != nil {
 		status, eventResult := ms.logErrorAndReturnResult(ctx, "invalid requester symbol", err)
 		return actionExecutionResult{status: status, result: eventResult, pr: pr}
@@ -132,9 +132,9 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 	}
 	illRequest.Header.RequestingAgencyId = iso18626.TypeAgencyId{
 		AgencyIdType: iso18626.TypeSchemeValuePair{
-			Text: requesterSymbol[0],
+			Text: reqAuthority,
 		},
-		AgencyIdValue: requesterSymbol[1],
+		AgencyIdValue: reqSymbol,
 	}
 	illRequest.Header.RequestingAgencyRequestId = pr.ID
 	illRequest.Header.Timestamp = utils.XSDDateTime{Time: time.Now()}
