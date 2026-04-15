@@ -75,7 +75,7 @@ DELETE FROM event
 WHERE ill_transaction_id = $1;
 
 -- name: UpdateEventStatus :one
-UPDATE event SET last_signal = $3, event_status = $2
+UPDATE event SET last_signal = $3, event_status = $2, broadcast = $4
 WHERE id = $1
 RETURNING sqlc.embed(event);
 
