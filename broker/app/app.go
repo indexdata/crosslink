@@ -168,7 +168,7 @@ func Init(ctx context.Context) (Context, error) {
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenant := common.NewTenant(TENANT_TO_SYMBOL)
 	apiSymbolChecker := api.NewSymbolChecker(tenant).WithIllRepo(illRepo).WithLookupAdapter(dirAdapter)
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, apiSymbolChecker, &iso18626Handler, API_PAGE_SIZE)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, *apiSymbolChecker, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 

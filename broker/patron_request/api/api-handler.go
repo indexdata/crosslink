@@ -50,14 +50,14 @@ type PatronRequestApiHandler struct {
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, symbolChecker *api.SymbolChecker, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, symbolChecker api.SymbolChecker, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
-		symbolChecker:        *symbolChecker,
+		symbolChecker:        symbolChecker,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
 }
