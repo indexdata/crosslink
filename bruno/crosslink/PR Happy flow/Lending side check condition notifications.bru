@@ -1,0 +1,50 @@
+meta {
+  name: Lending side check condition notifications
+  type: http
+  seq: 42
+}
+
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}/notifications?side=lending&kind=condition
+  body: none
+  auth: basic
+}
+
+params:query {
+  side: lending
+  kind: condition
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  test("for lending condition notifications", function() {
+    const body = res.getBody();
+    expect(body.about.count).to.equal(2);
+    expect(body.items).to.be.an("array");
+    expect(body.items.length).to.equal(2);
+
+    const conditionNote = body.items.find((n) => n.note === "please do not copy");
+    expect(conditionNote).to.not.equal(undefined);
+    expect(conditionNote.kind).to.equal("condition");
+    expect(conditionNote.condition).to.equal("NoReproduction");
+    expect(conditionNote.direction).to.equal("sent");
+
+    const costCondition = body.items.find((n) => n.cost === 20 && n.currency === "USD");
+    expect(costCondition).to.not.equal(undefined);
+    expect(costCondition.kind).to.equal("condition");
+    expect(costCondition.direction).to.equal("sent");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

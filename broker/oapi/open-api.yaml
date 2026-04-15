@@ -78,6 +78,15 @@ components:
       description: Symbol for access control
       schema:
         type: string
+    NotificationKind:
+      name: kind
+      in: query
+      description: Notification kind, valid values "note" and "condition"
+      schema:
+        type: string
+        enum:
+          - note
+          - condition
     PatronRequestId:
       name: pr_id
       in: query
@@ -854,6 +863,12 @@ components:
         direction:
           type: string
           description: Direction of the notification, either sent or received
+        kind:
+          type: string
+          description: Kind of notification, either note or condition
+          enum:
+            - note
+            - condition
         note:
           type: string
           description: Note of notification
@@ -883,6 +898,7 @@ components:
         - fromSymbol
         - toSymbol
         - direction
+        - kind
         - createdAt
 
     CreatePrNotification:
@@ -1540,6 +1556,7 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/Side'
         - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/NotificationKind'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
       tags:
