@@ -1,7 +1,7 @@
 meta {
-  name: Borrowing side check-in check
+  name: Borrowing side accept-cost-condition check
   type: http
-  seq: 28
+  seq: 18
 }
 
 get {
@@ -24,10 +24,11 @@ auth:basic {
 }
 
 script:post-response {
-  test("for check-in", function() {
+  test("for accept-cost-condition", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("check-in")
+    expect(pr.lastAction).to.equal("accept-condition")
     expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("WILL_SUPPLY")
   });
 }
 

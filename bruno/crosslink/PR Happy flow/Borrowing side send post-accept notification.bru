@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side check-in
+  name: Borrowing side send post-accept notification
   type: http
-  seq: 27
+  seq: 15
 }
 
 post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+  url: {{host}}/patron_requests/{{prId}}/notifications?side=borrowing
   body: json
   auth: basic
 }
@@ -25,14 +25,13 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+    "note": "no problem"
   }
 }
 
 script:post-response {
   test("for success", function() {
-    const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(res.getStatus()).to.equal(201);
   });
 }
 
