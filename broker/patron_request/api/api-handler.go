@@ -510,7 +510,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		return
 	}
 
-	var responseList []proapi.PrNotification
+	responseList := make([]proapi.PrNotification, 0, len(list))
 	for _, n := range list {
 		apiN, inErr := toApiNotification(n)
 		if inErr != nil {
