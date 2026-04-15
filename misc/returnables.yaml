@@ -96,6 +96,9 @@ states:
         transitions:
           success: CANCEL_PENDING
     events:
+      - name: will-supply-conditional
+        desc: Supplier adds conditions after initial WillSupply (ISO18626 WillSupply with conditions)
+        transition: CONDITION_PENDING
       - name: loaned
         desc: Supplier shipped the item (ISO18626 Loaned)
         transition: SHIPPED

@@ -608,7 +608,7 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             note,
 			OfferedCosts:     offeredCosts,
 		},

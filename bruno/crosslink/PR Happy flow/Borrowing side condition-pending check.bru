@@ -1,11 +1,11 @@
 meta {
-  name: Borrowing side check-out
+  name: Borrowing side condition-pending check
   type: http
-  seq: 19
+  seq: 10
 }
 
-post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+get {
+  url: {{host}}/patron_requests/{{prId}}?side=borrowing
   body: json
   auth: basic
 }
@@ -23,16 +23,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-      "action": "check-out"
-  }
+script:pre-request {
+  bru.sleep(500)
 }
 
 script:post-response {
-  test("for success", function() {
+  test("for condition pending", function() {
     const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+    expect(pr.state).to.equal("CONDITION_PENDING")
   });
 }
 

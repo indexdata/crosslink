@@ -1,21 +1,21 @@
 meta {
-  name: Borrowing side receive check
+  name: Lending side add-condition check
   type: http
-  seq: 17
+  seq: 9
 }
 
 get {
-  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
   body: json
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  side: lending
 }
 
 headers {
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -24,10 +24,11 @@ auth:basic {
 }
 
 script:post-response {
-  test("for receive", function() {
+  test("for add-condition", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("receive")
+    expect(pr.lastAction).to.equal("add-condition")
     expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("CONDITION_PENDING")
   });
 }
 

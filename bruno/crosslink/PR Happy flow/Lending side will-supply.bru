@@ -29,6 +29,15 @@ body:json {
   }
 }
 
+script:post-response {
+  test("for expected bad request", function() {
+    expect(res.getStatus()).to.equal(400)
+    const body = res.getBody();
+    const expectedError = `Action will-supply is not allowed for patron request ${bru.getVar("lendingPrId")} in state WILL_SUPPLY`;
+    expect(body.error).to.equal(expectedError)
+  });
+}
+
 settings {
   encodeUrl: true
   timeout: 0
