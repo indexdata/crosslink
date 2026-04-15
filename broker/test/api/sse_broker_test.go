@@ -105,12 +105,21 @@ func TestSseEndpointNoSide(t *testing.T) {
 }
 
 func TestSseEndpointNoSymbol(t *testing.T) {
-	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=borrowing")
+	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=/broker/")
 	assert.NoError(t, err)
 	bodyBytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, 400, resp.StatusCode)
 	assert.Equal(t, "symbol must be specified\n", string(bodyBytes))
+}
+
+func TestSseEndpointNoTenant(t *testing.T) {
+	resp, err := http.Get(getLocalhostWithPort() + "/broker/sse/events?side=borrowing")
+	assert.NoError(t, err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, resp.StatusCode)
+	assert.Equal(t, "X-Okapi-Tenant must be specified\n", string(bodyBytes))
 }
 
 func executeTask(t time.Time) {

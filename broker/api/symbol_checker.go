@@ -117,5 +117,5 @@ func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant s
 }
 
 func (s *SymbolChecker) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
-	return s.Check(ctx, strings.Contains(r.RequestURI, "/broker/"), tenant, symbol)
+	return s.Check(ctx, strings.HasPrefix(r.URL.Path, "/broker/"), tenant, symbol)
 }
