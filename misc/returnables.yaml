@@ -280,6 +280,10 @@ states:
     side: SUPPLIER
     primaryAction: ship
     actions:
+      - name: add-condition
+        desc: Add additional conditions and notify requester
+        transitions:
+          success: CONDITION_PENDING
       - name: ship
         desc: Mark shipped; send ISO Loaned; NCIP CheckOutItem
         transitions:
