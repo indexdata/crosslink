@@ -1,7 +1,7 @@
 meta {
-  name: Borrowing side check-in
+  name: Borrowing side accept-cost-condition
   type: http
-  seq: 27
+  seq: 17
 }
 
 post {
@@ -25,8 +25,12 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+      "action": "accept-condition"
   }
+}
+
+script:pre-request {
+  bru.sleep(500)
 }
 
 script:post-response {

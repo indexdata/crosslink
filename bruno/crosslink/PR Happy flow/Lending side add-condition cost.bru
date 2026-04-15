@@ -1,21 +1,21 @@
 meta {
-  name: Borrowing side check-in
+  name: Lending side add-condition cost
   type: http
-  seq: 27
+  seq: 16
 }
 
 post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
   body: json
   auth: basic
 }
 
 params:query {
-  side: borrowing
+  side: lending
 }
 
 headers {
-  X-Okapi-Tenant: {{OkapiTenantReq}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
 }
 
 auth:basic {
@@ -25,8 +25,16 @@ auth:basic {
 
 body:json {
   {
-      "action": "check-in"
+      "action": "add-condition",
+      "actionParams": {
+        "cost": 20,
+        "currency": "USD"
+      }
   }
+}
+
+script:pre-request {
+  bru.sleep(500)
 }
 
 script:post-response {

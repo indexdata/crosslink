@@ -29,7 +29,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}},
 		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
-		LenderStateConditionAccepted: {{actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateConditionAccepted: {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
 		LenderStateShippedReturn:     {{actionName: LenderActionMarkReceived}},
 		LenderStateCancelRequested:   {{actionName: LenderActionAcceptCancel}, {actionName: LenderActionRejectCancel}},
 	}
@@ -64,6 +64,7 @@ func TestIsActionAvailable(t *testing.T) {
 	// Lender
 	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, LenderActionShip))
 	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending}, LenderActionAddCondition))
+	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted}, LenderActionAddCondition))
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, BorrowerActionRejectCondition))
 }
 
@@ -92,6 +93,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	// Lender
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending}))
+	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
 }
 
