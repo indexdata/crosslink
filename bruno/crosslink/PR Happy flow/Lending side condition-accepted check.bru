@@ -1,7 +1,7 @@
 meta {
-  name: Lending side ship check
+  name: Lending side condition-accepted check
   type: http
-  seq: 15
+  seq: 13
 }
 
 get {
@@ -23,11 +23,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(500)
+}
+
 script:post-response {
-  test("for ship", function() {
+  test("for condition accepted", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("ship")
-    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("CONDITION_ACCEPTED")
   });
 }
 
