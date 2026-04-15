@@ -252,6 +252,10 @@ states:
     side: SUPPLIER
     primaryAction: cannot-supply
     actions:
+      - name: add-condition
+        desc: Add additional conditions and notify requester
+        transitions:
+          success: CONDITION_PENDING
       - name: cannot-supply
         desc: Indicate cannot supply
         transitions:
@@ -294,7 +298,7 @@ states:
       - name: received
         desc: Requester sends ISO Received
         transition: RECEIVED
-    
+
   - name: RECEIVED
     display: Received
     desc: Requester has received the shipped item

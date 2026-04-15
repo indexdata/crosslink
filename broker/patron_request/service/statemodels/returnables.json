@@ -370,6 +370,13 @@
       "primaryAction": "cannot-supply",
       "actions": [
         {
+          "name": "add-condition",
+          "desc": "Add additional conditions and notify requester",
+          "transitions": {
+            "success": "CONDITION_PENDING"
+          }
+        },
+        {
           "name": "cannot-supply",
           "desc": "Indicate cannot supply",
           "transitions": {
