@@ -1411,6 +1411,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.Equal(t, "plain ram note", n.Note.String)
+			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
 			assert.False(t, n.Cost.Valid)
 			assert.False(t, n.Condition.Valid)
 		}
@@ -1440,6 +1441,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.Equal(t, "plain sam note", n.Note.String)
+			assert.Equal(t, pr_db.NotificationKindNote, n.Kind)
 			assert.False(t, n.Cost.Valid)
 			assert.False(t, n.Condition.Valid)
 		}
@@ -1509,6 +1511,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid)
+			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
 			assert.Equal(t, "NoReproduction", n.Condition.String)
 			assert.False(t, n.Cost.Valid)
 		}
@@ -1530,6 +1533,7 @@ func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *test
 		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 			n := mockPrRepo.savedNotifications[0]
 			assert.False(t, n.Note.Valid) // no synthetic "Offered costs" note
+			assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
 			assert.False(t, n.Condition.Valid)
 			c, err := n.Cost.Float64Value()
 			assert.NoError(t, err)

@@ -504,7 +504,11 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 	if pr == nil {
 		return
 	}
-	list, fullCount, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: pr.ID, Limit: limit, Offset: offset})
+	kind := ""
+	if params.Kind != nil {
+		kind = string(*params.Kind)
+	}
+	list, fullCount, err := a.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{PrID: pr.ID, Limit: limit, Offset: offset, Kind: kind})
 	if err != nil {
 		addInternalError(ctx, w, err)
 		return
@@ -893,6 +897,7 @@ func toApiNotification(notification pr_db.Notification) (proapi.PrNotification, 
 		FromSymbol:     notification.FromSymbol,
 		ToSymbol:       notification.ToSymbol,
 		Direction:      string(notification.Direction),
+		Kind:           proapi.PrNotificationKind(notification.Kind),
 		Note:           toString(notification.Note),
 		Cost:           cost,
 		Currency:       toString(notification.Currency),
@@ -916,6 +921,7 @@ func toDbNotification(create proapi.CreatePrNotification, pr pr_db.PatronRequest
 		FromSymbol: fromSymbol,
 		ToSymbol:   toSymbol,
 		Direction:  pr_db.NotificationDirectionSent,
+		Kind:       pr_db.NotificationKindNote,
 		Note:       getDbText(&create.Note),
 		CreatedAt: pgtype.Timestamp{
 			Time:  time.Now(),

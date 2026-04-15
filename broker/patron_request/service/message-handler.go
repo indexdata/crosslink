@@ -612,6 +612,7 @@ func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.Extende
 		FromSymbol: supSymbol,
 		ToSymbol:   reqSymbol,
 		Direction:  pr_db.NotificationDirectionReceived,
+		Kind:       inferNotificationKind(note.Valid, condition.Valid, cost.Valid),
 		Condition:  condition,
 		Currency:   currency,
 		Cost:       cost,
@@ -660,6 +661,7 @@ func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.Extende
 		FromSymbol: reqSymbol,
 		ToSymbol:   supSymbol,
 		Direction:  pr_db.NotificationDirectionReceived,
+		Kind:       pr_db.NotificationKindNote,
 		CreatedAt: pgtype.Timestamp{
 			Valid: true,
 			Time:  time.Now(),
@@ -718,6 +720,7 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 		FromSymbol: reqSymbol,
 		ToSymbol:   supSymbol,
 		Direction:  pr_db.NotificationDirectionReceived,
+		Kind:       inferNotificationKind(note.Valid, false, cost.Valid),
 		Currency:   currency,
 		Cost:       cost,
 		CreatedAt: pgtype.Timestamp{
@@ -726,6 +729,13 @@ func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.Ext
 		},
 	})
 	return err
+}
+
+func inferNotificationKind(hasNote bool, hasCondition bool, hasCost bool) pr_db.NotificationKind {
+	if hasCondition || hasCost {
+		return pr_db.NotificationKindCondition
+	}
+	return pr_db.NotificationKindNote
 }
 
 func getSymbolsFromHeader(header iso18626.Header) (string, string) {

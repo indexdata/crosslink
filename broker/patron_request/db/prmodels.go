@@ -9,6 +9,7 @@ type PatronRequestSide string
 type PatronRequestAction string
 type NotificationReceipt string
 type NotificationDirection string
+type NotificationKind string
 
 const (
 	NotificationAccepted     NotificationReceipt = "ACCEPTED"
@@ -19,6 +20,9 @@ const (
 
 	NotificationDirectionSent     NotificationDirection = "sent"
 	NotificationDirectionReceived NotificationDirection = "received"
+
+	NotificationKindNote      NotificationKind = "note"
+	NotificationKindCondition NotificationKind = "condition"
 )
 
 type PrItem struct {

@@ -46,6 +46,7 @@ CREATE TABLE notification
     from_symbol     VARCHAR   NOT NULL,
     to_symbol       VARCHAR   NOT NULL,
     direction       VARCHAR   NOT NULL DEFAULT 'sent',
+    kind            VARCHAR   NOT NULL DEFAULT 'note',
     note            VARCHAR,
     cost            NUMERIC(19, 4),
     currency        VARCHAR,
