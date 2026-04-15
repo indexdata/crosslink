@@ -690,7 +690,6 @@ func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text,
 		nil
 }
 
-
 func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
 	supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
 	var note pgtype.Text

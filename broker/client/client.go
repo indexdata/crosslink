@@ -680,7 +680,9 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	shouldInjectSyntheticNotes := !(isCrossLinkVendor(trCtx.requester) || isCrossLinkVendor(trCtx.selectedPeer) || isCrossLinkVendor(target.peer))
+	shouldInjectSyntheticNotes := !isCrossLinkVendor(trCtx.requester) &&
+		!isCrossLinkVendor(trCtx.selectedPeer) &&
+		!isCrossLinkVendor(target.peer)
 	if supplierSymbolNote && shouldInjectSyntheticNotes {
 		prependSupplierSymbolNote(trCtx, sam)
 	}
