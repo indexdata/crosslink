@@ -55,6 +55,18 @@ func TestCreateMessageHeaderOpaque(t *testing.T) {
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestCreateMessageHeaderWithSymbolWithoutAuthority(t *testing.T) {
+	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "REQ"}}
+	sup := ill_db.LocatedSupplier{SupplierSymbol: "SUP"}
+
+	header := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTransparent))
+
+	assert.Equal(t, "", header.RequestingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "REQ", header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "", header.SupplyingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "SUP", header.SupplyingAgencyId.AgencyIdValue)
+}
+
 func TestSendHttpPost(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "mytenant",
@@ -874,6 +886,11 @@ func TestPrependSupplierSymbolNote(t *testing.T) {
 	sam.MessageInfo.Note = "#special note#"
 	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1#special note#", sam.MessageInfo.Note)
+
+	supplier.SupplierSymbol = "SUP2"
+	sam.MessageInfo.Note = ""
+	prependSupplierSymbolNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP2", sam.MessageInfo.Note)
 
 	// No synthetic supplier note for internal CrossLink requester/supplier flows.
 	requester.Vendor = string(directory.CrossLink)
