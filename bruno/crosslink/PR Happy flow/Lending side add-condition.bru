@@ -26,8 +26,10 @@ auth:basic {
 body:json {
   {
       "action": "add-condition",
-      "loanCondition": "NoReproduction",
-      "note": "please do not copy"
+      "actionParams": {
+        "loanCondition": "NoReproduction",
+        "note": "please do not copy"
+      }
   }
 }
 

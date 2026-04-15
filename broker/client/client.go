@@ -680,18 +680,27 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	if supplierSymbolNote {
+	shouldInjectSyntheticNotes := !isCrossLinkVendor(trCtx.requester) &&
+		!isCrossLinkVendor(trCtx.selectedPeer) &&
+		!isCrossLinkVendor(target.peer)
+	if supplierSymbolNote && shouldInjectSyntheticNotes {
 		prependSupplierSymbolNote(trCtx, sam)
 	}
-	if vendorNote && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+	if vendorNote && shouldInjectSyntheticNotes && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNote(sam, target.peer.Vendor)
 	}
 	return message
 }
 
+func isCrossLinkVendor(peer *ill_db.Peer) bool {
+	return peer != nil && strings.EqualFold(peer.Vendor, string(directory.CrossLink))
+}
+
 func prependSupplierSymbolNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
-		trCtx.selectedSupplier != nil {
+		trCtx.selectedSupplier != nil &&
+		!isCrossLinkVendor(trCtx.requester) &&
+		!isCrossLinkVendor(trCtx.selectedPeer) {
 		symbol := strings.SplitN(trCtx.selectedSupplier.SupplierSymbol, ":", 2)
 		if sam.MessageInfo.Note != "" {
 			sep := shim.NOTE_FIELD_SEP

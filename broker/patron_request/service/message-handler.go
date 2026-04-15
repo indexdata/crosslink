@@ -572,173 +572,160 @@ func (m *PatronRequestMessageHandler) saveItem(ctx common.ExtendedContext, prId 
 }
 
 func (m *PatronRequestMessageHandler) extractSamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, sam iso18626.SupplyingAgencyMessage) error {
-	if sam.MessageInfo.Note != "" {
-		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-			ID:         uuid.NewString(),
-			PrID:       pr.ID,
-			Note:       getDbText(sam.MessageInfo.Note),
-			FromSymbol: supSymbol,
-			ToSymbol:   reqSymbol,
-			Direction:  pr_db.NotificationDirectionReceived,
-			CreatedAt: pgtype.Timestamp{
-				Valid: true,
-				Time:  time.Now(),
-			},
-		})
-		if err != nil {
-			return err
+	supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
+	var note pgtype.Text
+	noteText := stripReShareConditionMarkers(stripItemsNotePayload(sam.MessageInfo.Note))
+	if noteText != "" {
+		note = getDbText(noteText)
+	}
+	var condition pgtype.Text
+	if sam.DeliveryInfo != nil && sam.DeliveryInfo.LoanCondition != nil {
+		if sam.DeliveryInfo.LoanCondition.Text != "" {
+			condition = getDbText(sam.DeliveryInfo.LoanCondition.Text)
 		}
 	}
+
+	var currency pgtype.Text
+	var cost pgtype.Numeric
 	if sam.MessageInfo.OfferedCosts != nil {
-		supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-		cost, err := safeConvertInt32(sam.MessageInfo.OfferedCosts.MonetaryValue.Exp)
+		var err error
+		cost, currency, err = toNotificationCost(sam.MessageInfo.OfferedCosts)
 		if err != nil {
 			return err
 		}
-		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-			ID:         uuid.NewString(),
-			PrID:       pr.ID,
-			FromSymbol: supSymbol,
-			ToSymbol:   reqSymbol,
-			Direction:  pr_db.NotificationDirectionReceived,
-			Note:       getDbText("Offered costs"),
-			Currency:   getDbText(sam.MessageInfo.OfferedCosts.CurrencyCode.Text),
-			Cost: pgtype.Numeric{
-				Valid: true,
-				Int:   big.NewInt(int64(sam.MessageInfo.OfferedCosts.MonetaryValue.Base)),
-				Exp:   cost,
-			},
-			CreatedAt: pgtype.Timestamp{
-				Valid: true,
-				Time:  time.Now(),
-			},
-		})
+	} else if sam.DeliveryInfo != nil && sam.DeliveryInfo.DeliveryCosts != nil {
+		var err error
+		cost, currency, err = toNotificationCost(sam.DeliveryInfo.DeliveryCosts)
 		if err != nil {
 			return err
 		}
 	}
-	if sam.DeliveryInfo != nil {
-		if sam.DeliveryInfo.DeliveryCosts != nil {
-			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-			cost, err := safeConvertInt32(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Exp)
-			if err != nil {
-				return err
-			}
-			_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-				ID:         uuid.NewString(),
-				PrID:       pr.ID,
-				FromSymbol: supSymbol,
-				ToSymbol:   reqSymbol,
-				Direction:  pr_db.NotificationDirectionReceived,
-				Note:       getDbText("Delivery costs"),
-				Currency:   getDbText(sam.DeliveryInfo.DeliveryCosts.CurrencyCode.Text),
-				Cost: pgtype.Numeric{
-					Valid: true,
-					Int:   big.NewInt(int64(sam.DeliveryInfo.DeliveryCosts.MonetaryValue.Base)),
-					Exp:   cost,
-				},
-				CreatedAt: pgtype.Timestamp{
-					Valid: true,
-					Time:  time.Now(),
-				},
-			})
-			if err != nil {
-				return err
-			}
-		}
-		if sam.DeliveryInfo.LoanCondition != nil {
-			supSymbol, reqSymbol := getSymbolsFromHeader(sam.Header)
-			_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-				ID:         uuid.NewString(),
-				PrID:       pr.ID,
-				FromSymbol: supSymbol,
-				ToSymbol:   reqSymbol,
-				Direction:  pr_db.NotificationDirectionReceived,
-				Condition:  getDbText(sam.DeliveryInfo.LoanCondition.Text),
-				CreatedAt: pgtype.Timestamp{
-					Valid: true,
-					Time:  time.Now(),
-				},
-			})
-			if err != nil {
-				return err
-			}
-		}
+
+	if !note.Valid && !condition.Valid && !cost.Valid {
+		return nil
 	}
-	return nil
+
+	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		ID:         uuid.NewString(),
+		PrID:       pr.ID,
+		Note:       note,
+		FromSymbol: supSymbol,
+		ToSymbol:   reqSymbol,
+		Direction:  pr_db.NotificationDirectionReceived,
+		Condition:  condition,
+		Currency:   currency,
+		Cost:       cost,
+		CreatedAt: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now(),
+		},
+	})
+	return err
+}
+
+func stripItemsNotePayload(note string) string {
+	if note == "" {
+		return ""
+	}
+	_, startIdx, endIdx := common.UnpackItemsNote(note)
+	if startIdx < 0 || endIdx < 0 {
+		return strings.TrimSpace(note)
+	}
+	before := strings.TrimSpace(note[:startIdx])
+	afterStart := endIdx + len(common.MULTIPLE_ITEMS_END)
+	after := ""
+	if afterStart < len(note) {
+		after = strings.TrimSpace(note[afterStart:])
+	}
+	switch {
+	case before != "" && after != "":
+		return before + "\n" + after
+	case before != "":
+		return before
+	default:
+		return after
+	}
 }
 
 func (m *PatronRequestMessageHandler) extractRamNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage) error {
-	if ram.Note != "" {
-		supSymbol, reqSymbol := getSymbolsFromHeader(ram.Header)
-		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-			ID:         uuid.NewString(),
-			PrID:       pr.ID,
-			Note:       getDbText(ram.Note),
-			FromSymbol: reqSymbol,
-			ToSymbol:   supSymbol,
-			Direction:  pr_db.NotificationDirectionReceived,
-			CreatedAt: pgtype.Timestamp{
-				Valid: true,
-				Time:  time.Now(),
-			},
-		})
-		if err != nil {
-			return err
-		}
+	noteText := stripReShareConditionMarkers(ram.Note)
+	if noteText == "" {
+		return nil
 	}
-	return nil
+	supSymbol, reqSymbol := getSymbolsFromHeader(ram.Header)
+	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		ID:         uuid.NewString(),
+		PrID:       pr.ID,
+		Note:       getDbText(noteText),
+		FromSymbol: reqSymbol,
+		ToSymbol:   supSymbol,
+		Direction:  pr_db.NotificationDirectionReceived,
+		CreatedAt: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now(),
+		},
+	})
+	return err
+}
+
+func stripReShareConditionMarkers(note string) string {
+	cleaned := note
+	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_ADD_LOAN_CONDITION, "")
+	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_AGREE, "")
+	cleaned = strings.ReplaceAll(cleaned, shim.RESHARE_LOAN_CONDITION_REJECT, "")
+	return strings.TrimSpace(cleaned)
+}
+
+func toNotificationCost(value *iso18626.TypeCosts) (pgtype.Numeric, pgtype.Text, error) {
+	costExp, err := safeConvertInt32(value.MonetaryValue.Exp)
+	if err != nil {
+		return pgtype.Numeric{}, pgtype.Text{}, err
+	}
+	return pgtype.Numeric{
+			Valid: true,
+			Int:   big.NewInt(int64(value.MonetaryValue.Base)),
+			Exp:   costExp,
+		},
+		getDbText(value.CurrencyCode.Text),
+		nil
 }
 
 func (m *PatronRequestMessageHandler) extractRequestNotifications(ctx common.ExtendedContext, pr pr_db.PatronRequest, request iso18626.Request) error {
+	supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
+	var note pgtype.Text
 	if request.ServiceInfo != nil && request.ServiceInfo.Note != "" {
-		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
-		_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-			ID:         uuid.NewString(),
-			PrID:       pr.ID,
-			Note:       getDbText(request.ServiceInfo.Note),
-			FromSymbol: reqSymbol,
-			ToSymbol:   supSymbol,
-			Direction:  pr_db.NotificationDirectionReceived,
-			CreatedAt: pgtype.Timestamp{
-				Valid: true,
-				Time:  time.Now(),
-			},
-		})
-		if err != nil {
-			return err
-		}
+		note = getDbText(request.ServiceInfo.Note)
 	}
+
+	var currency pgtype.Text
+	var cost pgtype.Numeric
 	if request.BillingInfo != nil && request.BillingInfo.MaximumCosts != nil {
-		supSymbol, reqSymbol := getSymbolsFromHeader(request.Header)
-		cost, err := safeConvertInt32(request.BillingInfo.MaximumCosts.MonetaryValue.Exp)
-		if err != nil {
-			return err
-		}
-		_, err = m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
-			ID:         uuid.NewString(),
-			PrID:       pr.ID,
-			Note:       getDbText("Maximum costs"),
-			FromSymbol: reqSymbol,
-			ToSymbol:   supSymbol,
-			Direction:  pr_db.NotificationDirectionReceived,
-			Currency:   getDbText(request.BillingInfo.MaximumCosts.CurrencyCode.Text),
-			Cost: pgtype.Numeric{
-				Valid: true,
-				Int:   big.NewInt(int64(request.BillingInfo.MaximumCosts.MonetaryValue.Base)),
-				Exp:   cost,
-			},
-			CreatedAt: pgtype.Timestamp{
-				Valid: true,
-				Time:  time.Now(),
-			},
-		})
+		var err error
+		cost, currency, err = toNotificationCost(request.BillingInfo.MaximumCosts)
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+
+	if !note.Valid && !cost.Valid {
+		return nil
+	}
+
+	_, err := m.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		ID:         uuid.NewString(),
+		PrID:       pr.ID,
+		Note:       note,
+		FromSymbol: reqSymbol,
+		ToSymbol:   supSymbol,
+		Direction:  pr_db.NotificationDirectionReceived,
+		Currency:   currency,
+		Cost:       cost,
+		CreatedAt: pgtype.Timestamp{
+			Valid: true,
+			Time:  time.Now(),
+		},
+	})
+	return err
 }
 
 func getSymbolsFromHeader(header iso18626.Header) (string, string) {
