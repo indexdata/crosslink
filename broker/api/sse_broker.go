@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,19 +15,19 @@ import (
 )
 
 type SseBroker struct {
-	input   chan SseMessage
-	clients map[string]map[chan string]bool
-	mu      sync.Mutex
-	ctx     common.ExtendedContext
-	tenant  common.Tenant
+	input         chan SseMessage
+	clients       map[string]map[chan string]bool
+	mu            sync.Mutex
+	ctx           common.ExtendedContext
+	symbolChecker SymbolChecker
 }
 
-func NewSseBroker(ctx common.ExtendedContext, tenant common.Tenant) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, symbolChecker SymbolChecker) (broker *SseBroker) {
 	broker = &SseBroker{
-		input:   make(chan SseMessage),
-		clients: make(map[string]map[chan string]bool),
-		ctx:     ctx,
-		tenant:  tenant,
+		input:         make(chan SseMessage),
+		clients:       make(map[string]map[chan string]bool),
+		ctx:           ctx,
+		symbolChecker: symbolChecker,
 	}
 
 	// Start the single broadcaster goroutine
@@ -67,24 +68,26 @@ func (b *SseBroker) removeClient(receiver string, clientChannel chan string) {
 
 // ServeHTTP implements the http.Handler interface for the SSE endpoint.
 func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	clientChannel := make(chan string, 10)
-	tenant := r.Header.Get("X-Okapi-Tenant")
-	var symbol string
-	if b.tenant.IsSpecified() && tenant != "" {
-		symbol = b.tenant.GetSymbol(tenant)
-	} else {
-		symbol = r.URL.Query().Get("symbol")
-	}
+	logParams := map[string]string{"method": "ServeHTTP"}
+	ectx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
+	tenant := r.Header.Get("X-Okapi-Tenant")
+	suppliedSymbol := r.URL.Query().Get("symbol")
+	symbol, err := b.symbolChecker.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	side := r.URL.Query().Get("side")
-	if side == "" || symbol == "" {
-		http.Error(w, "query parameter 'side' and 'symbol' must be specified", http.StatusBadRequest)
+	if side == "" {
+		http.Error(w, "query parameter 'side' must be specified", http.StatusBadRequest)
 		return
 	}
 	if side != string(prservice.SideBorrowing) && side != string(prservice.SideLending) {
 		http.Error(w, fmt.Sprintf("query parameter 'side' must be %s or %s", prservice.SideBorrowing, prservice.SideLending), http.StatusBadRequest)
 		return
 	}
+	clientChannel := make(chan string, 10)
 	b.mu.Lock()
 	receiver := side + symbol
 	clients := b.clients[receiver]

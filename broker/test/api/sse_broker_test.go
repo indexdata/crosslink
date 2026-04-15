@@ -101,7 +101,7 @@ func TestSseEndpointNoSide(t *testing.T) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, 400, resp.StatusCode)
-	assert.Equal(t, "query parameter 'side' and 'symbol' must be specified\n", string(bodyBytes))
+	assert.Equal(t, "query parameter 'side' must be specified\n", string(bodyBytes))
 }
 
 func TestSseEndpointNoSymbol(t *testing.T) {
@@ -110,7 +110,7 @@ func TestSseEndpointNoSymbol(t *testing.T) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, 400, resp.StatusCode)
-	assert.Equal(t, "query parameter 'side' and 'symbol' must be specified\n", string(bodyBytes))
+	assert.Equal(t, "symbol must be specified\n", string(bodyBytes))
 }
 
 func executeTask(t time.Time) {

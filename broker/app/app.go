@@ -172,7 +172,7 @@ func Init(ctx context.Context) (Context, error) {
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 
-	sseBroker := api.NewSseBroker(appCtx, tenant)
+	sseBroker := api.NewSseBroker(appCtx, *apiSymbolChecker)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
@@ -220,6 +220,7 @@ func StartServer(ctx Context) error {
 	if TENANT_TO_SYMBOL != "" {
 		tenant = common.NewTenant(TENANT_TO_SYMBOL)
 		symbolChecker = api.NewSymbolChecker(tenant).WithRepoCheck(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
+		ServeMux.HandleFunc("/broker/sse/events", ctx.SseBroker.ServeHTTP)
 
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, *symbolChecker, API_PAGE_SIZE)
 		oapi.HandlerFromMuxWithBaseURL(&apiHandler, ServeMux, "/broker")

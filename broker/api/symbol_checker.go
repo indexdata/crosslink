@@ -32,13 +32,13 @@ func (s *SymbolChecker) WithLookupAdapter(directoryLookupAdapter adapter.Directo
 	return s
 }
 
-func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBroker bool, tenant *string, symbol *string) (string, error) {
+func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
 	var mainSymbol string
-	if isBroker {
+	if isBrokerPrefix {
 		if !s.tenantResolver.IsSpecified() {
 			return "", errors.New("tenant mapping must be specified")
 		}
-		if tenant == nil {
+		if tenant == nil || *tenant == "" {
 			return "", errors.New("X-Okapi-Tenant must be specified")
 		}
 		mainSymbol = s.tenantResolver.GetSymbol(*tenant)

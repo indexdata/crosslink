@@ -21,7 +21,12 @@ func TestSymbolChecker(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "symbol must be specified", err.Error())
 
-	requestSymbol := "symbol2"
+	requestSymbol := ""
+	_, err = symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	assert.Error(t, err)
+	assert.Equal(t, "symbol must be specified", err.Error())
+
+	requestSymbol = "symbol2"
 	symbol, err := symbolChecker.Check(ctx, false, nil, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
@@ -36,7 +41,12 @@ func TestSymbolChecker(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
 
-	tenant := "tenant1"
+	tenant := ""
+	_, err = symbolChecker.Check(ctx, true, &tenant, nil)
+	assert.Error(t, err)
+	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
+
+	tenant = "tenant1"
 	symbol, err = symbolChecker.Check(ctx, true, &tenant, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, strings.ToUpper(tenant), symbol)
