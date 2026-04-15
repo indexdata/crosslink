@@ -166,8 +166,7 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	tenant := common.NewTenant(TENANT_TO_SYMBOL)
-	apiSymbolChecker := api.NewSymbolChecker(tenant).WithIllRepo(illRepo).WithLookupAdapter(dirAdapter)
+	apiSymbolChecker := api.NewSymbolChecker().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantSymbol(TENANT_TO_SYMBOL)
 	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, *apiSymbolChecker, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
@@ -211,15 +210,13 @@ func StartServer(ctx Context) error {
 		_, _ = w.Write(oapi.OpenAPISpecYAML)
 	})
 
-	tenant := common.NewTenant("")
-	symbolChecker := api.NewSymbolChecker(tenant).WithIllRepo(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
+	symbolChecker := api.NewSymbolChecker().WithIllRepo(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
 
 	apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, *symbolChecker, API_PAGE_SIZE)
 	oapi.HandlerFromMux(&apiHandler, ServeMux)
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	if TENANT_TO_SYMBOL != "" {
-		tenant = common.NewTenant(TENANT_TO_SYMBOL)
-		symbolChecker = api.NewSymbolChecker(tenant).WithIllRepo(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter)
+		symbolChecker = api.NewSymbolChecker().WithIllRepo(ctx.IllRepo).WithLookupAdapter(ctx.DirAdapter).WithTenantSymbol(TENANT_TO_SYMBOL)
 		ServeMux.HandleFunc("/broker/sse/events", ctx.SseBroker.ServeHTTP)
 
 		apiHandler := api.NewApiHandler(ctx.EventRepo, ctx.IllRepo, *symbolChecker, API_PAGE_SIZE)

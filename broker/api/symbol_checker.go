@@ -13,13 +13,16 @@ import (
 type SymbolChecker struct {
 	illRepo                *ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
-	tenantResolver         common.Tenant
+	tenantSymbolMap        string
 }
 
-func NewSymbolChecker(tenantResolver common.Tenant) *SymbolChecker {
-	return &SymbolChecker{
-		tenantResolver: tenantResolver,
-	}
+func NewSymbolChecker() *SymbolChecker {
+	return &SymbolChecker{}
+}
+
+func (s *SymbolChecker) WithTenantSymbol(tenantSymbol string) *SymbolChecker {
+	s.tenantSymbolMap = tenantSymbol
+	return s
 }
 
 func (s *SymbolChecker) WithIllRepo(illRepo ill_db.IllRepo) *SymbolChecker {
@@ -32,16 +35,24 @@ func (s *SymbolChecker) WithLookupAdapter(directoryLookupAdapter adapter.Directo
 	return s
 }
 
-func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
+func (s *SymbolChecker) IsSpecified() bool {
+	return s.tenantSymbolMap != ""
+}
+
+func (s *SymbolChecker) getSymbol(tenant string) string {
+	return strings.ReplaceAll(s.tenantSymbolMap, "{tenant}", strings.ToUpper(tenant))
+}
+
+func (s *SymbolChecker) symbolForRequest(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
 	var mainSymbol string
 	if isBrokerPrefix {
-		if !s.tenantResolver.IsSpecified() {
+		if !s.IsSpecified() {
 			return "", errors.New("tenant mapping must be specified")
 		}
 		if tenant == nil || *tenant == "" {
 			return "", errors.New("X-Okapi-Tenant must be specified")
 		}
-		mainSymbol = s.tenantResolver.GetSymbol(*tenant)
+		mainSymbol = s.getSymbol(*tenant)
 	} else {
 		if symbol == nil || *symbol == "" {
 			return "", errors.New("symbol must be specified")
@@ -81,14 +92,18 @@ func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBrokerPrefix bool, t
 	return *symbol, nil
 }
 
+func (s *SymbolChecker) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
+	return s.symbolForRequest(ctx, strings.HasPrefix(r.URL.Path, "/broker/"), tenant, symbol)
+}
+
 func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant string) []string {
-	if !s.tenantResolver.IsSpecified() {
+	if !s.IsSpecified() {
 		return []string{}
 	}
 	if tenant == "" {
 		return []string{}
 	}
-	mainSymbol := s.tenantResolver.GetSymbol(tenant)
+	mainSymbol := s.getSymbol(tenant)
 	if s.illRepo == nil {
 		return []string{mainSymbol}
 	}
@@ -111,8 +126,4 @@ func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant s
 		}
 	}
 	return symbols
-}
-
-func (s *SymbolChecker) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
-	return s.Check(ctx, strings.HasPrefix(r.URL.Path, "/broker/"), tenant, symbol)
 }

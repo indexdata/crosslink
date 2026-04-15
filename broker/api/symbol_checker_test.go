@@ -13,41 +13,41 @@ import (
 )
 
 func TestSymbolChecker(t *testing.T) {
-	tenantResolver := common.NewTenant("")
-	symbolChecker := NewSymbolChecker(tenantResolver)
+	symbolChecker := NewSymbolChecker()
+	assert.False(t, symbolChecker.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	_, err := symbolChecker.Check(ctx, false, nil, nil)
+	_, err := symbolChecker.symbolForRequest(ctx, false, nil, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "symbol must be specified", err.Error())
 
 	requestSymbol := ""
-	_, err = symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	_, err = symbolChecker.symbolForRequest(ctx, false, nil, &requestSymbol)
 	assert.Error(t, err)
 	assert.Equal(t, "symbol must be specified", err.Error())
 
 	requestSymbol = "symbol2"
-	symbol, err := symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	symbol, err := symbolChecker.symbolForRequest(ctx, false, nil, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
 
-	_, err = symbolChecker.Check(ctx, true, nil, nil)
+	_, err = symbolChecker.symbolForRequest(ctx, true, nil, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "tenant mapping must be specified", err.Error())
 
-	tenantResolver = common.NewTenant("{tenant}")
-	symbolChecker = NewSymbolChecker(tenantResolver)
-	_, err = symbolChecker.Check(ctx, true, nil, nil)
+	symbolChecker = NewSymbolChecker().WithTenantSymbol("{tenant}")
+	assert.True(t, symbolChecker.IsSpecified())
+	_, err = symbolChecker.symbolForRequest(ctx, true, nil, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
 
 	tenant := ""
-	_, err = symbolChecker.Check(ctx, true, &tenant, nil)
+	_, err = symbolChecker.symbolForRequest(ctx, true, &tenant, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
 
 	tenant = "tenant1"
-	symbol, err = symbolChecker.Check(ctx, true, &tenant, nil)
+	symbol, err = symbolChecker.symbolForRequest(ctx, true, &tenant, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, strings.ToUpper(tenant), symbol)
 }
@@ -73,65 +73,59 @@ func (r *MockIllRepo) GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerI
 }
 
 func TestSymbolCheckerRepoNoPeer(t *testing.T) {
-	tenantResolver := common.NewTenant("{tenant}")
-
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	symbolChecker := NewSymbolChecker().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL2"
-	_, err := symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	_, err := symbolChecker.symbolForRequest(ctx, false, nil, &requestSymbol)
 	assert.Error(t, err)
 	assert.Equal(t, "no peers for symbol", err.Error())
 }
 
 func TestSymbolCheckerRepoOK(t *testing.T) {
-	tenantResolver := common.NewTenant("{tenant}")
-
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{{SymbolValue: "LIB"}}, nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	symbolChecker := NewSymbolChecker().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL"
-	symbol, err := symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	symbol, err := symbolChecker.symbolForRequest(ctx, false, nil, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
 
 	requestSymbol = "LIB"
 	tenant := "symbol"
-	symbol, err = symbolChecker.Check(ctx, true, &tenant, &requestSymbol)
+	symbol, err = symbolChecker.symbolForRequest(ctx, true, &tenant, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
 
 	requestSymbol = ""
-	symbol, err = symbolChecker.Check(ctx, true, &tenant, &requestSymbol)
+	symbol, err = symbolChecker.symbolForRequest(ctx, true, &tenant, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, strings.ToUpper(tenant), symbol)
 }
 
 func TestSymbolCheckerRepoBranches(t *testing.T) {
-	tenantResolver := common.NewTenant("{tenant}")
-
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{}, nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	symbolChecker := NewSymbolChecker().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL"
-	symbol, err := symbolChecker.Check(ctx, false, nil, &requestSymbol)
+	symbol, err := symbolChecker.symbolForRequest(ctx, false, nil, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
 
 	requestSymbol = "LIB"
 	tenant := "SYMBOL"
-	_, err = symbolChecker.Check(ctx, true, &tenant, &requestSymbol)
+	_, err = symbolChecker.symbolForRequest(ctx, true, &tenant, &requestSymbol)
 	assert.Error(t, err)
 	assert.Equal(t, "symbol does not match any branch symbols for tenant", err.Error())
 }

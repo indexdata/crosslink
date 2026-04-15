@@ -54,7 +54,7 @@ func (a *ApiHandler) isOwner(ctx common.ExtendedContext, trans *ill_db.IllTransa
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
 	}
-	if !a.symbolChecker.tenantResolver.IsSpecified() {
+	if !a.symbolChecker.IsSpecified() {
 		return true
 	}
 	if tenant == nil {
@@ -172,7 +172,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.symbolChecker.tenantResolver.IsSpecified() {
+	} else if a.symbolChecker.IsSpecified() {
 		var symbols []string
 		if params.XOkapiTenant != nil {
 			symbols = a.symbolChecker.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
