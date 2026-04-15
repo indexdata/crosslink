@@ -96,3 +96,6 @@ sql:
           - column: "notification.receipt"
             go_type:
               type: "NotificationReceipt"
+          - column: "notification.direction"
+            go_type:
+              type: "NotificationDirection"

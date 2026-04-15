@@ -9,7 +9,7 @@ CREATE TABLE peer
     borrows_count  INTEGER   NOT NULL DEFAULT 0,
     vendor         VARCHAR   NOT NULL,
     broker_mode    VARCHAR   NOT NULL,
-    custom_data    jsonb,
+    custom_data    jsonb     NOT NULL DEFAULT '{}'::jsonb,
     http_headers   jsonb
 );
 

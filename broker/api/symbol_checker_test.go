@@ -78,7 +78,7 @@ func TestSymbolCheckerRepoNoPeer(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithRepoCheck(mockIllRepo)
+	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL2"
@@ -94,7 +94,7 @@ func TestSymbolCheckerRepoOK(t *testing.T) {
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{{SymbolValue: "LIB"}}, nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithRepoCheck(mockIllRepo)
+	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL"
@@ -116,7 +116,7 @@ func TestSymbolCheckerRepoBranches(t *testing.T) {
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{}, nil)
 
-	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithRepoCheck(mockIllRepo)
+	symbolChecker := NewSymbolChecker(tenantResolver).WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	requestSymbol := "SYMBOL"

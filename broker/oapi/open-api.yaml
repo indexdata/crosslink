@@ -823,6 +823,20 @@ components:
         - barcode
         - createdAt
 
+    PrNotifications:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of patron request notifications
+          items:
+            $ref: '#/components/schemas/PrNotification'
+
     PrNotification:
       type: object
       title: Notification
@@ -837,9 +851,9 @@ components:
         toSymbol:
           type: string
           description: Symbol of notification receiver
-        side:
+        direction:
           type: string
-          description: Patron request side
+          description: Direction of the notification, either sent or received
         note:
           type: string
           description: Note of notification
@@ -868,8 +882,36 @@ components:
         - id
         - fromSymbol
         - toSymbol
-        - side
+        - direction
         - createdAt
+
+    CreatePrNotification:
+      type: object
+      title: Create Notification
+      description: Create patron request notification body
+      properties:
+        note:
+          type: string
+          description: Note of notification
+      required:
+        - note
+
+    UpdateNotificationReceipt:
+      type: object
+      title: Update notification receipt
+      description: Update notification receipt body
+      properties:
+        receipt:
+          type: string
+          description: Notification receipt status
+          enum:
+            - ACCEPTED
+            - REJECTED
+            - SEEN
+            - SENT
+            - FAILED_TO_SEND
+      required:
+        - receipt
 
 paths:
   /:
@@ -1498,6 +1540,8 @@ paths:
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/Side'
         - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       tags:
         - patron-requests-api
       responses:
@@ -1506,9 +1550,99 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrNotification'
+                $ref: '#/components/schemas/PrNotifications'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found. Patron request not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create patron request notification
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrNotification'
+      responses:
+        '201':
+          description: Patron request notification created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrNotification'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found. Patron request not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/notifications/{notificationId}/receipt:
+    put:
+      summary: Update patron request notification receipt
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - in: path
+          name: notificationId
+          schema:
+            type: string
+          required: true
+          description: ID of the notification
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      tags:
+        - patron-requests-api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationReceipt'
+      responses:
+        '204':
+          description: Patron request notification updated successfully
         '400':
           description: Bad Request. Invalid query parameters.
           content:

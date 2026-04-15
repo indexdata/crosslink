@@ -537,6 +537,26 @@ func TestHandleSupplyingAgencyMessageWillSupplyCondition(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestHandleSupplyingAgencyMessageWillSupplyConditionFromWillSupply(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             "please do not copy\n" + shim.RESHARE_ADD_LOAN_CONDITION,
+		},
+	}, pr_db.PatronRequest{State: BorrowerStateWillSupply, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateConditionPending, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
 func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
@@ -1235,11 +1255,11 @@ func TestExtractRequestNotifications(t *testing.T) {
 		}},
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, 2, len(mockPrRepo.savedNotifications))
+	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 	assert.Equal(t, "save this", mockPrRepo.savedNotifications[0].Note.String)
 	assert.Equal(t, "ISIL:REQ", mockPrRepo.savedNotifications[0].FromSymbol)
 	assert.Equal(t, "ISIL:SUP", mockPrRepo.savedNotifications[0].ToSymbol)
-	cost, err := mockPrRepo.savedNotifications[1].Cost.Float64Value()
+	cost, err := mockPrRepo.savedNotifications[0].Cost.Float64Value()
 	assert.NoError(t, err)
 	assert.Equal(t, 1.23, cost.Float64)
 
@@ -1307,17 +1327,14 @@ func TestExtractSamNotifications(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
-	assert.Equal(t, 4, len(mockPrRepo.savedNotifications))
+	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
 	assert.Equal(t, "save this", mockPrRepo.savedNotifications[0].Note.String)
 	assert.Equal(t, "ISIL:SUP", mockPrRepo.savedNotifications[0].FromSymbol)
 	assert.Equal(t, "ISIL:REQ", mockPrRepo.savedNotifications[0].ToSymbol)
-	cost, err := mockPrRepo.savedNotifications[1].Cost.Float64Value()
+	cost, err := mockPrRepo.savedNotifications[0].Cost.Float64Value()
 	assert.NoError(t, err)
 	assert.Equal(t, 1.24, cost.Float64)
-	cost, err = mockPrRepo.savedNotifications[2].Cost.Float64Value()
-	assert.NoError(t, err)
-	assert.Equal(t, 1.25, cost.Float64)
-	assert.Equal(t, "library use only", mockPrRepo.savedNotifications[3].Condition.String)
+	assert.Equal(t, "library use only", mockPrRepo.savedNotifications[0].Condition.String)
 
 	// Error
 	mockPrRepo.savedNotifications = nil
@@ -1367,4 +1384,179 @@ func TestExtractSamNotifications(t *testing.T) {
 	})
 	assert.Equal(t, "db error", err.Error())
 	assert.Equal(t, 1, len(mockPrRepo.savedNotifications))
+}
+
+func TestExtractNotifications_OneMessageOneNotification_NoSyntheticNotes(t *testing.T) {
+	makeHeader := func() iso18626.Header {
+		return iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP",
+			},
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ",
+			},
+		}
+	}
+
+	t.Run("RAM note only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{
+			Header: makeHeader(),
+			Note:   "plain ram note",
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, "plain ram note", n.Note.String)
+			assert.False(t, n.Cost.Valid)
+			assert.False(t, n.Condition.Valid)
+		}
+	})
+
+	t.Run("RAM marker only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractRamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.RequestingAgencyMessage{
+			Header: makeHeader(),
+			Note:   shim.RESHARE_LOAN_CONDITION_AGREE,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, mockPrRepo.savedNotifications, 0)
+	})
+
+	t.Run("SAM note only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note: "plain sam note",
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, "plain sam note", n.Note.String)
+			assert.False(t, n.Cost.Valid)
+			assert.False(t, n.Condition.Valid)
+		}
+	})
+
+	t.Run("SAM marker and loanCondition", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note: shim.RESHARE_ADD_LOAN_CONDITION,
+			},
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.False(t, n.Note.Valid)
+			assert.Equal(t, "NoReproduction", n.Condition.String)
+		}
+	})
+
+	t.Run("SAM items payload only note", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note: common.MULTIPLE_ITEMS + "\nitem001||title one\n" + common.MULTIPLE_ITEMS_END,
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, mockPrRepo.savedNotifications, 0)
+	})
+
+	t.Run("SAM note with items payload", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				Note: "human note\n" + common.MULTIPLE_ITEMS + "\nitem001||title one\n" + common.MULTIPLE_ITEMS_END,
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.Equal(t, "human note", n.Note.String)
+			assert.False(t, n.Cost.Valid)
+			assert.False(t, n.Condition.Valid)
+		}
+	})
+
+	t.Run("SAM loanCondition only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			DeliveryInfo: &iso18626.DeliveryInfo{
+				LoanCondition: &iso18626.TypeSchemeValuePair{Text: "NoReproduction"},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.False(t, n.Note.Valid)
+			assert.Equal(t, "NoReproduction", n.Condition.String)
+			assert.False(t, n.Cost.Valid)
+		}
+	})
+
+	t.Run("SAM cost only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractSamNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.SupplyingAgencyMessage{
+			Header: makeHeader(),
+			MessageInfo: iso18626.MessageInfo{
+				OfferedCosts: &iso18626.TypeCosts{
+					CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "EUR"},
+					MonetaryValue: utils.XSDDecimal{Base: 500, Exp: -2},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.False(t, n.Note.Valid) // no synthetic "Offered costs" note
+			assert.False(t, n.Condition.Valid)
+			c, err := n.Cost.Float64Value()
+			assert.NoError(t, err)
+			assert.Equal(t, 5.0, c.Float64)
+		}
+	})
+
+	t.Run("Request cost only", func(t *testing.T) {
+		mockPrRepo := new(MockPrRepo)
+		handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), new(MockEventBus))
+		err := handler.extractRequestNotifications(appCtx, pr_db.PatronRequest{ID: "1"}, iso18626.Request{
+			Header: makeHeader(),
+			BillingInfo: &iso18626.BillingInfo{
+				MaximumCosts: &iso18626.TypeCosts{
+					CurrencyCode:  iso18626.TypeSchemeValuePair{Text: "EUR"},
+					MonetaryValue: utils.XSDDecimal{Base: 123, Exp: -2},
+				},
+			},
+		})
+		assert.NoError(t, err)
+		if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+			n := mockPrRepo.savedNotifications[0]
+			assert.False(t, n.Note.Valid) // no synthetic "Maximum costs" note
+			assert.False(t, n.Condition.Valid)
+			c, err := n.Cost.Float64Value()
+			assert.NoError(t, err)
+			assert.Equal(t, 1.23, c.Float64)
+		}
+	})
 }

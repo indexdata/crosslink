@@ -16,10 +16,12 @@ import (
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/handler"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -32,6 +34,17 @@ var symbol = "ISIL:REQ"
 var lendingString = string(prservice.SideLending)
 var proapiBorrowingSide = proapi.Side(prservice.SideBorrowing)
 var proapiLendingSide = proapi.Side(prservice.SideLending)
+
+func validIllRequest() iso18626.Request {
+	return iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Test title",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceType: iso18626.TypeServiceTypeCopy,
+		},
+	}
+}
 
 func TestGetId(t *testing.T) {
 	assert.True(t, getId("") != "")
@@ -49,7 +62,7 @@ func TestGetDbText(t *testing.T) {
 }
 
 func TestGetPatronRequests(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
@@ -62,7 +75,7 @@ func TestGetPatronRequests(t *testing.T) {
 }
 
 func TestGetPatronRequestsNoSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	params := proapi.GetPatronRequestsParams{
@@ -74,7 +87,7 @@ func TestGetPatronRequestsNoSymbol(t *testing.T) {
 }
 
 func TestGetPatronRequestsWithLimits(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	offset := proapi.Offset(10)
@@ -94,7 +107,7 @@ func TestGetPatronRequestsWithLimits(t *testing.T) {
 
 func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	repo := new(PrRepoCapture)
-	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	requesterReqID := "req-123"
@@ -113,19 +126,12 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 }
 
 func TestPostPatronRequests(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	id := "1"
 	toCreate := proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"bibliographicInfo": map[string]interface{}{
-				"title": "test",
-			},
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -139,7 +145,7 @@ func TestPostPatronRequests(t *testing.T) {
 }
 
 func TestPostPatronRequestsMissingSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	toCreate := proapi.PatronRequest{Id: "1"}
 	jsonBytes, err := json.Marshal(toCreate)
 	assert.NoError(t, err, "failed to marshal patron request")
@@ -153,7 +159,7 @@ func TestPostPatronRequestsMissingSymbol(t *testing.T) {
 }
 
 func TestPostPatronRequestsInvalidJson(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", bytes.NewBuffer([]byte("a\": v\"")))
 	rr := httptest.NewRecorder()
 	tenant := proapi.Tenant("test-lib")
@@ -163,16 +169,12 @@ func TestPostPatronRequestsInvalidJson(t *testing.T) {
 }
 
 func TestPostPatronRequestsInvalidIllRequestShape(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
-	toCreate := proapi.CreatePatronRequest{
-		Id:              ptr("1"),
-		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"header": "invalid",
-		},
-	}
-	jsonBytes, err := json.Marshal(toCreate)
-	assert.NoError(t, err, "failed to marshal patron request")
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	jsonBytes := []byte(`{
+		"id":"1",
+		"requesterSymbol":"` + symbol + `",
+		"illRequest":{"header":"invalid"}
+	}`)
 	req, err := http.NewRequest("POST", "/", bytes.NewBuffer(jsonBytes))
 	assert.NoError(t, err, "failed to create request")
 	rr := httptest.NewRecorder()
@@ -183,7 +185,7 @@ func TestPostPatronRequestsInvalidIllRequestShape(t *testing.T) {
 }
 
 func TestDeletePatronRequestsIdNotFound(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{Symbol: &symbol})
@@ -191,7 +193,7 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 }
 
 func TestDeletePatronRequestsIdMissingSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{})
@@ -200,7 +202,7 @@ func TestDeletePatronRequestsIdMissingSymbol(t *testing.T) {
 }
 
 func TestDeletePatronRequestsIdError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "1", proapi.DeletePatronRequestsIdParams{Symbol: &symbol})
@@ -209,7 +211,7 @@ func TestDeletePatronRequestsIdError(t *testing.T) {
 }
 
 func TestDeletePatronRequestsId(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "3", proapi.DeletePatronRequestsIdParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -218,7 +220,7 @@ func TestDeletePatronRequestsId(t *testing.T) {
 }
 
 func TestDeletePatronRequestsIdDeleted(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "4", proapi.DeletePatronRequestsIdParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -226,7 +228,7 @@ func TestDeletePatronRequestsIdDeleted(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdMissingSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "2", proapi.GetPatronRequestsIdParams{})
@@ -235,7 +237,7 @@ func TestGetPatronRequestsIdMissingSymbol(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotFound(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "2", proapi.GetPatronRequestsIdParams{Symbol: &symbol})
@@ -243,7 +245,7 @@ func TestGetPatronRequestsIdNotFound(t *testing.T) {
 }
 
 func TestGetPatronRequestsId(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsId(rr, req, "1", proapi.GetPatronRequestsIdParams{Symbol: &symbol})
@@ -252,7 +254,7 @@ func TestGetPatronRequestsId(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdActions(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -261,7 +263,7 @@ func TestGetPatronRequestsIdActions(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Side: &proapiBorrowingSide})
@@ -270,7 +272,7 @@ func TestGetPatronRequestsIdActionsNoSymbol(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdActionsDbError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "1", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -279,7 +281,7 @@ func TestGetPatronRequestsIdActionsDbError(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdActionsNotFoundBecauseOfSide(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdActions(rr, req, "3", proapi.GetPatronRequestsIdActionsParams{Symbol: &symbol, Side: &proapiLendingSide})
@@ -288,7 +290,7 @@ func TestGetPatronRequestsIdActionsNotFoundBecauseOfSide(t *testing.T) {
 }
 
 func TestPostPatronRequestsIdActionNoSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
@@ -297,7 +299,7 @@ func TestPostPatronRequestsIdActionNoSymbol(t *testing.T) {
 }
 
 func TestPostPatronRequestsIdActionDbError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequestsIdAction(rr, req, "1", proapi.PostPatronRequestsIdActionParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -306,7 +308,7 @@ func TestPostPatronRequestsIdActionDbError(t *testing.T) {
 }
 
 func TestPostPatronRequestsIdActionNotFoundBecauseOfSide(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Symbol: &symbol, Side: &proapiLendingSide})
@@ -315,7 +317,7 @@ func TestPostPatronRequestsIdActionNotFoundBecauseOfSide(t *testing.T) {
 }
 
 func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", strings.NewReader("{"))
 	rr := httptest.NewRecorder()
 	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -324,7 +326,7 @@ func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "3", proapi.GetPatronRequestsIdEventsParams{Side: &proapiBorrowingSide})
@@ -333,7 +335,7 @@ func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdEventsDbError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "1", proapi.GetPatronRequestsIdEventsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -342,7 +344,7 @@ func TestGetPatronRequestsIdEventsDbError(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdEventsNotFoundBecauseOfSide(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "3", proapi.GetPatronRequestsIdEventsParams{Symbol: &symbol, Side: &proapiLendingSide})
@@ -351,7 +353,7 @@ func TestGetPatronRequestsIdEventsNotFoundBecauseOfSide(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdEventsErrorGettingEvents(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdEvents(rr, req, "3", proapi.GetPatronRequestsIdEventsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -360,7 +362,7 @@ func TestGetPatronRequestsIdEventsErrorGettingEvents(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotificationsNoSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{Side: &proapiBorrowingSide})
@@ -369,7 +371,7 @@ func TestGetPatronRequestsIdNotificationsNoSymbol(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotificationsDbError(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdNotifications(rr, req, "1", proapi.GetPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -378,7 +380,7 @@ func TestGetPatronRequestsIdNotificationsDbError(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotificationsNotFoundBecauseOfSide(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiLendingSide})
@@ -387,7 +389,7 @@ func TestGetPatronRequestsIdNotificationsNotFoundBecauseOfSide(t *testing.T) {
 }
 
 func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
@@ -396,21 +398,14 @@ func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
 }
 
 func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	creationTime := time.Now()
 	id := uuid.NewString()
 	reqWithID := &proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-			"bibliographicInfo": map[string]interface{}{
-				"title": "Test title",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}
 
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
@@ -430,7 +425,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 }
 
 func TestParseAndValidateIllRequestInvalidRequesterSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	invalidSymbol := "REQ"
 
@@ -440,7 +435,7 @@ func TestParseAndValidateIllRequestInvalidRequesterSymbol(t *testing.T) {
 }
 
 func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
-	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), 10)
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	previousBrokerSymbol := brokerSymbol
 	brokerSymbol = "BROKER"
@@ -450,17 +445,166 @@ func TestParseAndValidateIllRequestInvalidBrokerSymbol(t *testing.T) {
 
 	_, _, err := handler.parseAndValidateIllRequest(ctx, &proapi.CreatePatronRequest{
 		RequesterSymbol: &symbol,
-		IllRequest: map[string]interface{}{
-			"serviceInfo": map[string]interface{}{
-				"serviceType": "Copy",
-			},
-			"bibliographicInfo": map[string]interface{}{
-				"title": "Test title",
-			},
-		},
+		IllRequest:      validIllRequest(),
 	}, time.Now())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid BROKER_SYMBOL")
+}
+
+func TestPostPatronRequestsIdNotificationsNoSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "symbol must be specified")
+}
+
+func TestPostPatronRequestsIdNotificationsDbError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"note\": \"Say hello\"}"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "1", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPostPatronRequestsIdNotificationsNotFoundBecauseOfSide(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"note\": \"Say hello\"}"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiLendingSide})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found")
+}
+
+func TestPostPatronRequestsIdNotificationsErrorSavingNotification(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"note\": \"Say hello\"}"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPostPatronRequestsIdNotificationsErrorBecauseOfBodyMissing(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "body is required")
+}
+
+func TestPostPatronRequestsIdNotificationsErrorBecauseOfBody(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"note"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "unexpected EOF")
+}
+
+func TestPostPatronRequestsIdNotificationsErrorFailedSendOnlyLogged(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositorySuccess), api.NewSymbolChecker(common.NewTenant("")), new(MockIso18626Handler), 10)
+	body := "{\"note\": \"Say hello\"}"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "4", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Say hello")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptNoSymbol(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n1", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "symbol must be specified")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptDbError(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "1", "n1", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptNotFoundBecauseOfSide(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n1", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiLendingSide})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptErrorReadingNotification(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n3", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptNotFound(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n2", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptErrorBecauseOfBodyMissing(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n1", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "body is required")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptErrorBecauseOfBody(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n1", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "unexpected EOF")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptPrDoesNotOwn(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "3", "n4", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+	assert.Contains(t, rr.Body.String(), "not found")
+}
+
+func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), api.NewSymbolChecker(common.NewTenant("")), nil, 10)
+	body := "{\"receipt\": \"SEEN\"}"
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdNotificationsNotificationIdReceipt(rr, req, "4", "4", proapi.PutPatronRequestsIdNotificationsNotificationIdReceiptParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
 type PrRepoError struct {
@@ -518,8 +662,31 @@ func (r *PrRepoError) GetNextHrid(ctx common.ExtendedContext, prefix string) (st
 	return strings.ToUpper(prefix) + "-" + strconv.FormatInt(r.counter, 10), nil
 }
 
-func (r *PrRepoError) GetNotificationsByPrId(ctx common.ExtendedContext, prId string) ([]pr_db.Notification, error) {
-	return []pr_db.Notification{}, errors.New("DB error")
+func (r *PrRepoError) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
+	return []pr_db.Notification{}, int64(0), errors.New("DB error")
+}
+
+func (r *PrRepoError) SaveNotification(ctx common.ExtendedContext, params pr_db.SaveNotificationParams) (pr_db.Notification, error) {
+	if params.ID == "4" || params.PrID == "3" {
+		return pr_db.Notification{}, errors.New("DB error")
+	}
+	return pr_db.Notification(params), nil
+}
+
+func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string) (pr_db.Notification, error) {
+	switch id {
+	case "n2":
+		return pr_db.Notification{}, pgx.ErrNoRows
+	case "n3":
+		return pr_db.Notification{}, errors.New("DB error")
+	default:
+		return pr_db.Notification{ID: id, PrID: id}, nil
+	}
+}
+
+type MockIso18626Handler struct {
+	mock.Mock
+	handler.Iso18626Handler
 }
 
 type MockEventBus struct {
@@ -527,6 +694,6 @@ type MockEventBus struct {
 	events.EventBus
 }
 
-func ptr(value string) *string {
-	return &value
+func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string) (string, error) {
+	return "", errors.New("DB error")
 }

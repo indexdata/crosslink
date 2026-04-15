@@ -14,6 +14,8 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	"github.com/indexdata/crosslink/directory"
+	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -334,6 +336,7 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 	status, result := locator.selectSupplier(appCtx, events.Event{IllTransactionID: "1"})
 
 	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP"}}, mockIllRepo.refreshSymbols)
 	skipped, ok := result.CustomData["skippedSuppliers"].([]SkippedSupplier)
 	assert.True(t, ok)
 	assert.Len(t, skipped, 1)
@@ -341,8 +344,106 @@ func TestGetNextSupplierClosedEventFailed(t *testing.T) {
 	assert.Equal(t, "no suppliers with new status", result.Problem.Details)
 }
 
+func TestLocateSuppliersDeduplicatesHoldingSymbolsForDirectoryLookup(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		peers: []ill_db.Peer{
+			{ID: "peer-1", BorrowsCount: 1},
+			{ID: "peer-2", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+		},
+	}
+
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
+}
+
+func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "return-ISIL:SUP1::FIRST;return-ISIL:SUP1::SECOND",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		peers: []ill_db.Peer{
+			{ID: "peer-1", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+		},
+	}
+
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(adapter.MockHoldingsLookupAdapter))
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 1) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "FIRST", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+	}
+}
+
+type MockIllRepoLocateSuppliers struct {
+	mocks.MockIllRepositorySuccess
+	illTransaction        ill_db.IllTransaction
+	requester             ill_db.Peer
+	peers                 []ill_db.Peer
+	peerSymbols           map[string][]ill_db.Symbol
+	refreshSymbols        [][]string
+	savedLocatedSuppliers []ill_db.SaveLocatedSupplierParams
+}
+
+func (r *MockIllRepoLocateSuppliers) GetIllTransactionById(ctx common.ExtendedContext, id string) (ill_db.IllTransaction, error) {
+	return r.illTransaction, nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetPeerById(ctx common.ExtendedContext, id string) (ill_db.Peer, error) {
+	return r.requester, nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	r.refreshSymbols = append(r.refreshSymbols, append([]string(nil), symbols...))
+	return r.peers, "<refresh>", nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.Symbol, error) {
+	return r.peerSymbols[peerId], nil
+}
+
+func (r *MockIllRepoLocateSuppliers) GetExclusiveBranchSymbolsByPeerId(ctx common.ExtendedContext, peerId string) ([]ill_db.BranchSymbol, error) {
+	return []ill_db.BranchSymbol{}, nil
+}
+
+func (r *MockIllRepoLocateSuppliers) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
+	r.savedLocatedSuppliers = append(r.savedLocatedSuppliers, params)
+	return ill_db.LocatedSupplier(params), nil
+}
+
 type MockIllRepoRequester struct {
 	mocks.MockIllRepositorySuccess
+	refreshSymbols [][]string
+	refreshErr     error
 }
 
 func (r *MockIllRepoRequester) GetPeerById(ctx common.ExtendedContext, peerId string) (ill_db.Peer, error) {
@@ -355,4 +456,9 @@ func (r *MockIllRepoRequester) GetLocatedSuppliersByIllTransactionAndStatus(ctx 
 		return []ill_db.LocatedSupplier{{ID: "1", SupplierID: "p1", SupplierSymbol: "ISIL:SUP"}}, nil
 	}
 	return []ill_db.LocatedSupplier{}, nil
+}
+
+func (r *MockIllRepoRequester) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	r.refreshSymbols = append(r.refreshSymbols, symbols)
+	return []ill_db.Peer{}, "<refresh>", r.refreshErr
 }

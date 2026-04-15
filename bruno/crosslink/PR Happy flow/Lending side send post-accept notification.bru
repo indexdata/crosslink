@@ -1,0 +1,41 @@
+meta {
+  name: Lending side send post-accept notification
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{host}}/patron_requests/{{lendingPrId}}/notifications?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "note": "thanks for accepting condition, I will ship now"
+  }
+}
+
+script:post-response {
+  test("for success", function() {
+    expect(res.getStatus()).to.equal(201);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

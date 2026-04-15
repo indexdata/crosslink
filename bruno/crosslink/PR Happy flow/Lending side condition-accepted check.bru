@@ -1,0 +1,40 @@
+meta {
+  name: Lending side condition-accepted check
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(500)
+}
+
+script:post-response {
+  test("for condition accepted", function() {
+    const pr = res.getBody();
+    expect(pr.state).to.equal("CONDITION_ACCEPTED")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

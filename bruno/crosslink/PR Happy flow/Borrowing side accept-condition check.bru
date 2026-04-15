@@ -1,0 +1,38 @@
+meta {
+  name: Borrowing side accept-condition check
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  test("for accept-condition", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("accept-condition")
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+    expect(pr.state).to.equal("WILL_SUPPLY")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

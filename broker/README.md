@@ -26,7 +26,7 @@ The broker exposes a JSON API that addresses two use cases:
 
 The broker’s APIs use hyperlinks to connect JSON resources.
 If you use Chrome or another browser to explore the API,
-consider installing an extension like [JSON Formatter](https://chromewebstore.google.com/detail/json-formatter/bcjindcccaagfpapjjmafapmmgkkhgoa), which makes hyperlinked JSON easier to navigate.
+consider installing an extension like [JSON Formatter Classic](https://chromewebstore.google.com/detail/json-formatter-classic/caacnjeoikecoeepknkbjdcaediamaej), which makes hyperlinked JSON easier to navigate.
 
 Note on FOLIO integration: selected API endpoints are available under the base path `/broker` when the `TENANT_TO_SYMBOL` environment variable is set.
 This enables the broker to operate as a FOLIO/Okapi module with authentication/authorization and multi-tenancy support;

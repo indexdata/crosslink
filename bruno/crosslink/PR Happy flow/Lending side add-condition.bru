@@ -1,0 +1,50 @@
+meta {
+  name: Lending side add-condition
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: lending
+}
+
+headers {
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "action": "add-condition",
+      "actionParams": {
+        "loanCondition": "NoReproduction",
+        "note": "please do not copy"
+      }
+  }
+}
+
+script:pre-request {
+  bru.sleep(500)
+}
+
+script:post-response {
+  test("for success", function() {
+    const pr = res.getBody();
+    expect(pr.result).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

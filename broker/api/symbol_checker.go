@@ -22,7 +22,7 @@ func NewSymbolChecker(tenantResolver common.Tenant) *SymbolChecker {
 	}
 }
 
-func (s *SymbolChecker) WithRepoCheck(illRepo ill_db.IllRepo) *SymbolChecker {
+func (s *SymbolChecker) WithIllRepo(illRepo ill_db.IllRepo) *SymbolChecker {
 	s.illRepo = &illRepo
 	return s
 }
