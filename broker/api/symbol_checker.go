@@ -59,7 +59,7 @@ func (s *SymbolChecker) Check(ctx common.ExtendedContext, isBrokerPrefix bool, t
 		ctx.Logger().Error("no peers for symbol", "symbol", mainSymbol)
 		return "", errors.New("no peers for symbol")
 	}
-	if symbol == nil || *symbol == mainSymbol {
+	if symbol == nil || *symbol == "" || *symbol == mainSymbol {
 		return mainSymbol, nil
 	}
 	found := false
@@ -89,9 +89,6 @@ func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant s
 		return []string{}
 	}
 	mainSymbol := s.tenantResolver.GetSymbol(tenant)
-	if s.illRepo == nil {
-		return []string{mainSymbol}
-	}
 	if s.illRepo == nil {
 		return []string{mainSymbol}
 	}

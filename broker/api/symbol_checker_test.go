@@ -103,10 +103,15 @@ func TestSymbolCheckerRepoOK(t *testing.T) {
 	assert.Equal(t, requestSymbol, symbol)
 
 	requestSymbol = "LIB"
-	tenant := "SYMBOL"
+	tenant := "symbol"
 	symbol, err = symbolChecker.Check(ctx, true, &tenant, &requestSymbol)
 	assert.NoError(t, err)
 	assert.Equal(t, requestSymbol, symbol)
+
+	requestSymbol = ""
+	symbol, err = symbolChecker.Check(ctx, true, &tenant, &requestSymbol)
+	assert.NoError(t, err)
+	assert.Equal(t, strings.ToUpper(tenant), symbol)
 }
 
 func TestSymbolCheckerRepoBranches(t *testing.T) {
