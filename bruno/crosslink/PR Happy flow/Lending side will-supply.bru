@@ -29,6 +29,10 @@ body:json {
   }
 }
 
+script:pre-request {
+  bru.sleep(500)
+}
+
 script:post-response {
   test("for expected bad request", function() {
     expect(res.getStatus()).to.equal(400)

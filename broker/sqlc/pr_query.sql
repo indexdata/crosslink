@@ -87,13 +87,14 @@ FROM item
 WHERE id = $1;
 
 -- name: SaveNotification :one
-INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, note, cost, currency, condition, receipt, created_at, acknowledged_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO notification (id, pr_id, from_symbol, to_symbol, direction, kind, note, cost, currency, condition, receipt, created_at, acknowledged_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 ON CONFLICT (id) DO UPDATE
     SET pr_id           = EXCLUDED.pr_id,
         from_symbol     = EXCLUDED.from_symbol,
         to_symbol       = EXCLUDED.to_symbol,
         direction       = EXCLUDED.direction,
+        kind            = EXCLUDED.kind,
         note            = EXCLUDED.note,
         cost            = EXCLUDED.cost,
         currency        = EXCLUDED.currency,
@@ -113,8 +114,9 @@ LIMIT 1;
 SELECT sqlc.embed(notification), COUNT(*) OVER () as full_count
 FROM notification
 WHERE pr_id = $3
+  AND (sqlc.arg(kind)::text = '' OR kind = sqlc.arg(kind)::text)
 ORDER BY created_at
-    LIMIT $1 OFFSET $2;
+LIMIT $1 OFFSET $2;
 
 -- name: DeleteNotificationById :exec
 DELETE

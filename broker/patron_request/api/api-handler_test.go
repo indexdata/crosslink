@@ -397,6 +397,66 @@ func TestGetPatronRequestsIdNotificationsErrorGettingEvents(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
+	repo := &PrRepoNotificationsCapture{
+		notifications: []pr_db.Notification{
+			{
+				ID:         "n-condition-1",
+				PrID:       "3",
+				FromSymbol: "ISIL:BROKER",
+				ToSymbol:   "ISIL:REQ",
+				Direction:  pr_db.NotificationDirectionReceived,
+				Kind:       pr_db.NotificationKindCondition,
+				Condition: pgtype.Text{
+					String: "NoReproduction",
+					Valid:  true,
+				},
+				Note: pgtype.Text{
+					String: "please do not copy",
+					Valid:  true,
+				},
+				CreatedAt: pgtype.Timestamp{
+					Time:  time.Now(),
+					Valid: true,
+				},
+			},
+		},
+		fullCount: 1,
+	}
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, common.NewTenant(""), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+
+	kind := proapi.GetPatronRequestsIdNotificationsParamsKind(proapi.PrNotificationKindCondition)
+	limit := proapi.Limit(5)
+	offset := proapi.Offset(2)
+	handler.GetPatronRequestsIdNotifications(rr, req, "3", proapi.GetPatronRequestsIdNotificationsParams{
+		Symbol: &symbol,
+		Side:   &proapiBorrowingSide,
+		Kind:   &kind,
+		Limit:  &limit,
+		Offset: &offset,
+	})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.lastParams) {
+		assert.Equal(t, "3", repo.lastParams.PrID)
+		assert.Equal(t, int32(5), repo.lastParams.Limit)
+		assert.Equal(t, int32(2), repo.lastParams.Offset)
+		assert.Equal(t, "condition", repo.lastParams.Kind)
+	}
+
+	var response proapi.PrNotifications
+	err := json.Unmarshal(rr.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	if assert.Len(t, response.Items, 1) {
+		assert.Equal(t, proapi.PrNotificationKindCondition, response.Items[0].Kind)
+		assert.Equal(t, "NoReproduction", *response.Items[0].Condition)
+		assert.Equal(t, "please do not copy", *response.Items[0].Note)
+	}
+	assert.Equal(t, int64(1), response.About.Count)
+}
+
 func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, *api.NewSymbolChecker(), nil, 10)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -618,9 +678,22 @@ type PrRepoCapture struct {
 	cql *string
 }
 
+type PrRepoNotificationsCapture struct {
+	PrRepoError
+	lastParams    *pr_db.GetNotificationsByPrIdParams
+	notifications []pr_db.Notification
+	fullCount     int64
+}
+
 func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
 	r.cql = cql
 	return []pr_db.PatronRequest{}, 0, nil
+}
+
+func (r *PrRepoNotificationsCapture) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
+	paramsCopy := params
+	r.lastParams = &paramsCopy
+	return r.notifications, r.fullCount, nil
 }
 
 func (r *PrRepoError) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {

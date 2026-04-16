@@ -1042,6 +1042,7 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 	if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 		n := mockPrRepo.savedNotifications[0]
 		assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+		assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
 		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
 		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
 		assert.False(t, n.Note.Valid)
@@ -1111,6 +1112,7 @@ func TestHandleInvokeLenderActionAddConditionWithCurrency(t *testing.T) {
 	if assert.Len(t, mockPrRepo.savedNotifications, 1) {
 		n := mockPrRepo.savedNotifications[0]
 		assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+		assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
 		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
 		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
 		assert.Equal(t, "Condition note", n.Note.String)

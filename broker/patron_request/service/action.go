@@ -814,6 +814,7 @@ func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx com
 		FromSymbol: pr.SupplierSymbol.String,
 		ToSymbol:   pr.RequesterSymbol.String,
 		Direction:  pr_db.NotificationDirectionSent,
+		Kind:       pr_db.NotificationKindCondition,
 		Note:       note,
 		Condition:  condition,
 		Cost:       cost,
