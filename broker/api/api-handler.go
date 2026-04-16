@@ -38,14 +38,14 @@ type ApiHandler struct {
 	limitDefault  int32
 	eventRepo     events.EventRepo
 	illRepo       ill_db.IllRepo
-	symbolChecker SymbolChecker
+	tenantContext TenantContext
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, symbolChecker SymbolChecker, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantContext TenantContext, limitDefault int32) ApiHandler {
 	return ApiHandler{
 		eventRepo:     eventRepo,
 		illRepo:       illRepo,
-		symbolChecker: symbolChecker,
+		tenantContext: tenantContext,
 		limitDefault:  limitDefault,
 	}
 }
@@ -54,13 +54,13 @@ func (a *ApiHandler) isOwner(ctx common.ExtendedContext, trans *ill_db.IllTransa
 	if tenant == nil && requesterSymbol != nil {
 		return trans.RequesterSymbol.String == *requesterSymbol
 	}
-	if !a.symbolChecker.IsSpecified() {
+	if !a.tenantContext.IsSpecified() {
 		return true
 	}
 	if tenant == nil {
 		return false
 	}
-	syms := a.symbolChecker.GetSymbolsForTenant(ctx, *tenant)
+	syms := a.tenantContext.GetSymbolsForTenant(ctx, *tenant)
 	for _, sym := range syms {
 		if trans.RequesterSymbol.String == sym {
 			return true
@@ -174,9 +174,9 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 	} else {
 		var symbols []string
-		if a.symbolChecker.IsSpecified() {
+		if a.tenantContext.IsSpecified() {
 			if params.XOkapiTenant != nil {
-				symbols = a.symbolChecker.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
+				symbols = a.tenantContext.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
 			} else if params.RequesterSymbol != nil {
 				symbols = []string{*params.RequesterSymbol}
 			}

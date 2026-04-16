@@ -10,40 +10,40 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 )
 
-type SymbolChecker struct {
+type TenantContext struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantSymbolMap        string
 }
 
-func NewSymbolChecker() *SymbolChecker {
-	return &SymbolChecker{}
+func NewTenantContext() *TenantContext {
+	return &TenantContext{}
 }
 
-func (s *SymbolChecker) WithTenantSymbol(tenantSymbol string) *SymbolChecker {
+func (s *TenantContext) WithTenantSymbol(tenantSymbol string) *TenantContext {
 	s.tenantSymbolMap = tenantSymbol
 	return s
 }
 
-func (s *SymbolChecker) WithIllRepo(illRepo ill_db.IllRepo) *SymbolChecker {
+func (s *TenantContext) WithIllRepo(illRepo ill_db.IllRepo) *TenantContext {
 	s.illRepo = illRepo
 	return s
 }
 
-func (s *SymbolChecker) WithLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) *SymbolChecker {
+func (s *TenantContext) WithLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) *TenantContext {
 	s.directoryLookupAdapter = directoryLookupAdapter
 	return s
 }
 
-func (s *SymbolChecker) IsSpecified() bool {
+func (s *TenantContext) IsSpecified() bool {
 	return s.tenantSymbolMap != ""
 }
 
-func (s *SymbolChecker) getSymbol(tenant string) string {
+func (s *TenantContext) getSymbol(tenant string) string {
 	return strings.ReplaceAll(s.tenantSymbolMap, "{tenant}", strings.ToUpper(tenant))
 }
 
-func (s *SymbolChecker) symbolForRequest(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
+func (s *TenantContext) symbolForRequest(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
 	var mainSymbol string
 	if isBrokerPrefix {
 		if !s.IsSpecified() {
@@ -92,11 +92,11 @@ func (s *SymbolChecker) symbolForRequest(ctx common.ExtendedContext, isBrokerPre
 	return *symbol, nil
 }
 
-func (s *SymbolChecker) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
+func (s *TenantContext) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
 	return s.symbolForRequest(ctx, strings.HasPrefix(r.URL.Path, "/broker/"), tenant, symbol)
 }
 
-func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant string) []string {
+func (s *TenantContext) GetSymbolsForTenant(ctx common.ExtendedContext, tenant string) []string {
 	if !s.IsSpecified() {
 		return []string{}
 	}

@@ -45,19 +45,19 @@ type PatronRequestApiHandler struct {
 	actionMappingService prservice.ActionMappingService
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
-	symbolChecker        api.SymbolChecker
+	tenantContext        api.TenantContext
 	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, symbolChecker api.SymbolChecker, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, tenantContext api.TenantContext, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
-		symbolChecker:        symbolChecker,
+		tenantContext:        tenantContext,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
 }
@@ -96,7 +96,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -202,7 +202,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, newPr.RequesterSymbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, newPr.RequesterSymbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -255,7 +255,7 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -308,7 +308,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -329,7 +329,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 
 	if err != nil {
 		addBadRequestError(ctx, w, err)
@@ -357,7 +357,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -434,7 +434,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -465,7 +465,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -496,7 +496,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -546,7 +546,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -599,7 +599,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.symbolChecker.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
+	symbol, err := a.tenantContext.GetSymbolForRequest(ctx, r, params.XOkapiTenant, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return

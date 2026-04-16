@@ -19,15 +19,15 @@ type SseBroker struct {
 	clients       map[string]map[chan string]bool
 	mu            sync.Mutex
 	ctx           common.ExtendedContext
-	symbolChecker SymbolChecker
+	tenantContext TenantContext
 }
 
-func NewSseBroker(ctx common.ExtendedContext, symbolChecker SymbolChecker) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, tenantContext TenantContext) (broker *SseBroker) {
 	broker = &SseBroker{
 		input:         make(chan SseMessage),
 		clients:       make(map[string]map[chan string]bool),
 		ctx:           ctx,
-		symbolChecker: symbolChecker,
+		tenantContext: tenantContext,
 	}
 
 	// Start the single broadcaster goroutine
@@ -73,7 +73,7 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tenant := r.Header.Get("X-Okapi-Tenant")
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	symbol, err := b.symbolChecker.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
+	symbol, err := b.tenantContext.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
