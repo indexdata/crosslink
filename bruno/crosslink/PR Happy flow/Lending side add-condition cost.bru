@@ -34,7 +34,7 @@ body:json {
 }
 
 script:pre-request {
-  bru.sleep(500)
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
 script:post-response {
