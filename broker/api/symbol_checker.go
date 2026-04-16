@@ -11,7 +11,7 @@ import (
 )
 
 type SymbolChecker struct {
-	illRepo                *ill_db.IllRepo
+	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantSymbolMap        string
 }
@@ -26,7 +26,7 @@ func (s *SymbolChecker) WithTenantSymbol(tenantSymbol string) *SymbolChecker {
 }
 
 func (s *SymbolChecker) WithIllRepo(illRepo ill_db.IllRepo) *SymbolChecker {
-	s.illRepo = &illRepo
+	s.illRepo = illRepo
 	return s
 }
 
@@ -62,7 +62,7 @@ func (s *SymbolChecker) symbolForRequest(ctx common.ExtendedContext, isBrokerPre
 	if s.illRepo == nil {
 		return mainSymbol, nil
 	}
-	peers, _, err := (*s.illRepo).GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
+	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
 	if err != nil {
 		return "", err
 	}
@@ -75,7 +75,7 @@ func (s *SymbolChecker) symbolForRequest(ctx common.ExtendedContext, isBrokerPre
 	}
 	found := false
 	for _, peer := range peers {
-		branchSymbols, err := (*s.illRepo).GetBranchSymbolsByPeerId(ctx, peer.ID)
+		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
 			return "", err
 		}
@@ -107,7 +107,7 @@ func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant s
 	if s.illRepo == nil {
 		return []string{mainSymbol}
 	}
-	peers, _, err := (*s.illRepo).GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
+	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
 	if err != nil {
 		return []string{}
 	}
@@ -117,7 +117,7 @@ func (s *SymbolChecker) GetSymbolsForTenant(ctx common.ExtendedContext, tenant s
 	}
 	symbols := []string{mainSymbol}
 	for _, peer := range peers {
-		branchSymbols, err := (*s.illRepo).GetBranchSymbolsByPeerId(ctx, peer.ID)
+		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
 		if err != nil {
 			return []string{}
 		}
