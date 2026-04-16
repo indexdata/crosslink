@@ -59,6 +59,23 @@ const (
 	SignalNoticeCreated Signal = "notice_created"
 )
 
+// SignalTarget controls which handler role receives the signal.
+type SignalTarget string
+
+const (
+	SignalConsumers SignalTarget = "consumers"
+	SignalObservers SignalTarget = "observers"
+	SignalAll       SignalTarget = "all"
+)
+
+// HandlerRole controls which signal target this handler supports.
+type HandlerRole string
+
+const (
+	HandlerRoleConsumer HandlerRole = "consumer" // claims/locks the event
+	HandlerRoleObserver HandlerRole = "observer" // doesn't claim/lock the event
+)
+
 type EventData struct {
 	CommonEventData
 	CustomData map[string]any `json:"customData,omitempty"`
@@ -98,9 +115,9 @@ type EventResult struct {
 }
 
 type NotifyData struct {
-	Event     string `json:"event"`
-	Signal    Signal `json:"signal"`
-	Broadcast bool   `json:"broadcast,omitempty"`
+	Event  string       `json:"event"`
+	Signal Signal       `json:"signal"`
+	Target SignalTarget `json:"target"`
 }
 
 func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {

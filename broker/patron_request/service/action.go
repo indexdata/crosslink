@@ -74,7 +74,7 @@ func (a *PatronRequestActionService) ProcessInvokeActionTask(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) processInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
-	return a.eventBus.ProcessTask(ctx, event, a.handleInvokeAction)
+	return a.eventBus.ProcessTask(ctx, event, events.SignalConsumers, a.handleInvokeAction)
 }
 
 func logActionErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {
@@ -180,7 +180,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 	currentState := pr.State
 	for _, action := range autoActions {
 		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action}}
-		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID)
+		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
 			return &autoActionFailure{action: action, msg: err.Error()}
 		}
@@ -247,7 +247,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, eventID)
+		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsRequesterMessage, eventData, status, events.EventDomainPatronRequest, eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
@@ -296,7 +296,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		customData["lmsOutgoingMessage"] = outgoing
 		customData["lmsIncomingMessage"] = incoming
 		eventData := events.EventData{CustomData: customData}
-		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, eventID)
+		_, createErr := a.eventBus.CreateNoticeWithParent(pr.ID, events.EventNameLmsSupplierMessage, eventData, status, events.EventDomainPatronRequest, eventID, events.SignalConsumers)
 		if createErr != nil {
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}

@@ -15,8 +15,7 @@ type EventRepo interface {
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
-	Notify(ctx common.ExtendedContext, eventId string, signal Signal) error
-	NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal Signal) error
+	Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
@@ -69,19 +68,11 @@ func (r *PgEventRepo) UpdateEventLifecycle(ctx common.ExtendedContext, params Up
 	return row.Event, err
 }
 
-func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal) error {
-	return r.notify(ctx, eventId, signal, false)
-}
-
-func (r *PgEventRepo) NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal Signal) error {
-	return r.notify(ctx, eventId, signal, true)
-}
-
-func (r *PgEventRepo) notify(ctx common.ExtendedContext, eventId string, signal Signal, broadcast bool) error {
+func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error {
 	data := NotifyData{
-		Event:     eventId,
-		Signal:    signal,
-		Broadcast: broadcast,
+		Event:  eventId,
+		Signal: signal,
+		Target: target,
 	}
 	jsonData, _ := json.Marshal(data)
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)

@@ -67,11 +67,7 @@ func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx common.ExtendedCont
 	return r.GetEvent(ctx, id)
 }
 
-func (r *MockEventRepositorySuccess) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
-	return nil
-}
-
-func (r *MockEventRepositorySuccess) NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
+func (r *MockEventRepositorySuccess) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal, target events.SignalTarget) error {
 	return nil
 }
 
@@ -127,11 +123,7 @@ func (r *MockEventRepositoryError) UpdateEventLifecycle(ctx common.ExtendedConte
 	return events.Event{}, errors.New("DB error")
 }
 
-func (r *MockEventRepositoryError) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
-	return errors.New("DB error")
-}
-
-func (r *MockEventRepositoryError) NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal events.Signal) error {
+func (r *MockEventRepositoryError) Notify(ctx common.ExtendedContext, eventId string, signal events.Signal, target events.SignalTarget) error {
 	return errors.New("DB error")
 }
 

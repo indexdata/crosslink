@@ -1461,7 +1461,7 @@ type MockEventBus struct {
 	runTaskHandler      bool
 }
 
-func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
+func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, target events.SignalTarget, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
 	if m.runTaskHandler {
 		status, result := h(ctx, event)
 		event.EventStatus = status
@@ -1485,7 +1485,7 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 	return event, nil
 }
 
-func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
+func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
 	m.createdTaskData = append(m.createdTaskData, data)
 	m.createdTaskNames = append(m.createdTaskNames, eventName)
 	if m.createTaskErr != nil {
@@ -1499,7 +1499,7 @@ func (m *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 	return taskID, nil
 }
 
-func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain) (string, error) {
+func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, target events.SignalTarget) (string, error) {
 	m.createdNoticeIDs = append(m.createdNoticeIDs, id)
 	m.createdNoticeData = append(m.createdNoticeData, data)
 	m.createdNoticeStatus = append(m.createdNoticeStatus, status)
@@ -1509,7 +1509,7 @@ func (m *MockEventBus) CreateNotice(id string, eventName events.EventName, data 
 	return id, nil
 }
 
-func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, parentId *string) (string, error) {
+func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventName, data events.EventData, status events.EventStatus, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
 	if parentId == nil || id == "error" {
 		return "", errors.New("event bus error")
 	}

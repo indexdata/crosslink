@@ -83,10 +83,10 @@ func TestMultipleEventHandlers(t *testing.T) {
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
-		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			normalCreated.Add(1)
 		})
 		err = app.StartEventBus(ctx, eventBus)
@@ -94,13 +94,13 @@ func TestMultipleEventHandlers(t *testing.T) {
 	}
 
 	var requestReceived1 []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
 	})
 
 	for i := 0; i < noEvents; i++ {
 		illId := apptest.GetIllTransId(t, illRepo)
-		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil)
+		_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
 		assert.NoError(t, err, "Task should be created without errors")
 	}
 
@@ -144,10 +144,10 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
 		})
-		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			normalCreated.Add(1)
 		})
 		err = app.StartEventBus(ctx, eventBus)
@@ -155,16 +155,16 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	}
 
 	var requestReceived1 []events.Event
-	eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
 	})
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		normalCreated.Add(1)
 	})
 
 	for i := 0; i < noEvents; i++ {
 		illId := apptest.GetIllTransId(t, illRepo)
-		_, err := eventBus.CreateTaskBroadcast(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, events.EventDomainIllTransaction, nil)
+		_, err := eventBus.CreateTask(illId, events.EventNameConfirmRequesterMsg, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalObservers)
 		assert.NoError(t, err, "Task should be created without errors")
 	}
 
@@ -212,42 +212,42 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			coreStarted.Add(1)
 		})
-		eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 			coreCompleted.Add(1)
 		})
-		eventBus.HandleTaskStartedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 			broadcastStarted.Add(1)
 		})
-		eventBus.HandleTaskCompletedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 			broadcastCompleted.Add(1)
 		})
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
 
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		coreStarted.Add(1)
 	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		coreCompleted.Add(1)
 	})
-	eventBus.HandleTaskStartedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 		broadcastStarted.Add(1)
 	})
-	eventBus.HandleTaskCompletedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
 		broadcastCompleted.Add(1)
 	})
 
 	illId := apptest.GetIllTransId(t, illRepo)
-	eventId, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil)
+	eventId, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
 	assert.NoError(t, err, "Task should be created without errors")
 	event, err := eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventId)
 	assert.NoError(t, err, "event should exist")
 
-	_, err = eventBus.BeginTaskBroadcast(event.ID)
+	_, err = eventBus.BeginTask(event.ID, events.SignalAll)
 	assert.NoError(t, err, "Task should begin without errors")
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
@@ -260,7 +260,7 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 	assert.Equal(t, int32(1), coreStarted.Load(), "core started handlers should run once")
 	assert.Equal(t, noBuses, broadcastStarted.Load(), "broadcast started handlers should run on every bus")
 
-	_, err = eventBus.CompleteTaskBroadcast(event.ID, &events.EventResult{}, events.EventStatusSuccess)
+	_, err = eventBus.CompleteTask(event.ID, &events.EventResult{}, events.EventStatusSuccess, events.SignalAll)
 	assert.NoError(t, err, "Task should complete without errors")
 
 	if !test.WaitForPredicateToBeTrue(func() bool {
@@ -279,12 +279,12 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 
 func TestCreateTask(t *testing.T) {
 	var requestReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived = append(requestReceived, event)
 	})
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil)
+	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -339,13 +339,13 @@ func TestTransactionRollback(t *testing.T) {
 
 func TestCreateNotice(t *testing.T) {
 	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -369,19 +369,19 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	var eventsReceived []events.Event
 	var eventsStarted []events.Event
 	var eventsCompleted []events.Event
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		eventsReceived = append(eventsReceived, event)
 	})
-	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		eventsStarted = append(eventsStarted, event)
 	})
-	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		eventsCompleted = append(eventsCompleted, event)
 	})
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil)
+	_, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
@@ -403,7 +403,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	assert.Equal(t, events.EventTypeTask, event.EventType, "Event type should be TASK")
 	assert.Equal(t, events.EventStatusNew, event.EventStatus, "Event status should be NEW")
 
-	_, err = eventBus.BeginTask(eventId)
+	_, err = eventBus.BeginTask(eventId, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
@@ -420,7 +420,7 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	}
 
 	result := events.EventResult{}
-	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be started: %s", err)
 	}
@@ -441,21 +441,21 @@ func TestBeginTaskNegative(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()
 
-	_, err := eventBus.BeginTask(eventId)
+	_, err := eventBus.BeginTask(eventId, events.SignalConsumers)
 	if err == nil || err.Error() != "no rows in result set" {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	_, err = eventBus.BeginTask(eventId)
+	_, err = eventBus.BeginTask(eventId, events.SignalConsumers)
 	if err == nil || err.Error() != "cannot begin task processing, event is not a TASK but NOTICE" {
 		t.Errorf("Should fail with: cannot begin task processing, event is not a TASK but NOTICE")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	_, err = eventBus.BeginTask(eventId)
+	_, err = eventBus.BeginTask(eventId, events.SignalConsumers)
 	if err == nil || err.Error() != "cannot begin task processing, event is not in state NEW but SUCCESS" {
 		t.Errorf("Should fail with: event is not in state NEW but SUCCESS")
 	}
@@ -466,21 +466,21 @@ func TestCompleteTaskNegative(t *testing.T) {
 	eventId := uuid.New().String()
 
 	result := events.EventResult{}
-	_, err := eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err := eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess, events.SignalConsumers)
 	if err == nil || err.Error() != "no rows in result set" {
 		t.Errorf("Should fail with: no rows in result set")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess, events.SignalConsumers)
 	if err == nil || err.Error() != "cannot complete task processing, event is not a TASK but NOTICE" {
 		t.Errorf("Should fail with: cannot complete task processing, event is not a TASK but NOTICE")
 	}
 
 	eventId = apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusSuccess, events.EventNameRequesterMsgReceived)
 
-	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess)
+	_, err = eventBus.CompleteTask(eventId, &result, events.EventStatusSuccess, events.SignalConsumers)
 	if err == nil || err.Error() != "cannot complete task processing, event is not in state PROCESSING but SUCCESS" {
 		t.Errorf("Should fail with: event is not in state PROCESSING but SUCCESS")
 	}
@@ -517,13 +517,13 @@ func TestReconnectListener(t *testing.T) {
 	time.Sleep(2000 * time.Millisecond)
 
 	var eventReceived []events.Event
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		eventReceived = append(eventReceived, event)
 	})
 
 	illId := apptest.GetIllTransId(t, illRepo)
 
-	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illId, events.EventNameSupplierMsgReceived, events.EventData{}, events.EventStatusSuccess, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		t.Errorf("Task should be created without errors: %s", err)
 	}
