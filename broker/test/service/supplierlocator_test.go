@@ -30,13 +30,13 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "return-ISIL:SUP-TEST-1")
 	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
@@ -64,7 +64,7 @@ func TestLocateSuppliersAndSelect(t *testing.T) {
 		t.Error("Failed to create symbol " + err.Error())
 	}
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
@@ -108,13 +108,13 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	var completedLocateSuppliers []events.Event
 	illTrId := createIllTransaction(t, illRepo, "return-ISIL:NOCHANGE")
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedSelect []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if event.IllTransactionID == illTrId {
 			completedSelect = append(completedSelect, event)
 		}
@@ -142,7 +142,7 @@ func TestLocateSuppliersNoUpdate(t *testing.T) {
 		t.Error("Failed to create symbol " + err.Error())
 	}
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
@@ -185,7 +185,7 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "LOANED;LOANED")
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
@@ -194,7 +194,7 @@ func TestLocateSuppliersOrder(t *testing.T) {
 	sup2 := getOrCreatePeer(t, illRepo, "ISIL:SUP2", 2, 4)
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
@@ -247,26 +247,26 @@ func TestLocateSupplierUnreachable(t *testing.T) {
 		t.Error("failed to update ill transaction: " + err.Error())
 	}
 	var completedLocateSuppliers []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedLocateSuppliers = append(completedLocateSuppliers, event)
 		}
 	})
 	var completedMessageSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedMessageSupplier = append(completedMessageSupplier, event)
 		}
 	})
 	var completedSelectSupplier []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedSelectSupplier = append(completedSelectSupplier, event)
 		}
 	})
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("Failed to notify with error " + err.Error())
 	}
@@ -304,14 +304,14 @@ func TestLocateSuppliersTaskAlreadyInProgress(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	illTrId := createIllTransaction(t, illRepo, "sup-test-1")
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
 	})
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusProcessing, events.EventNameLocateSuppliers)
-	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}
@@ -370,20 +370,20 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			illTrId := createIllTransaction(t, illRepo, tt.supReqId)
 			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+			eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					completedTask = append(completedTask, event)
 				}
 			})
 			var messageRequester []events.Event
-			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					messageRequester = append(messageRequester, event)
 				}
 			})
 
 			eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 			if err != nil {
 				t.Error("Failed to notify with error " + err.Error())
 			}
@@ -441,20 +441,20 @@ func TestSelectSupplierErrors(t *testing.T) {
 			appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 			illTrId := apptest.GetIllTransId(t, illRepo)
 			var completedTask []events.Event
-			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, func(ctx common.ExtendedContext, event events.Event) {
+			eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					completedTask = append(completedTask, event)
 				}
 			})
 			var messageRequester []events.Event
-			eventBus.HandleEventCreated(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
+			eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 				if illTrId == event.IllTransactionID {
 					messageRequester = append(messageRequester, event)
 				}
 			})
 
 			eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameSelectSupplier)
-			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+			err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 			if err != nil {
 				t.Error("failed to notify with error " + err.Error())
 			}
@@ -488,14 +488,14 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
 	illTrId := createIllTransaction(t, illRepo, "return-"+supSymbol)
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			completedTask = append(completedTask, event)
 		}
 	})
 
 	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers)
-	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}
@@ -542,7 +542,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
@@ -575,7 +575,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 		},
 	}
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}
@@ -623,7 +623,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
@@ -656,7 +656,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 		},
 	}
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeNotice, events.EventStatusSuccess, events.EventNameSupplierMsgReceived, eventData)
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}
@@ -702,14 +702,14 @@ func TestLocalSupplyToAlmaPeer(t *testing.T) {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
 		}
 	})
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers, events.EventData{})
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}
@@ -769,14 +769,14 @@ func TestSupplyMainAndBranch(t *testing.T) {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
 	var completedTask []events.Event
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		if illTrId == event.IllTransactionID {
 			appCtx.Logger().Info("Added completed task")
 			completedTask = append(completedTask, event)
 		}
 	})
 	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameLocateSuppliers, events.EventData{})
-	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated)
+	err = eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
 	if err != nil {
 		t.Error("failed to notify with error " + err.Error())
 	}

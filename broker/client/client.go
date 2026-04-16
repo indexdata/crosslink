@@ -91,12 +91,12 @@ func CreateIso18626ClientWithHttpClient(client *http.Client) Iso18626Client {
 
 func (c *Iso18626Client) MessageRequester(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
-	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendSupplyingAgencyMessage)
+	_, _ = c.eventBus.ProcessTask(ctx, event, events.SignalAll, c.createAndSendSupplyingAgencyMessage)
 }
 
 func (c *Iso18626Client) MessageSupplier(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(CLIENT_COMP))
-	_, _ = c.eventBus.ProcessTask(ctx, event, c.createAndSendRequestOrRequestingAgencyMessage)
+	_, _ = c.eventBus.ProcessTask(ctx, event, events.SignalAll, c.createAndSendRequestOrRequestingAgencyMessage)
 }
 
 func (c *Iso18626Client) getSkippedSupplierAndPeer(ctx common.ExtendedContext, illTransId, symbol string) (*ill_db.LocatedSupplier, *ill_db.Peer, error) {

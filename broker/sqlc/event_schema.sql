@@ -17,7 +17,6 @@ CREATE TABLE event
     event_data         jsonb,
     result_data        jsonb,
     last_signal        VARCHAR   NOT NULL,
-    broadcast          BOOLEAN   NOT NULL DEFAULT FALSE,
     patron_request_id  VARCHAR   NOT NULL,
     FOREIGN KEY (ill_transaction_id) REFERENCES ill_transaction (id),
     FOREIGN KEY (event_name) REFERENCES event_config (event_name)

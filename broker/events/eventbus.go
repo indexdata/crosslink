@@ -23,40 +23,32 @@ const DEFAULT_PATRON_REQUEST_ID = "00000000-0000-0000-0000-000000000002"
 
 type EventBus interface {
 	Start(ctx common.ExtendedContext) error
-	// Create a regular (unicast) task event
-	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
-	// When event (task or notice) is broadcasting, every event bus instance receives all event signals (created, started, completed) and executes registered handlers
-	CreateTaskBroadcast(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error)
-	// Create a regular (unicast) notice event
-	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
-	// Create a broadcasting notice event, every event bus instance receives the created signal and executes registered handlers
-	CreateNoticeBroadcast(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error)
-	// Create a regular (unicast) notice event with parentId, for cases where notice is related to a parent task. If parentId is not needed, use CreateNotice
-	CreateNoticeWithParent(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string) (string, error)
-	// Mark task for processing or fail if status is invalid (e.g already started)
-	BeginTask(eventId string) (Event, error)
-	// Mark task as completed or fail if status is invalid (e.g not started)
-	CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error)
-	// Register handler for event (task or notice) created signal
-	HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event))
-	// Register handler for task started signal
-	HandleTaskStarted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
-	// Register handler for task completed signal
-	HandleTaskCompleted(eventName EventName, f func(ctx common.ExtendedContext, event Event))
-	// Execute task processing function within an automatic Begin/Complete block.
-	ProcessTask(ctx common.ExtendedContext, event Event, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
+	CreateTask(id string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
+	CreateNotice(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error)
+	// CreateNoticeWithParent creates a notice linked to a parent event.
+	CreateNoticeWithParent(id string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error)
+	// BeginTask marks a task as processing and emits SignalTaskBegin to the selected target.
+	BeginTask(eventId string, target SignalTarget) (Event, error)
+	// CompleteTask marks a task as finished and emits SignalTaskComplete to the selected target.
+	CompleteTask(eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error)
+	// HandleEventCreated registers a handler for task/notice creation signal.
+	HandleEventCreated(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event))
+	// HandleTaskStarted registers a handler for task start signal.
+	HandleTaskStarted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event))
+	// HandleTaskCompleted registers a handler for task completion signal.
+	HandleTaskCompleted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event))
+	// ProcessTask runs h inside BeginTask/CompleteTask block and signals the selected target.
+	ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 }
 
 type PostgresEventBus struct {
-	repo                  EventRepo
-	ctx                   common.ExtendedContext
-	ConnectionString      string
-	EventCreatedHandlers  map[EventName][]func(ctx common.ExtendedContext, event Event)
-	TaskStartedHandlers   map[EventName][]func(ctx common.ExtendedContext, event Event)
-	TaskCompletedHandlers map[EventName][]func(ctx common.ExtendedContext, event Event)
-	randGen               *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
+	repo             EventRepo
+	ctx              common.ExtendedContext
+	ConnectionString string
+	handlers         map[Signal]map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event)
+	randGen          *rand.Rand // local random generator to avoid same seed for all instance, only needed in Go < 1.20
 }
 
 func NewPostgresEventBus(repo EventRepo, connString string) *PostgresEventBus {
@@ -151,37 +143,39 @@ func (p *PostgresEventBus) Start(ctx common.ExtendedContext) error {
 }
 
 func (p *PostgresEventBus) handleNotify(data NotifyData) {
-	event, err := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
+	event, err := p.repo.GetEvent(p.ctx, data.Event)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
-			p.ctx.Logger().Error("failure claiming event", "error", err, "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
-		} else {
-			p.ctx.Logger().Debug("no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "broadcast", event.Broadcast)
-		}
+		p.ctx.Logger().Error("failure loading event", "error", err, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
 		return
 	}
 	p.ctx.Logger().Debug("received event", "channel", EVENT_BUS_CHANNEL,
 		"signal", data.Signal,
-		"broadcast", event.Broadcast,
+		"target", data.Target,
 		"eventName", event.EventName,
 		"eventType", event.EventType,
 		"eventStatus", event.EventStatus)
-	switch data.Signal {
-	case SignalTaskCreated, SignalNoticeCreated:
-		triggerHandlers(p.getEventContext(&event), event, p.EventCreatedHandlers, data.Signal)
-	case SignalTaskBegin:
-		triggerHandlers(p.getEventContext(&event), event, p.TaskStartedHandlers, data.Signal)
-	case SignalTaskComplete:
-		triggerHandlers(p.getEventContext(&event), event, p.TaskCompletedHandlers, data.Signal)
-	default:
-		p.ctx.Logger().Error("unsupported signal", "signal", data.Signal, "eventName", event.EventName)
+
+	if data.Target == SignalObservers || data.Target == SignalAll {
+		triggerHandlers(p.getEventContext(&event), event, p.getHandlers(data.Signal, HandlerRoleObserver, event.EventName), data.Signal)
+	}
+
+	if data.Target == SignalConsumers || data.Target == SignalAll {
+		claimedEvent, claimErr := p.repo.ClaimEventForSignal(p.ctx, data.Event, data.Signal)
+		if claimErr != nil {
+			if !errors.Is(claimErr, pgx.ErrNoRows) {
+				p.ctx.Logger().Error("failure claiming event", "error", claimErr, "eventId", data.Event, "signal", data.Signal, "target", data.Target)
+			} else {
+				p.ctx.Logger().Debug("no event claimed for signal", "eventId", data.Event, "signal", data.Signal, "target", data.Target)
+			}
+			return
+		}
+		triggerHandlers(p.getEventContext(&claimedEvent), claimedEvent, p.getHandlers(data.Signal, HandlerRoleConsumer, claimedEvent.EventName), data.Signal)
 	}
 }
 
-func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlersMap map[EventName][]func(ctx common.ExtendedContext, event Event), signal Signal) {
+func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []func(ctx common.ExtendedContext, event Event), signal Signal) {
 	var wg sync.WaitGroup
-	handlers, ok := handlersMap[event.EventName]
-	if ok {
+	if len(handlers) > 0 {
 		eventCtx.Logger().Debug("found handlers for event", "count", len(handlers), "eventName", event.EventName, "signal", signal)
 		for _, handler := range handlers {
 			wg.Add(1)
@@ -197,15 +191,7 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlersMap m
 	eventCtx.Logger().Debug("all handlers finished", "eventName", event.EventName, "signal", signal)
 }
 
-func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error) {
-	return p.createTask(classId, eventName, data, eventDomain, parentId, false)
-}
-
-func (p *PostgresEventBus) CreateTaskBroadcast(illTransactionID string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string) (string, error) {
-	return p.createTask(illTransactionID, eventName, data, eventDomain, parentId, true)
-}
-
-func (p *PostgresEventBus) createTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, broadcast bool) (string, error) {
+func (p *PostgresEventBus) CreateTask(classId string, eventName EventName, data EventData, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	id := uuid.New().String()
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
@@ -219,31 +205,26 @@ func (p *PostgresEventBus) createTask(classId string, eventName EventName, data 
 			EventData:        data,
 			ParentID:         getPgText(parentId),
 			LastSignal:       string(SignalTaskCreated),
-			Broadcast:        broadcast,
 			PatronRequestID:  patronRequestID,
 		})
 		if err != nil && event.ParentID.Valid {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated)
+		err = eventRepo.Notify(p.ctx, id, SignalTaskCreated, target)
 		p.ctx.Logger().Debug("created TASK event", "eventName", eventName, "eventId", event.ID, "status", event.EventStatus)
 		return err
 	})
 }
 
-func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, false, nil)
+func (p *PostgresEventBus) CreateNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, target SignalTarget) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventDomain, nil, target)
 }
 
-func (p *PostgresEventBus) CreateNoticeWithParent(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, false, parentId)
+func (p *PostgresEventBus) CreateNoticeWithParent(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
+	return p.createNotice(classId, eventName, data, status, eventDomain, parentId, target)
 }
 
-func (p *PostgresEventBus) CreateNoticeBroadcast(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain) (string, error) {
-	return p.createNotice(classId, eventName, data, status, eventDomain, true, nil)
-}
-
-func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, broadcast bool, parentId *string) (string, error) {
+func (p *PostgresEventBus) createNotice(classId string, eventName EventName, data EventData, status EventStatus, eventDomain EventDomain, parentId *string, target SignalTarget) (string, error) {
 	id := uuid.New().String()
 	illTransactionID, patronRequestID := getIllTransactionAndPatronRequestId(classId, eventDomain)
 	return id, p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
@@ -256,20 +237,19 @@ func (p *PostgresEventBus) createNotice(classId string, eventName EventName, dat
 			EventStatus:      status,
 			EventData:        data,
 			LastSignal:       string(SignalNoticeCreated),
-			Broadcast:        broadcast,
 			PatronRequestID:  patronRequestID,
 			ParentID:         getPgText(parentId),
 		})
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated)
+		err = eventRepo.Notify(p.ctx, id, SignalNoticeCreated, target)
 		p.ctx.Logger().Debug("created NOTICE event", "eventName", eventName, "eventId", event.ID, "status", status)
 		return err
 	})
 }
 
-func (p *PostgresEventBus) BeginTask(eventId string) (Event, error) {
+func (p *PostgresEventBus) BeginTask(eventId string, target SignalTarget) (Event, error) {
 	var event Event
 	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		var err error
@@ -283,7 +263,7 @@ func (p *PostgresEventBus) BeginTask(eventId string) (Event, error) {
 		if event.EventStatus != EventStatusNew {
 			return fmt.Errorf("cannot begin task processing, event is not in state NEW but %s", event.EventStatus)
 		}
-		event, err = eventRepo.UpdateEventStatus(p.ctx, UpdateEventStatusParams{
+		event, err = eventRepo.UpdateEventLifecycle(p.ctx, UpdateEventLifecycleParams{
 			ID:          eventId,
 			EventStatus: EventStatusProcessing,
 			LastSignal:  string(SignalTaskBegin),
@@ -291,13 +271,13 @@ func (p *PostgresEventBus) BeginTask(eventId string) (Event, error) {
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin)
+		err = eventRepo.Notify(p.ctx, eventId, SignalTaskBegin, target)
 		return err
 	})
 	return event, err
 }
 
-func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus) (Event, error) {
+func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, status EventStatus, target SignalTarget) (Event, error) {
 	var event Event
 	err := p.repo.WithTxFunc(p.ctx, func(eventRepo EventRepo) error {
 		var err error
@@ -320,45 +300,28 @@ func (p *PostgresEventBus) CompleteTask(eventId string, result *EventResult, sta
 		if err != nil {
 			return err
 		}
-		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete)
+		err = eventRepo.Notify(p.ctx, eventId, SignalTaskComplete, target)
 		return err
 	})
 	return event, err
 }
 
-func (p *PostgresEventBus) HandleEventCreated(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
-	if p.EventCreatedHandlers == nil {
-		p.EventCreatedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
-	}
-	if p.EventCreatedHandlers[eventName] == nil {
-		p.EventCreatedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
-	}
-	p.EventCreatedHandlers[eventName] = append(p.EventCreatedHandlers[eventName], f)
+func (p *PostgresEventBus) HandleEventCreated(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event)) {
+	p.registerHandler(SignalTaskCreated, role, eventName, f)
+	p.registerHandler(SignalNoticeCreated, role, eventName, f)
 }
 
-func (p *PostgresEventBus) HandleTaskStarted(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
-	if p.TaskStartedHandlers == nil {
-		p.TaskStartedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
-	}
-	if p.TaskStartedHandlers[eventName] == nil {
-		p.TaskStartedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
-	}
-	p.TaskStartedHandlers[eventName] = append(p.TaskStartedHandlers[eventName], f)
+func (p *PostgresEventBus) HandleTaskStarted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event)) {
+	p.registerHandler(SignalTaskBegin, role, eventName, f)
 }
 
-func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
-	if p.TaskCompletedHandlers == nil {
-		p.TaskCompletedHandlers = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
-	}
-	if p.TaskCompletedHandlers[eventName] == nil {
-		p.TaskCompletedHandlers[eventName] = []func(ctx common.ExtendedContext, event Event){}
-	}
-	p.TaskCompletedHandlers[eventName] = append(p.TaskCompletedHandlers[eventName], f)
+func (p *PostgresEventBus) HandleTaskCompleted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event)) {
+	p.registerHandler(SignalTaskComplete, role, eventName, f)
 }
 
-func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
+func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
 	inEvent := &event
-	event, err := p.BeginTask(event.ID)
+	event, err := p.BeginTask(event.ID, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
@@ -366,12 +329,40 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 
 	status, result := h(ctx, event)
 
-	event, err = p.CompleteTask(event.ID, result, status)
+	event, err = p.CompleteTask(event.ID, result, status, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
 	}
 	return event, nil
+}
+
+func (p *PostgresEventBus) registerHandler(signal Signal, role HandlerRole, eventName EventName, f func(ctx common.ExtendedContext, event Event)) {
+	if p.handlers == nil {
+		p.handlers = make(map[Signal]map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event))
+	}
+	if p.handlers[signal] == nil {
+		p.handlers[signal] = make(map[HandlerRole]map[EventName][]func(ctx common.ExtendedContext, event Event))
+	}
+	if p.handlers[signal][role] == nil {
+		p.handlers[signal][role] = make(map[EventName][]func(ctx common.ExtendedContext, event Event))
+	}
+	p.handlers[signal][role][eventName] = append(p.handlers[signal][role][eventName], f)
+}
+
+func (p *PostgresEventBus) getHandlers(signal Signal, role HandlerRole, eventName EventName) []func(ctx common.ExtendedContext, event Event) {
+	if p.handlers == nil {
+		return nil
+	}
+	signalHandlers, ok := p.handlers[signal]
+	if !ok {
+		return nil
+	}
+	roleHandlers, ok := signalHandlers[role]
+	if !ok {
+		return nil
+	}
+	return roleHandlers[eventName]
 }
 
 func (p *PostgresEventBus) FindAncestor(descendant *Event, ancestorName EventName) *Event {

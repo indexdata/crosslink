@@ -365,13 +365,17 @@ type MockEventBus struct {
 	BroadcastCreated int
 }
 
-func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
+func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
+	if target == events.SignalObservers {
+		r.BroadcastCreated++
+		return "id2", nil
+	}
 	r.TasksCreated++
+	if target == events.SignalAll {
+		r.BroadcastCreated++
+		return "id2", nil
+	}
 	return "id1", nil
-}
-func (r *MockEventBus) CreateTaskBroadcast(illTransactionID string, eventName events.EventName, data events.EventData, eventClass events.EventDomain, parentId *string) (string, error) {
-	r.BroadcastCreated++
-	return "id2", nil
 }
 
 type MockIllRepositoryRequester struct {

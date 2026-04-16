@@ -306,23 +306,23 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
 	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
 	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, sseBroker *api.SseBroker) {
-	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
-	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
-	eventBus.HandleEventCreated(events.EventNameConfirmSupplierMsg, iso18626Handler.ConfirmSupplierMsg)
+	eventBus.HandleEventCreated(events.EventNameMessageSupplier, events.HandlerRoleConsumer, iso18626Client.MessageSupplier)
+	eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, iso18626Client.MessageRequester)
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, iso18626Handler.ConfirmRequesterMsg)
+	eventBus.HandleEventCreated(events.EventNameConfirmSupplierMsg, events.HandlerRoleObserver, iso18626Handler.ConfirmSupplierMsg)
 
-	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
-	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)
+	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, supplierLocator.LocateSuppliers)
+	eventBus.HandleEventCreated(events.EventNameSelectSupplier, events.HandlerRoleConsumer, supplierLocator.SelectSupplier)
 
-	eventBus.HandleEventCreated(events.EventNameRequestReceived, workflowManager.RequestReceived)
-	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, workflowManager.SupplierMessageReceived)
-	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, workflowManager.RequesterMessageReceived)
-	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, workflowManager.OnLocateSupplierComplete)
-	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
+	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, workflowManager.RequestReceived)
+	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, workflowManager.SupplierMessageReceived)
+	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, events.HandlerRoleConsumer, workflowManager.RequesterMessageReceived)
+	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, workflowManager.OnLocateSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, workflowManager.OnSelectSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, workflowManager.OnMessageSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, workflowManager.OnMessageRequesterComplete)
+	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.
