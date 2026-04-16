@@ -389,20 +389,12 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		if len(symbol) == 0 {
 			return ErrSupplierNotFoundOrInvalid
 		}
-		supp, supErr := repo.GetSelectedSupplierForIllTransaction(ctx, illTrans.ID)
-		if symbol != brokerSymbol {
-			if supErr != nil {
-				if errors.Is(supErr, pgx.ErrNoRows) {
-					return ErrSupplierNotFoundOrInvalid
-				}
-				return supErr
-			}
-			if supp.SupplierSymbol != symbol {
-				return ErrSupplierNotFoundOrInvalid
-			}
+		supplier, err := getRequesterMessageSupplier(ctx, repo, illTrans.ID, symbol)
+		if err != nil {
+			return err
 		}
 		if illTrans.RequesterID.Valid {
-			errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData, &supp)
+			errShim := applyRequesterShim(ctx, repo, illTrans.RequesterID.String, illMessage, &eventData, supplier)
 			if errShim != nil {
 				if errors.Is(errShim, pgx.ErrNoRows) {
 					return ErrReqAgencyNotFound
@@ -454,6 +446,30 @@ func handleRequestingAgencyMessage(ctx common.ExtendedContext, illMessage *iso18
 		wg: &wg,
 	}
 	wg.Wait()
+}
+
+func getRequesterMessageSupplier(ctx common.ExtendedContext, repo ill_db.IllRepo, illTransID string, symbol string) (*ill_db.LocatedSupplier, error) {
+	supp, supErr := repo.GetSelectedSupplierForIllTransaction(ctx, illTransID)
+	if symbol == brokerSymbol {
+		if supErr == nil {
+			return &supp, nil
+		}
+		if errors.Is(supErr, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, supErr
+	}
+
+	if supErr != nil {
+		if errors.Is(supErr, pgx.ErrNoRows) {
+			return nil, ErrSupplierNotFoundOrInvalid
+		}
+		return nil, supErr
+	}
+	if supp.SupplierSymbol != symbol {
+		return nil, ErrSupplierNotFoundOrInvalid
+	}
+	return &supp, nil
 }
 
 func applyRequesterShim(ctx common.ExtendedContext, repo ill_db.IllRepo, reqId string, illMessage *iso18626.ISO18626Message, eventData *events.EventData, supplier *ill_db.LocatedSupplier) error {

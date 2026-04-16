@@ -304,25 +304,24 @@ func (c *Iso18626Client) getSelectedSupplierAndPeer(ctx common.ExtendedContext, 
 }
 
 func createMessageHeader(transaction ill_db.IllTransaction, sup *ill_db.LocatedSupplier, isRequestingMessage bool, brokerMode string) iso18626.Header {
-	requesterSymbol := strings.SplitN(brokerSymbol, ":", 2)
+	requesterSymbol := brokerSymbol
 	if !isRequestingMessage || brokerMode == string(common.BrokerModeTransparent) {
-		requesterSymbol = strings.SplitN(transaction.RequesterSymbol.String, ":", 2)
+		requesterSymbol = transaction.RequesterSymbol.String
 	}
-	if len(requesterSymbol) < 2 {
-		requesterSymbol = append(requesterSymbol, "")
-	}
-	supplierSymbol := strings.SplitN(brokerSymbol, ":", 2)
+	supplierSymbol := brokerSymbol
 	if sup != nil && sup.SupplierSymbol != "" && (isRequestingMessage || brokerMode == string(common.BrokerModeTransparent)) {
-		supplierSymbol = strings.SplitN(sup.SupplierSymbol, ":", 2)
+		supplierSymbol = sup.SupplierSymbol
 	}
+	requesterAgencyType, requesterAgencyValue := common.SplitAgencySymbol(requesterSymbol)
+	supplierAgencyType, supplierAgencyValue := common.SplitAgencySymbol(supplierSymbol)
 	return iso18626.Header{
 		RequestingAgencyId: iso18626.TypeAgencyId{
-			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: requesterSymbol[0]},
-			AgencyIdValue: requesterSymbol[1],
+			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: requesterAgencyType},
+			AgencyIdValue: requesterAgencyValue,
 		},
 		SupplyingAgencyId: iso18626.TypeAgencyId{
-			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: supplierSymbol[0]},
-			AgencyIdValue: supplierSymbol[1],
+			AgencyIdType:  iso18626.TypeSchemeValuePair{Text: supplierAgencyType},
+			AgencyIdValue: supplierAgencyValue,
 		},
 		Timestamp: utils.XSDDateTime{
 			Time: time.Now(),
@@ -500,11 +499,9 @@ func getPeerInfo(peer *ill_db.Peer, symbol string) (string, iso18626.TypeAgencyI
 	agencyId := iso18626.TypeAgencyId{}
 	if symbol != "" {
 		name = fmt.Sprintf("%v (%v)", peer.Name, symbol)
-		parts := strings.SplitN(symbol, ":", 2)
-		if len(parts) == 2 {
-			agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: parts[0]}
-			agencyId.AgencyIdValue = parts[1]
-		}
+		agencyType, agencyValue := common.SplitAgencySymbol(symbol)
+		agencyId.AgencyIdType = iso18626.TypeSchemeValuePair{Text: agencyType}
+		agencyId.AgencyIdValue = agencyValue
 	}
 	address := iso18626.PhysicalAddress{}
 	if peer.CustomData.Addresses != nil {
@@ -701,15 +698,15 @@ func prependSupplierSymbolNote(trCtx transactionContext, sam *iso18626.Supplying
 		trCtx.selectedSupplier != nil &&
 		!isCrossLinkVendor(trCtx.requester) &&
 		!isCrossLinkVendor(trCtx.selectedPeer) {
-		symbol := strings.SplitN(trCtx.selectedSupplier.SupplierSymbol, ":", 2)
+		_, symbol := common.SplitAgencySymbol(trCtx.selectedSupplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
 			sep := shim.NOTE_FIELD_SEP
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {
 				sep = ""
 			}
-			sam.MessageInfo.Note = "Supplier: " + symbol[1] + sep + sam.MessageInfo.Note
+			sam.MessageInfo.Note = "Supplier: " + symbol + sep + sam.MessageInfo.Note
 		} else {
-			sam.MessageInfo.Note = "Supplier: " + symbol[1]
+			sam.MessageInfo.Note = "Supplier: " + symbol
 		}
 	}
 }
