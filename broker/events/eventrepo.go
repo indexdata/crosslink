@@ -11,11 +11,12 @@ import (
 type EventRepo interface {
 	repo.Transactional[EventRepo]
 	SaveEvent(ctx common.ExtendedContext, params SaveEventParams) (Event, error)
-	UpdateEventStatus(ctx common.ExtendedContext, params UpdateEventStatusParams) (Event, error)
+	UpdateEventLifecycle(ctx common.ExtendedContext, params UpdateEventLifecycleParams) (Event, error)
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx common.ExtendedContext, eventId string, signal Signal) error
+	NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal Signal) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
 	DeleteEventsByIllTransaction(ctx common.ExtendedContext, illTransId string) error
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
@@ -63,15 +64,24 @@ func (r *PgEventRepo) ClaimEventForSignal(ctx common.ExtendedContext, id string,
 	return row.Event, err
 }
 
-func (r *PgEventRepo) UpdateEventStatus(ctx common.ExtendedContext, params UpdateEventStatusParams) (Event, error) {
-	row, err := r.queries.UpdateEventStatus(ctx, r.GetConnOrTx(), params)
+func (r *PgEventRepo) UpdateEventLifecycle(ctx common.ExtendedContext, params UpdateEventLifecycleParams) (Event, error) {
+	row, err := r.queries.UpdateEventLifecycle(ctx, r.GetConnOrTx(), params)
 	return row.Event, err
 }
 
 func (r *PgEventRepo) Notify(ctx common.ExtendedContext, eventId string, signal Signal) error {
+	return r.notify(ctx, eventId, signal, false)
+}
+
+func (r *PgEventRepo) NotifyBroadcast(ctx common.ExtendedContext, eventId string, signal Signal) error {
+	return r.notify(ctx, eventId, signal, true)
+}
+
+func (r *PgEventRepo) notify(ctx common.ExtendedContext, eventId string, signal Signal, broadcast bool) error {
 	data := NotifyData{
-		Event:  eventId,
-		Signal: signal,
+		Event:     eventId,
+		Signal:    signal,
+		Broadcast: broadcast,
 	}
 	jsonData, _ := json.Marshal(data)
 	sql := fmt.Sprintf("NOTIFY crosslink_channel, '%s'", jsonData)

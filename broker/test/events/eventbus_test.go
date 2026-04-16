@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -72,6 +73,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var normalCreated atomic.Int32
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
@@ -83,6 +85,9 @@ func TestMultipleEventHandlers(t *testing.T) {
 
 		eventBus.HandleEventCreated(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
+		})
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+			normalCreated.Add(1)
 		})
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
@@ -129,6 +134,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	noPools := 3
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
+	var normalCreated atomic.Int32
 	ctx := context.Background()
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
@@ -138,16 +144,22 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		eventRepo := app.CreateEventRepo(dbPool)
 		eventBus := app.CreateEventBus(eventRepo)
 
-		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+		eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
 			receivedAr[i] = append(receivedAr[i], event)
+		})
+		eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+			normalCreated.Add(1)
 		})
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
 
 	var requestReceived1 []events.Event
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+	eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
 		requestReceived1 = append(requestReceived1, event)
+	})
+	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, func(ctx common.ExtendedContext, event events.Event) {
+		normalCreated.Add(1)
 	})
 
 	for i := 0; i < noEvents; i++ {
@@ -170,6 +182,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		total += len(receivedAr[i])
 	}
 	assert.Equal(t, noEvents*(noPools+1), total, "Total number of events should match the number of created tasks")
+	assert.Equal(t, int32(0), normalCreated.Load(), "broadcast-created signals should not invoke normal created handlers")
 	if total != noEvents {
 		for e := range requestReceived1 {
 			t.Logf("Request event %d: %s", e, requestReceived1[e].ID)
@@ -180,6 +193,88 @@ func TestBroadcastEventHandlers(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) {
+	noPools := 3
+	noBuses := int32(noPools + 1) // +1 for the main event bus
+	var coreStarted atomic.Int32
+	var coreCompleted atomic.Int32
+	var broadcastStarted atomic.Int32
+	var broadcastCompleted atomic.Int32
+	ctx := context.Background()
+
+	for i := 0; i < noPools; i++ {
+		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
+		assert.NoError(t, err, "failed to init db pool")
+		defer dbPool.Close()
+
+		eventRepo := app.CreateEventRepo(dbPool)
+		eventBus := app.CreateEventBus(eventRepo)
+
+		eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+			coreStarted.Add(1)
+		})
+		eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+			coreCompleted.Add(1)
+		})
+		eventBus.HandleTaskStartedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+			broadcastStarted.Add(1)
+		})
+		eventBus.HandleTaskCompletedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+			broadcastCompleted.Add(1)
+		})
+		err = app.StartEventBus(ctx, eventBus)
+		assert.NoError(t, err, "failed to start event bus")
+	}
+
+	eventBus.HandleTaskStarted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		coreStarted.Add(1)
+	})
+	eventBus.HandleTaskCompleted(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		coreCompleted.Add(1)
+	})
+	eventBus.HandleTaskStartedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		broadcastStarted.Add(1)
+	})
+	eventBus.HandleTaskCompletedBroadcast(events.EventNameRequestReceived, func(ctx common.ExtendedContext, event events.Event) {
+		broadcastCompleted.Add(1)
+	})
+
+	illId := apptest.GetIllTransId(t, illRepo)
+	eventId, err := eventBus.CreateTask(illId, events.EventNameRequestReceived, events.EventData{}, events.EventDomainIllTransaction, nil)
+	assert.NoError(t, err, "Task should be created without errors")
+	event, err := eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventId)
+	assert.NoError(t, err, "event should exist")
+
+	_, err = eventBus.BeginTaskBroadcast(event.ID)
+	assert.NoError(t, err, "Task should begin without errors")
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return coreStarted.Load() >= 1 &&
+			broadcastStarted.Load() >= noBuses
+	}) {
+		t.Error("Expected started lifecycle handlers to receive task signal")
+	}
+
+	assert.Equal(t, int32(1), coreStarted.Load(), "core started handlers should run once")
+	assert.Equal(t, noBuses, broadcastStarted.Load(), "broadcast started handlers should run on every bus")
+
+	_, err = eventBus.CompleteTaskBroadcast(event.ID, &events.EventResult{}, events.EventStatusSuccess)
+	assert.NoError(t, err, "Task should complete without errors")
+
+	if !test.WaitForPredicateToBeTrue(func() bool {
+		return coreCompleted.Load() >= 1 &&
+			broadcastCompleted.Load() >= noBuses
+	}) {
+		t.Error("Expected completed lifecycle handlers to receive task signal")
+	}
+
+	assert.Equal(t, int32(1), coreCompleted.Load(), "core completed handlers should run once")
+	assert.Equal(t, noBuses, broadcastCompleted.Load(), "broadcast completed handlers should run on every bus")
+
+	_, err = eventRepo.GetEvent(common.CreateExtCtxWithArgs(context.Background(), nil), eventId)
+	assert.NoError(t, err, "event should exist")
 }
 
 func TestCreateTask(t *testing.T) {

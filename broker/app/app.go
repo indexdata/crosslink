@@ -308,8 +308,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, sseBroker *api.SseBroker) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, iso18626Client.MessageRequester)
-	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
-	eventBus.HandleEventCreated(events.EventNameConfirmSupplierMsg, iso18626Handler.ConfirmSupplierMsg)
+	eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmRequesterMsg, iso18626Handler.ConfirmRequesterMsg)
+	eventBus.HandleEventCreatedBroadcast(events.EventNameConfirmSupplierMsg, iso18626Handler.ConfirmSupplierMsg)
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, supplierLocator.SelectSupplier)
@@ -321,8 +321,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, workflowManager.OnSelectSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, workflowManager.OnMessageRequesterComplete)
-	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
-	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompletedBroadcast(events.EventNameMessageSupplier, sseBroker.IncomingIsoMessage)
+	eventBus.HandleTaskCompletedBroadcast(events.EventNameMessageRequester, sseBroker.IncomingIsoMessage)
 
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.

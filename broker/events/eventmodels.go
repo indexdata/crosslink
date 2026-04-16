@@ -98,8 +98,9 @@ type EventResult struct {
 }
 
 type NotifyData struct {
-	Event  string `json:"event"`
-	Signal Signal `json:"signal"`
+	Event     string `json:"event"`
+	Signal    Signal `json:"signal"`
+	Broadcast bool   `json:"broadcast,omitempty"`
 }
 
 func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {

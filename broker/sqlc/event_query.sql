@@ -31,7 +31,7 @@ LIMIT 1;
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = ''
-WHERE (last_signal = $2 OR event.broadcast = true) AND event.id = $1
+WHERE last_signal = $2 AND event.id = $1
 RETURNING sqlc.embed(event);
 
 -- name: GetIllTransactionEvents :many
@@ -48,9 +48,9 @@ ORDER BY timestamp;
 
 -- name: SaveEvent :one
 INSERT INTO event (
-    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, broadcast, patron_request_id
+    id, timestamp, ill_transaction_id, parent_id, event_type, event_name, event_status, event_data, result_data, last_signal, patron_request_id
 ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
          )
 ON CONFLICT (id) DO UPDATE
     SET timestamp = EXCLUDED.timestamp,
@@ -62,7 +62,6 @@ ON CONFLICT (id) DO UPDATE
     event_data = EXCLUDED.event_data,
     result_data = EXCLUDED.result_data,
     last_signal = EXCLUDED.last_signal,
-    broadcast = EXCLUDED.broadcast,
     patron_request_id = EXCLUDED.patron_request_id
 RETURNING sqlc.embed(event);
 
@@ -74,8 +73,8 @@ WHERE id = $1;
 DELETE FROM event
 WHERE ill_transaction_id = $1;
 
--- name: UpdateEventStatus :one
-UPDATE event SET last_signal = $3, event_status = $2, broadcast = $4
+-- name: UpdateEventLifecycle :one
+UPDATE event SET last_signal = $3, event_status = $2
 WHERE id = $1
 RETURNING sqlc.embed(event);
 
@@ -84,4 +83,3 @@ SELECT sqlc.embed(event) FROM event
 WHERE ill_transaction_id = sqlc.arg(IllTransactionID) AND event_name = 'requester-msg-received' AND
     (event_data -> 'incomingMessage' -> 'requestingAgencyMessage' ->> 'action')::text = sqlc.arg(Action)::text
 ORDER BY timestamp DESC LIMIT 1;
-
