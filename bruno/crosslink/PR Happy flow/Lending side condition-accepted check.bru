@@ -1,12 +1,12 @@
 meta {
-  name: Lending side check status
+  name: Lending side condition-accepted check
   type: http
-  seq: 32
+  seq: 13
 }
 
 get {
   url: {{host}}/patron_requests/{{lendingPrId}}?side=lending
-  body: none
+  body: json
   auth: basic
 }
 
@@ -23,12 +23,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
+script:pre-request {
+  bru.sleep(500)
+}
+
 script:post-response {
-  test("Check if patron request is complete", () => {
-      const pr = res.getBody();
-      expect(pr.lastActionResult).to.eql("SUCCESS");
-      expect(pr.lastAction).to.eql("mark-received");
-      expect(pr.state).to.eql("COMPLETED");
+  test("for condition accepted", function() {
+    const pr = res.getBody();
+    expect(pr.state).to.equal("CONDITION_ACCEPTED")
   });
 }
 

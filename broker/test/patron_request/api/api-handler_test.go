@@ -390,14 +390,23 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
 
 	// Check notification requester side
+	findNotificationByNote := func(list []proapi.PrNotification, note string) *proapi.PrNotification {
+		for i := range list {
+			if list[i].Note != nil && *list[i].Note == note {
+				return &list[i]
+			}
+		}
+		return nil
+	}
+
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &notifications)
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
-		return notifications.About.Count > 2
+		return findNotificationByNote(notifications.Items, "Will ship") != nil
 	})
-	assert.Equal(t, "Supplier: "+strings.SplitN(supplierSymbol, ":", 2)[1]+", Will ship", *notifications.Items[2].Note)
-	assert.Nil(t, notifications.Items[2].AcknowledgedAt)
+	willShipNotification := findNotificationByNote(notifications.Items, "Will ship")
+	assert.NotNil(t, willShipNotification)
 
 	// Set seen notification
 	receipt := proapi.UpdateNotificationReceipt{
@@ -405,18 +414,21 @@ func TestActionsToCompleteState(t *testing.T) {
 	}
 	receiptBytes, err := json.Marshal(receipt)
 	assert.NoError(t, err, "failed to marshal patron request notification")
-	httpRequest(t, "PUT", requesterPrPath+"/notifications/"+notifications.Items[2].Id+"/receipt"+queryParams, receiptBytes, 204)
+	httpRequest(t, "PUT", requesterPrPath+"/notifications/"+willShipNotification.Id+"/receipt"+queryParams, receiptBytes, 204)
 
 	// Check notification requester side
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &notifications)
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
-		return notifications.About.Count > 2
+		found := findNotificationByNote(notifications.Items, "Will ship")
+		return found != nil && found.Receipt != nil && *found.Receipt == "SEEN" && found.AcknowledgedAt != nil
 	})
-	assert.Equal(t, "Supplier: "+strings.SplitN(supplierSymbol, ":", 2)[1]+", Will ship", *notifications.Items[2].Note)
-	assert.Equal(t, "SEEN", *notifications.Items[2].Receipt)
-	assert.NotNil(t, notifications.Items[2].AcknowledgedAt)
+	willShipNotification = findNotificationByNote(notifications.Items, "Will ship")
+	if assert.NotNil(t, willShipNotification) {
+		assert.Equal(t, "SEEN", *willShipNotification.Receipt)
+		assert.NotNil(t, willShipNotification.AcknowledgedAt)
+	}
 
 	// Ship
 	action = proapi.ExecuteAction{
@@ -546,7 +558,12 @@ func TestActionsToCompleteState(t *testing.T) {
 	var prNotifications proapi.PrNotifications
 	err = json.Unmarshal(respBytes, &prNotifications)
 	assert.NoError(t, err, "failed to unmarshal patron request notifications")
-	assert.True(t, prNotifications.About.Count >= 4)
+	assert.True(t, prNotifications.About.Count >= 1)
+	finalWillShipNotification := findNotificationByNote(prNotifications.Items, "Will ship")
+	if assert.NotNil(t, finalWillShipNotification) {
+		assert.NotNil(t, finalWillShipNotification.Receipt)
+		assert.Equal(t, "SEEN", *finalWillShipNotification.Receipt)
+	}
 
 	// Check supplier patron request done
 	respBytes = httpRequest(t, "GET", supplierPrPath+supQueryParams, []byte{}, 200)

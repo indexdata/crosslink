@@ -1023,6 +1023,9 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
 		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"loanCondition": "my condition",
+		},
 	}})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
@@ -1032,8 +1035,43 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 		assert.Equal(t, iso18626.TypeStatusWillSupply, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
 		assert.Equal(t, "#ReShareAddLoanCondition#", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
 		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts)
-		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo)
+		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
+			assert.Equal(t, "my condition", mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+		}
 	}
+	if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+		n := mockPrRepo.savedNotifications[0]
+		assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+		assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
+		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
+		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
+		assert.False(t, n.Note.Valid)
+		assert.Equal(t, "my condition", n.Condition.String)
+	}
+}
+
+func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionAddCondition
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"note": "Condition note",
+		},
+	}})
+	assert.Equal(t, events.EventStatusError, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateValidated, mockPrRepo.savedPr.State)
+	assert.Equal(t, "loanCondition or cost is required", resultData.EventError.Message)
+	assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage)
+	assert.Len(t, mockPrRepo.savedNotifications, 0)
 }
 
 func TestHandleInvokeLenderActionAddConditionWithCurrency(t *testing.T) {
@@ -1070,6 +1108,19 @@ func TestHandleInvokeLenderActionAddConditionWithCurrency(t *testing.T) {
 		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
 			assert.Equal(t, "my condition", mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
 		}
+	}
+	if assert.Len(t, mockPrRepo.savedNotifications, 1) {
+		n := mockPrRepo.savedNotifications[0]
+		assert.Equal(t, pr_db.NotificationDirectionSent, n.Direction)
+		assert.Equal(t, pr_db.NotificationKindCondition, n.Kind)
+		assert.Equal(t, "ISIL:SUP1", n.FromSymbol)
+		assert.Equal(t, "ISIL:REQ1", n.ToSymbol)
+		assert.Equal(t, "Condition note", n.Note.String)
+		assert.Equal(t, "my condition", n.Condition.String)
+		assert.Equal(t, "DKK", n.Currency.String)
+		cost, err := n.Cost.Float64Value()
+		assert.NoError(t, err)
+		assert.Equal(t, 12.34, cost.Float64)
 	}
 }
 

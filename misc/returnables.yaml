@@ -96,6 +96,9 @@ states:
         transitions:
           success: CANCEL_PENDING
     events:
+      - name: will-supply-conditional
+        desc: Supplier adds conditions after initial WillSupply (ISO18626 WillSupply with conditions)
+        transition: CONDITION_PENDING
       - name: loaned
         desc: Supplier shipped the item (ISO18626 Loaned)
         transition: SHIPPED
@@ -252,6 +255,10 @@ states:
     side: SUPPLIER
     primaryAction: cannot-supply
     actions:
+      - name: add-condition
+        desc: Add additional conditions and notify requester
+        transitions:
+          success: CONDITION_PENDING
       - name: cannot-supply
         desc: Indicate cannot supply
         transitions:
@@ -273,6 +280,10 @@ states:
     side: SUPPLIER
     primaryAction: ship
     actions:
+      - name: add-condition
+        desc: Add additional conditions and notify requester
+        transitions:
+          success: CONDITION_PENDING
       - name: ship
         desc: Mark shipped; send ISO Loaned; NCIP CheckOutItem
         transitions:
@@ -294,7 +305,7 @@ states:
       - name: received
         desc: Requester sends ISO Received
         transition: RECEIVED
-    
+
   - name: RECEIVED
     display: Received
     desc: Requester has received the shipped item

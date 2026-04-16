@@ -55,6 +55,18 @@ func TestCreateMessageHeaderOpaque(t *testing.T) {
 	assert.Equal(t, "BROKER", supHeader.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestCreateMessageHeaderWithSymbolWithoutAuthority(t *testing.T) {
+	illTrans := ill_db.IllTransaction{RequesterSymbol: pgtype.Text{String: "REQ"}}
+	sup := ill_db.LocatedSupplier{SupplierSymbol: "SUP"}
+
+	header := createMessageHeader(illTrans, &sup, true, string(common.BrokerModeTransparent))
+
+	assert.Equal(t, "", header.RequestingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "REQ", header.RequestingAgencyId.AgencyIdValue)
+	assert.Equal(t, "", header.SupplyingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "SUP", header.SupplyingAgencyId.AgencyIdValue)
+}
+
 func TestSendHttpPost(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "mytenant",
@@ -688,6 +700,27 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
 }
+
+func TestBuildSupplyingAgencyMessage_NoSyntheticNotesForCrossLinkInternalVendor(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage = nil
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(directory.Alma),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+	trCtx.requester.Vendor = string(directory.CrossLink)
+	msgTarget := messageTarget{
+		status:        iso18626.TypeStatusLoaned,
+		brokerMessage: true,
+		supplier:      sup,
+		peer:          supPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	assert.Equal(t, "", message.MessageInfo.Note)
+}
 func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	event := createSupplyingAgencyMessageEvent(true)
@@ -853,6 +886,17 @@ func TestPrependSupplierSymbolNote(t *testing.T) {
 	sam.MessageInfo.Note = "#special note#"
 	prependSupplierSymbolNote(trCtx, &sam)
 	assert.Equal(t, "Supplier: SUP1#special note#", sam.MessageInfo.Note)
+
+	supplier.SupplierSymbol = "SUP2"
+	sam.MessageInfo.Note = ""
+	prependSupplierSymbolNote(trCtx, &sam)
+	assert.Equal(t, "Supplier: SUP2", sam.MessageInfo.Note)
+
+	// No synthetic supplier note for internal CrossLink requester/supplier flows.
+	requester.Vendor = string(directory.CrossLink)
+	sam.MessageInfo.Note = "Original note"
+	prependSupplierSymbolNote(trCtx, &sam)
+	assert.Equal(t, "Original note", sam.MessageInfo.Note)
 }
 
 func TestHandleIllMessage(t *testing.T) {

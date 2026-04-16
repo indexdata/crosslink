@@ -614,6 +614,69 @@ func TestIso18626AlmaShimRequestingMessageLoanConditionReject(t *testing.T) {
 	assert.Equal(t, "BROKER", msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithSymbolWithoutAuthority(t *testing.T) {
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "BROKER",
+			},
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   "reject",
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "AU-VBAY"})
+
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "AU-VBAY", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
+func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithoutSupplierStaysNotification(t *testing.T) {
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "BROKER",
+			},
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   "reject",
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, nil)
+
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, iso18626.TypeActionNotification, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "ISIL", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
+func TestIso18626AlmaShimRequestingMessageLoanConditionRejectWithEmptySupplierStaysNotification(t *testing.T) {
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "BROKER",
+			},
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   "reject",
+	})
+	resmsg := GetShim(string(directory.Alma)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{})
+
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"reject", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, iso18626.TypeActionNotification, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "ISIL", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text)
+	assert.Equal(t, "BROKER", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
 func TestIso18626AlmaShimRequestingMessageOriginalCancelKeepsSupplyingAgencyId(t *testing.T) {
 	msg := newRAM(&iso18626.RequestingAgencyMessage{
 		Header: iso18626.Header{

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -11,6 +12,7 @@ import (
 	"github.com/indexdata/crosslink/directory"
 
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -77,6 +79,64 @@ func TestApplyRequesterShimAlma(t *testing.T) {
 	assert.Equal(t, "BROKER", eventData.CustomData[ORIGINAL_INCOMING_MESSAGE].(*iso18626.ISO18626Message).RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
 }
 
+func TestGetRequesterMessageSupplierBrokerSymbolNoSelectedSupplier(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mockRepo := new(MockIllRepositoryNoSelectedSupplier)
+
+	supplier, err := getRequesterMessageSupplier(appCtx, mockRepo, "ill-1", brokerSymbol)
+
+	assert.NoError(t, err)
+	assert.Nil(t, supplier)
+}
+
+func TestGetRequesterMessageSupplierPeerSymbolRequiresSelectedSupplier(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mockRepo := new(MockIllRepositoryNoSelectedSupplier)
+
+	supplier, err := getRequesterMessageSupplier(appCtx, mockRepo, "ill-1", "ISIL:SUP1")
+
+	assert.Nil(t, supplier)
+	assert.True(t, errors.Is(err, ErrSupplierNotFoundOrInvalid))
+}
+
+func TestGetRequesterMessageSupplierBrokerSymbolUsesSelectedSupplierWhenPresent(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mockRepo := new(mocks.MockIllRepositorySuccess)
+
+	supplier, err := getRequesterMessageSupplier(appCtx, mockRepo, "ill-1", brokerSymbol)
+
+	assert.NoError(t, err)
+	if assert.NotNil(t, supplier) {
+		assert.Equal(t, "ISIL:SUP", supplier.SupplierSymbol)
+	}
+}
+
+func TestApplyRequesterShimAlmaWithoutSupplierDoesNotTurnRejectIntoCancel(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mockRepo := new(MockIllRepositorySuccessAlma)
+	eventData := events.EventData{}
+	message := iso18626.NewISO18626Message()
+	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "BROKER",
+			},
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   "ReJeCT",
+	}
+
+	err := applyRequesterShim(appCtx, mockRepo, "1", message, &eventData, nil)
+
+	assert.NoError(t, err, "should not have DB error")
+	assert.NotNil(t, eventData.IncomingMessage)
+	assert.Equal(t, iso18626.TypeActionNotification, eventData.IncomingMessage.RequestingAgencyMessage.Action)
+	assert.Equal(t, "BROKER", eventData.IncomingMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
 type MockIllRepositorySuccessAlma struct {
 	mocks.MockIllRepositorySuccess
 }
@@ -86,4 +146,12 @@ func (r *MockIllRepositorySuccessAlma) GetPeerById(ctx common.ExtendedContext, i
 		ID:     id,
 		Vendor: string(directory.Alma),
 	}, nil
+}
+
+type MockIllRepositoryNoSelectedSupplier struct {
+	mocks.MockIllRepositorySuccess
+}
+
+func (r *MockIllRepositoryNoSelectedSupplier) GetSelectedSupplierForIllTransaction(ctx common.ExtendedContext, illTransId string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{}, pgx.ErrNoRows
 }

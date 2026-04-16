@@ -95,12 +95,13 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 		copyRam := *message.RequestingAgencyMessage
 		copyMessage.RequestingAgencyMessage = &copyRam
 		conditionNote := i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
-		if conditionNote == RESHARE_LOAN_CONDITION_REJECT && supplier != nil {
+		if conditionNote == RESHARE_LOAN_CONDITION_REJECT && supplier != nil && supplier.SupplierSymbol != "" {
 			// condition reject is handled as a non-terminal Cancel addressed to the supplier
 			// regular Cancel is always terminal (addressed to broker)
-			symbol := strings.SplitN(supplier.SupplierSymbol, ":", 2)
-			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbol[0]
-			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbol[1]
+			copyMessage.RequestingAgencyMessage.Action = iso18626.TypeActionCancel
+			symbolType, symbolValue := common.SplitAgencySymbol(supplier.SupplierSymbol)
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text = symbolType
+			copyMessage.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = symbolValue
 		}
 	}
 	if message.SupplyingAgencyMessage != nil {
@@ -549,7 +550,6 @@ func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *is
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_AGREE + requestingAgencyMessage.Note
 			return RESHARE_LOAN_CONDITION_AGREE
 		} else if strings.EqualFold(note, REJECT) {
-			requestingAgencyMessage.Action = iso18626.TypeActionCancel
 			requestingAgencyMessage.Note = RESHARE_LOAN_CONDITION_REJECT + requestingAgencyMessage.Note
 			return RESHARE_LOAN_CONDITION_REJECT
 		}

@@ -188,6 +188,7 @@ func TestNotification(t *testing.T) {
 		FromSymbol: "f123",
 		ToSymbol:   "t123",
 		Direction:  pr_db.NotificationDirectionReceived,
+		Kind:       pr_db.NotificationKindCondition,
 		Note: pgtype.Text{
 			String: "n123",
 			Valid:  true,
@@ -239,6 +240,7 @@ func TestNotification(t *testing.T) {
 		FromSymbol: "f12",
 		ToSymbol:   "t12",
 		Direction:  pr_db.NotificationDirectionSent,
+		Kind:       pr_db.NotificationKindCondition,
 		Note: pgtype.Text{
 			String: "n12",
 			Valid:  true,
@@ -290,7 +292,7 @@ func TestNotification(t *testing.T) {
 
 	// Get by pr id
 	var fullCount int64
-	notifications, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0})
+	notifications, fullCount, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: ""})
 	assert.NoError(t, err)
 	assert.Len(t, notifications, 1)
 	assert.Equal(t, notificaitonId, notifications[0].ID)

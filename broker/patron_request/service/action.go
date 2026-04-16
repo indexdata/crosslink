@@ -576,6 +576,10 @@ func (a *PatronRequestActionService) cannotSupplyLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	if params.LoanCondition == "" && params.Cost == nil {
+		status, result := logActionErrorAndReturnResult(ctx, "loanCondition or cost is required", nil)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	var offeredCosts *iso18626.TypeCosts
 	if params.Cost != nil {
 		if params.Currency == "" {
@@ -608,13 +612,21 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 	}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
-			ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 			Note:             note,
 			OfferedCosts:     offeredCosts,
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		deliveryInfo)
-	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	execResult := a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+	if execResult.status != events.EventStatusSuccess {
+		return execResult
+	}
+	if err := a.saveLendingAddConditionNotification(ctx, pr, params); err != nil {
+		failStatus, failResult := logActionErrorAndReturnResult(ctx, "failed to save add-condition notification", err)
+		return actionExecutionResult{status: failStatus, result: failResult, pr: pr}
+	}
+	return execResult
 }
 
 func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request, params actionParams) actionExecutionResult {
@@ -772,4 +784,42 @@ func (a *PatronRequestActionService) getItems(ctx common.ExtendedContext, pr pr_
 		return nil, errors.New("no items found for patron request")
 	}
 	return items, nil
+}
+
+func (a *PatronRequestActionService) saveLendingAddConditionNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) error {
+	var note pgtype.Text
+	if params.Note != "" {
+		note = getDbText(params.Note)
+	}
+	var condition pgtype.Text
+	if params.LoanCondition != "" {
+		condition = getDbText(params.LoanCondition)
+	}
+
+	var cost pgtype.Numeric
+	var currency pgtype.Text
+	if params.Cost != nil {
+		if err := cost.Scan(strconv.FormatFloat(*params.Cost, 'f', -1, 64)); err != nil {
+			return err
+		}
+		currency = getDbText(params.Currency)
+	}
+	if !note.Valid && !condition.Valid && !cost.Valid {
+		return nil
+	}
+
+	_, err := a.prRepo.SaveNotification(ctx, pr_db.SaveNotificationParams{
+		ID:         uuid.NewString(),
+		PrID:       pr.ID,
+		FromSymbol: pr.SupplierSymbol.String,
+		ToSymbol:   pr.RequesterSymbol.String,
+		Direction:  pr_db.NotificationDirectionSent,
+		Kind:       pr_db.NotificationKindCondition,
+		Note:       note,
+		Condition:  condition,
+		Cost:       cost,
+		Currency:   currency,
+		CreatedAt:  pgtype.Timestamp{Valid: true, Time: time.Now()},
+	})
+	return err
 }
