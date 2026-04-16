@@ -172,44 +172,26 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.symbolChecker.IsSpecified() {
-		var symbols []string
-		if params.XOkapiTenant != nil {
-			symbols = a.symbolChecker.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
-		} else if params.RequesterSymbol != nil {
-			symbols = []string{*params.RequesterSymbol}
-		}
-		if len(symbols) == 0 {
-			writeJsonResponse(w, resp)
-			return
-		}
-		// TODO handle multiple symbols properly instead of just using the first one in the list
-		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
-			Limit:  limit,
-			Offset: offset,
-			RequesterSymbol: pgtype.Text{
-				String: symbols[0],
-				Valid:  true,
-			},
-		}
-		var trans []ill_db.IllTransaction
-		var err error
-		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams, cql)
-		if err != nil { //DB error
-			addInternalError(ctx, w, err)
-			return
-		}
-		for _, t := range trans {
-			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
-		}
 	} else {
+		var symbols []string
+		if a.symbolChecker.IsSpecified() {
+			if params.XOkapiTenant != nil {
+				symbols = a.symbolChecker.GetSymbolsForTenant(ctx, *params.XOkapiTenant)
+			} else if params.RequesterSymbol != nil {
+				symbols = []string{*params.RequesterSymbol}
+			}
+			if len(symbols) == 0 {
+				writeJsonResponse(w, resp)
+				return
+			}
+		}
 		dbparams := ill_db.ListIllTransactionsParams{
 			Limit:  limit,
 			Offset: offset,
 		}
 		var trans []ill_db.IllTransaction
 		var err error
-		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql)
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql, symbols)
 		if err != nil { //DB error
 			addInternalError(ctx, w, err)
 			return
