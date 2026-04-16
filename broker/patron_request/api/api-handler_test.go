@@ -423,7 +423,7 @@ func TestGetPatronRequestsIdNotificationsWithKindFilter(t *testing.T) {
 		},
 		fullCount: 1,
 	}
-	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, common.NewTenant(""), nil, 10)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, *api.NewSymbolChecker(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
