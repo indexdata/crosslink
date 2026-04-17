@@ -222,10 +222,11 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.True(t, strings.HasPrefix(lastLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, lastLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	assert.Contains(t, lastLink, "offset=10")
-	// we have estblished that the next link is correct, now we will check if it works
 
+	// we still need the tenant
 	body = httpGet(t, nextLink, "", http.StatusBadRequest)
-
+	assert.Contains(t, string(body), "header X-Okapi-Tenant must be specified")
+	// supply tenant now
 	body = httpGet(t, nextLink, "bib1", http.StatusOK)
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
