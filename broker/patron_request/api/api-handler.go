@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -242,7 +241,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
+	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, pr, pr.IllRequest))
@@ -577,7 +576,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
 	}
 
-	//w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+dbNotification.ID, ""))
+	//w.Header().Set("Location", api.Link(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(apiN)
@@ -693,29 +692,32 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
-	pathPrefix := ""
-	if strings.Contains(r.RequestURI, "/broker/") {
-		pathPrefix = "/broker"
-	}
 	ownerSymbol := ""
-	if request.Side == pr_db.PatronRequestSide(prservice.SideBorrowing) {
+	if request.Side == pr_db.PatronRequestSide(prservice.SideBorrowing) && request.RequesterSymbol.Valid {
 		ownerSymbol = request.RequesterSymbol.String
-	} else if request.Side == pr_db.PatronRequestSide(prservice.SideLending) {
+	} else if request.Side == pr_db.PatronRequestSide(prservice.SideLending) && request.SupplierSymbol.Valid {
 		ownerSymbol = request.SupplierSymbol.String
 	}
-	if ownerSymbol == "" && request.RequesterSymbol.Valid {
-		ownerSymbol = request.RequesterSymbol.String
+	var notificationsLink *string
+	var itemsLink *string
+	var availableActionsLink *string
+	var eventsLink *string
+	if ownerSymbol != "" {
+		linkQuery := api.Query("symbol", ownerSymbol)
+		notificationsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "notifications"), linkQuery)
+		notificationsLink = &notificationsLinkValue
+		itemsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "items"), linkQuery)
+		itemsLink = &itemsLinkValue
+		availableActionsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "actions"), linkQuery)
+		availableActionsLink = &availableActionsLinkValue
+		eventsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "events"), linkQuery)
+		eventsLink = &eventsLinkValue
 	}
-	if ownerSymbol == "" && request.SupplierSymbol.Valid {
-		ownerSymbol = request.SupplierSymbol.String
+	var illTransactionLink *string
+	if request.RequesterReqID.Valid && request.RequesterReqID.String != "" {
+		value := api.Link(r, api.Path("ill_transactions"), api.Query("requester_req_id", request.RequesterReqID.String))
+		illTransactionLink = &value
 	}
-	linkQuery := "symbol=" + url.QueryEscape(ownerSymbol)
-	requestPath := pathPrefix + "/patron_requests/" + request.ID
-	notificationsLink := api.ToLinkPath(r, requestPath+"/notifications", linkQuery)
-	itemsLink := api.ToLinkPath(r, requestPath+"/items", linkQuery)
-	availableActionsLink := api.ToLinkPath(r, requestPath+"/actions", linkQuery)
-	eventsLink := api.ToLinkPath(r, requestPath+"/events", linkQuery)
-	illTransactionLink := api.ToLinkPath(r, pathPrefix+"/ill_transactions", "requester_req_id="+url.QueryEscape(request.RequesterReqID.String))
 
 	pr := proapi.PatronRequest{
 		Id:                   request.ID,
@@ -732,11 +734,11 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 		LastActionOutcome:    toString(request.LastActionOutcome),
 		LastActionResult:     toString(request.LastActionResult),
 		Items:                &items,
-		NotificationsLink:    &notificationsLink,
-		ItemsLink:            &itemsLink,
-		AvailableActionsLink: &availableActionsLink,
-		IllTransactionLink:   &illTransactionLink,
-		EventsLink:           &eventsLink,
+		NotificationsLink:    notificationsLink,
+		ItemsLink:            itemsLink,
+		AvailableActionsLink: availableActionsLink,
+		IllTransactionLink:   illTransactionLink,
+		EventsLink:           eventsLink,
 		TerminalState:        request.TerminalState,
 	}
 	if request.UpdatedAt.Valid {

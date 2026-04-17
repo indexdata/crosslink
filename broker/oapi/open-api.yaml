@@ -1277,10 +1277,10 @@ paths:
     get:
       summary: Retrieve patron requests
       description: |
-        Use this endpoint to retrieve patron requests. 
+        Use this endpoint to retrieve patron requests.
         Query parameter cql can be used to filter the results.
-        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
-        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at, 
+        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention,
+        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
         requester_req_id, title, author, patron, terminal_state, updated_at, cql.serverChoice.
       tags:
         - patron-requests-api

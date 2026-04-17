@@ -60,6 +60,58 @@ func TestGetDbText(t *testing.T) {
 	assert.False(t, result.Valid)
 }
 
+func TestToApiPatronRequestOmitsOwnerLinksWithoutDetectedSymbol(t *testing.T) {
+	now := time.Now()
+	req := httptest.NewRequest("GET", "http://localhost/patron_requests/pr-1", nil)
+	pr := pr_db.PatronRequest{
+		ID:        "pr-1",
+		CreatedAt: pgtype.Timestamp{Valid: true, Time: now},
+		State:     pr_db.PatronRequestState("NEW"),
+		Side:      prservice.SideBorrowing,
+		RequesterReqID: pgtype.Text{
+			String: "REQ-1",
+			Valid:  true,
+		},
+		// Borrowing side owner symbol is requester; keep it invalid to assert no fallback to supplier.
+		RequesterSymbol: pgtype.Text{Valid: false},
+		SupplierSymbol: pgtype.Text{
+			String: "ISIL:SUP",
+			Valid:  true,
+		},
+	}
+
+	apiPr := toApiPatronRequest(req, pr, iso18626.Request{})
+	assert.Nil(t, apiPr.NotificationsLink)
+	assert.Nil(t, apiPr.ItemsLink)
+	assert.Nil(t, apiPr.AvailableActionsLink)
+	assert.Nil(t, apiPr.EventsLink)
+	assert.NotNil(t, apiPr.IllTransactionLink)
+	assert.Contains(t, *apiPr.IllTransactionLink, "requester_req_id=REQ-1")
+}
+
+func TestToApiPatronRequestOmitsIllTransactionLinkWithoutRequesterReqID(t *testing.T) {
+	now := time.Now()
+	req := httptest.NewRequest("GET", "http://localhost/patron_requests/pr-2", nil)
+	pr := pr_db.PatronRequest{
+		ID:        "pr-2",
+		CreatedAt: pgtype.Timestamp{Valid: true, Time: now},
+		State:     pr_db.PatronRequestState("NEW"),
+		Side:      prservice.SideBorrowing,
+		RequesterSymbol: pgtype.Text{
+			String: "ISIL:REQ",
+			Valid:  true,
+		},
+		RequesterReqID: pgtype.Text{Valid: false},
+	}
+
+	apiPr := toApiPatronRequest(req, pr, iso18626.Request{})
+	assert.NotNil(t, apiPr.NotificationsLink)
+	assert.NotNil(t, apiPr.ItemsLink)
+	assert.NotNil(t, apiPr.AvailableActionsLink)
+	assert.NotNil(t, apiPr.EventsLink)
+	assert.Nil(t, apiPr.IllTransactionLink)
+}
+
 func TestGetPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, common.NewTenant(""), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
