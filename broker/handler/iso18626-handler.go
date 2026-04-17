@@ -542,7 +542,7 @@ func handleRequestingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Re
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameRequesterMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
@@ -797,14 +797,14 @@ func handleSupplyingAgencyErrorWithNotice(ctx common.ExtendedContext, w http.Res
 			},
 		},
 	}
-	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction)
+	_, err := eventBus.CreateNotice(illTransId, events.EventNameSupplierMsgReceived, eventData, events.EventStatusProblem, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 	}
 }
 
 func createNotice(ctx common.ExtendedContext, eventBus events.EventBus, illTransId string, eventName events.EventName, eventData events.EventData, eventStatus events.EventStatus) (string, error) {
-	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction)
+	id, err := eventBus.CreateNotice(illTransId, eventName, eventData, eventStatus, events.EventDomainIllTransaction, events.SignalConsumers)
 	if err != nil {
 		ctx.Logger().Error(InternalFailedToCreateNotice, "error", err, "transactionId", illTransId)
 		return "", err
@@ -818,7 +818,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 	suppResponseEvent := h.eventBus.FindAncestor(&event, events.EventNameMessageSupplier)
 	if suppResponseEvent == nil {
 		// all instances will try to process the event on lookup failure
-		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		_, _ = h.eventBus.ProcessTask(ctx, event, events.SignalConsumers, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 			return handleConfirmReqMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameMessageSupplier))
 		})
 		return
@@ -826,7 +826,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 	reqRequestEvent := h.eventBus.FindAncestor(suppResponseEvent, events.EventNameRequesterMsgReceived)
 	if reqRequestEvent == nil {
 		// all instances will try to process the event on lookup failure
-		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		_, _ = h.eventBus.ProcessTask(ctx, event, events.SignalConsumers, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 			return handleConfirmReqMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameRequesterMsgReceived))
 		})
 		return
@@ -835,7 +835,7 @@ func (h *Iso18626Handler) ConfirmRequesterMsg(ctx common.ExtendedContext, event 
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
-	_, _ = h.eventBus.ProcessTask(ctx, event, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+	_, _ = h.eventBus.ProcessTask(ctx, event, events.SignalConsumers, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 		return h.handleConfirmRequesterMsgTask(ec, e, reqRequestEvent.ID, reqRequestEvent.EventData.IncomingMessage, suppResponseEvent.ResultData)
 	})
 }
@@ -863,7 +863,7 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx common.ExtendedContext, event e
 	supRequestEvent := h.eventBus.FindAncestor(parent, events.EventNameSupplierMsgReceived)
 	if supRequestEvent == nil {
 		// all instances will try to process the event on lookup failure
-		_, _ = h.eventBus.ProcessTask(ctx, event, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+		_, _ = h.eventBus.ProcessTask(ctx, event, events.SignalConsumers, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 			return handleConfirmSuppMsgMissingAncestor(ec, e, fmt.Errorf("ancestor event %s missing", events.EventNameSupplierMsgReceived))
 		})
 		return
@@ -872,7 +872,7 @@ func (h *Iso18626Handler) ConfirmSupplierMsg(ctx common.ExtendedContext, event e
 		return // instance doesn't have the paused request
 	}
 	// instance has the event, process it
-	_, _ = h.eventBus.ProcessTask(ctx, event, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
+	_, _ = h.eventBus.ProcessTask(ctx, event, events.SignalConsumers, func(ec common.ExtendedContext, e events.Event) (events.EventStatus, *events.EventResult) {
 		return h.handleConfirmSupplierMsgTask(ec, e, supRequestEvent.ID, supRequestEvent.EventData.IncomingMessage, parent.ResultData)
 	})
 }

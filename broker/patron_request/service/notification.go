@@ -27,7 +27,7 @@ func CreatePatronRequestNotificationService(prRepo pr_db.PrRepo, eventBus events
 
 func (n *PatronRequestNotificationService) SendPatronRequestNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, notification pr_db.Notification) error {
 	data := events.EventData{CommonEventData: events.CommonEventData{Notification: &notification}}
-	eventID, err := n.eventBus.CreateTask(pr.ID, events.EventNameSendNotification, data, events.EventDomainPatronRequest, nil)
+	eventID, err := n.eventBus.CreateTask(pr.ID, events.EventNameSendNotification, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
 	if err != nil {
 		return errors.New("failed to create event for patron request notification(" + notification.ID + "): " + err.Error())
 	}
@@ -46,7 +46,7 @@ func (n *PatronRequestNotificationService) SendPatronRequestNotification(ctx com
 }
 
 func (n *PatronRequestNotificationService) processInvokeNotificationTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
-	return n.eventBus.ProcessTask(ctx, event, n.handleInvokeNotification)
+	return n.eventBus.ProcessTask(ctx, event, events.SignalConsumers, n.handleInvokeNotification)
 }
 
 func (n *PatronRequestNotificationService) handleInvokeNotification(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

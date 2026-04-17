@@ -767,6 +767,6 @@ type MockEventBus struct {
 	events.EventBus
 }
 
-func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string) (string, error) {
+func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
 	return "", errors.New("DB error")
 }

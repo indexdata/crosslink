@@ -104,7 +104,7 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 	handler func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error),
 ) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	data := events.EventData{CommonEventData: events.CommonEventData{IncomingMessage: incoming}}
-	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil)
+	eventID, err := m.eventBus.CreateTask(prID, events.EventNamePatronRequestMessage, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
 	if err != nil {
 		return events.EventStatusError, nil, err
 	}
@@ -120,7 +120,7 @@ func (m *PatronRequestMessageHandler) processPatronRequestMessageTask(
 		EventName:       events.EventNamePatronRequestMessage,
 		PatronRequestID: prID,
 		EventData:       data,
-	}, func(taskCtx common.ExtendedContext, task events.Event) (events.EventStatus, *events.EventResult) {
+	}, events.SignalConsumers, func(taskCtx common.ExtendedContext, task events.Event) (events.EventStatus, *events.EventResult) {
 		handlerStatus, response, handleErr = handler(taskCtx, taskParentID(&task))
 		result := &events.EventResult{
 			CommonEventData: events.CommonEventData{
