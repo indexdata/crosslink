@@ -21,11 +21,15 @@ auth:basic {
 
 script:post-response {
   test("for items", function() {
-    const items = res.getBody();
+    const body = res.getBody();
     const expected = bru.getEnvVar("itemId");
-    expect(items).to.be.an("array");
-    expect(items.length).to.be.at.least(1);
-    items.forEach(function(item) {
+    expect(body).to.have.property("about");
+    expect(body.about).to.have.property("count");
+    expect(body).to.have.property("items");
+    expect(body.items).to.be.an("array");
+    expect(body.items.length).to.be.at.least(1);
+    expect(body.about.count).to.equal(body.items.length);
+    body.items.forEach(function(item) {
       expect(item).to.have.property("itemId");
       expect(item).to.have.property("barcode");
       expect(item.itemId).to.equal(expected);

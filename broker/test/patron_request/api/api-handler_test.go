@@ -239,6 +239,14 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
 
+	// GET items (initially empty): should return object with empty items list, not null
+	respBytes = httpRequest(t, "GET", thisPrPath+"/items"+queryParams, []byte{}, 200)
+	var initialPrItems proapi.PrItems
+	err = json.Unmarshal(respBytes, &initialPrItems)
+	assert.NoError(t, err, "failed to unmarshal initial patron request items")
+	assert.Equal(t, int64(0), initialPrItems.About.Count)
+	assert.Equal(t, []proapi.PrItem{}, initialPrItems.Items)
+
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
@@ -569,10 +577,11 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/items"+queryParams, []byte{}, 200)
-	var prItems []proapi.PrItem
+	var prItems proapi.PrItems
 	err = json.Unmarshal(respBytes, &prItems)
 	assert.NoError(t, err, "failed to unmarshal patron request items")
-	assert.Len(t, prItems, 1)
+	assert.Equal(t, int64(1), prItems.About.Count)
+	assert.Len(t, prItems.Items, 1)
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
