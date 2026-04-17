@@ -498,6 +498,21 @@ components:
           description: List of patron request items
           items:
             $ref: '#/components/schemas/PrItem'
+        notificationsLink:
+          type: string
+          description: Link to notifications for this patron request
+        itemsLink:
+          type: string
+          description: Link to items for this patron request
+        availableActionsLink:
+          type: string
+          description: Link to available actions for this patron request
+        illTransactionLink:
+          type: string
+          description: Link to related ILL transaction lookup
+        eventsLink:
+          type: string
+          description: Link to events for this patron request
         terminalState:
           type: boolean
           description: Indicates if the request is in terminal state
@@ -1276,10 +1291,10 @@ paths:
     get:
       summary: Retrieve patron requests
       description: |
-        Use this endpoint to retrieve patron requests. 
+        Use this endpoint to retrieve patron requests.
         Query parameter cql can be used to filter the results.
-        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
-        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at, 
+        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention,
+        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
         requester_req_id, title, author, patron, terminal_state, updated_at, cql.serverChoice.
       tags:
         - patron-requests-api

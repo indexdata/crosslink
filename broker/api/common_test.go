@@ -27,6 +27,56 @@ func TestGetSymbolForRequest(t *testing.T) {
 	assert.Equal(t, "", resolved)
 }
 
+func TestWithBrokerPrefix(t *testing.T) {
+	brokerReq, _ := http.NewRequest("GET", "/broker/patron_request", strings.NewReader("{"))
+	brokerReq.RequestURI = "/broker/patron_request"
+	assert.True(t, IsBrokerRequest(brokerReq))
+	assert.Equal(t, "/broker/patron_requests/1", WithBrokerPrefix(brokerReq, "/patron_requests/1"))
+	assert.Equal(t, "/broker/", WithBrokerPrefix(brokerReq, ""))
+	assert.Equal(t, "/broker/", WithBrokerPrefix(brokerReq, "/"))
+
+	regularReq, _ := http.NewRequest("GET", "/patron_request", strings.NewReader("{"))
+	regularReq.RequestURI = "/patron_request"
+	assert.False(t, IsBrokerRequest(regularReq))
+	assert.Equal(t, "/patron_requests/1", WithBrokerPrefix(regularReq, "/patron_requests/1"))
+	assert.Equal(t, "/", WithBrokerPrefix(regularReq, ""))
+	assert.Equal(t, "/", WithBrokerPrefix(regularReq, "/"))
+}
+
+func TestPathAndQuery(t *testing.T) {
+	assert.Equal(t, "/patron_requests/1/items", Path("patron_requests", "1", "items"))
+	assert.Equal(t, "/patron_requests/1/items", Path("/patron_requests/", "/1/", "/items/"))
+	assert.Equal(t, "/patron%20requests/a%2Fb%3Fx/items", Path("patron requests", "a/b?x", "items"))
+
+	values := Query("symbol", "ISIL:REQ", "offset", "10", "dangling")
+	assert.Equal(t, "ISIL:REQ", values.Get("symbol"))
+	assert.Equal(t, "10", values.Get("offset"))
+	assert.Empty(t, values.Get("dangling"))
+}
+
+func TestLink(t *testing.T) {
+	regularReq := httptest.NewRequest("GET", "https://example.org/patron_requests", nil)
+	regularReq.RequestURI = "/patron_requests"
+	link := Link(regularReq, Path("patron_requests", "1", "items"), Query("symbol", "ISIL:REQ", "q", "a b"))
+	assert.Equal(t, "https://example.org/patron_requests/1/items?q=a+b&symbol=ISIL%3AREQ", link)
+
+	brokerReq := httptest.NewRequest("GET", "https://example.org/broker/patron_requests", nil)
+	brokerReq.RequestURI = "/broker/patron_requests"
+	brokerLink := Link(brokerReq, Path("patron_requests", "1", "items"), Query("symbol", "ISIL:REQ"))
+	assert.Equal(t, "https://example.org/broker/patron_requests/1/items?symbol=ISIL%3AREQ", brokerLink)
+}
+
+func TestLinkRel(t *testing.T) {
+	req := httptest.NewRequest("GET", "https://example.org/patron_requests/1", nil)
+	req.RequestURI = "/patron_requests/1"
+
+	currentLink := LinkRel(req, "", Query("symbol", "ISIL:REQ"))
+	assert.Equal(t, "https://example.org/patron_requests/1?symbol=ISIL%3AREQ", currentLink)
+
+	relativeLink := LinkRel(req, "items", Query("symbol", "ISIL:REQ"))
+	assert.Equal(t, "https://example.org/patron_requests/1/items?symbol=ISIL%3AREQ", relativeLink)
+}
+
 func TestCollectAboutDataLastLink(t *testing.T) {
 	reqOffset0 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=0", nil)
 	reqOffset10 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=10", nil)

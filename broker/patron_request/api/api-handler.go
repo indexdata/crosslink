@@ -156,7 +156,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 	var responseItems []proapi.PatronRequest
 	for _, pr := range prs {
-		responseItems = append(responseItems, toApiPatronRequest(pr, pr.IllRequest))
+		responseItems = append(responseItems, toApiPatronRequest(r, pr, pr.IllRequest))
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
@@ -241,10 +241,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
+	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, pr.IllRequest))
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
@@ -315,7 +315,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	if pr == nil {
 		return
 	}
-	writeJsonResponse(w, toApiPatronRequest(*pr, pr.IllRequest))
+	writeJsonResponse(w, toApiPatronRequest(r, *pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
@@ -578,7 +578,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		ctx.Logger().Error("failed to send notification for patron request", "notificationId", dbNotification.ID, "error", err.Error())
 	}
 
-	//w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+dbNotification.ID, ""))
+	//w.Header().Set("Location", api.Link(r, api.Path("patron_requests", id, "notifications", dbNotification.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(apiN)
@@ -689,27 +689,59 @@ func addNotFoundError(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
+func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
+	ownerSymbol := ""
+	if request.Side == pr_db.PatronRequestSide(prservice.SideBorrowing) && request.RequesterSymbol.Valid {
+		ownerSymbol = request.RequesterSymbol.String
+	} else if request.Side == pr_db.PatronRequestSide(prservice.SideLending) && request.SupplierSymbol.Valid {
+		ownerSymbol = request.SupplierSymbol.String
+	}
+	var notificationsLink *string
+	var itemsLink *string
+	var availableActionsLink *string
+	var eventsLink *string
+	if ownerSymbol != "" {
+		linkQuery := api.Query("symbol", ownerSymbol)
+		notificationsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "notifications"), linkQuery)
+		notificationsLink = &notificationsLinkValue
+		itemsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "items"), linkQuery)
+		itemsLink = &itemsLinkValue
+		availableActionsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "actions"), linkQuery)
+		availableActionsLink = &availableActionsLinkValue
+		eventsLinkValue := api.Link(r, api.Path("patron_requests", request.ID, "events"), linkQuery)
+		eventsLink = &eventsLinkValue
+	}
+	var illTransactionLink *string
+	if request.RequesterReqID.Valid && request.RequesterReqID.String != "" {
+		value := api.Link(r, api.Path("ill_transactions"), api.Query("requester_req_id", request.RequesterReqID.String))
+		illTransactionLink = &value
+	}
+
 	pr := proapi.PatronRequest{
-		Id:                 request.ID,
-		CreatedAt:          request.CreatedAt.Time,
-		State:              string(request.State),
-		Side:               string(request.Side),
-		Patron:             toString(request.Patron),
-		RequesterSymbol:    toString(request.RequesterSymbol),
-		SupplierSymbol:     toString(request.SupplierSymbol),
-		IllRequest:         illRequest,
-		RequesterRequestId: toString(request.RequesterReqID),
-		NeedsAttention:     request.NeedsAttention,
-		LastAction:         toString(request.LastAction),
-		LastActionOutcome:  toString(request.LastActionOutcome),
-		LastActionResult:   toString(request.LastActionResult),
-		Items:              &items,
-		TerminalState:      request.TerminalState,
+		Id:                   request.ID,
+		CreatedAt:            request.CreatedAt.Time,
+		State:                string(request.State),
+		Side:                 string(request.Side),
+		Patron:               toString(request.Patron),
+		RequesterSymbol:      toString(request.RequesterSymbol),
+		SupplierSymbol:       toString(request.SupplierSymbol),
+		IllRequest:           illRequest,
+		RequesterRequestId:   toString(request.RequesterReqID),
+		NeedsAttention:       request.NeedsAttention,
+		LastAction:           toString(request.LastAction),
+		LastActionOutcome:    toString(request.LastActionOutcome),
+		LastActionResult:     toString(request.LastActionResult),
+		Items:                &items,
+		NotificationsLink:    notificationsLink,
+		ItemsLink:            itemsLink,
+		AvailableActionsLink: availableActionsLink,
+		IllTransactionLink:   illTransactionLink,
+		EventsLink:           eventsLink,
+		TerminalState:        request.TerminalState,
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
