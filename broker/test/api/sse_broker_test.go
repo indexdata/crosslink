@@ -105,7 +105,7 @@ func TestSseEndpointNoSide(t *testing.T) {
 }
 
 func TestSseEndpointNoSymbol(t *testing.T) {
-	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=borrowwing&other=/broker/")
+	resp, err := http.Get(getLocalhostWithPort() + "/sse/events?side=borrowing&other=/broker/")
 	assert.NoError(t, err)
 	bodyBytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
