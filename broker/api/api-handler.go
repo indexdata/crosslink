@@ -109,7 +109,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	if params.IllTransactionId != nil {
 		logParams["IllTransactionId"] = *params.IllTransactionId
 	}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
 	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
@@ -138,7 +138,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	var resp oapi.IllTransactions
@@ -194,7 +194,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 }
 
 func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request, id string, params oapi.GetIllTransactionsIdParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
 	})
 	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
@@ -210,7 +210,7 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 }
 
 func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeleteIllTransactionsId", "id": id},
 	})
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
@@ -248,7 +248,7 @@ func (a *ApiHandler) returnHttpError(ctx common.ExtendedContext, w http.Response
 }
 
 func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
 	dbparams := ill_db.ListPeersParams{
@@ -287,7 +287,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostPeers"},
 	})
 	var newPeer oapi.Peer
@@ -355,7 +355,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeletePeersSymbol", "id": id},
 	})
 	err := a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
@@ -413,7 +413,7 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 }
 
 func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPeersSymbol", "id": id},
 	})
 	peer, err := a.illRepo.GetPeerById(ctx, id)
@@ -441,7 +441,7 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PutPeersSymbol", "id": id},
 	})
 	peer, err := a.illRepo.GetPeerById(ctx, id)
@@ -547,7 +547,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	if params.IllTransactionId != nil {
 		logParams["IllTransactionId"] = *params.IllTransactionId
 	}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
 	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
@@ -577,6 +577,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 
 func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
 	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": params.ArchiveDelay, "ArchiveStatus": params.ArchiveStatus}
+	// a background process so use background context instead of request context to avoid cancellation when request is finished
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: logParams,
 	})
