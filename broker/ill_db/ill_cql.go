@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/cql-go/pgcql"
 )
 
@@ -63,11 +64,11 @@ func (q *Queries) ListIllTransactionsCql(ctx context.Context, db DBTX, arg ListI
 		} else {
 			cql.WriteString("(")
 		}
-		if len(symbol) == 0 || strings.ContainsAny(symbol, " *\"\\") {
-			return nil, fmt.Errorf("invalid symbol: %s", symbol)
+		comp, err := cqlbuilder.NewQuery().Search("requester_symbol").Term(symbol).Build()
+		if err != nil {
+			return nil, fmt.Errorf("failed to build CQL query: %w", err)
 		}
-		sc := "requester_symbol=" + symbol
-		cql.WriteString(sc)
+		cql.WriteString(comp.String())
 	}
 	if cql.Len() > 0 {
 		cql.WriteString(")")
