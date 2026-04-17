@@ -39,8 +39,8 @@ func TestTenantNoSymbol(t *testing.T) {
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
-	url := &url.URL{Path: "/test"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/test"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
 	_, err := tenant.GetSymbol()
@@ -58,8 +58,8 @@ func TestTenantWithSymbol(t *testing.T) {
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
-	url := &url.URL{Path: "/test"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/test"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	symbol := "LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
@@ -78,8 +78,8 @@ func TestTenantNoMapping(t *testing.T) {
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
 	_, err := tenant.GetSymbol()
@@ -97,8 +97,8 @@ func TestTenantMissingTenant(t *testing.T) {
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
 	_, err := tenant.GetSymbol()
@@ -117,8 +117,8 @@ func TestTenantMapOK(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
 	sym, err := tenant.GetSymbol()
@@ -140,8 +140,8 @@ func TestTenantRepo1(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
 	sym, err := tenant.GetSymbol()
@@ -163,8 +163,8 @@ func TestTenantSymIdentical(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-TENANT1"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
 	outputSymbol, err := tenant.GetSymbol()
@@ -186,8 +186,8 @@ func TestTenantNoBranchMatch(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
@@ -210,8 +210,8 @@ func TestTenantBranchMatch(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
 	outputSymbol, err := tenant.GetSymbol()
@@ -233,8 +233,8 @@ func TestTenantRepoError1(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
@@ -257,8 +257,8 @@ func TestTenantRepoError2(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	url := &url.URL{Path: "/broker/"}
-	httpRequest := &http.Request{Header: header, URL: url}
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
