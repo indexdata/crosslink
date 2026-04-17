@@ -59,10 +59,12 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 	offset64 := int64(offset)
 	if fullCount > limit64 {
 		lastOffset := ((fullCount - 1) / limit64) * limit64
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
-		link := ToLinkUrlValues(r, urlValues)
-		about.LastLink = &link
+		if offset64 < lastOffset {
+			urlValues := r.URL.Query()
+			urlValues["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
+			link := ToLinkUrlValues(r, urlValues)
+			about.LastLink = &link
+		}
 	}
 	if offset64 > 0 {
 		pOffset := offset64 - limit64
