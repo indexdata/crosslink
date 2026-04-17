@@ -158,6 +158,24 @@
           "permissionsRequired": [
             "broker.patron_requests.item.notifications.get"
           ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/notifications",
+          "permissionsRequired": [
+            "broker.patron_requests.item.notifications.post"
+          ]
+        },
+        {
+          "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/notifications/{notificationId}/receipt",
+          "permissionsRequired": [
+            "broker.patron_requests.item.notifications.item.receipt.put"
+          ]
         }
       ]
     }
@@ -259,6 +277,16 @@
       "permissionName": "broker.patron_requests.item.notifications.get"
     },
     {
+      "description": "Create notification for a patron request",
+      "displayName": "Broker - create patron request notification",
+      "permissionName": "broker.patron_requests.item.notifications.post"
+    },
+    {
+      "description": "Update notification receipt for a patron request",
+      "displayName": "Broker - update patron request notification receipt",
+      "permissionName": "broker.patron_requests.item.notifications.item.receipt.put"
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -268,7 +296,6 @@
         "broker.patron_requests.item.get",
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
-        "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get"
       ]
@@ -281,7 +308,9 @@
       "subPermissions": [
         "broker.patron_requests.post",
         "broker.patron_requests.item.delete",
-        "broker.patron_requests.item.action.post"
+        "broker.patron_requests.item.action.post",
+        "broker.patron_requests.item.notifications.post",
+        "broker.patron_requests.item.notifications.item.receipt.put"
       ]
     },
     {
@@ -322,7 +351,9 @@
         "broker.patron_requests.item.action.post",
         "broker.state_model.item.get",
         "broker.patron_requests.item.items.get",
-        "broker.patron_requests.item.notifications.get"
+        "broker.patron_requests.item.notifications.get",
+        "broker.patron_requests.item.notifications.post",
+        "broker.patron_requests.item.notifications.item.receipt.put"
       ]
     }
   ]
