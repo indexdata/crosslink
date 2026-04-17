@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/directory"
 
 	"github.com/google/uuid"
@@ -38,10 +39,10 @@ type ApiHandler struct {
 	limitDefault  int32
 	eventRepo     events.EventRepo
 	illRepo       ill_db.IllRepo
-	tenantContext TenantContext
+	tenantContext tenant.TenantContext
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantContext TenantContext, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantContext tenant.TenantContext, limitDefault int32) ApiHandler {
 	return ApiHandler{
 		eventRepo:     eventRepo,
 		illRepo:       illRepo,

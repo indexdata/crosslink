@@ -1,4 +1,4 @@
-package api
+package tenant
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ type TenantContext struct {
 	tenantSymbolMap        string
 }
 
-func NewTenantContext() *TenantContext {
+func NewContext() *TenantContext {
 	return &TenantContext{}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/iso18626"
 )
 
@@ -19,10 +20,10 @@ type SseBroker struct {
 	clients       map[string]map[chan string]bool
 	mu            sync.Mutex
 	ctx           common.ExtendedContext
-	tenantContext TenantContext
+	tenantContext tenant.TenantContext
 }
 
-func NewSseBroker(ctx common.ExtendedContext, tenantContext TenantContext) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, tenantContext tenant.TenantContext) (broker *SseBroker) {
 	broker = &SseBroker{
 		input:         make(chan SseMessage),
 		clients:       make(map[string]map[chan string]bool),

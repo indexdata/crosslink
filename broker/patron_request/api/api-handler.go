@@ -21,6 +21,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -45,12 +46,12 @@ type PatronRequestApiHandler struct {
 	actionMappingService prservice.ActionMappingService
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
-	tenantContext        api.TenantContext
+	tenantContext        tenant.TenantContext
 	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, tenantContext api.TenantContext, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, tenantContext tenant.TenantContext, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
