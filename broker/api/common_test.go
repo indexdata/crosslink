@@ -30,6 +30,7 @@ func TestGetSymbolForRequest(t *testing.T) {
 func TestCollectAboutDataLastLink(t *testing.T) {
 	reqOffset0 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=0", nil)
 	reqOffset10 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=10", nil)
+	reqOffset20 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=20", nil)
 
 	// First page (count=21, limit=10, offset=0): prevLink omitted, next/last present.
 	about := CollectAboutData(21, 0, 10, reqOffset0)
@@ -60,6 +61,15 @@ func TestCollectAboutDataLastLink(t *testing.T) {
 	assert.Equal(t, int64(20), about.Count)
 	assert.NotNil(t, about.PrevLink)
 	assert.Contains(t, *about.PrevLink, "offset=0")
+	assert.Contains(t, *about.PrevLink, "symbol=ISIL%3ADK-BIB1")
+	assert.Nil(t, about.NextLink)
+	assert.Nil(t, about.LastLink)
+
+	// Last partial page (count=21, limit=10, offset=20): lastLink and nextLink should be omitted.
+	about = CollectAboutData(21, 20, 10, reqOffset20)
+	assert.Equal(t, int64(21), about.Count)
+	assert.NotNil(t, about.PrevLink)
+	assert.Contains(t, *about.PrevLink, "offset=10")
 	assert.Contains(t, *about.PrevLink, "symbol=ISIL%3ADK-BIB1")
 	assert.Nil(t, about.NextLink)
 	assert.Nil(t, about.LastLink)
