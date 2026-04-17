@@ -441,11 +441,13 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 		return
 	}
 
-	var responseItems []oapi.Event
+	responseItems := make([]oapi.Event, 0, len(eventsList))
 	for _, event := range eventsList {
 		responseItems = append(responseItems, api.ToApiEvent(event, "", &event.PatronRequestID))
 	}
-	writeJsonResponse(w, responseItems)
+	resp := oapi.Events{Items: responseItems}
+	resp.About.Count = int64(len(responseItems))
+	writeJsonResponse(w, resp)
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdItemsParams) {
@@ -553,6 +555,10 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 	err = json.NewDecoder(r.Body).Decode(&newNotification)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
+		return
+	}
+	if strings.TrimSpace(newNotification.Note) == "" {
+		addBadRequestError(ctx, w, errors.New("note is required"))
 		return
 	}
 
