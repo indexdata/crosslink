@@ -849,6 +849,20 @@ components:
           items:
             $ref: '#/components/schemas/PrNotification'
 
+    PrItems:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of patron request items
+          items:
+            $ref: '#/components/schemas/PrItem'
+
     PrNotification:
       type: object
       title: Notification
@@ -1524,9 +1538,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrItem'
+                $ref: '#/components/schemas/PrItems'
         '400':
           description: Bad Request. Invalid query parameters.
           content:

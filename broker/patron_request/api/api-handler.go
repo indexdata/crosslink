@@ -471,11 +471,13 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 		return
 	}
 
-	var responseItems []proapi.PrItem
+	responseItems := make([]proapi.PrItem, 0, len(itemsList))
 	for _, item := range itemsList {
 		responseItems = append(responseItems, toApiItem(item))
 	}
-	writeJsonResponse(w, responseItems)
+	resp := proapi.PrItems{Items: responseItems}
+	resp.About.Count = int64(len(responseItems))
+	writeJsonResponse(w, resp)
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdNotificationsParams) {
