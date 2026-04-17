@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -70,10 +69,9 @@ func (b *SseBroker) removeClient(receiver string, clientChannel chan string) {
 // ServeHTTP implements the http.Handler interface for the SSE endpoint.
 func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logParams := map[string]string{"method": "ServeHTTP"}
-	ectx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
+	ectx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	// symbol, err := b.tenantContext.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
 	symbol, err := b.tenantContext.WithRequest(ectx, r, &suppliedSymbol).GetSymbol()
 
 	if err != nil {

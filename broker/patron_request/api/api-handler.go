@@ -331,7 +331,6 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
 	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
-
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
