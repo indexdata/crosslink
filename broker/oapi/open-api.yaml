@@ -498,6 +498,21 @@ components:
           description: List of patron request items
           items:
             $ref: '#/components/schemas/PrItem'
+        notificationsLink:
+          type: string
+          description: Link to notifications for this patron request
+        itemsLink:
+          type: string
+          description: Link to items for this patron request
+        availableActionsLink:
+          type: string
+          description: Link to available actions for this patron request
+        illTransactionLink:
+          type: string
+          description: Link to related ILL transaction lookup
+        eventsLink:
+          type: string
+          description: Link to events for this patron request
         terminalState:
           type: boolean
           description: Indicates if the request is in terminal state

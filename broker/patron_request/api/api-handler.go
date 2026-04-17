@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -156,7 +157,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 	var responseItems []proapi.PatronRequest
 	for _, pr := range prs {
-		responseItems = append(responseItems, toApiPatronRequest(pr, pr.IllRequest))
+		responseItems = append(responseItems, toApiPatronRequest(r, pr, pr.IllRequest))
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
@@ -244,7 +245,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	w.Header().Set("Location", api.ToLinkPath(r, r.URL.Path+"/"+pr.ID, ""))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPatronRequest(pr, pr.IllRequest))
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
@@ -315,7 +316,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	if pr == nil {
 		return
 	}
-	writeJsonResponse(w, toApiPatronRequest(*pr, pr.IllRequest))
+	writeJsonResponse(w, toApiPatronRequest(r, *pr, pr.IllRequest))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
@@ -687,27 +688,56 @@ func addNotFoundError(w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func toApiPatronRequest(request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
+func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
+	pathPrefix := ""
+	if strings.Contains(r.RequestURI, "/broker/") {
+		pathPrefix = "/broker"
+	}
+	ownerSymbol := ""
+	if request.Side == pr_db.PatronRequestSide(prservice.SideBorrowing) {
+		ownerSymbol = request.RequesterSymbol.String
+	} else if request.Side == pr_db.PatronRequestSide(prservice.SideLending) {
+		ownerSymbol = request.SupplierSymbol.String
+	}
+	if ownerSymbol == "" && request.RequesterSymbol.Valid {
+		ownerSymbol = request.RequesterSymbol.String
+	}
+	if ownerSymbol == "" && request.SupplierSymbol.Valid {
+		ownerSymbol = request.SupplierSymbol.String
+	}
+	linkQuery := "symbol=" + url.QueryEscape(ownerSymbol)
+	requestPath := pathPrefix + "/patron_requests/" + request.ID
+	notificationsLink := api.ToLinkPath(r, requestPath+"/notifications", linkQuery)
+	itemsLink := api.ToLinkPath(r, requestPath+"/items", linkQuery)
+	availableActionsLink := api.ToLinkPath(r, requestPath+"/actions", linkQuery)
+	eventsLink := api.ToLinkPath(r, requestPath+"/events", linkQuery)
+	illTransactionLink := api.ToLinkPath(r, pathPrefix+"/ill_transactions", "requester_req_id="+url.QueryEscape(request.RequesterReqID.String))
+
 	pr := proapi.PatronRequest{
-		Id:                 request.ID,
-		CreatedAt:          request.CreatedAt.Time,
-		State:              string(request.State),
-		Side:               string(request.Side),
-		Patron:             toString(request.Patron),
-		RequesterSymbol:    toString(request.RequesterSymbol),
-		SupplierSymbol:     toString(request.SupplierSymbol),
-		IllRequest:         illRequest,
-		RequesterRequestId: toString(request.RequesterReqID),
-		NeedsAttention:     request.NeedsAttention,
-		LastAction:         toString(request.LastAction),
-		LastActionOutcome:  toString(request.LastActionOutcome),
-		LastActionResult:   toString(request.LastActionResult),
-		Items:              &items,
-		TerminalState:      request.TerminalState,
+		Id:                   request.ID,
+		CreatedAt:            request.CreatedAt.Time,
+		State:                string(request.State),
+		Side:                 string(request.Side),
+		Patron:               toString(request.Patron),
+		RequesterSymbol:      toString(request.RequesterSymbol),
+		SupplierSymbol:       toString(request.SupplierSymbol),
+		IllRequest:           illRequest,
+		RequesterRequestId:   toString(request.RequesterReqID),
+		NeedsAttention:       request.NeedsAttention,
+		LastAction:           toString(request.LastAction),
+		LastActionOutcome:    toString(request.LastActionOutcome),
+		LastActionResult:     toString(request.LastActionResult),
+		Items:                &items,
+		NotificationsLink:    &notificationsLink,
+		ItemsLink:            &itemsLink,
+		AvailableActionsLink: &availableActionsLink,
+		IllTransactionLink:   &illTransactionLink,
+		EventsLink:           &eventsLink,
+		TerminalState:        request.TerminalState,
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
