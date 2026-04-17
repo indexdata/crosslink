@@ -63,9 +63,9 @@ func TestTenantWithSymbol(t *testing.T) {
 
 	symbol := "LIB"
 	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
-	_, err := tenant.GetSymbol()
+	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
-	assert.Equal(t, "LIB", symbol)
+	assert.Equal(t, "LIB", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
@@ -121,9 +121,9 @@ func TestTenantMapOK(t *testing.T) {
 	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
-	sym, err := tenant.GetSymbol()
+	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
-	assert.Equal(t, "ISIL:DK-TENANT1", sym)
+	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
@@ -144,9 +144,9 @@ func TestTenantRepo1(t *testing.T) {
 	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
-	sym, err := tenant.GetSymbol()
+	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
-	assert.Equal(t, "ISIL:DK-TENANT1", sym)
+	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
