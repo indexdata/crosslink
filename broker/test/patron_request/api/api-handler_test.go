@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -150,6 +151,16 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, "validate", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NotificationsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
+	assert.NotNil(t, foundPr.ItemsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.ItemsLink)
+	assert.NotNil(t, foundPr.AvailableActionsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.AvailableActionsLink)
+	assert.NotNil(t, foundPr.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.EventsLink)
+	assert.NotNil(t, foundPr.IllTransactionLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPr.IllTransactionLink)
 
 	assert.Equal(t, false, foundPr.NeedsAttention)
 
@@ -166,6 +177,16 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 	assert.Nil(t, foundPrs.About.LastLink)
+	assert.NotNil(t, foundPrs.Items[0].NotificationsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].NotificationsLink)
+	assert.NotNil(t, foundPrs.Items[0].ItemsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].ItemsLink)
+	assert.NotNil(t, foundPrs.Items[0].AvailableActionsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].AvailableActionsLink)
+	assert.NotNil(t, foundPrs.Items[0].EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].EventsLink)
+	assert.NotNil(t, foundPrs.Items[0].IllTransactionLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPrs.Items[0].IllTransactionLink)
 	assertPatronRequestIllRequest(t, foundPrs.Items[0].IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
