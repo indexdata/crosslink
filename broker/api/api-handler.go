@@ -314,7 +314,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	var newPeer oapi.Peer
 	err := json.NewDecoder(r.Body).Decode(&newPeer)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	_, err = a.illRepo.GetPeerById(ctx, newPeer.Id)
@@ -478,7 +478,7 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	var update oapi.Peer
 	err = json.NewDecoder(r.Body).Decode(&update)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	peer.Name = update.Name

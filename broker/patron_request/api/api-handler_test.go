@@ -620,6 +620,16 @@ func TestPostPatronRequestsIdNotificationsErrorBecauseOfBody(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "unexpected EOF")
 }
 
+func TestPostPatronRequestsIdNotificationsErrorBecauseOfMissingNote(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), common.NewTenant(""), nil, 10)
+	body := "{}"
+	req, _ := http.NewRequest("POST", "/", bytes.NewBufferString(body))
+	rr := httptest.NewRecorder()
+	handler.PostPatronRequestsIdNotifications(rr, req, "3", proapi.PostPatronRequestsIdNotificationsParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "note is required")
+}
+
 func TestPostPatronRequestsIdNotificationsErrorFailedSendOnlyLogged(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositorySuccess), common.NewTenant(""), new(MockIso18626Handler), 10)
 	body := "{\"note\": \"Say hello\"}"

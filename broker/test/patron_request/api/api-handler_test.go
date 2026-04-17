@@ -570,10 +570,11 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Check requester patron request event count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/events"+queryParams, []byte{}, 200)
-	var events []oapi.Event
+	var events oapi.Events
 	err = json.Unmarshal(respBytes, &events)
 	assert.NoError(t, err, "failed to unmarshal patron request events")
-	assert.True(t, len(events) > 5)
+	assert.True(t, len(events.Items) > 5)
+	assert.Equal(t, int64(len(events.Items)), events.About.Count)
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/items"+queryParams, []byte{}, 200)
@@ -607,7 +608,8 @@ func TestActionsToCompleteState(t *testing.T) {
 	respBytes = httpRequest(t, "GET", supplierPrPath+"/events"+supQueryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &events)
 	assert.NoError(t, err, "failed to unmarshal patron request events")
-	assert.True(t, len(events) > 5)
+	assert.True(t, len(events.Items) > 5)
+	assert.Equal(t, int64(len(events.Items)), events.About.Count)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

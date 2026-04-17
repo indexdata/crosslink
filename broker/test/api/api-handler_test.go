@@ -458,6 +458,30 @@ func TestPeersNoHeaders(t *testing.T) {
 	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNotFound)
 }
 
+func TestPeersBadRequestJson(t *testing.T) {
+	httpRequest(t, "POST", "/peers", []byte("{"), "", http.StatusBadRequest)
+
+	toCreate := oapi.Peer{
+		Id:            uuid.New().String(),
+		Name:          "Peer",
+		Url:           "https://url.com",
+		Symbols:       []string{"ISIL:PEER"},
+		RefreshPolicy: oapi.Transaction,
+	}
+	jsonBytes, err := json.Marshal(toCreate)
+	assert.NoError(t, err)
+
+	body := httpRequest(t, "POST", "/peers", jsonBytes, "", http.StatusCreated)
+	var respPeer oapi.Peer
+	err = json.Unmarshal(body, &respPeer)
+	assert.NoError(t, err)
+
+	httpRequest(t, "PUT", "/peers/"+respPeer.Id, []byte("{"), "", http.StatusBadRequest)
+
+	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNoContent)
+	httpRequest(t, "DELETE", "/peers/"+respPeer.Id, nil, "", http.StatusNotFound)
+}
+
 func TestPeersCRUD(t *testing.T) {
 	headers := map[string]string{
 		"X-Okapi-Tenant": "diku",
@@ -691,9 +715,9 @@ func TestPostPeersError(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/", bytes.NewBuffer([]byte{}))
 	rr := httptest.NewRecorder()
 	handlerMock.PostPeers(rr, req)
-	if status := rr.Code; status != http.StatusInternalServerError {
+	if status := rr.Code; status != http.StatusBadRequest {
 		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusInternalServerError)
+			status, http.StatusBadRequest)
 	}
 }
 func TestDeletePeersSymbolDbError(t *testing.T) {
