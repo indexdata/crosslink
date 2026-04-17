@@ -2,7 +2,8 @@ package api
 
 import (
 	"context"
-	"strings"
+	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -11,46 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-func TestTenantContext(t *testing.T) {
-	tenantContext := NewTenantContext()
-	assert.False(t, tenantContext.IsSpecified())
-
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	_, err := tenantContext.symbolForRequest(ctx, false, nil, nil)
-	assert.Error(t, err)
-	assert.Equal(t, "symbol must be specified", err.Error())
-
-	requestSymbol := ""
-	_, err = tenantContext.symbolForRequest(ctx, false, nil, &requestSymbol)
-	assert.Error(t, err)
-	assert.Equal(t, "symbol must be specified", err.Error())
-
-	requestSymbol = "symbol2"
-	symbol, err := tenantContext.symbolForRequest(ctx, false, nil, &requestSymbol)
-	assert.NoError(t, err)
-	assert.Equal(t, requestSymbol, symbol)
-
-	_, err = tenantContext.symbolForRequest(ctx, true, nil, nil)
-	assert.Error(t, err)
-	assert.Equal(t, "tenant mapping must be specified", err.Error())
-
-	tenantContext = NewTenantContext().WithTenantSymbol("{tenant}")
-	assert.True(t, tenantContext.IsSpecified())
-	_, err = tenantContext.symbolForRequest(ctx, true, nil, nil)
-	assert.Error(t, err)
-	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
-
-	tenant := ""
-	_, err = tenantContext.symbolForRequest(ctx, true, &tenant, nil)
-	assert.Error(t, err)
-	assert.Equal(t, "X-Okapi-Tenant must be specified", err.Error())
-
-	tenant = "tenant1"
-	symbol, err = tenantContext.symbolForRequest(ctx, true, &tenant, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, strings.ToUpper(tenant), symbol)
-}
 
 type MockDirectoryLookupAdapter struct {
 	mock.Mock
@@ -72,60 +33,239 @@ func (r *MockIllRepo) GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerI
 	return args.Get(0).([]ill_db.BranchSymbol), args.Error(1)
 }
 
-func TestTenantContextRepoNoPeer(t *testing.T) {
+func TestTenantNoSymbol(t *testing.T) {
+	tenantContext := NewTenantContext()
+	assert.False(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	url := &url.URL{Path: "/test"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	_, err := tenant.GetSymbol()
+	assert.Error(t, err)
+	assert.Equal(t, "symbol must be specified", err.Error())
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Nil(t, symbols)
+}
+
+func TestTenantWithSymbol(t *testing.T) {
+	tenantContext := NewTenantContext()
+	assert.False(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	url := &url.URL{Path: "/test"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	symbol := "LIB"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	_, err := tenant.GetSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "LIB", symbol)
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"LIB"}, symbols)
+}
+
+func TestTenantNoMapping(t *testing.T) {
+	tenantContext := NewTenantContext()
+	assert.False(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	_, err := tenant.GetSymbol()
+	assert.Error(t, err)
+	assert.Equal(t, "tenant mapping must be specified", err.Error())
+
+	_, err = tenant.GetSymbols()
+	assert.Error(t, err)
+	assert.Equal(t, "tenant mapping must be specified", err.Error())
+}
+
+func TestTenantMissingTenant(t *testing.T) {
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	_, err := tenant.GetSymbol()
+	assert.Error(t, err)
+	assert.Equal(t, "header X-Okapi-Tenant must be specified", err.Error())
+
+	_, err = tenant.GetSymbols()
+	assert.Error(t, err)
+	assert.Equal(t, "header X-Okapi-Tenant must be specified", err.Error())
+}
+
+func TestTenantMapOK(t *testing.T) {
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	sym, err := tenant.GetSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:DK-TENANT1", sym)
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:DK-TENANT1"}, symbols)
+}
+
+func TestTenantRepo1(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewTenantContext().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	requestSymbol := "SYMBOL2"
-	_, err := tenantContext.symbolForRequest(ctx, false, nil, &requestSymbol)
-	assert.Error(t, err)
-	assert.Equal(t, "no peers for symbol", err.Error())
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+
+	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	sym, err := tenant.GetSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:DK-TENANT1", sym)
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:DK-TENANT1"}, symbols)
 }
 
-func TestTenantContextRepoOK(t *testing.T) {
+func TestTenantSymIdentical(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
-	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
-	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{{SymbolValue: "LIB"}}, nil)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewTenantContext().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	requestSymbol := "SYMBOL"
-	symbol, err := tenantContext.symbolForRequest(ctx, false, nil, &requestSymbol)
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+	symbol := "ISIL:DK-TENANT1"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
-	assert.Equal(t, requestSymbol, symbol)
+	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
 
-	requestSymbol = "LIB"
-	tenant := "symbol"
-	symbol, err = tenantContext.symbolForRequest(ctx, true, &tenant, &requestSymbol)
+	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
-	assert.Equal(t, requestSymbol, symbol)
-
-	requestSymbol = ""
-	symbol, err = tenantContext.symbolForRequest(ctx, true, &tenant, &requestSymbol)
-	assert.NoError(t, err)
-	assert.Equal(t, strings.ToUpper(tenant), symbol)
+	assert.Equal(t, []string{"ISIL:DK-TENANT1"}, symbols)
 }
 
-func TestTenantContextRepoBranches(t *testing.T) {
+func TestTenantNoBranchMatch(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
-	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "SYMBOL"}}, "", nil)
-	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{}, nil)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewTenantContext().WithTenantSymbol("{tenant}").WithLookupAdapter(&MockDirectoryLookupAdapter{}).WithIllRepo(mockIllRepo)
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
-	requestSymbol := "SYMBOL"
-	symbol, err := tenantContext.symbolForRequest(ctx, false, nil, &requestSymbol)
-	assert.NoError(t, err)
-	assert.Equal(t, requestSymbol, symbol)
-
-	requestSymbol = "LIB"
-	tenant := "SYMBOL"
-	_, err = tenantContext.symbolForRequest(ctx, true, &tenant, &requestSymbol)
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+	symbol := "LIB"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	_, err := tenant.GetSymbol()
 	assert.Error(t, err)
 	assert.Equal(t, "symbol does not match any branch symbols for tenant", err.Error())
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:DK-TENANT1"}, symbols)
+}
+
+func TestTenantBranchMatch(t *testing.T) {
+	mockIllRepo := new(MockIllRepo)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "ISIL:DK-TENANT1"}}, "", nil)
+	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{{SymbolValue: "ISIL:DK-DIKU"}, {SymbolValue: "ISIL:DK-LIB"}}, nil)
+
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+	symbol := "ISIL:DK-LIB"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	outputSymbol, err := tenant.GetSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:DK-LIB", outputSymbol)
+
+	symbols, err := tenant.GetSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:DK-TENANT1", "ISIL:DK-DIKU", "ISIL:DK-LIB"}, symbols)
+}
+
+func TestTenantRepoError1(t *testing.T) {
+	mockIllRepo := new(MockIllRepo)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", assert.AnError)
+
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+	symbol := "ISIL:DK-LIB"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	_, err := tenant.GetSymbol()
+	assert.Error(t, err)
+	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+
+	_, err = tenant.GetSymbols()
+	assert.Error(t, err)
+	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+}
+
+func TestTenantRepoError2(t *testing.T) {
+	mockIllRepo := new(MockIllRepo)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "ISIL:DK-TENANT1"}}, "", nil)
+	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{}, assert.AnError)
+
+	tenantContext := NewTenantContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.isSpecified())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	url := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: url}
+	symbol := "ISIL:DK-LIB"
+	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	_, err := tenant.GetSymbol()
+	assert.Error(t, err)
+	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+
+	_, err = tenant.GetSymbols()
+	assert.Error(t, err)
+	assert.Equal(t, "assert.AnError general error for testing", err.Error())
 }

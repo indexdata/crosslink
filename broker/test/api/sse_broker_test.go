@@ -119,7 +119,7 @@ func TestSseEndpointNoTenant(t *testing.T) {
 	bodyBytes, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 	assert.Equal(t, 400, resp.StatusCode)
-	assert.Equal(t, "X-Okapi-Tenant must be specified\n", string(bodyBytes))
+	assert.Equal(t, "header X-Okapi-Tenant must be specified\n", string(bodyBytes))
 }
 
 func executeTask(t time.Time) {

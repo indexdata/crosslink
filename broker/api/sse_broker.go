@@ -71,9 +71,10 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	logParams := map[string]string{"method": "ServeHTTP"}
 	ectx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Other: logParams})
 
-	tenant := r.Header.Get("X-Okapi-Tenant")
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	symbol, err := b.tenantContext.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
+	// symbol, err := b.tenantContext.GetSymbolForRequest(ectx, r, &tenant, &suppliedSymbol)
+	symbol, err := b.tenantContext.WithRequest(ectx, r, &suppliedSymbol).GetSymbol()
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

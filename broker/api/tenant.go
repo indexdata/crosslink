@@ -35,7 +35,7 @@ func (s *TenantContext) WithLookupAdapter(directoryLookupAdapter adapter.Directo
 	return s
 }
 
-func (s *TenantContext) IsSpecified() bool {
+func (s *TenantContext) isSpecified() bool {
 	return s.tenantSymbolMap != ""
 }
 
@@ -43,87 +43,109 @@ func (s *TenantContext) getSymbol(tenant string) string {
 	return strings.ReplaceAll(s.tenantSymbolMap, "{tenant}", strings.ToUpper(tenant))
 }
 
-func (s *TenantContext) symbolForRequest(ctx common.ExtendedContext, isBrokerPrefix bool, tenant *string, symbol *string) (string, error) {
+type Tenant struct {
+	tenantContext *TenantContext
+	ctx           common.ExtendedContext
+	okapiEndpoint bool
+	tenant        string
+	symbol        string
+}
+
+func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request, symbol *string) *Tenant {
+	var pSymbol string
+	if symbol != nil {
+		pSymbol = *symbol
+	}
+	t := &Tenant{
+		tenantContext: s,
+		tenant:        r.Header.Get("X-Okapi-Tenant"),
+		ctx:           ctx,
+		okapiEndpoint: strings.HasPrefix(r.URL.Path, "/broker/"),
+		symbol:        pSymbol,
+	}
+	return t
+}
+
+func (t *Tenant) GetSymbol() (string, error) {
 	var mainSymbol string
-	if isBrokerPrefix {
-		if !s.IsSpecified() {
+	if t.okapiEndpoint {
+		if !t.tenantContext.isSpecified() {
 			return "", errors.New("tenant mapping must be specified")
 		}
-		if tenant == nil || *tenant == "" {
-			return "", errors.New("X-Okapi-Tenant must be specified")
+		if t.tenant == "" {
+			return "", errors.New("header X-Okapi-Tenant must be specified")
 		}
-		mainSymbol = s.getSymbol(*tenant)
+		mainSymbol = t.tenantContext.getSymbol(t.tenant)
 	} else {
-		if symbol == nil || *symbol == "" {
+		if t.symbol == "" {
 			return "", errors.New("symbol must be specified")
 		}
-		mainSymbol = *symbol
+		mainSymbol = t.symbol
 	}
-	if s.illRepo == nil {
+	if t.tenantContext.illRepo == nil {
 		return mainSymbol, nil
 	}
-	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
+	peers, _, err := t.tenantContext.illRepo.GetCachedPeersBySymbols(t.ctx, []string{mainSymbol}, t.tenantContext.directoryLookupAdapter)
 	if err != nil {
 		return "", err
 	}
-	if len(peers) == 0 {
-		ctx.Logger().Error("no peers for symbol", "symbol", mainSymbol)
-		return "", errors.New("no peers for symbol")
-	}
-	if symbol == nil || *symbol == "" || *symbol == mainSymbol {
+	// seems like len(peers) > 0 always, so we can't flag an error for symbol that does not exist
+	// if supplied symbol is the same as main symbol, we can skip the check against branch symbols, since it's valid
+	if t.symbol == "" || t.symbol == mainSymbol {
 		return mainSymbol, nil
 	}
 	found := false
 	for _, peer := range peers {
-		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+		branchSymbols, err := t.tenantContext.illRepo.GetBranchSymbolsByPeerId(t.ctx, peer.ID)
 		if err != nil {
 			return "", err
 		}
 		for _, branchSymbol := range branchSymbols {
-			if *symbol == branchSymbol.SymbolValue {
+			if t.symbol == branchSymbol.SymbolValue {
 				found = true
-				break
 			}
 		}
 	}
 	if !found {
 		return "", errors.New("symbol does not match any branch symbols for tenant")
 	}
-	return *symbol, nil
+	return t.symbol, nil
 }
 
-func (s *TenantContext) GetSymbolForRequest(ctx common.ExtendedContext, r *http.Request, tenant *string, symbol *string) (string, error) {
-	return s.symbolForRequest(ctx, strings.HasPrefix(r.URL.Path, "/broker/"), tenant, symbol)
-}
-
-func (s *TenantContext) GetSymbolsForTenant(ctx common.ExtendedContext, tenant string) []string {
-	if !s.IsSpecified() {
-		return []string{}
+// GetSymbols returns the main symbol for the tenant and all branch symbols of peers associated with that symbol.
+// Note that empty list and nil are used to distinguish between "no symbols" and "all symbols" (i.e. no symbol filtering).
+func (t *Tenant) GetSymbols() ([]string, error) {
+	var mainSymbol string
+	if t.okapiEndpoint {
+		if !t.tenantContext.isSpecified() {
+			return nil, errors.New("tenant mapping must be specified")
+		}
+		if t.tenant == "" {
+			return nil, errors.New("header X-Okapi-Tenant must be specified")
+		}
+		mainSymbol = t.tenantContext.getSymbol(t.tenant)
+	} else {
+		if t.symbol == "" {
+			return nil, nil
+		}
+		mainSymbol = t.symbol
 	}
-	if tenant == "" {
-		return []string{}
+	allSyms := []string{mainSymbol}
+	if t.tenantContext.illRepo == nil {
+		return allSyms, nil
 	}
-	mainSymbol := s.getSymbol(tenant)
-	if s.illRepo == nil {
-		return []string{mainSymbol}
-	}
-	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
+	peers, _, err := t.tenantContext.illRepo.GetCachedPeersBySymbols(t.ctx, []string{mainSymbol}, t.tenantContext.directoryLookupAdapter)
 	if err != nil {
-		return []string{}
+		return nil, err
 	}
-	if len(peers) == 0 {
-		ctx.Logger().Error("no peers for symbol", "symbol", mainSymbol)
-		return []string{}
-	}
-	symbols := []string{mainSymbol}
 	for _, peer := range peers {
-		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+		branchSymbols, err := t.tenantContext.illRepo.GetBranchSymbolsByPeerId(t.ctx, peer.ID)
 		if err != nil {
-			return []string{}
+			return nil, err
 		}
 		for _, branchSymbol := range branchSymbols {
-			symbols = append(symbols, branchSymbol.SymbolValue)
+			allSyms = append(allSyms, branchSymbol.SymbolValue)
 		}
 	}
-	return symbols
+	return allSyms, nil
 }
