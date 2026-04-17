@@ -85,14 +85,15 @@ func (t *Tenant) GetSymbol() (string, error) {
 	if t.tenantContext.illRepo == nil {
 		return mainSymbol, nil
 	}
+	// if supplied symbol is the same as main symbol, we can skip the check against branch symbols, since it's valid
+	// we do not check even if only one symbol because GetCachedPeersBySymbols() creates a peer for the main symbol if it does not exist,
+	// so we would not be able to distinguish between "symbol does not exist" and "symbol exists but has no peers"
+	if t.symbol == "" || t.symbol == mainSymbol {
+		return mainSymbol, nil
+	}
 	peers, _, err := t.tenantContext.illRepo.GetCachedPeersBySymbols(t.ctx, []string{mainSymbol}, t.tenantContext.directoryLookupAdapter)
 	if err != nil {
 		return "", err
-	}
-	// seems like len(peers) > 0 always, so we can't flag an error for symbol that does not exist
-	// if supplied symbol is the same as main symbol, we can skip the check against branch symbols, since it's valid
-	if t.symbol == "" || t.symbol == mainSymbol {
-		return mainSymbol, nil
 	}
 	found := false
 	for _, peer := range peers {
@@ -113,7 +114,8 @@ func (t *Tenant) GetSymbol() (string, error) {
 }
 
 // GetSymbols returns the main symbol for the tenant and all branch symbols of peers associated with that symbol.
-// Note that empty list and nil are used to distinguish between "no symbols" and "all symbols" (i.e. no symbol filtering).
+// A nil slice means no symbol filtering should be applied. Otherwise, the returned slice contains at least the
+// main symbol and may include associated branch symbols.
 func (t *Tenant) GetSymbols() ([]string, error) {
 	var mainSymbol string
 	if t.okapiEndpoint {
