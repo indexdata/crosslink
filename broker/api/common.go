@@ -7,11 +7,8 @@ import (
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/oapi"
+	"github.com/indexdata/crosslink/broker/tenant"
 )
-
-func IsBrokerRequest(r *http.Request) bool {
-	return strings.Contains(r.RequestURI, "/broker/")
-}
 
 func WithBrokerPrefix(r *http.Request, path string) string {
 	if path == "" {
@@ -20,7 +17,7 @@ func WithBrokerPrefix(r *http.Request, path string) string {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	if IsBrokerRequest(r) {
+	if tenant.IsBrokerRequest(r) {
 		if path == "/" {
 			return "/broker/"
 		}
