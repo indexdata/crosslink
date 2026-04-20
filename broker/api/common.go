@@ -10,37 +10,30 @@ import (
 	"github.com/indexdata/crosslink/broker/tenant"
 )
 
-func WithBrokerPrefix(r *http.Request, path string) string {
-	if path == "" {
-		path = "/"
-	}
+func withBasePath(r *http.Request, path string) string {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	if tenant.IsBrokerRequest(r) {
-		if path == "/" {
-			return "/broker/"
-		}
-		return "/broker" + path
+	if tenant.IsOkapiRequest(r) {
+		return tenant.OKAPI_PATH_PREFIX + path
 	}
 	return path
 }
 
-func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
-	path := r.URL.Path
-	cleanRelPath := strings.Trim(relPath, "/")
-	if cleanRelPath != "" {
-		path = strings.TrimRight(path, "/") + "/" + cleanRelPath
-	}
-	return linkRaw(r, path, urlValues.Encode())
+func Path(parts ...string) string {
+	return path(true, parts...)
 }
 
-func Path(parts ...string) string {
+func path(escape bool, parts ...string) string {
 	pathParts := make([]string, 0, len(parts))
 	for _, part := range parts {
 		clean := strings.Trim(part, "/")
 		if clean != "" {
-			pathParts = append(pathParts, url.PathEscape(clean))
+			if escape {
+				pathParts = append(pathParts, url.PathEscape(clean))
+			} else {
+				pathParts = append(pathParts, clean)
+			}
 		}
 	}
 	return "/" + strings.Join(pathParts, "/")
@@ -55,10 +48,14 @@ func Query(params ...string) url.Values {
 }
 
 func Link(r *http.Request, path string, query url.Values) string {
-	return linkRaw(r, WithBrokerPrefix(r, path), query.Encode())
+	return link(r, withBasePath(r, path), query.Encode())
 }
 
-func linkRaw(r *http.Request, path string, query string) string {
+func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
+	return link(r, path(false, r.URL.Path, relPath), urlValues.Encode())
+}
+
+func link(r *http.Request, path string, query string) string {
 	if query != "" {
 		path = path + "?" + query
 	}
