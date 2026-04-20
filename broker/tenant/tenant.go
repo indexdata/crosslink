@@ -59,19 +59,20 @@ func (s *TenantContext) getBranchSymbols(ctx common.ExtendedContext, mainSymbol 
 	if err != nil {
 		return nil, err
 	}
-	for _, peer := range peers {
-		//expect only one peer
-		branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
-		if err != nil {
-			return nil, err
-		}
-		symbols := make([]string, 0, len(branchSymbols))
-		for _, branchSymbol := range branchSymbols {
-			symbols = append(symbols, branchSymbol.SymbolValue)
-		}
-		return symbols, nil
+	if len(peers) == 0 {
+		return []string{}, nil
 	}
-	return []string{}, nil
+	// expect only one peer
+	peer := peers[0]
+	branchSymbols, err := s.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
+	if err != nil {
+		return nil, err
+	}
+	symbols := make([]string, 0, len(branchSymbols))
+	for _, branchSymbol := range branchSymbols {
+		symbols = append(symbols, branchSymbol.SymbolValue)
+	}
+	return symbols, nil
 }
 
 func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request, symbol *string) (Tenant, error) {
