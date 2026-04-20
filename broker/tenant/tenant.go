@@ -12,15 +12,14 @@ import (
 
 const OKAPI_PATH_PREFIX = "/broker"
 
+func IsOkapiRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
+}
+
 type TenantContext struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantSymbolMap        string
-}
-
-func IsOkapiRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
-
 }
 
 func NewContext() *TenantContext {
