@@ -16,6 +16,10 @@ type TenantContext struct {
 	tenantSymbolMap        string
 }
 
+func IsBrokerRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, "/broker/")
+}
+
 func NewContext() *TenantContext {
 	return &TenantContext{}
 }
@@ -60,7 +64,7 @@ func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request,
 		tenantContext: s,
 		tenant:        r.Header.Get("X-Okapi-Tenant"),
 		ctx:           ctx,
-		okapiEndpoint: strings.HasPrefix(r.URL.Path, "/broker/"),
+		okapiEndpoint: IsBrokerRequest(r),
 		symbol:        pSymbol,
 	}
 	return t
