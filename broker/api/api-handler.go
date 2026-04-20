@@ -74,7 +74,11 @@ func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.Res
 		addInternalError(ctx, w, err)
 		return nil, err
 	}
-	tenant := a.tenantContext.WithRequest(ctx, r, requesterSymbol)
+	tenant, err := a.tenantContext.WithRequest(ctx, r, requesterSymbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return nil, err
+	}
 	syms, err := tenant.GetSymbols()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
@@ -165,7 +169,11 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
 	} else {
-		tenant := a.tenantContext.WithRequest(ctx, r, params.RequesterSymbol)
+		tenant, err := a.tenantContext.WithRequest(ctx, r, params.RequesterSymbol)
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
 		symbols, err := tenant.GetSymbols()
 		if err != nil {
 			addBadRequestError(ctx, w, err)

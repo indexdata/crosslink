@@ -72,8 +72,12 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ectx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	symbol, err := b.tenantContext.WithRequest(ectx, r, &suppliedSymbol).GetSymbol()
-
+	tenant, err := b.tenantContext.WithRequest(ectx, r, &suppliedSymbol)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	symbol, err := tenant.GetSymbol()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

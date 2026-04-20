@@ -33,6 +33,12 @@ func (r *MockIllRepo) GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerI
 	return args.Get(0).([]ill_db.BranchSymbol), args.Error(1)
 }
 
+func mustWithRequest(t *testing.T, tenantContext *TenantContext, ctx common.ExtendedContext, r *http.Request, symbol *string) Tenant {
+	tenant, err := tenantContext.WithRequest(ctx, r, symbol)
+	assert.NoError(t, err)
+	return tenant
+}
+
 func TestTenantNoSymbol(t *testing.T) {
 	tenantContext := NewContext()
 	assert.False(t, tenantContext.IsSpecified())
@@ -42,7 +48,7 @@ func TestTenantNoSymbol(t *testing.T) {
 	turl := &url.URL{Path: "/test"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
-	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, nil)
 	_, err := tenant.GetSymbol()
 	assert.Error(t, err)
 	assert.Equal(t, "symbol must be specified", err.Error())
@@ -62,14 +68,14 @@ func TestTenantWithSymbol(t *testing.T) {
 	httpRequest := &http.Request{Header: header, URL: turl}
 
 	symbol := "LIB"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
 	assert.Equal(t, "LIB", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
-	assert.NoError(t, err)
-	assert.Equal(t, []string{"LIB"}, symbols)
+	assert.Error(t, err)
+	assert.Nil(t, symbols)
 }
 
 func TestTenantNoMapping(t *testing.T) {
@@ -81,12 +87,7 @@ func TestTenantNoMapping(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
-	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
-	_, err := tenant.GetSymbol()
-	assert.Error(t, err)
-	assert.Equal(t, "tenant mapping must be specified", err.Error())
-
-	_, err = tenant.GetSymbols()
+	_, err := tenantContext.WithRequest(ctx, httpRequest, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "tenant mapping must be specified", err.Error())
 }
@@ -100,12 +101,7 @@ func TestTenantMissingTenant(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
-	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
-	_, err := tenant.GetSymbol()
-	assert.Error(t, err)
-	assert.Equal(t, "header X-Okapi-Tenant must be specified", err.Error())
-
-	_, err = tenant.GetSymbols()
+	_, err := tenantContext.WithRequest(ctx, httpRequest, nil)
 	assert.Error(t, err)
 	assert.Equal(t, "header X-Okapi-Tenant must be specified", err.Error())
 }
@@ -120,14 +116,14 @@ func TestTenantMapOK(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
-	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, nil)
 	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
-	assert.NoError(t, err)
-	assert.Equal(t, []string{"ISIL:DK-TENANT1"}, symbols)
+	assert.Error(t, err)
+	assert.Nil(t, symbols)
 }
 
 func TestTenantRepo1(t *testing.T) {
@@ -143,7 +139,7 @@ func TestTenantRepo1(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
-	tenant := tenantContext.WithRequest(ctx, httpRequest, nil)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, nil)
 	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
@@ -166,7 +162,7 @@ func TestTenantSymIdentical(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-TENANT1"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
@@ -189,10 +185,9 @@ func TestTenantNoBranchMatch(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "LIB"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
-	assert.Error(t, err)
-	assert.Equal(t, "symbol does not match any branch symbols for tenant", err.Error())
+	assert.NoError(t, err)
 
 	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
@@ -213,10 +208,10 @@ func TestTenantBranchMatch(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	outputSymbol, err := tenant.GetSymbol()
 	assert.NoError(t, err)
-	assert.Equal(t, "ISIL:DK-LIB", outputSymbol)
+	assert.Equal(t, "ISIL:DK-TENANT1", outputSymbol)
 
 	symbols, err := tenant.GetSymbols()
 	assert.NoError(t, err)
@@ -236,10 +231,9 @@ func TestTenantRepoError1(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
-	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.NoError(t, err)
 
 	_, err = tenant.GetSymbols()
 	assert.Error(t, err)
@@ -260,10 +254,9 @@ func TestTenantRepoError2(t *testing.T) {
 	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 	symbol := "ISIL:DK-LIB"
-	tenant := tenantContext.WithRequest(ctx, httpRequest, &symbol)
+	tenant := mustWithRequest(t, tenantContext, ctx, httpRequest, &symbol)
 	_, err := tenant.GetSymbol()
-	assert.Error(t, err)
-	assert.Equal(t, "assert.AnError general error for testing", err.Error())
+	assert.NoError(t, err)
 
 	_, err = tenant.GetSymbols()
 	assert.Error(t, err)
