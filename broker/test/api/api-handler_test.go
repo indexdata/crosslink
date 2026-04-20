@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/broker/vcs"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,7 +45,7 @@ var eventRepo events.EventRepo
 var sseBroker *api.SseBroker
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, common.NewTenant(""), api.LIMIT_DEFAULT)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, *tenant.NewContext(), api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
@@ -202,7 +203,8 @@ func TestGetIllTransactions(t *testing.T) {
 	prevLink := *resp.About.PrevLink
 	assert.Contains(t, prevLink, "offset=0")
 
-	body = getResponseBody(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
+	body = httpGet(t, "/broker/ill_transactions?requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"), "bib1", http.StatusOK)
+
 	resp.About.NextLink = nil
 	resp.About.PrevLink = nil
 	err = json.Unmarshal(body, &resp)
@@ -221,12 +223,12 @@ func TestGetIllTransactions(t *testing.T) {
 	assert.True(t, strings.HasPrefix(lastLink, getLocalhostWithPort()+"/broker/ill_transactions?"))
 	assert.Contains(t, lastLink, "requester_symbol="+url.QueryEscape("ISIL:DK-BIB1"))
 	assert.Contains(t, lastLink, "offset=10")
-	// we have estblished that the next link is correct, now we will check if it works
-	hres, err := http.Get(nextLink) // nolint:gosec
-	assert.NoError(t, err)
-	defer hres.Body.Close()
-	body, err = io.ReadAll(hres.Body)
-	assert.NoError(t, err)
+
+	// we still need the tenant
+	body = httpGet(t, nextLink, "", http.StatusBadRequest)
+	assert.Contains(t, string(body), "header X-Okapi-Tenant must be specified")
+	// supply tenant now
+	body = httpGet(t, nextLink, "bib1", http.StatusOK)
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.NotNil(t, resp.About.PrevLink)
@@ -324,9 +326,10 @@ func TestBrokerCRUD(t *testing.T) {
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
 	httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "ruc", http.StatusNotFound)
 	httpGet(t, "/broker/ill_transactions/"+illId, "ruc", http.StatusNotFound)
-	httpGet(t, "/broker/ill_transactions/"+illId, "", http.StatusNotFound)
+	httpGet(t, "/broker/ill_transactions/"+illId, "diku", http.StatusOK)
+	httpGet(t, "/broker/ill_transactions/"+illId, "", http.StatusBadRequest)
 
-	body = httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	body = httpGet(t, "/broker/ill_transactions/"+illId+"?requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &tran)
 	assert.NoError(t, err)
 	assert.Equal(t, illId, tran.Id)
@@ -339,7 +342,11 @@ func TestBrokerCRUD(t *testing.T) {
 
 	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "ruc", http.StatusOK)))
 
-	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "", http.StatusOK)))
+	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "magtic", http.StatusOK)))
+
+	assert.Equal(t, 0, len(httpGetTrans(t, "/broker/ill_transactions", "", http.StatusBadRequest)))
+
+	assert.True(t, len(httpGetTrans(t, "/ill_transactions", "", http.StatusOK)) >= 2)
 
 	body = httpGet(t, "/broker/ill_transactions?requester_req_id="+url.QueryEscape(reqReqId), "diku", http.StatusOK)
 	var resp oapi.IllTransactions
@@ -383,7 +390,7 @@ func TestBrokerCRUD(t *testing.T) {
 	assert.Len(t, events.Items, 1)
 	assert.Equal(t, eventId, events.Items[0].Id)
 
-	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "", http.StatusOK)
+	body = httpGet(t, "/broker/events?requester_req_id="+url.QueryEscape(reqReqId)+"&requester_symbol="+url.QueryEscape("ISIL:DK-DIKU"), "diku", http.StatusOK)
 	err = json.Unmarshal(body, &events)
 	assert.NoError(t, err)
 	assert.Len(t, events.Items, 1)
@@ -846,7 +853,10 @@ func getResponseBody(t *testing.T, endpoint string) []byte {
 
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, tenant string, expectStatus int) []byte {
 	client := http.DefaultClient
-	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
+	if strings.HasPrefix(uriPath, "/") {
+		uriPath = getLocalhostWithPort() + uriPath
+	}
+	hreq, err := http.NewRequest(method, uriPath, bytes.NewBuffer(reqbytes))
 	assert.NoError(t, err)
 	if tenant != "" {
 		hreq.Header.Set("X-Okapi-Tenant", tenant)

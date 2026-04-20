@@ -11,6 +11,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/directory"
 
 	"github.com/google/uuid"
@@ -34,36 +35,23 @@ var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
-	limitDefault int32
-	eventRepo    events.EventRepo
-	illRepo      ill_db.IllRepo
-	tenant       common.Tenant
+	limitDefault  int32
+	eventRepo     events.EventRepo
+	illRepo       ill_db.IllRepo
+	tenantContext tenant.TenantContext
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenant common.Tenant, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantContext tenant.TenantContext, limitDefault int32) ApiHandler {
 	return ApiHandler{
-		eventRepo:    eventRepo,
-		illRepo:      illRepo,
-		tenant:       tenant,
-		limitDefault: limitDefault,
+		eventRepo:     eventRepo,
+		illRepo:       illRepo,
+		tenantContext: tenantContext,
+		limitDefault:  limitDefault,
 	}
-}
-
-func (a *ApiHandler) isOwner(trans *ill_db.IllTransaction, tenant *string, requesterSymbol *string) bool {
-	if tenant == nil && requesterSymbol != nil {
-		return trans.RequesterSymbol.String == *requesterSymbol
-	}
-	if !a.tenant.IsSpecified() {
-		return true
-	}
-	if tenant == nil {
-		return false
-	}
-	return trans.RequesterSymbol.String == a.tenant.GetSymbol(*tenant)
 }
 
 func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.ResponseWriter,
-	okapiTenant *string, requesterSymbol *string, requesterReqId *oapi.RequesterRequestId,
+	r *http.Request, requesterSymbol *string, requesterReqId *oapi.RequesterRequestId,
 	illTransactionId *oapi.IllTransactionId) (*ill_db.IllTransaction, error) {
 	var tran ill_db.IllTransaction
 	var err error
@@ -86,10 +74,21 @@ func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.Res
 		addInternalError(ctx, w, err)
 		return nil, err
 	}
-	if !a.isOwner(&tran, okapiTenant, requesterSymbol) {
-		return nil, nil
+	tenant := a.tenantContext.WithRequest(ctx, r, requesterSymbol)
+	syms, err := tenant.GetSymbols()
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return nil, err
 	}
-	return &tran, nil
+	if syms == nil {
+		return &tran, nil
+	}
+	for _, s := range syms {
+		if s == tran.RequesterSymbol.String {
+			return &tran, nil
+		}
+	}
+	return nil, nil
 }
 
 func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -109,10 +108,10 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	if params.IllTransactionId != nil {
 		logParams["IllTransactionId"] = *params.IllTransactionId
 	}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 		params.RequesterReqId, params.IllTransactionId)
 	if err != nil {
 		return
@@ -138,7 +137,7 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactions"},
 	})
 	var resp oapi.IllTransactions
@@ -156,7 +155,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	}
 	var fullCount int64
 	if params.RequesterReqId != nil {
-		tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+		tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 			params.RequesterReqId, nil)
 		if err != nil {
 			return
@@ -165,49 +164,28 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			fullCount = 1
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
-	} else if a.tenant.IsSpecified() {
-		var symbol string
-		if params.XOkapiTenant != nil {
-			symbol = a.tenant.GetSymbol(*params.XOkapiTenant)
-		} else if params.RequesterSymbol != nil {
-			symbol = *params.RequesterSymbol
-		}
-		if symbol == "" {
-			writeJsonResponse(w, resp)
-			return
-		}
-		dbparams := ill_db.GetIllTransactionsByRequesterSymbolParams{
-			Limit:  limit,
-			Offset: offset,
-			RequesterSymbol: pgtype.Text{
-				String: symbol,
-				Valid:  true,
-			},
-		}
-		var trans []ill_db.IllTransaction
-		var err error
-		trans, fullCount, err = a.illRepo.GetIllTransactionsByRequesterSymbol(ctx, dbparams, cql)
-		if err != nil { //DB error
-			addInternalError(ctx, w, err)
-			return
-		}
-		for _, t := range trans {
-			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
-		}
 	} else {
-		dbparams := ill_db.ListIllTransactionsParams{
-			Limit:  limit,
-			Offset: offset,
-		}
-		var trans []ill_db.IllTransaction
-		var err error
-		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql)
-		if err != nil { //DB error
-			addInternalError(ctx, w, err)
+		tenant := a.tenantContext.WithRequest(ctx, r, params.RequesterSymbol)
+		symbols, err := tenant.GetSymbols()
+		if err != nil {
+			addBadRequestError(ctx, w, err)
 			return
 		}
-		for _, t := range trans {
-			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
+		if symbols == nil || len(symbols) > 0 {
+			dbparams := ill_db.ListIllTransactionsParams{
+				Limit:  limit,
+				Offset: offset,
+			}
+			var trans []ill_db.IllTransaction
+			var err error
+			trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql, symbols)
+			if err != nil { //DB error
+				addInternalError(ctx, w, err)
+				return
+			}
+			for _, t := range trans {
+				resp.Items = append(resp.Items, toApiIllTransaction(r, t))
+			}
 		}
 	}
 	resp.About = CollectAboutData(fullCount, offset, limit, r)
@@ -215,10 +193,10 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 }
 
 func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request, id string, params oapi.GetIllTransactionsIdParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetIllTransactionsId", "id": id},
 	})
-	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 		nil, &id)
 	if err != nil {
 		return
@@ -231,7 +209,7 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 }
 
 func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeleteIllTransactionsId", "id": id},
 	})
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
@@ -269,7 +247,7 @@ func (a *ApiHandler) returnHttpError(ctx common.ExtendedContext, w http.Response
 }
 
 func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPeers"},
 	})
 	dbparams := ill_db.ListPeersParams{
@@ -308,7 +286,7 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PostPeers"},
 	})
 	var newPeer oapi.Peer
@@ -376,7 +354,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "DeletePeersSymbol", "id": id},
 	})
 	err := a.illRepo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
@@ -434,7 +412,7 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 }
 
 func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "GetPeersSymbol", "id": id},
 	})
 	peer, err := a.illRepo.GetPeerById(ctx, id)
@@ -462,7 +440,7 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: map[string]string{"method": "PutPeersSymbol", "id": id},
 	})
 	peer, err := a.illRepo.GetPeerById(ctx, id)
@@ -568,10 +546,10 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	if params.IllTransactionId != nil {
 		logParams["IllTransactionId"] = *params.IllTransactionId
 	}
-	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{
 		Other: logParams,
 	})
-	tran, err := a.getIllTranFromParams(ctx, w, params.XOkapiTenant, params.RequesterSymbol,
+	tran, err := a.getIllTranFromParams(ctx, w, r, params.RequesterSymbol,
 		params.RequesterReqId, params.IllTransactionId)
 	if err != nil {
 		return
@@ -598,6 +576,7 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 
 func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
 	logParams := map[string]string{"method": "PostArchiveIllTransactions", "ArchiveDelay": params.ArchiveDelay, "ArchiveStatus": params.ArchiveStatus}
+	// a background process so use background context instead of request context to avoid cancellation when request is finished
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{
 		Other: logParams,
 	})
