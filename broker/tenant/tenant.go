@@ -10,22 +10,24 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 )
 
+const OKAPI_PATH_PREFIX = "/broker"
+
+func IsOkapiRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
+}
+
 type TenantContext struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantSymbolMap        string
 }
 
-func IsBrokerRequest(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/broker/")
-}
-
 func NewContext() *TenantContext {
 	return &TenantContext{}
 }
 
-func (s *TenantContext) WithTenantSymbol(tenantSymbol string) *TenantContext {
-	s.tenantSymbolMap = tenantSymbol
+func (s *TenantContext) WithTenantSymbolMap(tenantSymbolMap string) *TenantContext {
+	s.tenantSymbolMap = tenantSymbolMap
 	return s
 }
 
@@ -39,7 +41,7 @@ func (s *TenantContext) WithLookupAdapter(directoryLookupAdapter adapter.Directo
 	return s
 }
 
-func (s *TenantContext) isSpecified() bool {
+func (s *TenantContext) IsSpecified() bool {
 	return s.tenantSymbolMap != ""
 }
 
@@ -64,7 +66,7 @@ func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request,
 		tenantContext: s,
 		tenant:        r.Header.Get("X-Okapi-Tenant"),
 		ctx:           ctx,
-		okapiEndpoint: IsBrokerRequest(r),
+		okapiEndpoint: IsOkapiRequest(r),
 		symbol:        pSymbol,
 	}
 	return t
@@ -73,7 +75,7 @@ func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request,
 func (t *Tenant) GetSymbol() (string, error) {
 	var mainSymbol string
 	if t.okapiEndpoint {
-		if !t.tenantContext.isSpecified() {
+		if !t.tenantContext.IsSpecified() {
 			return "", errors.New("tenant mapping must be specified")
 		}
 		if t.tenant == "" {
@@ -123,7 +125,7 @@ func (t *Tenant) GetSymbol() (string, error) {
 func (t *Tenant) GetSymbols() ([]string, error) {
 	var mainSymbol string
 	if t.okapiEndpoint {
-		if !t.tenantContext.isSpecified() {
+		if !t.tenantContext.IsSpecified() {
 			return nil, errors.New("tenant mapping must be specified")
 		}
 		if t.tenant == "" {

@@ -7,6 +7,35 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestLinkAddsOkapiPrefix(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://localhost/broker/", nil)
+
+	link := Link(req, Path("events"), Query("symbol", "ISIL:DK-BIB1"))
+
+	assert.Equal(t, "http://localhost/broker/events?symbol=ISIL%3ADK-BIB1", link)
+}
+
+func TestLinkRelPreservesOkapiPrefix(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://localhost/broker/ill_transactions?offset=0", nil)
+
+	link := LinkRel(req, "events", Query("offset", "10"))
+
+	assert.Equal(t, "http://localhost/broker/ill_transactions/events?offset=10", link)
+}
+
+func TestCollectAboutDataLinksPreserveOkapiPrefix(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://localhost/broker/ill_transactions?symbol=ISIL:DK-BIB1&offset=0", nil)
+
+	about := CollectAboutData(21, 0, 10, req)
+
+	assert.NotNil(t, about.NextLink)
+	assert.Contains(t, *about.NextLink, "http://localhost/broker/ill_transactions?")
+	assert.Contains(t, *about.NextLink, "offset=10")
+	assert.NotNil(t, about.LastLink)
+	assert.Contains(t, *about.LastLink, "http://localhost/broker/ill_transactions?")
+	assert.Contains(t, *about.LastLink, "offset=20")
+}
+
 func TestCollectAboutDataLastLink(t *testing.T) {
 	reqOffset0 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=0", nil)
 	reqOffset10 := httptest.NewRequest("GET", "http://localhost/ill_transactions?symbol=ISIL:DK-BIB1&offset=10", nil)

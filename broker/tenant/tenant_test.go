@@ -35,7 +35,7 @@ func (r *MockIllRepo) GetBranchSymbolsByPeerId(ctx common.ExtendedContext, peerI
 
 func TestTenantNoSymbol(t *testing.T) {
 	tenantContext := NewContext()
-	assert.False(t, tenantContext.isSpecified())
+	assert.False(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -54,7 +54,7 @@ func TestTenantNoSymbol(t *testing.T) {
 
 func TestTenantWithSymbol(t *testing.T) {
 	tenantContext := NewContext()
-	assert.False(t, tenantContext.isSpecified())
+	assert.False(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -74,7 +74,7 @@ func TestTenantWithSymbol(t *testing.T) {
 
 func TestTenantNoMapping(t *testing.T) {
 	tenantContext := NewContext()
-	assert.False(t, tenantContext.isSpecified())
+	assert.False(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -92,8 +92,8 @@ func TestTenantNoMapping(t *testing.T) {
 }
 
 func TestTenantMissingTenant(t *testing.T) {
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}")
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}")
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -111,8 +111,8 @@ func TestTenantMissingTenant(t *testing.T) {
 }
 
 func TestTenantMapOK(t *testing.T) {
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}")
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}")
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -134,8 +134,8 @@ func TestTenantRepo1(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -157,8 +157,8 @@ func TestTenantSymIdentical(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -180,8 +180,8 @@ func TestTenantNoBranchMatch(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -204,8 +204,8 @@ func TestTenantBranchMatch(t *testing.T) {
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "ISIL:DK-TENANT1"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{{SymbolValue: "ISIL:DK-DIKU"}, {SymbolValue: "ISIL:DK-LIB"}}, nil)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -227,8 +227,8 @@ func TestTenantRepoError1(t *testing.T) {
 	mockIllRepo := new(MockIllRepo)
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", assert.AnError)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
@@ -251,8 +251,8 @@ func TestTenantRepoError2(t *testing.T) {
 	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{{ID: "ISIL:DK-TENANT1"}}, "", nil)
 	mockIllRepo.On("GetBranchSymbolsByPeerId", mock.Anything, mock.Anything).Return([]ill_db.BranchSymbol{}, assert.AnError)
 
-	tenantContext := NewContext().WithTenantSymbol("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
-	assert.True(t, tenantContext.isSpecified())
+	tenantContext := NewContext().WithTenantSymbolMap("ISIL:DK-{tenant}").WithIllRepo(mockIllRepo)
+	assert.True(t, tenantContext.IsSpecified())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	header := http.Header{}
