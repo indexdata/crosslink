@@ -9,21 +9,59 @@ import (
 	"github.com/indexdata/crosslink/broker/oapi"
 )
 
-func ToLinkUrlValues(r *http.Request, urlValues url.Values) string {
-	return ToLinkPath(r, r.URL.Path, urlValues.Encode())
+func IsBrokerRequest(r *http.Request) bool {
+	return strings.Contains(r.RequestURI, "/broker/")
 }
 
-func toLink(r *http.Request, path string, id string, query string) string {
-	if strings.Contains(r.RequestURI, "/broker/") {
-		path = "/broker" + path
+func WithBrokerPrefix(r *http.Request, path string) string {
+	if path == "" {
+		path = "/"
 	}
-	if id != "" {
-		path = path + "/" + id
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
 	}
-	return ToLinkPath(r, path, query)
+	if IsBrokerRequest(r) {
+		if path == "/" {
+			return "/broker/"
+		}
+		return "/broker" + path
+	}
+	return path
 }
 
-func ToLinkPath(r *http.Request, path string, query string) string {
+func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
+	path := r.URL.Path
+	cleanRelPath := strings.Trim(relPath, "/")
+	if cleanRelPath != "" {
+		path = strings.TrimRight(path, "/") + "/" + cleanRelPath
+	}
+	return linkRaw(r, path, urlValues.Encode())
+}
+
+func Path(parts ...string) string {
+	pathParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		clean := strings.Trim(part, "/")
+		if clean != "" {
+			pathParts = append(pathParts, url.PathEscape(clean))
+		}
+	}
+	return "/" + strings.Join(pathParts, "/")
+}
+
+func Query(params ...string) url.Values {
+	values := url.Values{}
+	for i := 0; i+1 < len(params); i += 2 {
+		values.Add(params[i], params[i+1])
+	}
+	return values
+}
+
+func Link(r *http.Request, path string, query url.Values) string {
+	return linkRaw(r, WithBrokerPrefix(r, path), query.Encode())
+}
+
+func linkRaw(r *http.Request, path string, query string) string {
 	if query != "" {
 		path = path + "?" + query
 	}
@@ -63,14 +101,14 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 		if offset64 != lastOffset {
 			urlValues := r.URL.Query()
 			urlValues["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
-			link := ToLinkUrlValues(r, urlValues)
+			link := LinkRel(r, "", urlValues)
 			about.LastLink = &link
 		}
 	}
 	if offset64 > 0 {
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{"0"}
-		firstLink := ToLinkUrlValues(r, urlValues)
+		firstLink := LinkRel(r, "", urlValues)
 		about.FirstLink = &firstLink
 
 		pOffset := offset64 - limit64
@@ -82,14 +120,14 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 		}
 		urlValues = r.URL.Query()
 		urlValues["offset"] = []string{strconv.FormatInt(pOffset, 10)}
-		prevLink := ToLinkUrlValues(r, urlValues)
+		prevLink := LinkRel(r, "", urlValues)
 		about.PrevLink = &prevLink
 	}
 	if fullCount > offset64+limit64 {
 		noffset := offset64 + limit64
 		urlValues := r.URL.Query()
 		urlValues["offset"] = []string{strconv.FormatInt(noffset, 10)}
-		link := ToLinkUrlValues(r, urlValues)
+		link := LinkRel(r, "", urlValues)
 		about.NextLink = &link
 	}
 	return about

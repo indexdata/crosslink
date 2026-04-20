@@ -29,8 +29,11 @@ vars:pre-request {
 
 script:post-response {
   const responseData = res.getBody();
+  expect(responseData).to.have.property("about");
+  expect(responseData).to.have.property("items");
+  const responseItems = responseData.items || [];
   
-  const eventsByAction = action => responseData.filter(pr => {
+  const eventsByAction = action => responseItems.filter(pr => {
     return pr.eventData.action == action;
   });
   

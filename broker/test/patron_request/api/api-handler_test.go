@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -150,6 +151,16 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, "validate", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NotificationsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
+	assert.NotNil(t, foundPr.ItemsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.ItemsLink)
+	assert.NotNil(t, foundPr.AvailableActionsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.AvailableActionsLink)
+	assert.NotNil(t, foundPr.EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.EventsLink)
+	assert.NotNil(t, foundPr.IllTransactionLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPr.IllTransactionLink)
 
 	assert.Equal(t, false, foundPr.NeedsAttention)
 
@@ -166,6 +177,16 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
 	assert.Nil(t, foundPrs.About.LastLink)
+	assert.NotNil(t, foundPrs.Items[0].NotificationsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].NotificationsLink)
+	assert.NotNil(t, foundPrs.Items[0].ItemsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/items?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].ItemsLink)
+	assert.NotNil(t, foundPrs.Items[0].AvailableActionsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/actions?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].AvailableActionsLink)
+	assert.NotNil(t, foundPrs.Items[0].EventsLink)
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/events?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPrs.Items[0].EventsLink)
+	assert.NotNil(t, foundPrs.Items[0].IllTransactionLink)
+	assert.Equal(t, getLocalhostWithPort()+"/ill_transactions?requester_req_id="+url.QueryEscape(*newPr.Id), *foundPrs.Items[0].IllTransactionLink)
 	assertPatronRequestIllRequest(t, foundPrs.Items[0].IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
@@ -217,6 +238,14 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
+
+	// GET items (initially empty): should return object with empty items list, not null
+	respBytes = httpRequest(t, "GET", thisPrPath+"/items"+queryParams, []byte{}, 200)
+	var initialPrItems proapi.PrItems
+	err = json.Unmarshal(respBytes, &initialPrItems)
+	assert.NoError(t, err, "failed to unmarshal initial patron request items")
+	assert.Equal(t, int64(0), initialPrItems.About.Count)
+	assert.Equal(t, []proapi.PrItem{}, initialPrItems.Items)
 
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -541,17 +570,19 @@ func TestActionsToCompleteState(t *testing.T) {
 
 	// Check requester patron request event count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/events"+queryParams, []byte{}, 200)
-	var events []oapi.Event
+	var events oapi.Events
 	err = json.Unmarshal(respBytes, &events)
 	assert.NoError(t, err, "failed to unmarshal patron request events")
-	assert.True(t, len(events) > 5)
+	assert.True(t, len(events.Items) > 5)
+	assert.Equal(t, int64(len(events.Items)), events.About.Count)
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/items"+queryParams, []byte{}, 200)
-	var prItems []proapi.PrItem
+	var prItems proapi.PrItems
 	err = json.Unmarshal(respBytes, &prItems)
 	assert.NoError(t, err, "failed to unmarshal patron request items")
-	assert.Len(t, prItems, 1)
+	assert.Equal(t, int64(1), prItems.About.Count)
+	assert.Len(t, prItems.Items, 1)
 
 	// Check requester patron request item count
 	respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
@@ -577,7 +608,8 @@ func TestActionsToCompleteState(t *testing.T) {
 	respBytes = httpRequest(t, "GET", supplierPrPath+"/events"+supQueryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &events)
 	assert.NoError(t, err, "failed to unmarshal patron request events")
-	assert.True(t, len(events) > 5)
+	assert.True(t, len(events.Items) > 5)
+	assert.Equal(t, int64(len(events.Items)), events.About.Count)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

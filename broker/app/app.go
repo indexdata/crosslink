@@ -226,7 +226,10 @@ func StartServer(ctx Context) error {
 	}
 
 	// SSE Incoming message handler
-	ServeMux.HandleFunc("/sse/events", ctx.SseBroker.ServeHTTP)
+	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
+	if TENANT_TO_SYMBOL != "" {
+		ServeMux.HandleFunc("GET /broker/sse/events", ctx.SseBroker.ServeHTTP)
+	}
 
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Server", vcs.GetSignature())

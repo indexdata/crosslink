@@ -31,7 +31,6 @@ var EVENTS_PATH = "/events"
 var LOCATED_SUPPLIERS_PATH = "/located_suppliers"
 var PEERS_PATH = "/peers"
 var PATRON_REQUESTS_PATH = "/patron_requests"
-var ILL_TRANSACTION_QUERY = "ill_transaction_id="
 var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
@@ -96,11 +95,11 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	var index oapi.Index
 	index.Revision = vcs.GetCommit()
 	index.Signature = vcs.GetSignature()
-	index.Links.IllTransactionsLink = toLink(r, ILL_TRANSACTIONS_PATH, "", "")
-	index.Links.EventsLink = toLink(r, EVENTS_PATH, "", "")
-	index.Links.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", "")
-	index.Links.PeersLink = toLink(r, PEERS_PATH, "", "")
-	index.Links.PatronRequestsLink = toLink(r, PATRON_REQUESTS_PATH, "", "")
+	index.Links.IllTransactionsLink = Link(r, Path(ILL_TRANSACTIONS_PATH), nil)
+	index.Links.EventsLink = Link(r, Path(EVENTS_PATH), nil)
+	index.Links.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), nil)
+	index.Links.PeersLink = Link(r, Path(PEERS_PATH), nil)
+	index.Links.PatronRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), nil)
 	writeJsonResponse(w, index)
 }
 
@@ -293,7 +292,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	var newPeer oapi.Peer
 	err := json.NewDecoder(r.Body).Decode(&newPeer)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	_, err = a.illRepo.GetPeerById(ctx, newPeer.Id)
@@ -457,7 +456,7 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	var update oapi.Peer
 	err = json.NewDecoder(r.Body).Decode(&update)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		addBadRequestError(ctx, w, err)
 		return
 	}
 	peer.Name = update.Name
@@ -674,7 +673,7 @@ func toApiLocatedSupplier(r *http.Request, sup ill_db.LocatedSupplier) oapi.Loca
 		PrevReason:        toString(sup.PrevReason),
 		LastReason:        toString(sup.LastReason),
 		SupplierRequestID: toString(sup.SupplierRequestID),
-		SupplierPeerLink:  toLink(r, PEERS_PATH, sup.SupplierID, ""),
+		SupplierPeerLink:  Link(r, Path(PEERS_PATH, sup.SupplierID), nil),
 	}
 }
 
@@ -693,10 +692,10 @@ func toApiIllTransaction(r *http.Request, trans ill_db.IllTransaction) oapi.IllT
 	api.SupplierRequestID = getString(trans.SupplierRequestID)
 	api.LastSupplierStatus = getString(trans.LastSupplierStatus)
 	api.PrevSupplierStatus = getString(trans.PrevSupplierStatus)
-	api.EventsLink = toLink(r, EVENTS_PATH, "", ILL_TRANSACTION_QUERY+trans.ID)
-	api.LocatedSuppliersLink = toLink(r, LOCATED_SUPPLIERS_PATH, "", ILL_TRANSACTION_QUERY+trans.ID)
+	api.EventsLink = Link(r, Path(EVENTS_PATH), Query("ill_transaction_id", trans.ID))
+	api.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), Query("ill_transaction_id", trans.ID))
 	if trans.RequesterID.Valid {
-		api.RequesterPeerLink = toLink(r, PEERS_PATH, trans.RequesterID.String, "")
+		api.RequesterPeerLink = Link(r, Path(PEERS_PATH, trans.RequesterID.String), nil)
 	}
 	api.IllTransactionData = trans.IllTransactionData
 	return api

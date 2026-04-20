@@ -498,6 +498,21 @@ components:
           description: List of patron request items
           items:
             $ref: '#/components/schemas/PrItem'
+        notificationsLink:
+          type: string
+          description: Link to notifications for this patron request
+        itemsLink:
+          type: string
+          description: Link to items for this patron request
+        availableActionsLink:
+          type: string
+          description: Link to available actions for this patron request
+        illTransactionLink:
+          type: string
+          description: Link to related ILL transaction lookup
+        eventsLink:
+          type: string
+          description: Link to events for this patron request
         terminalState:
           type: boolean
           description: Indicates if the request is in terminal state
@@ -849,6 +864,20 @@ components:
           items:
             $ref: '#/components/schemas/PrNotification'
 
+    PrItems:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of patron request items
+          items:
+            $ref: '#/components/schemas/PrItem'
+
     PrNotification:
       type: object
       title: Notification
@@ -1126,7 +1155,7 @@ paths:
                 $ref: '#/components/schemas/Error'
   /peers/{id}:
     get:
-      summary: Get a peer by symbol
+      summary: Get a peer by ID
       parameters:
         - in: path
           name: id
@@ -1262,10 +1291,10 @@ paths:
     get:
       summary: Retrieve patron requests
       description: |
-        Use this endpoint to retrieve patron requests. 
+        Use this endpoint to retrieve patron requests.
         Query parameter cql can be used to filter the results.
-        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention, 
-        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at, 
+        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention,
+        has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
         requester_req_id, title, author, patron, terminal_state, updated_at, cql.serverChoice.
       tags:
         - patron-requests-api
@@ -1487,11 +1516,15 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                   $ref: '#/components/schemas/Event'
+                $ref: '#/components/schemas/Events'
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found. Patron request not found.
           content:
             application/json:
               schema:
@@ -1524,9 +1557,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrItem'
+                $ref: '#/components/schemas/PrItems'
         '400':
           description: Bad Request. Invalid query parameters.
           content:
@@ -1685,6 +1716,9 @@ paths:
   /sse/events:
     get:
       summary: Subscribe to real-time notifications. Notification is send out every time when ISO18626 message is sent out
+      description: |
+        Opens an SSE stream.
+        Each `data:` payload is a JSON object with the same structure as `SseResult` (`event` and `data`).
       tags:
         - sse-api
       parameters:
@@ -1695,9 +1729,25 @@ paths:
         '200':
           description: Result of subscription
           content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: message-requester
+                data: {"event":"message-requester","data":{"supplyingAgencyMessage":{"header":{"requestingAgencyId":{"agencyIdType":{"text":"ISIL"},"agencyIdValue":"REQ"}}}}}
+
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SseResult'
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /state_model/models/{model}:
     get:
