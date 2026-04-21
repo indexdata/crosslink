@@ -124,6 +124,13 @@
             "success": "CANCEL_PENDING"
           }
         }
+      ],
+      "events": [
+        {
+          "name": "will-supply-conditional",
+          "desc": "Supplier updates/extends conditions while still pending",
+          "transition": "CONDITION_PENDING"
+        }
       ]
     },
     {

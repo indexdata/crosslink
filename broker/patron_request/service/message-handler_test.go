@@ -557,6 +557,26 @@ func TestHandleSupplyingAgencyMessageWillSupplyConditionFromWillSupply(t *testin
 	assert.NoError(t, err)
 }
 
+func TestHandleSupplyingAgencyMessageWillSupplyConditionFromConditionPending(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             "updated condition\n" + shim.RESHARE_ADD_LOAN_CONDITION,
+		},
+	}, pr_db.PatronRequest{State: BorrowerStateConditionPending, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateConditionPending, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
 func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
