@@ -66,6 +66,9 @@ states:
       - name: will-supply-conditional
         desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
         transition: CONDITION_PENDING
+      - name: loaned
+        desc: Supplier shipped the item (ISO18626 Loaned)
+        transition: SHIPPED
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
         transition: UNFILLED
@@ -88,6 +91,9 @@ states:
       - name: will-supply-conditional
         desc: Supplier updates/extends conditions while still pending
         transition: CONDITION_PENDING
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
 
   - name: WILL_SUPPLY
     display: Will Supply
