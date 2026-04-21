@@ -97,6 +97,11 @@
           "transition": "CONDITION_PENDING"
         },
         {
+          "name": "loaned",
+          "desc": "Supplier shipped the item (ISO18626 Loaned)",
+          "transition": "SHIPPED"
+        },
+        {
           "name": "unfilled",
           "desc": "Supplier cannot supply (ISO18626 Unfilled)",
           "transition": "UNFILLED"
@@ -130,6 +135,11 @@
           "name": "will-supply-conditional",
           "desc": "Supplier updates/extends conditions while still pending",
           "transition": "CONDITION_PENDING"
+        },
+        {
+          "name": "unfilled",
+          "desc": "Supplier cannot supply (ISO18626 Unfilled)",
+          "transition": "UNFILLED"
         }
       ]
     },

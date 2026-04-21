@@ -598,6 +598,27 @@ func TestHandleSupplyingAgencyMessageLoaned(t *testing.T) {
 	assert.Len(t, mockPrRepo.savedItems, 1)
 }
 
+func TestHandleSupplyingAgencyMessageLoanedFromSupplierLocated(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             "#MultipleItems#\n1|2|3\n#MultipleItemsEnd#",
+		},
+	}, pr_db.PatronRequest{State: BorrowerStateSupplierLocated, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateShipped, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+	assert.Len(t, mockPrRepo.savedItems, 1)
+}
+
 func TestHandleSupplyingAgencyMessageLoanCompleted(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
@@ -630,6 +651,25 @@ func TestHandleSupplyingAgencyMessageUnfilled(t *testing.T) {
 		},
 		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
 	}, pr_db.PatronRequest{State: BorrowerStateSent, Side: SideBorrowing})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, BorrowerStateUnfilled, mockPrRepo.savedPr.State)
+	assert.NoError(t, err)
+}
+
+func TestHandleSupplyingAgencyMessageUnfilledFromConditionPending(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, resp, err := handler.handleSupplyingAgencyMessage(appCtx, iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+		},
+		StatusInfo: iso18626.StatusInfo{Status: iso18626.TypeStatusUnfilled},
+	}, pr_db.PatronRequest{State: BorrowerStateConditionPending, Side: SideBorrowing})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateUnfilled, mockPrRepo.savedPr.State)
