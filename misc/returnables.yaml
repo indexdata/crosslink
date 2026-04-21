@@ -84,6 +84,10 @@ states:
         desc: Reject supplier conditions (ISO18626 Cancel)
         transitions:
           success: CANCEL_PENDING
+    events:
+      - name: will-supply-conditional
+        desc: Supplier updates/extends conditions while still pending
+        transition: CONDITION_PENDING
 
   - name: WILL_SUPPLY
     display: Will Supply
