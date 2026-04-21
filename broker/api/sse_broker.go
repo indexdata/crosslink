@@ -15,19 +15,19 @@ import (
 )
 
 type SseBroker struct {
-	input         chan SseMessage
-	clients       map[string]map[chan string]bool
-	mu            sync.Mutex
-	ctx           common.ExtendedContext
-	tenantContext tenant.TenantContext
+	input          chan SseMessage
+	clients        map[string]map[chan string]bool
+	mu             sync.Mutex
+	ctx            common.ExtendedContext
+	tenantResolver tenant.TenantResolver
 }
 
-func NewSseBroker(ctx common.ExtendedContext, tenantContext tenant.TenantContext) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, tenantResolver tenant.TenantResolver) (broker *SseBroker) {
 	broker = &SseBroker{
-		input:         make(chan SseMessage),
-		clients:       make(map[string]map[chan string]bool),
-		ctx:           ctx,
-		tenantContext: tenantContext,
+		input:          make(chan SseMessage),
+		clients:        make(map[string]map[chan string]bool),
+		ctx:            ctx,
+		tenantResolver: tenantResolver,
 	}
 
 	// Start the single broadcaster goroutine
@@ -72,10 +72,18 @@ func (b *SseBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ectx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
 	suppliedSymbol := r.URL.Query().Get("symbol")
-	symbol, err := b.tenantContext.WithRequest(ectx, r, &suppliedSymbol).GetSymbol()
-
+	tenant, err := b.tenantResolver.Resolve(ectx, r, &suppliedSymbol)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if symbol == "" {
+		http.Error(w, "symbol must be specified", http.StatusBadRequest)
 		return
 	}
 	side := r.URL.Query().Get("side")

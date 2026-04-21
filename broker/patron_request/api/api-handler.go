@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -45,19 +46,19 @@ type PatronRequestApiHandler struct {
 	actionMappingService prservice.ActionMappingService
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
-	tenantContext        tenant.TenantContext
+	tenantResolver       tenant.TenantResolver
 	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, tenantContext tenant.TenantContext, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, tenantResolver tenant.TenantResolver, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,
 		eventBus:             eventBus,
 		eventRepo:            eventRepo,
 		actionMappingService: prservice.ActionMappingService{SMService: &prservice.StateModelService{}},
-		tenantContext:        tenantContext,
+		tenantResolver:       tenantResolver,
 		notificationSender:   *prservice.CreatePatronRequestNotificationService(prRepo, eventBus, iso18626Handler),
 	}
 }
@@ -68,6 +69,27 @@ func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice
 
 func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
 	a.actionTaskProcessor = actionTaskProcessor
+}
+
+func decodeRequiredBody[T any](r *http.Request, dst *T) error {
+	if r.Body == nil || r.Body == http.NoBody {
+		return errors.New("body is required")
+	}
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			return errors.New("body is required")
+		}
+		return err
+	}
+	return nil
+}
+
+func (a *PatronRequestApiHandler) getRequestSymbol(ctx common.ExtendedContext, r *http.Request, requestedSymbol *string) (string, error) {
+	tenant, err := a.tenantResolver.Resolve(ctx, r, requestedSymbol)
+	if err != nil {
+		return "", err
+	}
+	return tenant.GetRequestSymbol()
 }
 
 func (a *PatronRequestApiHandler) GetStateModelModelsModel(w http.ResponseWriter, r *http.Request, model string, params proapi.GetStateModelModelsModelParams) {
@@ -96,7 +118,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	symbol, err := a.getRequestSymbol(ctx, r, params.Symbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -139,10 +161,12 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 			return
 		}
 	}
-	qb, err = addOwnerRestriction(qb, symbol, side)
-	if err != nil {
-		addBadRequestError(ctx, w, err)
-		return
+	if symbol != "" {
+		qb, err = addOwnerRestriction(qb, symbol, side)
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
 	}
 	cql, err := qb.Build()
 	if err != nil {
@@ -202,9 +226,13 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	symbol, err := a.tenantContext.WithRequest(ctx, r, newPr.RequesterSymbol).GetSymbol()
+	symbol, err := a.getRequestSymbol(ctx, r, newPr.RequesterSymbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
+		return
+	}
+	if symbol == "" {
+		addBadRequestError(ctx, w, errors.New("symbol must be specified"))
 		return
 	}
 	logParams["symbol"] = symbol
@@ -255,14 +283,19 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -276,7 +309,14 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, symbol string) *pr_db.PatronRequest {
+func getOwnerSymbol(pr pr_db.PatronRequest) string {
+	if pr.Side == prservice.SideBorrowing {
+		return pr.RequesterSymbol.String
+	}
+	return pr.SupplierSymbol.String
+}
+
+func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -286,7 +326,12 @@ func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ct
 		addInternalError(ctx, w, err)
 		return nil
 	}
-	if isOwner(pr, symbol) && (!isSideParamValid(side) || string(pr.Side) == *side) {
+	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(pr))
+	if err != nil {
+		addInternalError(ctx, w, err)
+		return nil
+	}
+	if isOwner && (!isSideParamValid(side) || string(pr.Side) == *side) {
 		return &pr
 	}
 	addNotFoundError(w)
@@ -297,25 +342,25 @@ func isSideParamValid(side *string) bool {
 	return side != nil && (*side == string(prservice.SideBorrowing) || *side == string(prservice.SideLending))
 }
 
-func isOwner(pr pr_db.PatronRequest, symbol string) bool {
-	return (string(pr.Side) == string(prservice.SideBorrowing) && pr.RequesterSymbol.String == symbol) ||
-		(string(pr.Side) == string(prservice.SideLending) && pr.SupplierSymbol.String == symbol)
-}
-
 func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsId", "id": id}
 	if params.Side != nil {
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -329,14 +374,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -356,19 +406,24 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
 	var action proapi.ExecuteAction
-	err = json.NewDecoder(r.Body).Decode(&action)
+	err = decodeRequiredBody(r, &action)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -433,14 +488,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -466,14 +526,19 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -499,7 +564,12 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -515,7 +585,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		offset = *params.Offset
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -549,20 +619,20 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	if r.Body == nil {
-		addBadRequestError(ctx, w, errors.New("body is required"))
-		return
-	}
-
 	var newNotification proapi.CreatePrNotification
-	err = json.NewDecoder(r.Body).Decode(&newNotification)
+	err = decodeRequiredBody(r, &newNotification)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -572,7 +642,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		return
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -606,20 +676,20 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 		logParams["side"] = *params.Side
 	}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	symbol, err := a.tenantContext.WithRequest(ctx, r, params.Symbol).GetSymbol()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	if r.Body == nil {
-		addBadRequestError(ctx, w, errors.New("body is required"))
-		return
-	}
-
 	var receipt proapi.UpdateNotificationReceipt
-	err = json.NewDecoder(r.Body).Decode(&receipt)
+	err = decodeRequiredBody(r, &receipt)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -630,7 +700,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 		return
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, symbol)
+	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}

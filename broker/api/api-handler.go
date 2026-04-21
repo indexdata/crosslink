@@ -35,18 +35,18 @@ var LIMIT_DEFAULT int32 = 10
 var ARCHIVE_PROCESS_STARTED = "Archive process started"
 
 type ApiHandler struct {
-	limitDefault  int32
-	eventRepo     events.EventRepo
-	illRepo       ill_db.IllRepo
-	tenantContext tenant.TenantContext
+	limitDefault   int32
+	eventRepo      events.EventRepo
+	illRepo        ill_db.IllRepo
+	tenantResolver tenant.TenantResolver
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantContext tenant.TenantContext, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantResolver tenant.TenantResolver, limitDefault int32) ApiHandler {
 	return ApiHandler{
-		eventRepo:     eventRepo,
-		illRepo:       illRepo,
-		tenantContext: tenantContext,
-		limitDefault:  limitDefault,
+		eventRepo:      eventRepo,
+		illRepo:        illRepo,
+		tenantResolver: tenantResolver,
+		limitDefault:   limitDefault,
 	}
 }
 
@@ -74,19 +74,18 @@ func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.Res
 		addInternalError(ctx, w, err)
 		return nil, err
 	}
-	tenant := a.tenantContext.WithRequest(ctx, r, requesterSymbol)
-	syms, err := tenant.GetSymbols()
+	tenant, err := a.tenantResolver.Resolve(ctx, r, requesterSymbol)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return nil, err
 	}
-	if syms == nil {
-		return &tran, nil
+	isOwner, err := tenant.IsOwnerOf(tran.RequesterSymbol.String)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return nil, err
 	}
-	for _, s := range syms {
-		if s == tran.RequesterSymbol.String {
-			return &tran, nil
-		}
+	if isOwner {
+		return &tran, nil
 	}
 	return nil, nil
 }
@@ -165,27 +164,28 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 			resp.Items = append(resp.Items, toApiIllTransaction(r, *tran))
 		}
 	} else {
-		tenant := a.tenantContext.WithRequest(ctx, r, params.RequesterSymbol)
-		symbols, err := tenant.GetSymbols()
+		tenant, err := a.tenantResolver.Resolve(ctx, r, params.RequesterSymbol)
 		if err != nil {
 			addBadRequestError(ctx, w, err)
 			return
 		}
-		if symbols == nil || len(symbols) > 0 {
-			dbparams := ill_db.ListIllTransactionsParams{
-				Limit:  limit,
-				Offset: offset,
-			}
-			var trans []ill_db.IllTransaction
-			var err error
-			trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql, symbols)
-			if err != nil { //DB error
-				addInternalError(ctx, w, err)
-				return
-			}
-			for _, t := range trans {
-				resp.Items = append(resp.Items, toApiIllTransaction(r, t))
-			}
+		symbols, err := tenant.GetOwnedSymbols()
+		if err != nil {
+			addBadRequestError(ctx, w, err)
+			return
+		}
+		dbparams := ill_db.ListIllTransactionsParams{
+			Limit:  limit,
+			Offset: offset,
+		}
+		var trans []ill_db.IllTransaction
+		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql, symbols)
+		if err != nil { //DB error
+			addInternalError(ctx, w, err)
+			return
+		}
+		for _, t := range trans {
+			resp.Items = append(resp.Items, toApiIllTransaction(r, t))
 		}
 	}
 	resp.About = CollectAboutData(fullCount, offset, limit, r)

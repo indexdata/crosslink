@@ -14,6 +14,7 @@ WHERE id = $1
 -- name: ListPatronRequests :many
 SELECT id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, terminal_state, updated_at, COUNT(*) OVER () as full_count
 FROM patron_request_search_view
+WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 

@@ -104,10 +104,6 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	if err != nil {
 		return nil, nil, err
 	}
-	whereClause := ""
-	if res.GetWhereClause() != "" {
-		whereClause = "WHERE " + res.GetWhereClause() + " "
-	}
 	orgSql := listPatronRequests
 	pos := strings.Index(orgSql, "ORDER BY")
 	if pos == -1 {
@@ -121,7 +117,15 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	if res.GetOrderByClause() != "" {
 		orderBy = res.GetOrderByClause() + " "
 	}
-	sql := orgSql[:pos] + whereClause + orderBy + orgSql[limitPos:]
+	sqlPrefix := orgSql[:pos]
+	if res.GetWhereClause() != "" {
+		if strings.Contains(strings.ToUpper(sqlPrefix), "WHERE ") {
+			sqlPrefix += "AND " + res.GetWhereClause() + " "
+		} else {
+			sqlPrefix += "WHERE " + res.GetWhereClause() + " "
+		}
+	}
+	sql := sqlPrefix + orderBy + orgSql[limitPos:]
 	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
 	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)

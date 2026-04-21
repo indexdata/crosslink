@@ -371,20 +371,22 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Equal(t, int64(0), fullCount)
 
 	// no CQL
-	_, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
 	}, nil)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot scan NULL into *iso18626.Request")
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, int64(2), fullCount)
 
 	cql = "cql.allRecords=1"
-	_, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
 	}, &cql)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot scan NULL into *iso18626.Request")
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, int64(2), fullCount)
 
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)

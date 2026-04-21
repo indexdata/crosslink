@@ -45,7 +45,7 @@ var eventRepo events.EventRepo
 var sseBroker *api.SseBroker
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, *tenant.NewContext(), api.LIMIT_DEFAULT)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, *tenant.NewResolver(), api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"
@@ -260,6 +260,48 @@ func TestGetIllTransactions(t *testing.T) {
 	err = json.Unmarshal(body, &resp)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Items, 6)
+}
+
+func TestGetIllTransactionsOkapiIncludesBranchSymbols(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	tenantName := "BIBBRANCH" + strings.ToUpper(uuid.NewString())
+	mainSymbol := "ISIL:DK-" + tenantName
+	branchSymbol := "ISIL:DK-BRANCH" + strings.ToUpper(uuid.NewString())
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, mainSymbol, "http://example.invalid", app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	_, err := illRepo.SaveBranchSymbol(ctx, ill_db.SaveBranchSymbolParams{
+		PeerID:      peer.ID,
+		SymbolValue: branchSymbol,
+	})
+	assert.NoError(t, err)
+
+	_, err = illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+		ID: uuid.NewString(),
+		RequesterSymbol: pgtype.Text{
+			String: branchSymbol,
+			Valid:  true,
+		},
+		RequesterRequestID: pgtype.Text{
+			String: uuid.NewString(),
+			Valid:  true,
+		},
+		Timestamp: test.GetNow(),
+	})
+	assert.NoError(t, err)
+
+	body := httpGet(t, "/broker/ill_transactions", strings.ToLower(tenantName), http.StatusOK)
+	var resp oapi.IllTransactions
+	err = json.Unmarshal(body, &resp)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, resp.About.Count, int64(1))
+
+	found := false
+	for _, item := range resp.Items {
+		if item.RequesterSymbol == branchSymbol {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found)
 }
 
 func TestGetIllTransactionsId(t *testing.T) {
