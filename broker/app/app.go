@@ -83,15 +83,15 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus     events.EventBus
-	IllRepo      ill_db.IllRepo
-	EventRepo    events.EventRepo
-	DirAdapter   adapter.DirectoryLookupAdapter
-	PrRepo       pr_db.PrRepo
-	TenantCtx    *tenant.TenantContext
-	ApiHandler   api.ApiHandler
-	PrApiHandler prapi.PatronRequestApiHandler
-	SseBroker    *api.SseBroker
+	EventBus       events.EventBus
+	IllRepo        ill_db.IllRepo
+	EventRepo      events.EventRepo
+	DirAdapter     adapter.DirectoryLookupAdapter
+	PrRepo         pr_db.PrRepo
+	TenantResolver *tenant.TenantResolver
+	ApiHandler     api.ApiHandler
+	PrApiHandler   prapi.PatronRequestApiHandler
+	SseBroker      *api.SseBroker
 }
 
 func configLog() slog.Handler {
@@ -169,12 +169,12 @@ func Init(ctx context.Context) (Context, error) {
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
-	tenantContext := tenant.NewContext().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantSymbolMap(TENANT_TO_SYMBOL)
-	apiHandler := api.NewApiHandler(eventRepo, illRepo, *tenantContext, API_PAGE_SIZE)
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, *tenantContext, &iso18626Handler, API_PAGE_SIZE)
+	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
+	apiHandler := api.NewApiHandler(eventRepo, illRepo, *tenantResolver, API_PAGE_SIZE)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, *tenantResolver, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
-	sseBroker := api.NewSseBroker(appCtx, *tenantContext)
+	sseBroker := api.NewSseBroker(appCtx, *tenantResolver)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
@@ -182,15 +182,15 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 	return Context{
-		EventBus:     eventBus,
-		IllRepo:      illRepo,
-		EventRepo:    eventRepo,
-		DirAdapter:   dirAdapter,
-		PrRepo:       prRepo,
-		TenantCtx:    tenantContext,
-		ApiHandler:   apiHandler,
-		PrApiHandler: prApiHandler,
-		SseBroker:    sseBroker,
+		EventBus:       eventBus,
+		IllRepo:        illRepo,
+		EventRepo:      eventRepo,
+		DirAdapter:     dirAdapter,
+		PrRepo:         prRepo,
+		TenantResolver: tenantResolver,
+		ApiHandler:     apiHandler,
+		PrApiHandler:   prApiHandler,
+		SseBroker:      sseBroker,
 	}, nil
 }
 
@@ -217,7 +217,7 @@ func StartServer(ctx Context) error {
 	oapi.HandlerFromMux(&ctx.ApiHandler, ServeMux)
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
-	if ctx.TenantCtx.IsSpecified() {
+	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
 		oapi.HandlerFromMuxWithBaseURL(&ctx.ApiHandler, ServeMux, basePath)
 		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, basePath)

@@ -18,40 +18,40 @@ func IsOkapiRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
 }
 
-type TenantContext struct {
+type TenantResolver struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
-	tenantSymbolMap        string
+	tenantToSymbol         string
 }
 
-func NewContext() *TenantContext {
-	return &TenantContext{}
+func NewResolver() *TenantResolver {
+	return &TenantResolver{}
 }
 
-func (s *TenantContext) WithTenantSymbolMap(tenantSymbolMap string) *TenantContext {
-	s.tenantSymbolMap = tenantSymbolMap
+func (s *TenantResolver) WithTenantToSymbol(tenantToSymbol string) *TenantResolver {
+	s.tenantToSymbol = tenantToSymbol
 	return s
 }
 
-func (s *TenantContext) WithIllRepo(illRepo ill_db.IllRepo) *TenantContext {
+func (s *TenantResolver) WithIllRepo(illRepo ill_db.IllRepo) *TenantResolver {
 	s.illRepo = illRepo
 	return s
 }
 
-func (s *TenantContext) WithLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) *TenantContext {
+func (s *TenantResolver) WithLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) *TenantResolver {
 	s.directoryLookupAdapter = directoryLookupAdapter
 	return s
 }
 
-func (s *TenantContext) IsSpecified() bool {
-	return s.tenantSymbolMap != ""
+func (s *TenantResolver) HasTenantMapping() bool {
+	return s.tenantToSymbol != ""
 }
 
-func (s *TenantContext) mapSymbol(tenant string) string {
-	return strings.ReplaceAll(s.tenantSymbolMap, "{tenant}", strings.ToUpper(tenant))
+func (s *TenantResolver) mapTenantToSymbol(tenant string) string {
+	return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))
 }
 
-func (s *TenantContext) getBranchSymbols(ctx common.ExtendedContext, mainSymbol string) ([]string, error) {
+func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol string) ([]string, error) {
 	if s.illRepo == nil {
 		return nil, errors.New("illRepo must be not nil")
 	}
@@ -75,9 +75,13 @@ func (s *TenantContext) getBranchSymbols(ctx common.ExtendedContext, mainSymbol 
 	return symbols, nil
 }
 
-func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request, symbol *string) (Tenant, error) {
+func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, symbol *string) (Tenant, error) {
+	requestSymbol := ""
+	if symbol != nil {
+		requestSymbol = *symbol
+	}
 	if IsOkapiRequest(r) {
-		if !s.IsSpecified() {
+		if !s.HasTenantMapping() {
 			return nil, errors.New("tenant mapping must be specified")
 		}
 		if r.Header.Get(OkapiTenantHeader) == "" {
@@ -85,97 +89,105 @@ func (s *TenantContext) WithRequest(ctx common.ExtendedContext, r *http.Request,
 		}
 
 		t := &okapiTenant{
-			tenantContext: s,
-			tenantHeader:  r.Header.Get(OkapiTenantHeader),
-			mappedSymbol:  s.mapSymbol(r.Header.Get(OkapiTenantHeader)),
-			ctx:           ctx,
+			tenantResolver: s,
+			mappedSymbol:   s.mapTenantToSymbol(r.Header.Get(OkapiTenantHeader)),
+			ctx:            ctx,
+			requestSymbol:  requestSymbol,
 		}
 		return t, nil
 	} else {
 		t := &masterTenant{
-			tenantContext: s,
-			ctx:           ctx,
-			symbolParam:   symbol,
+			tenantResolver: s,
+			ctx:            ctx,
+			requestSymbol:  requestSymbol,
 		}
 		return t, nil
 	}
 }
 
 type Tenant interface {
-	// Returns trues if tenant is owner of the symbol,
+	// Returns true if tenant is owner of the symbol.
 	IsOwnerOf(symbol string) (bool, error)
-	// Return the primary symbol
-	GetSymbol() (string, error)
-	// Returns all owned symbols, or error if symbols cannot be determined
-	GetSymbols() ([]string, error)
+	// Returns all symbols owned by the tenant.
+	// A nil slice means the tenant is unrestricted and owns all symbols.
+	GetOwnedSymbols() ([]string, error)
+	// Returns the symbol specified in the current request.
+	GetRequestSymbol() (string, error)
 }
 
 type okapiTenant struct {
-	tenantContext *TenantContext
-	ctx           common.ExtendedContext
-	mappedSymbol  string
-	tenantHeader  string
+	tenantResolver *TenantResolver
+	ctx            common.ExtendedContext
+	mappedSymbol   string
+	requestSymbol  string
 }
 
 func (t *okapiTenant) IsOwnerOf(symbol string) (bool, error) {
-	if t.mappedSymbol == symbol {
+	if symbol == t.mappedSymbol {
 		return true, nil
 	}
-	branchSymbols, err := t.tenantContext.getBranchSymbols(t.ctx, t.mappedSymbol)
+	symbols, err := t.GetOwnedSymbols()
 	if err != nil {
 		return false, err
 	}
-	return slices.Contains(branchSymbols, symbol), nil
+	return slices.Contains(symbols, symbol), nil
 }
 
-func (t *okapiTenant) GetSymbol() (string, error) {
-	return t.mappedSymbol, nil
-}
-
-func (t *okapiTenant) GetSymbols() ([]string, error) {
-	branchSymbols, err := t.tenantContext.getBranchSymbols(t.ctx, t.mappedSymbol)
+func (t *okapiTenant) GetOwnedSymbols() ([]string, error) {
+	branchSymbols, err := t.tenantResolver.getBranchSymbols(t.ctx, t.mappedSymbol)
 	if err != nil {
 		return nil, err
 	}
 	return append([]string{t.mappedSymbol}, branchSymbols...), nil
 }
 
+func (t *okapiTenant) GetRequestSymbol() (string, error) {
+	if t.requestSymbol == "" {
+		return t.mappedSymbol, nil
+	}
+	isOwner, err := t.IsOwnerOf(t.requestSymbol)
+	if err != nil {
+		return "", err
+	}
+	if !isOwner {
+		return "", errors.New("symbol is not owned by tenant")
+	}
+	return t.requestSymbol, nil
+}
+
 type masterTenant struct {
-	tenantContext *TenantContext
-	ctx           common.ExtendedContext
-	symbolParam   *string
+	tenantResolver *TenantResolver
+	ctx            common.ExtendedContext
+	requestSymbol  string
 }
 
 func (t *masterTenant) IsOwnerOf(symbol string) (bool, error) {
-	if t.symbolParam == nil || *t.symbolParam == "" {
-		//no symbol param specified, master tenant is owner of all symbols
+	if t.requestSymbol == "" {
+		// no symbol param specified, master tenant is owner of all symbols
 		return true, nil
 	}
-	if *t.symbolParam == symbol {
+	if symbol == t.requestSymbol {
 		return true, nil
 	}
-	branchSymbols, err := t.tenantContext.getBranchSymbols(t.ctx, *t.symbolParam)
+	symbols, err := t.GetOwnedSymbols()
 	if err != nil {
 		return false, err
 	}
-	return slices.Contains(branchSymbols, symbol), nil
+	return slices.Contains(symbols, symbol), nil
 }
 
-func (t *masterTenant) GetSymbols() ([]string, error) {
-	if t.symbolParam == nil || *t.symbolParam == "" {
-		// No symbol restriction for the master tenant.
+func (t *masterTenant) GetOwnedSymbols() ([]string, error) {
+	if t.requestSymbol == "" {
+		// no symbol restriction for the master tenant
 		return nil, nil
 	}
-	branchSymbols, err := t.tenantContext.getBranchSymbols(t.ctx, *t.symbolParam)
+	branchSymbols, err := t.tenantResolver.getBranchSymbols(t.ctx, t.requestSymbol)
 	if err != nil {
 		return nil, err
 	}
-	return append([]string{*t.symbolParam}, branchSymbols...), nil
+	return append([]string{t.requestSymbol}, branchSymbols...), nil
 }
 
-func (t *masterTenant) GetSymbol() (string, error) {
-	if t.symbolParam == nil || *t.symbolParam == "" {
-		return "", errors.New("symbol must be specified")
-	}
-	return *t.symbolParam, nil
+func (t *masterTenant) GetRequestSymbol() (string, error) {
+	return t.requestSymbol, nil
 }
