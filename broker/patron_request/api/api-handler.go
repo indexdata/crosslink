@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
@@ -68,6 +69,19 @@ func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice
 
 func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
 	a.actionTaskProcessor = actionTaskProcessor
+}
+
+func decodeRequiredBody[T any](r *http.Request, dst *T) error {
+	if r.Body == nil || r.Body == http.NoBody {
+		return errors.New("body is required")
+	}
+	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		if errors.Is(err, io.EOF) {
+			return errors.New("body is required")
+		}
+		return err
+	}
+	return nil
 }
 
 func (a *PatronRequestApiHandler) getRequestSymbol(ctx common.ExtendedContext, r *http.Request, requestedSymbol *string) (string, error) {
@@ -408,12 +422,8 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if pr == nil {
 		return
 	}
-	if r.Body == nil {
-		addBadRequestError(ctx, w, errors.New("body is required"))
-		return
-	}
 	var action proapi.ExecuteAction
-	err = json.NewDecoder(r.Body).Decode(&action)
+	err = decodeRequiredBody(r, &action)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -621,13 +631,8 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	if r.Body == nil {
-		addBadRequestError(ctx, w, errors.New("body is required"))
-		return
-	}
-
 	var newNotification proapi.CreatePrNotification
-	err = json.NewDecoder(r.Body).Decode(&newNotification)
+	err = decodeRequiredBody(r, &newNotification)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -683,13 +688,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	if r.Body == nil {
-		addBadRequestError(ctx, w, errors.New("body is required"))
-		return
-	}
-
 	var receipt proapi.UpdateNotificationReceipt
-	err = json.NewDecoder(r.Body).Decode(&receipt)
+	err = decodeRequiredBody(r, &receipt)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return

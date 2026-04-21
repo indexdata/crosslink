@@ -53,7 +53,7 @@ func (s *TenantResolver) mapTenantToSymbol(tenant string) string {
 
 func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol string) ([]string, error) {
 	if s.illRepo == nil {
-		return nil, errors.New("illRepo must be not nil")
+		return nil, errors.New("illRepo must not be nil")
 	}
 	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{mainSymbol}, s.directoryLookupAdapter)
 	if err != nil {
