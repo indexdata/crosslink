@@ -54,7 +54,9 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 		}
 		return errors.New("surrogate diagnostic: " + diagnostic.Message + ": " + diagnostic.Details)
 	}
-	if record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" && record.RecordSchema != "marcxml" {
+	if record.RecordSchema != "" &&
+		record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" &&
+		record.RecordSchema != "marcxml" {
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
 	var rec marcxml.Record
