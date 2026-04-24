@@ -380,10 +380,11 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 }
 
 func TestSruMarcxmlWithHoldings(t *testing.T) {
+	var receivedQuery string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 		query := r.URL.Query().Get("query")
-		assert.Equal(t, "rec.id=\"123\"", query)
+		receivedQuery = query
 		w.Header().Set("Content-Type", "application/xml")
 		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
 			Type: "Bibliographic",
@@ -446,6 +447,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	holdings, query, err := ad.Lookup(p)
 	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
+	assert.Equal(t, "rec.id = 123", receivedQuery)
 	assert.Len(t, holdings, 2)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
 	assert.Equal(t, "s1", holdings[0].Symbol)
@@ -455,10 +457,13 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	ad = createSruAdapter(t, server.URL, server.URL)
 	p = adapter.HoldingLookupParams{
 		Identifier: "123",
+		Isbn:       "99-222",
+		Issn:       "99-333",
 	}
 	holdings, query, err = ad.Lookup(p)
 	assert.NotEmpty(t, query)
 	assert.Nil(t, err)
+	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
 	assert.Len(t, holdings, 4)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
 	assert.Equal(t, "s1", holdings[0].Symbol)
@@ -468,4 +473,11 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "s1", holdings[2].Symbol)
 	assert.Equal(t, "l2", holdings[3].LocalIdentifier)
 	assert.Equal(t, "s2", holdings[3].Symbol)
+
+	ad = createSruAdapter(t, server.URL)
+	p = adapter.HoldingLookupParams{}
+	holdings, query, err = ad.Lookup(p)
+	assert.Empty(t, query)
+	assert.Nil(t, err)
+	assert.Len(t, holdings, 0)
 }
