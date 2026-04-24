@@ -51,9 +51,20 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	globalId := illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId
+	var holdingsParams adapter.HoldingLookupParams
 
-	if globalId == "" {
+	bibliographicInfo := illTrans.IllTransactionData.BibliographicInfo
+	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
+	for _, id := range bibliographicInfo.BibliographicItemId {
+		code := id.BibliographicItemIdentifierCode.Text
+		switch code {
+		case "ISBN":
+			holdingsParams.Isbn = id.BibliographicItemIdentifier
+		case "ISSN":
+			holdingsParams.Issn = id.BibliographicItemIdentifier
+		}
+	}
+	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "ILL transaction missing SupplierUniqueRecordId", nil)
 	}
 
@@ -62,9 +73,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
 
-	holdings, query, err := s.holdingsAdapter.Lookup(adapter.HoldingLookupParams{
-		Identifier: globalId,
-	})
+	holdings, query, err := s.holdingsAdapter.Lookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}
@@ -72,7 +81,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	holdingsLog["lookupQuery"] = query
 	if len(holdings) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
-			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": globalId})
+			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
 	}
 	holdingsLog["entries"] = holdings
 	holdingsSymbols := make([]string, 0, len(holdings))
@@ -86,7 +95,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
 					"symbol", holding.Symbol,
 					"localIdentifier", holding.LocalIdentifier,
-					"supplierUniqueRecordId", globalId,
+					"supplierUniqueRecordId", holdingsParams.Identifier,
 				)
 			}
 			continue

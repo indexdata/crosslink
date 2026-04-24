@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func createSruAdapter(t *testing.T, url ...string) adapter.HoldingsLookupAdapter {
-	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url)
+func createSruAdapter(t *testing.T, isxn bool, url ...string) adapter.HoldingsLookupAdapter {
+	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url, isxn)
 	assert.NotNil(t, ad)
 	return ad
 }
@@ -27,7 +27,7 @@ func TestSru500(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -44,7 +44,7 @@ func TestSruBadXml(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -78,7 +78,7 @@ func TestSruBadDiagnostics(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -103,7 +103,7 @@ func TestSruMarcxmlNoHits(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -141,7 +141,7 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -178,7 +178,7 @@ func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -215,7 +215,7 @@ func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -258,7 +258,7 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -297,7 +297,7 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -369,7 +369,7 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -440,13 +440,13 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, true, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
 	assert.Equal(t, "rec.id = 123", receivedQuery)
 	assert.Len(t, holdings, 2)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
@@ -454,15 +454,15 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "l2", holdings[1].LocalIdentifier)
 	assert.Equal(t, "s2", holdings[1].Symbol)
 
-	ad = createSruAdapter(t, server.URL, server.URL)
+	ad = createSruAdapter(t, true, server.URL, server.URL)
 	p = adapter.HoldingLookupParams{
 		Identifier: "123",
 		Isbn:       "99-222",
 		Issn:       "99-333",
 	}
 	holdings, query, err = ad.Lookup(p)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
 	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
 	assert.Len(t, holdings, 4)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
@@ -474,10 +474,11 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "l2", holdings[3].LocalIdentifier)
 	assert.Equal(t, "s2", holdings[3].Symbol)
 
-	ad = createSruAdapter(t, server.URL)
-	p = adapter.HoldingLookupParams{}
-	holdings, query, err = ad.Lookup(p)
-	assert.Empty(t, query)
-	assert.Nil(t, err)
-	assert.Len(t, holdings, 0)
+	ad = createSruAdapter(t, false, server.URL)
+	p = adapter.HoldingLookupParams{
+		Isbn: "99-222",
+	}
+	_, _, err = ad.Lookup(p)
+	assert.Error(t, err)
+	assert.Equal(t, "no search parameters provided for SRU lookup", err.Error())
 }

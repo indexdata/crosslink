@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	HoldingsAdapter string = "HOLDINGS_ADAPTER"
-	SruUrl          string = "SRU_URL"
+	HoldingsAdapter    string = "HOLDINGS_ADAPTER"
+	SruUrl             string = "SRU_URL"
+	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
 )
 
 func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, error) {
@@ -21,7 +22,12 @@ func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, 
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", SruUrl)
 		}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ",")), nil
+		isxnVal, ok := cfg[HoldingsIsxnLookup]
+		if !ok {
+			return nil, fmt.Errorf("missing value for %s", HoldingsIsxnLookup)
+		}
+		isxn := strings.ToLower(isxnVal) == "true"
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ","), isxn), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil

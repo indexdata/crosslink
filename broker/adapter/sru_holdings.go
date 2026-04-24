@@ -17,11 +17,12 @@ import (
 
 type SruHoldingsLookupAdapter struct {
 	sruUrl []string
+	isxn   bool
 	client *http.Client
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn bool) HoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn}
 }
 
 func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
@@ -78,7 +79,7 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 	return cqlQuery.String(), nil
 }
 
-func genCql(params HoldingLookupParams) (string, error) {
+func (s *SruHoldingsLookupAdapter) genCql(params HoldingLookupParams) (string, error) {
 	var comps []string
 	if params.Identifier != "" {
 		cql, err := encodeCqlSearchClause("rec.id", params.Identifier)
@@ -87,14 +88,14 @@ func genCql(params HoldingLookupParams) (string, error) {
 		}
 		comps = append(comps, cql)
 	}
-	if params.Isbn != "" {
+	if s.isxn && params.Isbn != "" {
 		cql, err := encodeCqlSearchClause("isbn", params.Isbn)
 		if err != nil {
 			return "", err
 		}
 		comps = append(comps, cql)
 	}
-	if params.Issn != "" {
+	if s.isxn && params.Issn != "" {
 		cql, err := encodeCqlSearchClause("issn", params.Issn)
 		if err != nil {
 			return "", err
@@ -102,19 +103,16 @@ func genCql(params HoldingLookupParams) (string, error) {
 		comps = append(comps, cql)
 	}
 	if len(comps) == 0 {
-		return "", nil
+		return "", errors.New("no search parameters provided for SRU lookup")
 	}
 	return strings.Join(comps, " or "), nil
 }
 
 func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLookupParams) ([]Holding, string, error) {
 	var holdings []Holding
-	cql, err := genCql(params)
+	cql, err := s.genCql(params)
 	if err != nil {
 		return nil, "", err
-	}
-	if cql == "" {
-		return holdings, "", nil // perhaps error
 	}
 	query := "?maximumRecords=1000&recordSchema=marcxml&query=" + url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
