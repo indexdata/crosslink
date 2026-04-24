@@ -65,7 +65,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		}
 	}
 	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "ILL transaction missing SupplierUniqueRecordId", nil)
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
+			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
 	}
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
@@ -96,6 +97,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 					"symbol", holding.Symbol,
 					"localIdentifier", holding.LocalIdentifier,
 					"supplierUniqueRecordId", holdingsParams.Identifier,
+					"isbn", holdingsParams.Isbn,
+					"issn", holdingsParams.Issn,
 				)
 			}
 			continue

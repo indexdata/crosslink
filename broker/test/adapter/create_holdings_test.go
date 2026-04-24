@@ -25,6 +25,11 @@ func TestCreateHoldings(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_ISXN_LOOKUP")
 
+	m[adapter.HoldingsIsxnLookup] = "fake"
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "invalid value for HOLDINGS_ISXN_LOOKUP")
+
 	m[adapter.HoldingsIsxnLookup] = "true"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.NoError(t, err)

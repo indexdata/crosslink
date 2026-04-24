@@ -3,6 +3,7 @@ package adapter
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -27,7 +28,10 @@ func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, 
 			return nil, fmt.Errorf("missing value for %s", HoldingsIsxnLookup)
 		}
 		// ideally this should be per-SRU server and not for all
-		isxn := strings.ToLower(isxnVal) == "true"
+		isxn, err := strconv.ParseBool(isxnVal)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, err)
+		}
 		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ","), isxn), nil
 	}
 	if holdingsAdapterVal == "mock" {
