@@ -26,6 +26,7 @@ func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, 
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", HoldingsIsxnLookup)
 		}
+		// ideally this should be per-SRU server and not for all
 		isxn := strings.ToLower(isxnVal) == "true"
 		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ","), isxn), nil
 	}
