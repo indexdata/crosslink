@@ -382,6 +382,23 @@ func TestPostPatronRequestsIdActionErrorParsing(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "unexpected EOF")
 }
 
+func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	eventBus := new(MockEventBusCapture)
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, *tenantResolver, nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/action", strings.NewReader(reqBody))
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
+	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "okapi-user-1", eventBus.lastData.User)
+}
+
 func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -742,6 +759,17 @@ type PrRepoError struct {
 	counter int64
 }
 
+type PrRepoOkapiOwner struct {
+	PrRepoError
+}
+
+func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateValidated, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
 type PrRepoCapture struct {
 	PrRepoError
 	cql *string
@@ -838,4 +866,28 @@ type MockEventBus struct {
 
 func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
 	return "", errors.New("DB error")
+}
+
+type MockEventBusCapture struct {
+	MockEventBus
+	lastData events.EventData
+}
+
+func (h *MockEventBusCapture) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
+	h.lastData = data
+	return uuid.NewString(), nil
+}
+
+type MockActionTaskProcessor struct{}
+
+func (m *MockActionTaskProcessor) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	return events.Event{
+		ID:          event.ID,
+		EventStatus: events.EventStatusSuccess,
+		ResultData: events.EventResult{
+			CommonEventData: events.CommonEventData{
+				ActionResult: &events.ActionResult{Outcome: prservice.ActionOutcomeSuccess},
+			},
+		},
+	}, nil
 }

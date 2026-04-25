@@ -24,6 +24,7 @@ import (
 var SUPPLIER_PATRON_PATTERN = utils.GetEnv("SUPPLIER_PATRON_PATTERN", "%v_user")
 
 const COMP_MESSAGE = "pr_massage_handler"
+const iso18626UserFallback = "iso18626@unknown"
 
 type PatronRequestMessageHandler struct {
 	prRepo               pr_db.PrRepo
@@ -35,7 +36,7 @@ type PatronRequestMessageHandler struct {
 }
 
 type AutoActionRunner interface {
-	RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error
+	RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error
 }
 
 func CreatePatronRequestMessageHandler(prRepo pr_db.PrRepo, eventRepo events.EventRepo, illRepo ill_db.IllRepo, eventBus events.EventBus) PatronRequestMessageHandler {
@@ -52,12 +53,12 @@ func (m *PatronRequestMessageHandler) SetAutoActionRunner(autoActionRunner AutoA
 	m.autoActionRunner = autoActionRunner
 }
 
-func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
+func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
 	if m.autoActionRunner == nil {
 		return nil
 	}
 	// Auto actions run inline so incoming-message confirmations can include their outcomes.
-	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, parentEventID)
+	return m.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, parentEventID, user)
 }
 
 func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool, error) {
@@ -292,7 +293,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateSamResponse(ct
 		ctx.Logger().Error("failed to save sam notifications", "error", err)
 	}
 	if stateChanged {
-		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID)
+		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID, userFromSupplyingAgencyMessage(sam))
 		if err != nil {
 			return createSAMResponse(sam, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -405,7 +406,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 	message.Request = &request
 	status, response, handleErr := m.processPatronRequestMessageTask(ctx, pr.ID, message,
 		func(execCtx common.ExtendedContext, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
-			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID)
+			err = m.runAutoActionsOnStateEntry(execCtx, pr, parentEventID, userFromRequest(request))
 			if err != nil {
 				return createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
 					ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -526,7 +527,7 @@ func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ct
 		ctx.Logger().Error("failed to save ram notifications", "error", err)
 	}
 	if stateChanged {
-		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID)
+		err = m.runAutoActionsOnStateEntry(ctx, pr, parentEventID, userFromRequestingAgencyMessage(ram))
 		if err != nil {
 			return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 				ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
@@ -741,6 +742,27 @@ func inferNotificationKind(hasNote bool, hasCondition bool, hasCost bool) pr_db.
 func getSymbolsFromHeader(header iso18626.Header) (string, string) {
 	return header.SupplyingAgencyId.AgencyIdType.Text + ":" + header.SupplyingAgencyId.AgencyIdValue,
 		header.RequestingAgencyId.AgencyIdType.Text + ":" + header.RequestingAgencyId.AgencyIdValue
+}
+
+func userFromSupplyingAgencyMessage(message iso18626.SupplyingAgencyMessage) string {
+	return userFromAgencyId(message.Header.SupplyingAgencyId)
+}
+
+func userFromRequestingAgencyMessage(message iso18626.RequestingAgencyMessage) string {
+	return userFromAgencyId(message.Header.RequestingAgencyId)
+}
+
+func userFromRequest(request iso18626.Request) string {
+	return userFromAgencyId(request.Header.RequestingAgencyId)
+}
+
+func userFromAgencyId(agencyId iso18626.TypeAgencyId) string {
+	agencyType := strings.TrimSpace(agencyId.AgencyIdType.Text)
+	agencyValue := strings.TrimSpace(agencyId.AgencyIdValue)
+	if agencyType == "" || agencyValue == "" {
+		return iso18626UserFallback
+	}
+	return "iso18626@" + agencyType + ":" + agencyValue
 }
 
 func safeConvertInt32(n int) (int32, error) {

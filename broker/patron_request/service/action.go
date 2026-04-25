@@ -150,7 +150,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	}
 
 	if stateChanged {
-		err := a.RunAutoActionsOnStateEntry(ctx, updatedPr, &event.ID)
+		err := a.RunAutoActionsOnStateEntry(ctx, updatedPr, &event.ID, event.EventData.User)
 		if err != nil {
 			failedAction := action
 			var autoErr *autoActionFailure
@@ -167,7 +167,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	return execResult.status, execResult.result
 }
 
-func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
+func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
 	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 
 	currentState := pr.State
 	for _, action := range autoActions {
-		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action}}
+		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action, User: user}}
 		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
 			return &autoActionFailure{action: action, msg: err.Error()}
