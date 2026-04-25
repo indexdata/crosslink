@@ -171,7 +171,10 @@ func (t *okapiTenant) GetRequestSymbol() (string, error) {
 }
 
 func (t *okapiTenant) GetUser() string {
-	return t.user
+	if t.user != "" {
+		return t.user
+	}
+	return "unknown"
 }
 
 func (t *okapiTenant) GetRemoteHost() string {

@@ -137,7 +137,7 @@ func TestTenantMapOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, isOwner)
 
-	assert.Equal(t, "", tenant.GetUser())
+	assert.Equal(t, "unknown", tenant.GetUser())
 }
 
 func TestTenantGetUserFromOkapiHeader(t *testing.T) {
