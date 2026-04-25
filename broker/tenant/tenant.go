@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"errors"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,6 +14,9 @@ import (
 
 const OKAPI_PATH_PREFIX = "/broker"
 const OkapiTenantHeader = "X-Okapi-Tenant"
+const OkapiUserHeader = "X-Okapi-User-Id"
+const XForwardedForHeader = "X-Forwarded-For"
+const XForwardedUserHeader = "X-Forwarded-User"
 
 func IsOkapiRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
@@ -78,21 +82,24 @@ func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol
 func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, symbol *string) (Tenant, error) {
 	requestSymbol := ""
 	if symbol != nil {
-		requestSymbol = *symbol
+		requestSymbol = strings.TrimSpace(*symbol)
 	}
 	if IsOkapiRequest(r) {
 		if !s.HasTenantMapping() {
 			return nil, errors.New("tenant mapping must be specified")
 		}
-		if r.Header.Get(OkapiTenantHeader) == "" {
+		tenantHeader := strings.TrimSpace(r.Header.Get(OkapiTenantHeader))
+		if tenantHeader == "" {
 			return nil, errors.New("header " + OkapiTenantHeader + " must be specified")
 		}
 
 		t := &okapiTenant{
 			tenantResolver: s,
-			mappedSymbol:   s.mapTenantToSymbol(r.Header.Get(OkapiTenantHeader)),
+			mappedSymbol:   s.mapTenantToSymbol(tenantHeader),
 			ctx:            ctx,
 			requestSymbol:  requestSymbol,
+			user:           strings.TrimSpace(r.Header.Get(OkapiUserHeader)),
+			remoteHost:     getRemoteHost(r),
 		}
 		return t, nil
 	} else {
@@ -100,6 +107,8 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 			tenantResolver: s,
 			ctx:            ctx,
 			requestSymbol:  requestSymbol,
+			user:           strings.TrimSpace(r.Header.Get(XForwardedUserHeader)),
+			remoteHost:     getRemoteHost(r),
 		}
 		return t, nil
 	}
@@ -113,6 +122,10 @@ type Tenant interface {
 	GetOwnedSymbols() ([]string, error)
 	// Returns the symbol specified in the current request.
 	GetRequestSymbol() (string, error)
+	// Returns current user ID associated with the request.
+	GetUser() string
+	// Returns remote host/IP associated with the request.
+	GetRemoteHost() string
 }
 
 type okapiTenant struct {
@@ -120,6 +133,8 @@ type okapiTenant struct {
 	ctx            common.ExtendedContext
 	mappedSymbol   string
 	requestSymbol  string
+	user           string
+	remoteHost     string
 }
 
 func (t *okapiTenant) IsOwnerOf(symbol string) (bool, error) {
@@ -155,10 +170,20 @@ func (t *okapiTenant) GetRequestSymbol() (string, error) {
 	return t.requestSymbol, nil
 }
 
+func (t *okapiTenant) GetUser() string {
+	return t.user
+}
+
+func (t *okapiTenant) GetRemoteHost() string {
+	return t.remoteHost
+}
+
 type masterTenant struct {
 	tenantResolver *TenantResolver
 	ctx            common.ExtendedContext
 	requestSymbol  string
+	user           string
+	remoteHost     string
 }
 
 func (t *masterTenant) IsOwnerOf(symbol string) (bool, error) {
@@ -190,4 +215,33 @@ func (t *masterTenant) GetOwnedSymbols() ([]string, error) {
 
 func (t *masterTenant) GetRequestSymbol() (string, error) {
 	return t.requestSymbol, nil
+}
+
+func (t *masterTenant) GetUser() string {
+	user := t.user
+	if user == "" {
+		user = "unknown"
+	}
+	host := t.remoteHost
+	if host == "" {
+		host = "unknown"
+	}
+	return user + "@" + host
+}
+
+func (t *masterTenant) GetRemoteHost() string {
+	return t.remoteHost
+}
+
+func getRemoteHost(r *http.Request) string {
+	first, _, _ := strings.Cut(r.Header.Get(XForwardedForHeader), ",")
+	host := strings.TrimSpace(first)
+	if host != "" {
+		return host
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+	return strings.TrimSpace(r.RemoteAddr)
 }

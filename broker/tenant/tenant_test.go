@@ -136,6 +136,104 @@ func TestTenantMapOK(t *testing.T) {
 	isOwner, err := tenant.IsOwnerOf("ISIL:DK-TENANT1")
 	assert.NoError(t, err)
 	assert.True(t, isOwner)
+
+	assert.Equal(t, "", tenant.GetUser())
+}
+
+func TestTenantGetUserFromOkapiHeader(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Okapi-User-Id", "okapi-user")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "okapi-user", tenant.GetUser())
+}
+
+func TestTenantGetRemoteHostFromXForwardedFor(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Forwarded-For", "198.51.100.10, 10.0.0.5")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl, RemoteAddr: "10.10.10.10:34343"}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "198.51.100.10", tenant.GetRemoteHost())
+}
+
+func TestTenantGetRemoteHostFromRemoteAddr(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl, RemoteAddr: "10.10.10.10:34343"}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "10.10.10.10", tenant.GetRemoteHost())
+}
+
+func TestTenantGetRemoteHostEmpty(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "", tenant.GetRemoteHost())
+}
+
+func TestTenantGetUserFallbackForNonOkapi(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl, RemoteAddr: "10.10.10.10:34343"}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "unknown@10.10.10.10", tenant.GetUser())
+}
+
+func TestTenantGetUserFallbackForNonOkapiWithoutHost(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "unknown@unknown", tenant.GetUser())
+}
+
+func TestTenantGetUserFallbackForNonOkapiWithSymbol(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl, RemoteAddr: "10.10.10.10:34343"}
+	symbol := "ISIL:DK-LIB"
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, &symbol)
+	assert.Equal(t, "unknown@10.10.10.10", tenant.GetUser())
+}
+
+func TestTenantGetUserFromXForwardedUserForNonOkapi(t *testing.T) {
+	tenantResolver := NewResolver()
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Forwarded-User", "remote-user")
+	turl := &url.URL{Path: "/patron_requests"}
+	httpRequest := &http.Request{Header: header, URL: turl, RemoteAddr: "10.10.10.10:34343"}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "remote-user@10.10.10.10", tenant.GetUser())
 }
 
 func TestTenantRepo1(t *testing.T) {
