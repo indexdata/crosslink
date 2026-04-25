@@ -1,7 +1,9 @@
 package api
 
 import (
+	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,4 +109,52 @@ func TestCollectAboutDataLastLink(t *testing.T) {
 	assert.NotNil(t, about.LastLink)
 	assert.Contains(t, *about.LastLink, "offset=20")
 	assert.Contains(t, *about.LastLink, "symbol=ISIL%3ADK-BIB1")
+}
+
+func TestGetProtoUsesForwardedProto(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "http")
+	req := &http.Request{Header: header, URL: &url.URL{Scheme: "https", Host: "broker.example.org"}}
+
+	assert.Equal(t, "http", getProto(req))
+}
+
+func TestGetProtoUsesFirstForwardedProtoValue(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "https, http")
+	req := &http.Request{Header: header, URL: &url.URL{Scheme: "http", Host: "broker.example.org"}}
+
+	assert.Equal(t, "https", getProto(req))
+}
+
+func TestGetProtoInvalidForwardedProtoFallsBackToHttps(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "ftp")
+	req := &http.Request{Header: header, URL: &url.URL{Scheme: "", Host: "broker.example.org"}}
+
+	assert.Equal(t, "https", getProto(req))
+}
+
+func TestGetProtoForcesHttpForLocalhost(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "https")
+	req := &http.Request{Header: header, URL: &url.URL{Scheme: "https", Host: "localhost:9130"}}
+
+	assert.Equal(t, "http", getProto(req))
+}
+
+func TestGetProtoDoesNotForceHttpForPartialLocalhostName(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Proto", "https")
+	req := &http.Request{Header: header, URL: &url.URL{Scheme: "https", Host: "my-localhost.example:9130"}}
+
+	assert.Equal(t, "https", getProto(req))
+}
+
+func TestGetHostUsesFirstForwardedHostValue(t *testing.T) {
+	header := http.Header{}
+	header.Set("X-Forwarded-Host", "proxy.example.org, backend.internal")
+	req := &http.Request{Header: header, URL: &url.URL{Host: "broker.example.org"}}
+
+	assert.Equal(t, "proxy.example.org", getHost(req))
 }

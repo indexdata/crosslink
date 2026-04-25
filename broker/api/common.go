@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -55,28 +56,61 @@ func LinkRel(r *http.Request, relPath string, urlValues url.Values) string {
 	return link(r, path(false, r.URL.Path, relPath), urlValues.Encode())
 }
 
+func hostOnly(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return strings.ToLower(h)
+	}
+	return strings.ToLower(host)
+}
+
+func isLocalHost(host string) bool {
+	switch hostOnly(host) {
+	case "localhost", "127.0.0.1":
+		return true
+	default:
+		return false
+	}
+}
+
+func getHost(r *http.Request) string {
+	first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Host"), ",")
+	host := strings.TrimSpace(first)
+	if host == "" {
+		host = strings.TrimSpace(r.URL.Host)
+	}
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	return host
+}
+
+func getProto(r *http.Request) string {
+	first, _, _ := strings.Cut(r.Header.Get("X-Forwarded-Proto"), ",")
+	proto := strings.TrimSpace(first)
+	proto = strings.ToLower(proto)
+	if proto == "" {
+		proto = strings.ToLower(strings.TrimSpace(r.URL.Scheme))
+	}
+	if proto != "http" && proto != "https" {
+		proto = "https"
+	}
+	if isLocalHost(getHost(r)) {
+		return "http"
+	}
+	return proto
+}
+
 func link(r *http.Request, path string, query string) string {
 	if query != "" {
 		path = path + "?" + query
 	}
-	urlScheme := r.Header.Get("X-Forwarded-Proto")
-	if len(urlScheme) == 0 {
-		urlScheme = r.URL.Scheme
-	}
-	if len(urlScheme) == 0 {
-		urlScheme = "https"
-	}
-	urlHost := r.Header.Get("X-Forwarded-Host")
-	if len(urlHost) == 0 {
-		urlHost = r.URL.Host
-	}
-	if len(urlHost) == 0 {
-		urlHost = r.Host
-	}
-	if strings.Contains(urlHost, "localhost") {
-		urlScheme = "http"
-	}
-	return urlScheme + "://" + urlHost + path
+	scheme := getProto(r)
+	host := getHost(r)
+	return scheme + "://" + host + path
 }
 
 func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Request) oapi.About {
@@ -93,16 +127,16 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 	}
 	if fullCount > limit64 {
 		if offset64 != lastOffset {
-			urlValues := r.URL.Query()
-			urlValues["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
-			link := LinkRel(r, "", urlValues)
+			params := r.URL.Query()
+			params["offset"] = []string{strconv.FormatInt(lastOffset, 10)}
+			link := LinkRel(r, "", params)
 			about.LastLink = &link
 		}
 	}
 	if offset64 > 0 {
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{"0"}
-		firstLink := LinkRel(r, "", urlValues)
+		params := r.URL.Query()
+		params["offset"] = []string{"0"}
+		firstLink := LinkRel(r, "", params)
 		about.FirstLink = &firstLink
 
 		pOffset := offset64 - limit64
@@ -112,16 +146,16 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 		if pOffset > lastOffset {
 			pOffset = lastOffset
 		}
-		urlValues = r.URL.Query()
-		urlValues["offset"] = []string{strconv.FormatInt(pOffset, 10)}
-		prevLink := LinkRel(r, "", urlValues)
+		params = r.URL.Query()
+		params["offset"] = []string{strconv.FormatInt(pOffset, 10)}
+		prevLink := LinkRel(r, "", params)
 		about.PrevLink = &prevLink
 	}
 	if fullCount > offset64+limit64 {
 		noffset := offset64 + limit64
-		urlValues := r.URL.Query()
-		urlValues["offset"] = []string{strconv.FormatInt(noffset, 10)}
-		link := LinkRel(r, "", urlValues)
+		params := r.URL.Query()
+		params["offset"] = []string{strconv.FormatInt(noffset, 10)}
+		link := LinkRel(r, "", params)
 		about.NextLink = &link
 	}
 	return about
