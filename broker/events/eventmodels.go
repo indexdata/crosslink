@@ -88,6 +88,7 @@ type CommonEventData struct {
 	HttpFailure     *httpclient.HttpError      `json:"httpFailure,omitempty"`
 	EventError      *EventError                `json:"eventError,omitempty"`
 	Note            string                     `json:"note,omitempty"`
+	User            string                     `json:"user,omitempty"`
 	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
 	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
 	Notification    *pr_db.Notification        `json:"notification,omitempty"`
