@@ -337,7 +337,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			problem:     "ILL transaction missing SupplierUniqueRecordId",
+			problem:     "ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)",
 		},
 		{
 			name:        "FailedToLocateHoldings",

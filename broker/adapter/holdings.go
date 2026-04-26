@@ -6,6 +6,8 @@ type HoldingsLookupAdapter interface {
 
 type HoldingLookupParams struct {
 	Identifier string
+	Isbn       string
+	Issn       string
 }
 
 type Holding struct {

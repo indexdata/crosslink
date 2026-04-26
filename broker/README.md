@@ -100,6 +100,7 @@ Configuration is provided via environment variables:
 | `SHUTDOWN_DELAY`          | Delay duration for graceful shutdown (in-flight connections)                          | `15s`                                     |
 | `MAX_MESSAGE_SIZE`        | Max accepted ISO18626 message size                                                    | `100KB`                                   |
 | `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock` or `sru`                                               | `mock`                                    |
+| `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
 | `SRU_URL`                 | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                         | `http://localhost:8081/sru`               |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
