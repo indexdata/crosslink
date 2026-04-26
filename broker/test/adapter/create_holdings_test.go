@@ -8,7 +8,7 @@ import (
 )
 
 func TestCreateHoldings(t *testing.T) {
-	m := make(map[string]string)
+	m := make(map[string]any)
 
 	_, err := adapter.CreateHoldingsLookupAdapter(m)
 	assert.Error(t, err)
@@ -30,7 +30,7 @@ func TestCreateHoldings(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "invalid value for HOLDINGS_ISXN_LOOKUP")
 
-	m[adapter.HoldingsIsxnLookup] = "true"
+	m[adapter.HoldingsIsxnLookup] = true
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.NoError(t, err)
 

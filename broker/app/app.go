@@ -57,7 +57,7 @@ var DB_MIGRATE, _ = utils.GetEnvBool("DB_MIGRATE", true)
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
-var HOLDINGS_ISXN_LOOKUP = utils.GetEnv("HOLDINGS_ISXN_LOOKUP", "false")
+var HOLDINGS_ISXN_LOOKUP, _ = utils.GetEnvBool("HOLDINGS_ISXN_LOOKUP", false)
 var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
@@ -125,7 +125,7 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
+	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]any{
 		adapter.HoldingsAdapter:    HOLDINGS_ADAPTER,
 		adapter.SruUrl:             SRU_URL,
 		adapter.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,

@@ -3,7 +3,6 @@ package adapter
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -13,26 +12,26 @@ const (
 	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
 )
 
-func CreateHoldingsLookupAdapter(cfg map[string]string) (HoldingsLookupAdapter, error) {
-	holdingsAdapterVal, ok := cfg[HoldingsAdapter]
+func CreateHoldingsLookupAdapter(cfg map[string]any) (HoldingsLookupAdapter, error) {
+	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
 	}
 	if holdingsAdapterVal == "sru" {
-		sruUrlVal, ok := cfg[SruUrl]
+		sruUrlVal, ok := cfg[SruUrl].(string)
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", SruUrl)
 		}
-		isxnVal, ok := cfg[HoldingsIsxnLookup]
+		_, ok = cfg[HoldingsIsxnLookup]
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", HoldingsIsxnLookup)
 		}
 		// ideally this should be per-SRU server and not for all
-		isxn, err := strconv.ParseBool(isxnVal)
-		if err != nil {
-			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, err)
+		isxnLookup, ok := cfg[HoldingsIsxnLookup].(bool)
+		if !ok {
+			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, isxnLookup)
 		}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ","), isxn), nil
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruUrlVal, ","), isxnLookup), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil
