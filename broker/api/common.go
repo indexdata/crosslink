@@ -64,16 +64,20 @@ func hostOnly(host string) string {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		return strings.ToLower(h)
 	}
+	host = strings.TrimPrefix(host, "[")
+	host = strings.TrimSuffix(host, "]")
 	return strings.ToLower(host)
 }
 
 func isLocalHost(host string) bool {
-	switch hostOnly(host) {
-	case "localhost", "127.0.0.1":
+	host = hostOnly(host)
+	if host == "localhost" {
 		return true
-	default:
-		return false
 	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func getHost(r *http.Request) string {
