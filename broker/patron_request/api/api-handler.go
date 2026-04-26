@@ -221,12 +221,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 	logParams := map[string]string{"method": "PostPatronRequests"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	var newPr proapi.CreatePatronRequest
-	err := json.NewDecoder(r.Body).Decode(&newPr)
+	err := decodeRequiredBody(r, &newPr)
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
 	}
-	symbol, err := a.getRequestSymbol(ctx, r, newPr.RequesterSymbol)
+	tenant, err := a.tenantResolver.Resolve(ctx, r, newPr.RequesterSymbol)
+	if err != nil {
+		addBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
 	if err != nil {
 		addBadRequestError(ctx, w, err)
 		return
@@ -260,7 +265,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		return
 	}
 	if a.autoActionRunner != nil {
-		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil)
+		err = a.autoActionRunner.RunAutoActionsOnStateEntry(ctx, pr, nil, tenant.GetUser())
 		if err != nil {
 			addInternalError(ctx, w, err)
 			return
@@ -440,7 +445,10 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 	eventAction := pr_db.PatronRequestAction(action.Action)
-	data := events.EventData{CommonEventData: events.CommonEventData{Action: &eventAction}}
+	data := events.EventData{CommonEventData: events.CommonEventData{
+		Action: &eventAction,
+		User:   tenant.GetUser(),
+	}}
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}

@@ -125,6 +125,7 @@ func TestHandleMessageRequestCreatesTaskBeforeAutoActions(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Equal(t, "iso18626@ISIL:REQ1", mockAutoActionRunner.lastUser)
 	assert.Len(t, mockEventBus.createdTaskIDs, 1)
 	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
 		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
@@ -153,6 +154,10 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 		Header: iso18626.Header{
 			Timestamp:                 inTimestamp,
 			RequestingAgencyRequestId: patronRequestId,
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "SUP1",
+			},
 		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
@@ -166,6 +171,7 @@ func TestHandleMessageSupplyingAgencyCreatesTaskBeforeAutoActions(t *testing.T) 
 	assert.Equal(t, inTimestamp, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
 	assert.False(t, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Equal(t, "iso18626@ISIL:SUP1", mockAutoActionRunner.lastUser)
 	assert.Len(t, mockEventBus.createdTaskIDs, 1)
 	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
 		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
@@ -194,6 +200,10 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 		Header: iso18626.Header{
 			Timestamp:                inTimestamp,
 			SupplyingAgencyRequestId: "lender-pr-id-1",
+			RequestingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType:  iso18626.TypeSchemeValuePair{Text: "ISIL"},
+				AgencyIdValue: "REQ1",
+			},
 		},
 		Action: iso18626.TypeActionReceived,
 	}
@@ -204,6 +214,7 @@ func TestHandleMessageRequestingAgencyCreatesTaskBeforeAutoActions(t *testing.T)
 	assert.Equal(t, inTimestamp, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.TimestampReceived)
 	assert.False(t, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.Timestamp.IsZero())
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
+	assert.Equal(t, "iso18626@ISIL:REQ1", mockAutoActionRunner.lastUser)
 	assert.Len(t, mockEventBus.createdTaskIDs, 1)
 	if assert.NotNil(t, mockAutoActionRunner.lastParentEventID) {
 		assert.Equal(t, mockEventBus.createdTaskIDs[0], *mockAutoActionRunner.lastParentEventID)
@@ -823,13 +834,15 @@ type MockAutoActionRunner struct {
 	callCount         int
 	lastPr            pr_db.PatronRequest
 	lastParentEventID *string
+	lastUser          string
 	onRun             func(pr_db.PatronRequest)
 }
 
-func (m *MockAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string) error {
+func (m *MockAutoActionRunner) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
 	m.callCount++
 	m.lastPr = pr
 	m.lastParentEventID = parentEventID
+	m.lastUser = user
 	if m.onRun != nil {
 		m.onRun(pr)
 	}
@@ -1060,6 +1073,7 @@ func TestHandleRequestMessage(t *testing.T) {
 	assert.Equal(t, LenderStateNew, mockPrRepo.savedPr.State)
 	assert.Equal(t, 1, mockAutoActionRunner.callCount)
 	assert.Equal(t, LenderStateNew, mockAutoActionRunner.lastPr.State)
+	assert.Equal(t, "iso18626@ISIL:REQ1", mockAutoActionRunner.lastUser)
 	assert.NoError(t, err)
 }
 

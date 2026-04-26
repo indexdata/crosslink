@@ -719,7 +719,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
 		ID:              "invoke-validate",
 		PatronRequestID: patronRequestId,
-		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}},
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate, User: "okapi-user-1"}},
 	})
 
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -728,6 +728,7 @@ func TestHandleInvokeLenderActionValidate(t *testing.T) {
 	assert.Len(t, mockEventBus.createdTaskData, 1)
 	assert.NotNil(t, mockEventBus.createdTaskData[0].Action)
 	assert.Equal(t, LenderActionWillSupply, *mockEventBus.createdTaskData[0].Action)
+	assert.Equal(t, "okapi-user-1", mockEventBus.createdTaskData[0].User)
 }
 
 func TestHandleInvokeLenderActionValidateAutoActionError(t *testing.T) {
