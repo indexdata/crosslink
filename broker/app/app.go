@@ -57,7 +57,7 @@ var DB_MIGRATE, _ = utils.GetEnvBool("DB_MIGRATE", true)
 var ENABLE_JSON_LOG = utils.GetEnv("ENABLE_JSON_LOG", "false")
 var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
-var SRU_URL = utils.GetEnv("SRU_URL", "http://localhost:8081/sru")
+var HOLDINGS_SRU_URL = common.GetEnvWithDeprecated("HOLDINGS_SRU_URL", "SRU_URL", "http://localhost:8081/sru")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
 var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), func(val string) (int, error) {
@@ -126,7 +126,7 @@ func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
 	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]string{
 		adapter.HoldingsAdapter: HOLDINGS_ADAPTER,
-		adapter.SruUrl:          SRU_URL,
+		adapter.HoldingsSruURL:  HOLDINGS_SRU_URL,
 	})
 	if err != nil {
 		return Context{}, err

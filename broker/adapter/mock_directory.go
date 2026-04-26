@@ -9,10 +9,9 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
-	"github.com/indexdata/go-utils/utils"
 )
 
-var MOCK_CLIENT_URL = utils.GetEnv("MOCK_CLIENT_URL", "http://localhost:19083/iso18626")
+var MOCK_PEER_URL = common.GetEnvWithDeprecated("MOCK_PEER_URL", "MOCK_CLIENT_URL", "http://localhost:19083/iso18626")
 
 type MockDirectoryLookupAdapter struct {
 }
@@ -27,7 +26,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	if strings.Contains(params.Symbols[0], "ISIL:NOCHANGE") {
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:NOCHANGE"},
-			URL:        MOCK_CLIENT_URL,
+			URL:        MOCK_PEER_URL,
 			Vendor:     directory.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, strings.Join(params.Symbols, ","), nil
@@ -37,7 +36,7 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 	for _, value := range params.Symbols {
 		dirs = append(dirs, DirectoryEntry{
 			Symbols:    []string{value},
-			URL:        MOCK_CLIENT_URL,
+			URL:        MOCK_PEER_URL,
 			Vendor:     directory.Unknown,
 			BrokerMode: DEFAULT_BROKER_MODE,
 		})

@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
 
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	apptest.StartMockApp(mockPort)
 

@@ -69,7 +69,7 @@ func TestMain(m *testing.M) {
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
 	app.MigrationsFolder = "file://../../migrations"
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -296,9 +296,9 @@ func TestIso18626PostSupplyingMessageConfirm(t *testing.T) {
 		RequesterID:        apptest.CreatePgText(requester.ID),
 	})
 	assert.NoError(t, err)
-	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SUP_B", adapter.MOCK_CLIENT_URL)
+	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SUP_B", adapter.MOCK_PEER_URL)
 	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SUP_B", "WillSupply")
-	supplier.Url = adapter.MOCK_CLIENT_URL
+	supplier.Url = adapter.MOCK_PEER_URL
 	supplier, err = illRepo.SavePeer(appCtx, ill_db.SavePeerParams(supplier))
 	assert.NoError(t, err)
 	_, err = illRepo.SaveLocatedSupplier(appCtx, ill_db.SaveLocatedSupplierParams(locSup))
@@ -474,7 +474,7 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	data, _ := os.ReadFile("../testdata/reqmsg-notification.xml")
 	illId := uuid.NewString()
-	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_CLIENT_URL)
+	requester := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_ONE", adapter.MOCK_PEER_URL)
 	_, err := illRepo.SaveIllTransaction(appCtx, ill_db.SaveIllTransactionParams{
 		ID:                 illId,
 		Timestamp:          test.GetNow(),
@@ -485,12 +485,12 @@ func TestIso18626PostRequestingMessage(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to create ill transaction: %s", err)
 	}
-	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_TWO_A", adapter.MOCK_CLIENT_URL)
+	supplier := apptest.CreatePeer(t, illRepo, "ISIL:SLNP_TWO_A", adapter.MOCK_PEER_URL)
 	locSup := apptest.CreateLocatedSupplier(t, illRepo, illId, supplier.ID, "ISIL:SLNP_TWO_A", "selected")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.useMock {
-				supplier.Url = adapter.MOCK_CLIENT_URL + tt.urlEnding
+				supplier.Url = adapter.MOCK_PEER_URL + tt.urlEnding
 			} else {
 				port, _ := test.GetFreePort()
 				supplier.Url = "http:localhost:" + strconv.Itoa(port) + tt.urlEnding
