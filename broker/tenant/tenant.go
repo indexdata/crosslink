@@ -122,7 +122,10 @@ type Tenant interface {
 	GetOwnedSymbols() ([]string, error)
 	// Returns the symbol specified in the current request.
 	GetRequestSymbol() (string, error)
-	// Returns current user ID associated with the request.
+	// Returns the user value associated with the request.
+	// The returned format is implementation-specific and may include remote host
+	// information; callers that need the host/IP separately should use
+	// GetRemoteHost().
 	GetUser() string
 	// Returns remote host/IP associated with the request.
 	GetRemoteHost() string
