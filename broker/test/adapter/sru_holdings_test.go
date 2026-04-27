@@ -306,7 +306,7 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	assert.ErrorContains(t, err, "decoding marcxml failed")
 }
 
-func TestSruMarcxmlWithoutHoldings(t *testing.T) {
+func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
@@ -322,8 +322,7 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 					},
 				},
 				{
-					Tag: "999",
-					// skipped as it's not 11
+					Tag:  "999",
 					Ind1: "1",
 					Ind2: "0",
 					Subfield: []marcxml.SubfieldatafieldType{
@@ -376,7 +375,85 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 	holdings, query, err := ad.Lookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
-	assert.Len(t, holdings, 0)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
+	assert.Equal(t, "s1", holdings[0].Symbol)
+}
+
+func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		recBuf := marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "primary-local",
+						},
+						{
+							Code: "s",
+							Text: "primary-symbol",
+						},
+					},
+				},
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "0",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l",
+							Text: "fallback-local",
+						},
+						{
+							Code: "s",
+							Text: "fallback-symbol",
+						},
+					},
+				},
+			},
+		}}
+		retVersion := sru.VersionDefinition2_0
+		escaping := sru.RecordXMLEscapingDefinitionXml
+		recordXML, _ := xml.Marshal(recBuf)
+		sr := sru.SearchRetrieveResponse{
+			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
+				Version:         &retVersion,
+				NumberOfRecords: 1,
+				Records: &sru.RecordsDefinition{
+					Record: []sru.RecordDefinition{
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: recordXML,
+							},
+						},
+					},
+				},
+			},
+		}
+		responseXML, _ := xml.Marshal(sr)
+		w.Write(responseXML)
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createSruAdapter(t, false, server.URL)
+	p := adapter.HoldingLookupParams{
+		Identifier: "123",
+	}
+	holdings, query, err := ad.Lookup(p)
+	assert.NotEmpty(t, query)
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	assert.Equal(t, "primary-local", holdings[0].LocalIdentifier)
+	assert.Equal(t, "primary-symbol", holdings[0].Symbol)
 }
 
 func TestSruMarcxmlWithHoldings(t *testing.T) {
