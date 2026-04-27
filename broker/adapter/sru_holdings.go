@@ -25,13 +25,11 @@ func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn b
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn}
 }
 
-func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 string) bool {
-	found := false
+func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 string) {
 	for _, df := range rec.Datafield {
 		if df.Tag != "999" || df.Ind1 != "1" || df.Ind2 != ind2 {
 			continue
 		}
-		found = true
 		var holding Holding
 		for _, sf := range df.Subfield {
 			// l comes before s, so append happens when s is found
@@ -44,12 +42,13 @@ func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 st
 			}
 		}
 	}
-	return found
 }
 
 func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
 	// skipped and ignored if there is no 999, which suggests that something is wrong with the record
-	if !parseHoldingsForIndicator(rec, holdings, "1") {
+	holdingCount := len(*holdings)
+	parseHoldingsForIndicator(rec, holdings, "1")
+	if len(*holdings) == holdingCount {
 		parseHoldingsForIndicator(rec, holdings, "0")
 	}
 }
