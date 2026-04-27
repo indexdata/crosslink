@@ -31,5 +31,9 @@ func GetEnvBoolWithDeprecated(newName string, oldName string, defaultValue bool)
 
 func warnDeprecatedEnv(oldName string, newName string) {
 	loggerArgs := LoggerArgs{Component: "config"}
-	CreateExtCtxWithArgs(context.Background(), &loggerArgs).Logger().Warn("using deprecated env " + oldName + ", use " + newName + " instead")
+	CreateExtCtxWithArgs(context.Background(), &loggerArgs).Logger().Warn(
+		"using deprecated environment variable",
+		"oldEnv", oldName,
+		"newEnv", newName,
+	)
 }
