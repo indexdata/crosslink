@@ -61,7 +61,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: [ "bash", "-c", "psql -h postgres -U crosslink -d crosslink -c 'CREATE ROLE reservoir NOLOGIN;' && psql -h postgres -U crosslink -d crosslink -c 'GRANT reservoir TO crosslink;' && psql -h postgres -U crosslink -d crosslink -c 'CREATE SCHEMA default_mod_reservoir AUTHORIZATION reservoir;'" ]
+    entrypoint: [
+      "bash", "-c",
+      "psql -h postgres -U crosslink -d crosslink -c \"DO \\$\\$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'reservoir') THEN CREATE ROLE reservoir NOLOGIN; END IF; END \\$\\$;\" && \
+       psql -h postgres -U crosslink -d crosslink -c 'GRANT reservoir TO crosslink;' && \
+       psql -h postgres -U crosslink -d crosslink -c \"DO \\$\\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'default_mod_reservoir') THEN CREATE SCHEMA default_mod_reservoir AUTHORIZATION reservoir; END IF; END \\$\\$;\""
+    ]
     environment:
       PGPASSWORD: crosslink
 
