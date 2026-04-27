@@ -130,7 +130,10 @@ func TestGetBarcodeBase64_EncodeError(t *testing.T) {
 func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
 	svc := &PdfService{}
 	pr := pr_db.PatronRequest{
-		ID: "\x80invalid", // non-ASCII causes code128 encoding to fail
+		RequesterReqID: pgtype.Text{
+			String: "\x80invalid", // non-ASCII causes code128 encoding to fail
+			Valid:  true,
+		},
 	}
 	_, err := svc.GeneratePdfPullSlip(pr)
 	assert.Error(t, err)
@@ -142,7 +145,13 @@ func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
 	pullSlipTemplate = `{{.Unclosed`
 
 	svc := &PdfService{}
-	pr := pr_db.PatronRequest{ID: "REQ-X"}
+	pr := pr_db.PatronRequest{
+		ID: "REQ-X",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-X",
+			Valid:  true,
+		},
+	}
 	_, err := svc.GeneratePdfPullSlip(pr)
 	assert.Error(t, err)
 }
@@ -154,7 +163,13 @@ func TestGeneratePdfPullSlip_TempFileError(t *testing.T) {
 	t.Setenv("TEMP", "/nonexistent-dir-for-test")
 
 	svc := &PdfService{}
-	pr := pr_db.PatronRequest{ID: "REQ-TMPFAIL"}
+	pr := pr_db.PatronRequest{
+		ID: "REQ-TMPFAIL",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-TMPFAIL",
+			Valid:  true,
+		},
+	}
 	_, err := svc.GeneratePdfPullSlip(pr)
 	assert.Error(t, err)
 }

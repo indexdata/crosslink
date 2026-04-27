@@ -45,11 +45,13 @@ func (p PullSlipApiHandler) GetPullslipsId(w http.ResponseWriter, r *http.Reques
 	resp := psoapi.PullSlip{
 		Id:             ps.ID,
 		CreatedAt:      ps.CreatedAt.Time,
-		GeneratedAt:    &ps.GeneratedAt.Time,
 		Type:           psoapi.PullSlipType(ps.Type),
 		Owner:          ps.Owner,
 		SearchCriteria: ps.SearchCriteria,
 		PdfLink:        new(api.Link(r, api.Path("pullslips", id, "pdf"), nil)),
+	}
+	if ps.GeneratedAt.Valid {
+		resp.GeneratedAt = &ps.GeneratedAt.Time
 	}
 	api.WriteJsonResponse(w, resp)
 }
@@ -107,6 +109,7 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 
 	if pr.RequesterSymbol.String != symbol && pr.SupplierSymbol.String != symbol {
 		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request does not have the correct symbol"))
+		return
 	}
 
 	pdf, err := p.pdfService.GeneratePdfPullSlip(pr)

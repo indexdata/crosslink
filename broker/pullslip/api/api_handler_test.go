@@ -1,7 +1,6 @@
 package psapi
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -286,6 +285,7 @@ func TestPostPullslips_WrongSymbol(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.PostPullslips(rr, req, psoapi.PostPullslipsParams{Symbol: &sym})
 
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	// bad request is written but execution continues (no early return in handler)
 	prRepo.AssertExpectations(t)
 }
@@ -298,6 +298,3 @@ func TestWritePdf(t *testing.T) {
 	assert.Contains(t, rr.Header().Get("Content-Disposition"), "DOC-1")
 	assert.Equal(t, []byte("%PDF-direct"), rr.Body.Bytes())
 }
-
-// suppress unused import warning for bytes
-var _ = bytes.NewReader
