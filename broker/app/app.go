@@ -17,6 +17,9 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	psapi "github.com/indexdata/crosslink/broker/pullslip/api"
+	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
+	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
 
 	"github.com/dustin/go-humanize"
@@ -93,6 +96,7 @@ type Context struct {
 	ApiHandler     api.ApiHandler
 	PrApiHandler   prapi.PatronRequestApiHandler
 	SseBroker      *api.SseBroker
+	PsApiHandler   psapi.PullSlipApiHandler
 }
 
 func configLog() slog.Handler {
@@ -162,6 +166,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := ill_db.CreateIllRepo(pool)
 	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
+	psRepo := ps_db.CreatePsRepo(pool)
 
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
@@ -177,6 +182,7 @@ func Init(ctx context.Context) (Context, error) {
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
 	sseBroker := api.NewSseBroker(appCtx, *tenantResolver)
+	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, *tenantResolver)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)
@@ -193,6 +199,7 @@ func Init(ctx context.Context) (Context, error) {
 		ApiHandler:     apiHandler,
 		PrApiHandler:   prApiHandler,
 		SseBroker:      sseBroker,
+		PsApiHandler:   psApiHandler,
 	}, nil
 }
 
@@ -218,11 +225,13 @@ func StartServer(ctx Context) error {
 	})
 	oapi.HandlerFromMux(&ctx.ApiHandler, ServeMux)
 	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
+	psoapi.HandlerFromMux(&ctx.PsApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
 	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
 		oapi.HandlerFromMuxWithBaseURL(&ctx.ApiHandler, ServeMux, basePath)
 		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, basePath)
+		psoapi.HandlerFromMuxWithBaseURL(&ctx.PsApiHandler, ServeMux, basePath)
 		ServeMux.HandleFunc("GET "+basePath+"/sse/events", ctx.SseBroker.ServeHTTP)
 	}
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

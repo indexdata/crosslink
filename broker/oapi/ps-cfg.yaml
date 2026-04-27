@@ -1,0 +1,8 @@
+package: psoapi
+output: pullslip/oapi/ps-openapi_gen.go
+output-options:
+  include-tags:
+    - pull-slips-api
+generate:
+  models: true
+  std-http-server: true

@@ -176,6 +176,33 @@
           "permissionsRequired": [
             "broker.patron_requests.item.notifications.item.receipt.put"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/pullslips/{id}",
+          "permissionsRequired": [
+            "broker.pullslips.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/pullslips/{id}/pdf",
+          "permissionsRequired": [
+            "broker.pullslips.item.pdf.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/pullslips",
+          "permissionsRequired": [
+            "broker.pullslips.post"
+          ]
         }
       ]
     }
@@ -287,6 +314,21 @@
       "permissionName": "broker.patron_requests.item.notifications.item.receipt.put"
     },
     {
+      "description": "Get pull slip by id",
+      "displayName": "Broker - get pull slip by id",
+      "permissionName": "broker.pullslips.item.get"
+    },
+    {
+      "description": "Get pull slip PDF file by id",
+      "displayName": "Broker - Get pull slip PDF file by id",
+      "permissionName": "broker.pullslips.item.pdf.get"
+    },
+    {
+      "description": "Create pull slip for a patron request",
+      "displayName": "Broker - create pull slip for a patron request",
+      "permissionName": "broker.pullslips.post"
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -297,7 +339,9 @@
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.items.get",
-        "broker.patron_requests.item.notifications.get"
+        "broker.patron_requests.item.notifications.get",
+        "broker.pullslips.item.get",
+        "broker.pullslips.item.pdf.get"
       ]
     },
     {
@@ -310,7 +354,8 @@
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.action.post",
         "broker.patron_requests.item.notifications.post",
-        "broker.patron_requests.item.notifications.item.receipt.put"
+        "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.pullslips.post"
       ]
     },
     {
@@ -353,7 +398,10 @@
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
         "broker.patron_requests.item.notifications.post",
-        "broker.patron_requests.item.notifications.item.receipt.put"
+        "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.pullslips.item.get",
+        "broker.pullslips.item.pdf.get",
+        "broker.pullslips.post"
       ]
     }
   ]

@@ -1,12 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
 )
@@ -163,4 +165,42 @@ func CollectAboutData(fullCount int64, offset int32, limit int32, r *http.Reques
 		about.NextLink = &link
 	}
 	return about
+}
+
+func WriteJsonResponse(w http.ResponseWriter, resp any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func AddInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	errorString := err.Error()
+	resp := oapi.Error{
+		Error: &errorString,
+	}
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func AddBadRequestError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	errorString := err.Error()
+	resp := oapi.Error{
+		Error: &errorString,
+	}
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func AddNotFoundError(w http.ResponseWriter) {
+	errorString := "not found"
+	resp := oapi.Error{
+		Error: &errorString,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(resp)
 }
