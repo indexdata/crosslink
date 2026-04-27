@@ -34,6 +34,7 @@ services:
       DB_PROVISION: "true"
       DB_MIGRATE: "true"
       HOLDINGS_ADAPTER: sru
+      HOLDINGS_ISXN_LOOKUP: "true"
       SRU_URL: http://reservoir:8082/reservoir/sru
       DIRECTORY_ADAPTER: api
       DIRECTORY_API_URL: http://illmock:8081/directory/entries
