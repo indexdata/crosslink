@@ -102,3 +102,19 @@ sql:
           - column: "notification.kind"
             go_type:
               type: "NotificationKind"
+  - engine: "postgresql"
+    queries: "ps_query.sql"
+    schema: "ps_schema.sql"
+    gen:
+      go:
+        package: "ps_db"
+        out: "../pullslip/db"
+        output_db_file_name: "ps_db_gen.go"
+        output_models_file_name: "ps_models_gen.go"
+        output_files_suffix: "_gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        overrides:
+          - column: "pull_slip.type"
+            go_type:
+              type: "PullSlipType"
