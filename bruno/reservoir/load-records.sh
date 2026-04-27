@@ -3,6 +3,12 @@
 OKAPI_URL=http://localhost:8082
 
 curl -w'\n' -HContent-type:application/json \
+ $OKAPI_URL/reservoir/config/modules -d @marc-transformer-conf.json
+
+curl -HContent-Type:application/json \
+ -XPUT $OKAPI_URL/reservoir/config/oai -d'{"transformer":"marc-transformer::cluster_transform"}'
+
+curl -w'\n' -HContent-type:application/json \
  $OKAPI_URL/reservoir/config/modules -d @config-matchkeys-isxn.json
 
 # configure pool
