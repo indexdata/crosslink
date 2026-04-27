@@ -1,4 +1,6 @@
-# Patron Request API E2E test
+# Bruno
+
+## Patron Request API E2E test
 
 The provided Bruno API test includes an end-to-end execution of a happy path exchange between the requester (borrower) and supplier (lender).
 
@@ -14,5 +16,15 @@ docker compose up
 
 3. In Bruno, load the `LocalDev` environment.
 
-4. Run all steps in the Bruno runner. All HTTP response codes and validations should be green.
+4. Run all steps in the Bruno runner in the `PR Happy Flow` folder. All HTTP response codes and validations should be green.
 
+## Reservoir (incomplete)
+
+```
+docker compose -f docker-compose-reservoir.yml up
+```
+
+Start Bruno and load the `LocalDev` environment.
+
+Select the `Reservoir` flow in Bruno. Only the first parts of the Happy flow is currently in this holder. This
+is merely to test that SRU lookup is operational.

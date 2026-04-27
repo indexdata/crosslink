@@ -1,0 +1,60 @@
+meta {
+  name: Create borrowing side PR
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/patron_requests
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+      "illRequest": {
+        "bibliographicInfo": {
+          "supplierUniqueRecordId": "429e871b-9cd3-465a-8d94-a82bac2d9a44",
+          "title" : "my fake title",
+          "bibliographicItemId": [
+            {
+              "bibliographicItemIdentifier": "123-456-789",
+              "bibliographicItemIdentifierCode": {
+                 "#text": "ISBN"
+              }
+            }
+          ]
+        }
+      },
+      "patron": "{{requesterPatron}}",
+      "side": "borrowing",
+      "state": "NEW",
+      "requesterSymbol": "{{requesterSymbol}}"
+  }
+}
+
+script:post-response {
+  const responseData = res.getBody();
+  
+  test("Capture patron request id", () => {
+      expect(responseData.id).to.be.a("string").and.not.empty;
+      bru.setVar("prId", responseData.id);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}
