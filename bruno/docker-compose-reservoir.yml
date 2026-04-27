@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: crosslink_postgres
+    environment:
+      POSTGRES_USER: crosslink
+      POSTGRES_PASSWORD: crosslink
+      POSTGRES_DB: crosslink
+    ports:
+      - "25432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crosslink -d crosslink"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  broker:
+    build:
+      context: ..
+      dockerfile: broker/Dockerfile
+    container_name: crosslink_broker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_PORT: 8080
+      DB_TYPE: postgres
+      DB_USER: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+      DB_PROVISION: "true"
+      DB_MIGRATE: "true"
+      HOLDINGS_ADAPTER: sru
+      SRU_URL: http://reservoir:8082/reservoir/sru
+      DIRECTORY_ADAPTER: api
+      DIRECTORY_API_URL: http://illmock:8081/directory/entries
+      TENANT_TO_SYMBOL: "ISIL:US-{tenant}"
+    ports:
+      - "8080:8080"
+
+  illmock:
+    build:
+      context: ..
+      dockerfile: illmock/Dockerfile
+    container_name: crosslink_illmock
+    command: ["/illmock"]
+    environment:
+      HTTP_PORT: 8081
+      MOCK_DIRECTORY_ENTRIES_PATH: /data/directory.json
+    volumes:
+      - ./:/data:ro
+    ports:
+      - "8081:8081"
+
+  reservoir-init:
+    image: postgres:latest
+    container_name: reservoir_init
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: [ "bash", "-c", "psql -h postgres -U crosslink -d crosslink -c 'CREATE ROLE reservoir NOLOGIN;' && psql -h postgres -U crosslink -d crosslink -c 'GRANT reservoir TO crosslink;' && psql -h postgres -U crosslink -d crosslink -c 'CREATE SCHEMA default_mod_reservoir AUTHORIZATION reservoir;'" ]
+    environment:
+      PGPASSWORD: crosslink
+
+  reservior:
+    build:
+      context: ../../reservoir
+      dockerfile:  Dockerfile-jit
+    container_name: reservoir
+    depends_on:
+      reservoir-init:
+        condition: service_completed_successfully
+    environment:
+      HTTP_PORT: 8082
+      DB_USERNAME: crosslink
+      DB_PASSWORD: crosslink
+      DB_HOST: postgres
+      DB_DATABASE: crosslink
+      DB_PORT: 5432
+      TENANT_DEFAULT: default
+    ports:
+      - "8082:8082"
