@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
@@ -15,11 +17,12 @@ import (
 
 type SruHoldingsLookupAdapter struct {
 	sruUrl []string
+	isxn   bool
 	client *http.Client
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn bool) HoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn}
 }
 
 func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
@@ -68,13 +71,52 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 	return nil
 }
 
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, identifier string) ([]Holding, string, error) {
+func encodeCqlSearchClause(field string, value string) (string, error) {
+	cqlQuery, err := cqlbuilder.NewQuery().Search(field).Term(value).Build()
+	if err != nil {
+		return "", err
+	}
+	return cqlQuery.String(), nil
+}
+
+func (s *SruHoldingsLookupAdapter) genCql(params HoldingLookupParams) (string, error) {
+	var comps []string
+	if params.Identifier != "" {
+		cql, err := encodeCqlSearchClause("rec.id", params.Identifier)
+		if err != nil {
+			return "", err
+		}
+		comps = append(comps, cql)
+	}
+	if s.isxn && params.Isbn != "" {
+		cql, err := encodeCqlSearchClause("isbn", params.Isbn)
+		if err != nil {
+			return "", err
+		}
+		comps = append(comps, cql)
+	}
+	if s.isxn && params.Issn != "" {
+		cql, err := encodeCqlSearchClause("issn", params.Issn)
+		if err != nil {
+			return "", err
+		}
+		comps = append(comps, cql)
+	}
+	if len(comps) == 0 {
+		return "", errors.New("no search parameters provided for SRU lookup")
+	}
+	return strings.Join(comps, " or "), nil
+}
+
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLookupParams) ([]Holding, string, error) {
 	var holdings []Holding
-	cql := "rec.id=\"" + identifier + "\"" // TODO: should do proper CQL string escaping
+	cql, err := s.genCql(params)
+	if err != nil {
+		return nil, "", err
+	}
 	query := "?maximumRecords=1000&recordSchema=marcxml&query=" + url.QueryEscape(cql)
 	var sruResponse sru.SearchRetrieveResponse
-	// For now, perform just one request and get "all" records
-	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
+	err = httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	if err != nil {
 		return nil, query, err
 	}
@@ -100,7 +142,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding
 	var holdings []Holding
 	logQuery := ""
 	for _, sruUrl := range s.sruUrl {
-		h, query, err := s.getHoldings(sruUrl, params.Identifier)
+		h, query, err := s.getHoldings(sruUrl, params)
 		if err != nil {
 			return nil, query, err
 		}

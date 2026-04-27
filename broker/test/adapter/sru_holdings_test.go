@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func createSruAdapter(t *testing.T, url ...string) adapter.HoldingsLookupAdapter {
-	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url)
+func createSruAdapter(t *testing.T, isxn bool, url ...string) adapter.HoldingsLookupAdapter {
+	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url, isxn)
 	assert.NotNil(t, ad)
 	return ad
 }
@@ -27,7 +27,7 @@ func TestSru500(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -44,7 +44,7 @@ func TestSruBadXml(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -78,7 +78,7 @@ func TestSruBadDiagnostics(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -103,13 +103,13 @@ func TestSruMarcxmlNoHits(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Len(t, holdings, 0)
 }
 
@@ -141,7 +141,7 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -178,7 +178,7 @@ func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -215,7 +215,7 @@ func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -234,7 +234,7 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 		diagnostic.Message = "General system error"
 		diagnostic.Details = "Something went wrong"
 		diag_buf, err := xml.Marshal(diagnostic)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		sr := sru.SearchRetrieveResponse{
 			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
 				Version:         &retVersion,
@@ -258,7 +258,7 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -297,7 +297,7 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
@@ -369,21 +369,22 @@ func TestSruMarcxmlWithoutHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, false, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Len(t, holdings, 0)
 }
 
 func TestSruMarcxmlWithHoldings(t *testing.T) {
+	var receivedQuery string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 		query := r.URL.Query().Get("query")
-		assert.Equal(t, "rec.id=\"123\"", query)
+		receivedQuery = query
 		w.Header().Set("Content-Type", "application/xml")
 		rec_buf := marcxml.Record{RecordType: marcxml.RecordType{
 			Type: "Bibliographic",
@@ -413,59 +414,111 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 				},
 			},
 		}}
+		xml_buf1, err := xml.Marshal(rec_buf)
+		assert.NoError(t, err)
+
+		rec_buf = marcxml.Record{RecordType: marcxml.RecordType{
+			Type: "Bibliographic",
+			Datafield: []marcxml.DataFieldType{
+				{
+					Tag:  "999",
+					Ind1: "1",
+					Ind2: "1",
+					Subfield: []marcxml.SubfieldatafieldType{
+						{
+							Code: "l", // local identifier
+							Text: "l3",
+						},
+						{
+							Code: "s", // source identifier
+							Text: "s3",
+						},
+					},
+				},
+			},
+		}}
+		xml_buf2, err := xml.Marshal(rec_buf)
+		assert.NoError(t, err)
+
 		retVersion := sru.VersionDefinition2_0
 		escaping := sru.RecordXMLEscapingDefinitionXml
-		sru_buf, _ := xml.Marshal(rec_buf)
 		sr := sru.SearchRetrieveResponse{
 			SearchRetrieveResponseDefinition: sru.SearchRetrieveResponseDefinition{
 				Version:         &retVersion,
-				NumberOfRecords: 1,
+				NumberOfRecords: 2,
 				Records: &sru.RecordsDefinition{
 					Record: []sru.RecordDefinition{
 						{
 							RecordXMLEscaping: &escaping,
 							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
 							RecordData: sru.StringOrXmlFragmentDefinition{
-								XMLContent: sru_buf,
+								XMLContent: xml_buf1,
+							},
+						},
+						{
+							RecordXMLEscaping: &escaping,
+							RecordSchema:      "info:srw/schema/1/marcxml-v1.1",
+							RecordData: sru.StringOrXmlFragmentDefinition{
+								XMLContent: xml_buf2,
 							},
 						},
 					},
 				},
 			},
 		}
-		sru_buf, _ = xml.Marshal(sr)
-		w.Write(sru_buf)
+		xml_buf, err := xml.Marshal(sr)
+		assert.NoError(t, err)
+		w.Write(xml_buf)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	ad := createSruAdapter(t, server.URL)
+	ad := createSruAdapter(t, true, server.URL)
 	p := adapter.HoldingLookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
-	assert.Len(t, holdings, 2)
+	assert.Equal(t, "rec.id = 123", receivedQuery)
+	assert.Len(t, holdings, 3)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
 	assert.Equal(t, "s1", holdings[0].Symbol)
 	assert.Equal(t, "l2", holdings[1].LocalIdentifier)
 	assert.Equal(t, "s2", holdings[1].Symbol)
+	assert.Equal(t, "l3", holdings[2].LocalIdentifier)
+	assert.Equal(t, "s3", holdings[2].Symbol)
 
-	ad = createSruAdapter(t, server.URL, server.URL)
+	ad = createSruAdapter(t, true, server.URL, server.URL)
 	p = adapter.HoldingLookupParams{
 		Identifier: "123",
+		Isbn:       "99-222",
+		Issn:       "99-333",
 	}
 	holdings, query, err = ad.Lookup(p)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
-	assert.Nil(t, err)
-	assert.Len(t, holdings, 4)
+	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
+	assert.Len(t, holdings, 6)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
 	assert.Equal(t, "s1", holdings[0].Symbol)
 	assert.Equal(t, "l2", holdings[1].LocalIdentifier)
 	assert.Equal(t, "s2", holdings[1].Symbol)
-	assert.Equal(t, "l1", holdings[2].LocalIdentifier)
-	assert.Equal(t, "s1", holdings[2].Symbol)
-	assert.Equal(t, "l2", holdings[3].LocalIdentifier)
-	assert.Equal(t, "s2", holdings[3].Symbol)
+	assert.Equal(t, "l3", holdings[2].LocalIdentifier)
+	assert.Equal(t, "s3", holdings[2].Symbol)
+
+	assert.Equal(t, "l1", holdings[3].LocalIdentifier)
+	assert.Equal(t, "s1", holdings[3].Symbol)
+	assert.Equal(t, "l2", holdings[4].LocalIdentifier)
+	assert.Equal(t, "s2", holdings[4].Symbol)
+	assert.Equal(t, "l3", holdings[5].LocalIdentifier)
+	assert.Equal(t, "s3", holdings[5].Symbol)
+
+	ad = createSruAdapter(t, false, server.URL)
+	p = adapter.HoldingLookupParams{
+		Isbn: "99-222",
+	}
+	_, _, err = ad.Lookup(p)
+	assert.Error(t, err)
+	assert.Equal(t, "no search parameters provided for SRU lookup", err.Error())
 }

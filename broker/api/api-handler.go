@@ -64,24 +64,24 @@ func (a *ApiHandler) getIllTranFromParams(ctx common.ExtendedContext, w http.Res
 		tran, err = a.illRepo.GetIllTransactionById(ctx, *illTransactionId)
 	} else {
 		err = fmt.Errorf("either requesterReqId or illTransactionId should be provided")
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return nil, err
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return nil, err
 	}
 	tenant, err := a.tenantResolver.Resolve(ctx, r, requesterSymbol)
 	if err != nil {
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return nil, err
 	}
 	isOwner, err := tenant.IsOwnerOf(tran.RequesterSymbol.String)
 	if err != nil {
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return nil, err
 	}
 	if isOwner {
@@ -99,7 +99,7 @@ func (a *ApiHandler) Get(w http.ResponseWriter, r *http.Request) {
 	index.Links.LocatedSuppliersLink = Link(r, Path(LOCATED_SUPPLIERS_PATH), nil)
 	index.Links.PeersLink = Link(r, Path(PEERS_PATH), nil)
 	index.Links.PatronRequestsLink = Link(r, Path(PATRON_REQUESTS_PATH), nil)
-	writeJsonResponse(w, index)
+	WriteJsonResponse(w, index)
 }
 
 func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oapi.GetEventsParams) {
@@ -118,21 +118,21 @@ func (a *ApiHandler) GetEvents(w http.ResponseWriter, r *http.Request, params oa
 	var resp oapi.Events
 	resp.Items = make([]oapi.Event, 0)
 	if tran == nil {
-		writeJsonResponse(w, resp)
+		WriteJsonResponse(w, resp)
 		return
 	}
 	var fullCount int64
 	var eventList []events.Event
 	eventList, fullCount, err = a.eventRepo.GetIllTransactionEvents(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	resp.About.Count = fullCount
 	for _, event := range eventList {
 		resp.Items = append(resp.Items, ToApiEvent(event, event.IllTransactionID, nil))
 	}
-	writeJsonResponse(w, resp)
+	WriteJsonResponse(w, resp)
 }
 
 func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.GetIllTransactionsParams) {
@@ -166,12 +166,12 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 	} else {
 		tenant, err := a.tenantResolver.Resolve(ctx, r, params.RequesterSymbol)
 		if err != nil {
-			addBadRequestError(ctx, w, err)
+			AddBadRequestError(ctx, w, err)
 			return
 		}
 		symbols, err := tenant.GetOwnedSymbols()
 		if err != nil {
-			addBadRequestError(ctx, w, err)
+			AddBadRequestError(ctx, w, err)
 			return
 		}
 		dbparams := ill_db.ListIllTransactionsParams{
@@ -181,7 +181,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		var trans []ill_db.IllTransaction
 		trans, fullCount, err = a.illRepo.ListIllTransactions(ctx, dbparams, cql, symbols)
 		if err != nil { //DB error
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 		for _, t := range trans {
@@ -189,7 +189,7 @@ func (a *ApiHandler) GetIllTransactions(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 	resp.About = CollectAboutData(fullCount, offset, limit, r)
-	writeJsonResponse(w, resp)
+	WriteJsonResponse(w, resp)
 }
 
 func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request, id string, params oapi.GetIllTransactionsIdParams) {
@@ -202,10 +202,10 @@ func (a *ApiHandler) GetIllTransactionsId(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if tran == nil {
-		addNotFoundError(w)
+		AddNotFoundError(w)
 		return
 	}
-	writeJsonResponse(w, toApiIllTransaction(r, *tran))
+	WriteJsonResponse(w, toApiIllTransaction(r, *tran))
 }
 
 func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Request, id string) {
@@ -215,10 +215,10 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 	trans, err := a.illRepo.GetIllTransactionById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
+			AddNotFoundError(w)
 			return
 		} else {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 	}
@@ -226,7 +226,7 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 		return deleteIllTransaction(ctx, repo, a.eventRepo, trans.ID)
 	})
 	if err != nil {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -235,15 +235,15 @@ func (a *ApiHandler) DeleteIllTransactionsId(w http.ResponseWriter, r *http.Requ
 func (a *ApiHandler) returnHttpError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
 	// check if error is cql.ParserError
 	if cqlErr, ok := err.(*icql.ParseError); ok {
-		addBadRequestError(ctx, w, fmt.Errorf("cql parser error: %s", cqlErr.Error()))
+		AddBadRequestError(ctx, w, fmt.Errorf("cql parser error: %s", cqlErr.Error()))
 		return
 	}
 
 	if cqlErr, ok := err.(*pgcql.PgError); ok {
-		addBadRequestError(ctx, w, fmt.Errorf("pgcql error: %s", cqlErr.Error()))
+		AddBadRequestError(ctx, w, fmt.Errorf("pgcql error: %s", cqlErr.Error()))
 		return
 	}
-	addInternalError(ctx, w, err)
+	AddInternalError(ctx, w, err)
 }
 
 func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oapi.GetPeersParams) {
@@ -270,19 +270,19 @@ func (a *ApiHandler) GetPeers(w http.ResponseWriter, r *http.Request, params oap
 	for _, p := range peers {
 		symbols, e := a.illRepo.GetSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
-			addInternalError(ctx, w, e)
+			AddInternalError(ctx, w, e)
 			return
 		}
 		branchSymbols, e := a.illRepo.GetBranchSymbolsByPeerId(ctx, p.ID)
 		if e != nil {
-			addInternalError(ctx, w, e)
+			AddInternalError(ctx, w, e)
 			return
 		}
 		apiPeer := toApiPeer(p, symbols, branchSymbols)
 		resp.Items = append(resp.Items, apiPeer)
 	}
 	resp.About = CollectAboutData(count, dbparams.Offset, dbparams.Limit, r)
-	writeJsonResponse(w, resp)
+	WriteJsonResponse(w, resp)
 }
 
 func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
@@ -292,20 +292,20 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	var newPeer oapi.Peer
 	err := json.NewDecoder(r.Body).Decode(&newPeer)
 	if err != nil {
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return
 	}
 	_, err = a.illRepo.GetPeerById(ctx, newPeer.Id)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	} else if err == nil {
-		addBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.Id))
+		AddBadRequestError(ctx, w, fmt.Errorf("ID %v is already used", newPeer.Id))
 		return
 	}
 	for _, s := range newPeer.Symbols {
 		if !strings.Contains(s, ":") {
-			addBadRequestError(ctx, w, fmt.Errorf("symbol should be in \"ISIL:SYMBOL\" format but got %v", s))
+			AddBadRequestError(ctx, w, fmt.Errorf("symbol should be in \"ISIL:SYMBOL\" format but got %v", s))
 			return
 		}
 	}
@@ -344,7 +344,7 @@ func (a *ApiHandler) PostPeers(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	apiPeer := toApiPeer(peer, symbols, branchSymbols)
@@ -401,10 +401,10 @@ func (a *ApiHandler) DeletePeersId(w http.ResponseWriter, r *http.Request, id st
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
+			AddNotFoundError(w)
 			return
 		} else {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 	}
@@ -418,25 +418,25 @@ func (a *ApiHandler) GetPeersId(w http.ResponseWriter, r *http.Request, id strin
 	peer, err := a.illRepo.GetPeerById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
+			AddNotFoundError(w)
 			return
 		} else {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 	}
 	symbols, err := a.illRepo.GetSymbolsByPeerId(ctx, peer.ID)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	branchSymbols, err := a.illRepo.GetBranchSymbolsByPeerId(ctx, peer.ID)
 	if err != nil {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	apiPeer := toApiPeer(peer, symbols, branchSymbols)
-	writeJsonResponse(w, apiPeer)
+	WriteJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id string) {
@@ -446,17 +446,17 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	peer, err := a.illRepo.GetPeerById(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			addNotFoundError(w)
+			AddNotFoundError(w)
 			return
 		} else {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 	}
 	var update oapi.Peer
 	err = json.NewDecoder(r.Body).Decode(&update)
 	if err != nil {
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return
 	}
 	peer.Name = update.Name
@@ -469,12 +469,12 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	if update.CustomData != nil {
 		bytes, err := json.Marshal(update.CustomData)
 		if err != nil {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 		err = json.Unmarshal(bytes, &peer.CustomData)
 		if err != nil {
-			addInternalError(ctx, w, err)
+			AddInternalError(ctx, w, err)
 			return
 		}
 	} else {
@@ -534,11 +534,11 @@ func (a *ApiHandler) PutPeersId(w http.ResponseWriter, r *http.Request, id strin
 	})
 
 	if err != nil {
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	apiPeer := toApiPeer(peer, symbols, branchSymbols)
-	writeJsonResponse(w, apiPeer)
+	WriteJsonResponse(w, apiPeer)
 }
 
 func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request, params oapi.GetLocatedSuppliersParams) {
@@ -557,21 +557,21 @@ func (a *ApiHandler) GetLocatedSuppliers(w http.ResponseWriter, r *http.Request,
 	var resp oapi.LocatedSuppliers
 	resp.Items = make([]oapi.LocatedSupplier, 0)
 	if tran == nil {
-		writeJsonResponse(w, resp)
+		WriteJsonResponse(w, resp)
 		return
 	}
 	var supList []ill_db.LocatedSupplier
 	var count int64
 	supList, count, err = a.illRepo.GetLocatedSuppliersByIllTransaction(ctx, tran.ID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
-		addInternalError(ctx, w, err)
+		AddInternalError(ctx, w, err)
 		return
 	}
 	resp.About.Count = count
 	for _, supplier := range supList {
 		resp.Items = append(resp.Items, toApiLocatedSupplier(r, supplier))
 	}
-	writeJsonResponse(w, resp)
+	WriteJsonResponse(w, resp)
 }
 
 func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.Request, params oapi.PostArchiveIllTransactionsParams) {
@@ -582,22 +582,12 @@ func (a *ApiHandler) PostArchiveIllTransactions(w http.ResponseWriter, r *http.R
 	})
 	err := service.Archive(ctx, a.illRepo, params.ArchiveStatus, params.ArchiveDelay, true)
 	if err != nil {
-		addBadRequestError(ctx, w, err)
+		AddBadRequestError(ctx, w, err)
 		return
 	}
-	writeJsonResponse(w, oapi.StatusMessage{
+	WriteJsonResponse(w, oapi.StatusMessage{
 		Status: ARCHIVE_PROCESS_STARTED,
 	})
-}
-
-func writeJsonResponse(w http.ResponseWriter, resp any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-type ErrorMessage struct {
-	Error string `json:"error"`
 }
 
 func deleteIllTransaction(ctx common.ExtendedContext, illRepo ill_db.IllRepo, eventRepo events.EventRepo, transId string) error {
@@ -610,35 +600,6 @@ func deleteIllTransaction(ctx common.ExtendedContext, illRepo ill_db.IllRepo, ev
 		return inErr
 	}
 	return illRepo.DeleteIllTransaction(ctx, transId)
-}
-
-func addInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
-	resp := ErrorMessage{
-		Error: err.Error(),
-	}
-	ctx.Logger().Error("error serving api request", "error", err.Error())
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusInternalServerError)
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func addBadRequestError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
-	resp := ErrorMessage{
-		Error: err.Error(),
-	}
-	ctx.Logger().Error("error serving api request", "error", err.Error())
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func addNotFoundError(w http.ResponseWriter) {
-	resp := ErrorMessage{
-		Error: "not found",
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func ToApiEvent(event events.Event, illId string, prId *string) oapi.Event {

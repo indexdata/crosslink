@@ -8,9 +8,10 @@ import (
 )
 
 func TestCreateHoldings(t *testing.T) {
-	m := make(map[string]string)
+	m := make(map[string]any)
 
 	_, err := adapter.CreateHoldingsLookupAdapter(m)
+	assert.Error(t, err)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_ADAPTER")
 
 	m[adapter.HoldingsAdapter] = "sru"
@@ -20,11 +21,21 @@ func TestCreateHoldings(t *testing.T) {
 
 	m[adapter.HoldingsSruURL] = "http://example.com"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
-	assert.Nil(t, err)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "missing value for HOLDINGS_ISXN_LOOKUP")
+
+	m[adapter.HoldingsIsxnLookup] = "fake"
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "invalid value for HOLDINGS_ISXN_LOOKUP")
+
+	m[adapter.HoldingsIsxnLookup] = true
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.NoError(t, err)
 
 	m["HOLDINGS_ADAPTER"] = "mock"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	m["HOLDINGS_ADAPTER"] = "other"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)

@@ -4,6 +4,7 @@ output-options:
   exclude-tags:
     - patron-requests-api
     - sse-api
+    - pull-slips-api
   overlay:
     path: oapi/overlay.yaml
 generate:

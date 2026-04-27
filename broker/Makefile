@@ -37,6 +37,12 @@ PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
 PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
+# Pull slip OpenAPI
+PS_OAPI_DIR=oapi
+PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
+PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
+PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
+
 .PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
 
 all: $(BINARY) archive
@@ -50,7 +56,7 @@ generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
-generate-api: $(OAPI_GEN) $(PR_OAPI_GEN)
+generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN)
 
 $(RETURNABLES_JSON): $(RETURNABLES_YAML)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
@@ -61,6 +67,9 @@ $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
 
 $(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC)
 	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
+
+$(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
+	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
@@ -115,3 +124,4 @@ clean:
 	rm -f $(SQL_GEN_OUT)
 	rm -f $(OAPI_GEN)
 	rm -f $(PR_OAPI_GEN)
+	rm -f $(PS_OAPI_GEN)
