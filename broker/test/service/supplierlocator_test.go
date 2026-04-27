@@ -520,7 +520,7 @@ func TestCreatePeerFromDirectoryResponse(t *testing.T) {
 func TestUnfilledMessageWithReason(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supSymbol,
@@ -539,7 +539,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
-	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -601,7 +601,7 @@ func TestUnfilledMessageWithReason(t *testing.T) {
 func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	supSymbol := "ISIL:NEWSUPPLIER" + uuid.NewString()
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
+	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ"+uuid.NewString(), adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supSymbol,
@@ -620,7 +620,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create ILL transaction: %s", err)
 	}
-	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
+	sup := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
 	apptest.CreateLocatedSupplier(t, illRepo, illTrId, sup.ID, supSymbol, string(iso18626.TypeStatusUnfilled))
 	var completedTask []events.Event
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -680,7 +680,7 @@ func TestUnfilledMessageWithReason_BrokerModeOpaque(t *testing.T) {
 func TestLocalSupplyToAlmaPeer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.Alma, directory.Entry{})
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + reqSymbol,
@@ -736,9 +736,9 @@ func TestLocalSupplyToAlmaPeer(t *testing.T) {
 func TestSupplyMainAndBranch(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ" + uuid.NewString()
-	requester := apptest.CreatePeerWithMode(t, illRepo, reqSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
+	requester := apptest.CreatePeerWithMode(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
 	supSymbol := "ISIL:SUP" + uuid.NewString()
-	supplier := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
+	supplier := apptest.CreatePeerWithMode(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
 	branchSymbol := "ISIL:SUP-B-" + uuid.NewString()
 	_, err := illRepo.SaveBranchSymbol(appCtx, ill_db.SaveBranchSymbolParams{
 		PeerID:      supplier.ID,
@@ -747,7 +747,7 @@ func TestSupplyMainAndBranch(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to create branch symbol: %s", err)
 	}
-	branch := apptest.CreatePeerWithMode(t, illRepo, branchSymbol, adapter.MOCK_CLIENT_URL, string(common.BrokerModeTransparent))
+	branch := apptest.CreatePeerWithMode(t, illRepo, branchSymbol, adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
 	data := ill_db.IllTransactionData{
 		BibliographicInfo: iso18626.BibliographicInfo{
 			SupplierUniqueRecordId: "return-" + supSymbol + ";return-" + branchSymbol,
@@ -856,7 +856,7 @@ func getOrCreatePeer(t *testing.T, illRepo ill_db.IllRepo, symbol string, loans 
 				Time:  time.Now().Add(-24 * time.Hour),
 				Valid: true,
 			},
-			Url:          adapter.MOCK_CLIENT_URL,
+			Url:          adapter.MOCK_PEER_URL,
 			LoansCount:   service.ToInt32(loans),
 			BorrowsCount: service.ToInt32(borrows),
 		})
