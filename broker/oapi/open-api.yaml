@@ -961,6 +961,55 @@ components:
       required:
         - receipt
 
+    PullSlip:
+      type: object
+      title: Pull Slip
+      description: A generated pull slip record
+      properties:
+        id:
+          type: string
+          description: Pull slip ID
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        generatedAt:
+          type: string
+          format: date-time
+          description: When the PDF was generated
+        type:
+          type: string
+          description: Pull slip type (single, batch)
+          enum:
+            - single
+            - batch
+        owner:
+          type: string
+          description: Symbol of the owning institution
+        searchCriteria:
+          type: string
+          description: Criteria used to generate this pull slip
+        pdfLink:
+          type: string
+          description: Link to download the PDF
+      required:
+        - id
+        - createdAt
+        - type
+        - owner
+        - searchCriteria
+
+    CreatePullSlip:
+      type: object
+      title: Create Pull Slip
+      description: Create pull slip body
+      properties:
+        illTransactionId:
+          description: Patron request ID to create pull slips for
+          type: string
+      required:
+        - illTransactionId
+
 paths:
   /:
     get:
@@ -1790,6 +1839,119 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StateModelCapabilities'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pullslips/{id}:
+    get:
+      summary: Get pull slip by ID
+      tags:
+        - pull-slips-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the pull slip to retrieve
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Pull slip retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PullSlip'
+        '404':
+          description: Pull slip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pullslips/{id}/pdf:
+    get:
+      summary: Download pull slip PDF by ID
+      tags:
+        - pull-slips-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the pull slip whose PDF to download
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Pull slip PDF retrieved successfully
+          headers:
+            Content-Disposition:
+              description: Attachment filename for the PDF
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Pull slip not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pullslips:
+    post:
+      summary: Create pull slip for a patron request
+      tags:
+        - pull-slips-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePullSlip'
+      responses:
+        '200':
+          description: Pull slip PDF generated successfully
+          headers:
+            Content-Disposition:
+              description: Attachment filename for the generated PDF
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:

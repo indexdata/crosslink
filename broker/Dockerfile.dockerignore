@@ -23,3 +23,6 @@ broker/**/*_test.go
 
 # Include statemodels
 !broker/patron_request/service/statemodels
+
+# Include pull slip templates
+!broker/pullslip/service/pull_slip_template.html

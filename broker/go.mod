@@ -37,6 +37,8 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
+	github.com/boombuler/barcode v1.1.0
+	github.com/carlos7ags/folio v0.7.1
 )
 
 require (
