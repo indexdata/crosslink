@@ -1,0 +1,5 @@
+{
+  "id": "isxn-matcher",
+  "type": "javascript",
+  "url": "https://raw.githubusercontent.com/indexdata/reservoir/master/js/matchkeys/isxn/isxn.mjs"
+}

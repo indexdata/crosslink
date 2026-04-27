@@ -32,6 +32,13 @@ Start with:
 docker compose -f docker-compose-reservoir.yml up
 ```
 
+Load at least one MARC for reservoir with the `isxn` matcher with:
+
+```
+cd reservoir
+./load-records.sh
+```
+
 Start Bruno and load the `LocalDev` environment.
 
 Select the `Reservoir` folder in Bruno. Only the first parts of the Happy flow is currently in this holder. This
