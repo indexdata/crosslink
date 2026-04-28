@@ -210,7 +210,7 @@ func getStaffNotes(noteList []pr_db.Notification) string {
 			noteStrings = append(noteStrings, note.Note.String)
 		}
 	}
-	notes := strings.Join(noteStrings, "<br/>")
+	notes := strings.Join(noteStrings, "\n")
 	if notes == "" {
 		return DEFAULT_FOR_NO_VALUE
 	}
@@ -224,7 +224,7 @@ func getLoanConditions(conditionList []pr_db.Notification) string {
 			conditionStrings = append(conditionStrings, note.Condition.String)
 		}
 	}
-	conditions := strings.Join(conditionStrings, "<br/>")
+	conditions := strings.Join(conditionStrings, "\n")
 	if conditions == "" {
 		return DEFAULT_FOR_NO_VALUE
 	}

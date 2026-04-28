@@ -1,7 +1,7 @@
 DROP VIEW IF EXISTS patron_request_search_view;
 
 ALTER TABLE patron_request
-    DROP COLUMN supplier_message jsonb;
+    DROP COLUMN supplier_message;
 
 CREATE OR REPLACE VIEW patron_request_search_view AS
 SELECT
