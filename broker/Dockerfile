@@ -1,6 +1,6 @@
 FROM golang:1.26 AS build
 
-RUN apt-get update && apt-get install -y libyaz-dev
+RUN apt-get update && apt-get install -y libyaz-dev pkg-config
 
 # Builds from the workspace root dir
 WORKDIR /app

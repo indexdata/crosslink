@@ -1,7 +1,7 @@
 package zoom
 
 /*
-#cgo LDFLAGS: -lyaz
+#cgo pkg-config: yaz
 #include <yaz/zoom.h>
 #include <stdlib.h>
 */
