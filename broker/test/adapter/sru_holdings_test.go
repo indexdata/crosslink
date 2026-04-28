@@ -377,7 +377,7 @@ func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
-	assert.Equal(t, "s1", holdings[0].Symbol)
+	assert.Equal(t, "ISIL:s1", holdings[0].Symbol)
 }
 
 func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
@@ -455,7 +455,7 @@ func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
 	assert.Equal(t, "primary-local", holdings[0].LocalIdentifier)
-	assert.Equal(t, "primary-symbol", holdings[0].Symbol)
+	assert.Equal(t, "ISIL:primary-symbol", holdings[0].Symbol)
 }
 
 func TestSruMarcxmlUsesFallbackWhenPrimaryFieldHasNoUsableHolding(t *testing.T) {
@@ -529,7 +529,7 @@ func TestSruMarcxmlUsesFallbackWhenPrimaryFieldHasNoUsableHolding(t *testing.T) 
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
 	assert.Equal(t, "fallback-local", holdings[0].LocalIdentifier)
-	assert.Equal(t, "fallback-symbol", holdings[0].Symbol)
+	assert.Equal(t, "ISIL:fallback-symbol", holdings[0].Symbol)
 }
 
 func TestSruMarcxmlWithHoldings(t *testing.T) {
@@ -636,11 +636,11 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "rec.id = 123", receivedQuery)
 	assert.Len(t, holdings, 3)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
-	assert.Equal(t, "s1", holdings[0].Symbol)
+	assert.Equal(t, "ISIL:s1", holdings[0].Symbol)
 	assert.Equal(t, "l2", holdings[1].LocalIdentifier)
-	assert.Equal(t, "s2", holdings[1].Symbol)
+	assert.Equal(t, "ISIL:s2", holdings[1].Symbol)
 	assert.Equal(t, "l3", holdings[2].LocalIdentifier)
-	assert.Equal(t, "s3", holdings[2].Symbol)
+	assert.Equal(t, "ISIL:s3", holdings[2].Symbol)
 
 	ad = createSruAdapter(t, true, server.URL, server.URL)
 	p = adapter.HoldingLookupParams{
@@ -654,18 +654,18 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
 	assert.Len(t, holdings, 6)
 	assert.Equal(t, "l1", holdings[0].LocalIdentifier)
-	assert.Equal(t, "s1", holdings[0].Symbol)
+	assert.Equal(t, "ISIL:s1", holdings[0].Symbol)
 	assert.Equal(t, "l2", holdings[1].LocalIdentifier)
-	assert.Equal(t, "s2", holdings[1].Symbol)
+	assert.Equal(t, "ISIL:s2", holdings[1].Symbol)
 	assert.Equal(t, "l3", holdings[2].LocalIdentifier)
-	assert.Equal(t, "s3", holdings[2].Symbol)
+	assert.Equal(t, "ISIL:s3", holdings[2].Symbol)
 
 	assert.Equal(t, "l1", holdings[3].LocalIdentifier)
-	assert.Equal(t, "s1", holdings[3].Symbol)
+	assert.Equal(t, "ISIL:s1", holdings[3].Symbol)
 	assert.Equal(t, "l2", holdings[4].LocalIdentifier)
-	assert.Equal(t, "s2", holdings[4].Symbol)
+	assert.Equal(t, "ISIL:s2", holdings[4].Symbol)
 	assert.Equal(t, "l3", holdings[5].LocalIdentifier)
-	assert.Equal(t, "s3", holdings[5].Symbol)
+	assert.Equal(t, "ISIL:s3", holdings[5].Symbol)
 
 	ad = createSruAdapter(t, false, server.URL)
 	p = adapter.HoldingLookupParams{

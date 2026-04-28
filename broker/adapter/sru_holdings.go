@@ -21,6 +21,8 @@ type SruHoldingsLookupAdapter struct {
 	client *http.Client
 }
 
+const isilPrefix = "ISIL:"
+
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn bool) HoldingsLookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn}
 }
@@ -37,7 +39,11 @@ func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 st
 				holding.LocalIdentifier = string(sf.Text)
 			}
 			if sf.Code == "s" {
-				holding.Symbol = string(sf.Text)
+				symbol := string(sf.Text)
+				if symbol != "" && !strings.Contains(symbol, ":") {
+					symbol = isilPrefix + symbol
+				}
+				holding.Symbol = symbol
 				*holdings = append(*holdings, holding)
 			}
 		}
