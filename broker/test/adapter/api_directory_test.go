@@ -193,6 +193,27 @@ func TestLookupMissingSymbols(t *testing.T) {
 	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+ISIL%3APEER", cql)
 }
 
+func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		respBody := "{\"items\":[{" +
+			"\"name\":\"Peer\",\"symbols\":[{\"authority\":\"\",\"symbol\":\"PEER\"}]}]," +
+			"\"resultInfo\":{\"totalRecords\":1}}"
+		w.Write([]byte(respBody))
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ad := createDirectoryAdapter(server.URL)
+	p := adapter.DirectoryLookupParams{
+		Symbols: []string{"ISIL:PEER"},
+	}
+	entries, _, err := ad.Lookup(p)
+	assert.Nil(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, []string{"ISIL:PEER"}, entries[0].Symbols)
+}
+
 func TestLookup(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
