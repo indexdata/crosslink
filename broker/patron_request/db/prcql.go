@@ -34,13 +34,13 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("side", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithILikeOps()
 	def.AddField("requester_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithILikeOps()
 	def.AddField("supplier_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithILikeOps()
 	def.AddField("requester_req_id", f)
 
 	fb := pgcql.NewFieldBool()
@@ -79,7 +79,7 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'author'")
 	def.AddField("author", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithILikeOps()
 	def.AddField("patron", f)
 
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
