@@ -24,6 +24,6 @@ set -x
 
 curl -s \
       -HContent-Encoding:application/octet-stream \
-      -T $filename "$OKAPI_URL/reservoir/upload?sourceId=ISIL:US-RS3&sourceVersion=1&xmlFixing=true&fileName=$filename&localIdPath=%24.marc.fields%5B%2A%5D.001"
+      -T $filename "$OKAPI_URL/reservoir/upload?sourceId=US-RS3&sourceVersion=1&xmlFixing=true&fileName=$filename&localIdPath=%24.marc.fields%5B%2A%5D.001"
 
 curl -s "$OKAPI_URL/reservoir/sru?maximumRecords=1&query=isbn%3D9781172431779"
