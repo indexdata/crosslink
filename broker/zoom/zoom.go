@@ -101,6 +101,7 @@ func (r *ResultSet) GetRecord(index int) (*Record, error) {
 	if cRecord == nil {
 		return nil, nil
 	}
+	cRecord = C.ZOOM_record_clone(cRecord)
 	record := &Record{rec: cRecord}
 	runtime.SetFinalizer(record, func(record *Record) {
 		if record.rec != nil {
@@ -116,6 +117,9 @@ func (r *ResultSet) GetRecord(index int) (*Record, error) {
 }
 
 func (r *Record) Data(dataType string) string {
+	if r.rec == nil {
+		return ""
+	}
 	cType := C.CString(dataType)
 	defer C.free(unsafe.Pointer(cType))
 	cData := C.ZOOM_record_get(r.rec, cType, nil)

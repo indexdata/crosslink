@@ -64,4 +64,40 @@ func TestSearch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, record)
 	assert.Contains(t, record.Data("render"), "program")
+	assert.Equal(t, "", record.Data("unknown"))
+
+	record, err = rs.GetRecord(-1)
+	assert.NoError(t, err)
+	assert.Nil(t, record)
+
+	conn.Close()
+	_, err = conn.Search("@attr 1=4 computer")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connection is not established")
+}
+
+func TestRecordData(t *testing.T) {
+	record := &Record{}
+	assert.Equal(t, "", record.Data("render"))
+}
+
+func TestSearchUnsupportedSyntax(t *testing.T) {
+	options := Options{
+		"preferredRecordSyntax": "danmarc",
+	}
+
+	conn := NewConnection(options)
+	assert.NotNil(t, conn)
+	err := conn.Connect("z3950.indexdata.com/marc")
+	assert.NoError(t, err)
+
+	rs, err := conn.Search("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, rs)
+	assert.Greater(t, rs.Count(), 7)
+
+	// would like to get error for this.
+	record, err := rs.GetRecord(0)
+	assert.NoError(t, err)
+	assert.NotNil(t, record)
 }
