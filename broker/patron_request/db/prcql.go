@@ -34,14 +34,23 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("side", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("requester_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithExact().WithColumn("requester_symbol")
+	def.AddField("requester_symbol_exact", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("supplier_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithExact().WithColumn("supplier_symbol")
+	def.AddField("supplier_symbol_exact", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("requester_req_id", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("requester_req_id")
+	def.AddField("requester_req_id_exact", f)
 
 	fb := pgcql.NewFieldBool()
 	def.AddField("needs_attention", fb)
