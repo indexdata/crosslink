@@ -323,6 +323,10 @@ func TestListPatronRequests(t *testing.T) {
 				String: "ISIL:REQ",
 				Valid:  true,
 			},
+			SupplierSymbol: pgtype.Text{
+				String: "ISIL:SUP",
+				Valid:  true,
+			},
 			State:    prservice.BorrowerStateValidated,
 			Language: "english",
 			RequesterReqID: pgtype.Text{
@@ -357,6 +361,33 @@ func TestListPatronRequests(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = "requester_symbol = isil:req"
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = "supplier_symbol = isil:sup"
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = "requester_req_id = req-123"
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	// not found

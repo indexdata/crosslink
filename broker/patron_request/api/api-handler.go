@@ -155,7 +155,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		}
 	}
 	if params.RequesterReqId != nil {
-		_, err = qb.And().Search("requester_req_id").Term(*params.RequesterReqId).Build()
+		_, err = qb.And().Search("requester_req_id_exact").Term(*params.RequesterReqId).Build()
 		if err != nil {
 			api.AddBadRequestError(ctx, w, err)
 			return
@@ -195,22 +195,22 @@ func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	case prservice.SideLending:
 		_, err = queryBuilder.And().
 			Search("side").Term(string(prservice.SideLending)).
-			And().Search("supplier_symbol").Term(symbol).
+			And().Search("supplier_symbol_exact").Term(symbol).
 			Build()
 	case prservice.SideBorrowing:
 		_, err = queryBuilder.And().
 			Search("side").Term(string(prservice.SideBorrowing)).
-			And().Search("requester_symbol").Term(symbol).
+			And().Search("requester_symbol_exact").Term(symbol).
 			Build()
 	default:
 		_, err = queryBuilder.And().
 			BeginClause().
 			Search("side").Term(string(prservice.SideLending)).
-			And().Search("supplier_symbol").Term(symbol).
+			And().Search("supplier_symbol_exact").Term(symbol).
 			EndClause().
 			Or().
 			BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
-			And().Search("requester_symbol").Term(symbol).
+			And().Search("requester_symbol_exact").Term(symbol).
 			EndClause().
 			Build()
 	}
