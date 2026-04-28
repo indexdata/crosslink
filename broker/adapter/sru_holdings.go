@@ -40,8 +40,11 @@ func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 st
 			}
 			if sf.Code == "s" {
 				symbol := string(sf.Text)
-				if symbol != "" && !strings.Contains(symbol, ":") {
-					symbol = isilPrefix + symbol
+				if symbol != "" {
+					scheme, _, found := strings.Cut(symbol, ":")
+					if !found || strings.TrimSpace(scheme) == "" {
+						symbol = isilPrefix + symbol
+					}
 				}
 				holding.Symbol = symbol
 				*holdings = append(*holdings, holding)
