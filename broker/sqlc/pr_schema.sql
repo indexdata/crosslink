@@ -18,7 +18,8 @@ CREATE TABLE patron_request
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
-    updated_at          TIMESTAMP
+    updated_at          TIMESTAMP,
+    supplier_message    jsonb
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

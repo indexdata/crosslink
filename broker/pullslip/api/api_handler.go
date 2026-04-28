@@ -112,7 +112,17 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	pdf, err := p.pdfService.GeneratePdfPullSlip(pr)
+	notes, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	conditions, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	pdf, err := p.pdfService.GeneratePdfPullSlip(pr, notes, conditions)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
