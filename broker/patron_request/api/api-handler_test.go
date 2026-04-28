@@ -176,9 +176,9 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "requester_req_id = req-123")
+		assert.Contains(t, *repo.cql, "requester_req_id_exact = req-123")
 		assert.Contains(t, *repo.cql, "side = lending")
-		assert.Contains(t, *repo.cql, "supplier_symbol = ISIL:REQ")
+		assert.Contains(t, *repo.cql, "supplier_symbol_exact = ISIL:REQ")
 	}
 }
 
