@@ -23,11 +23,13 @@ replace (
 )
 
 require (
+	github.com/boombuler/barcode v1.1.0
+	github.com/carlos7ags/folio v0.7.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20260413194109-3e1c0001d698
+	github.com/indexdata/cql-go v1.0.1-0.20260428081332-7305dd10a792
 	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.2
@@ -37,8 +39,6 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
-	github.com/boombuler/barcode v1.1.0
-	github.com/carlos7ags/folio v0.7.1
 )
 
 require (
@@ -113,7 +113,9 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
