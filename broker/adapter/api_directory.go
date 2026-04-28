@@ -24,6 +24,8 @@ type ApiDirectory struct {
 	client *http.Client
 }
 
+const defAuthority = "ISIL"
+
 func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapter {
 	return &ApiDirectory{client: client, urls: urls}
 }
@@ -57,7 +59,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryE
 		var symbols []string
 		if d.Symbols != nil {
 			for _, s := range *d.Symbols {
-				symbols = append(symbols, s.Authority+":"+s.Symbol)
+				authority := s.Authority
+				if authority == "" {
+					authority = defAuthority
+				}
+				symbols = append(symbols, authority+":"+s.Symbol)
 			}
 			if d.Parent != nil {
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
