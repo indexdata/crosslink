@@ -66,7 +66,7 @@ func TestMain(m *testing.M) {
 	localAddress := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", localAddress), "failed to set peer URL")
 
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 	ncipMockUrl = "http://localhost:" + strconv.Itoa(mockPort) + "/ncip"
 
 	apptest.StartMockApp(mockPort)
@@ -90,12 +90,12 @@ func TestCrud(t *testing.T) {
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})
 	assert.NotNil(t, reqPeer)
-	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL)
+	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
 
 	// POST
@@ -326,14 +326,14 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
 	assert.NotNil(t, reqPeer)
 
 	lmsConfig := &directory.LmsConfig{
 		FromAgency: "from-agency",
 		Address:    ncipMockUrl,
 	}
-	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
+	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
 		})
@@ -615,7 +615,7 @@ func TestActionsToCompleteState(t *testing.T) {
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_CLIENT_URL, app.BROKER_MODE, directory.CrossLink,
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: &directory.LmsConfig{
 				FromAgency: "from-agency",

@@ -63,7 +63,7 @@ func TestMain(m *testing.M) {
 	LocalAddress = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	test.Expect(os.Setenv("PEER_URL", LocalAddress), "failed to set peer URL")
 
-	adapter.MOCK_CLIENT_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	apptest.StartMockApp(mockPort)
 
@@ -86,8 +86,8 @@ func TestMessageRequester(t *testing.T) {
 
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	//we use the mock as the destination for the request to get a valid ISO18626 response
-	reqPeer := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL)
-	supPeer := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL)
+	reqPeer := apptest.CreatePeer(t, illRepo, "ISIL:REQ1", adapter.MOCK_PEER_URL)
+	supPeer := apptest.CreatePeer(t, illRepo, "ISIL:RESP1", adapter.MOCK_PEER_URL)
 	illId := createIllTrans(t, illRepo, reqPeer.ID, "ISIL:REQ1", string(iso18626.TypeActionReceived), "ISIL:RESP1")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, supPeer.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
@@ -120,8 +120,8 @@ func TestMessageRequesterWithBrokerModePerPeer(t *testing.T) {
 
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
-	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", adapter.MOCK_CLIENT_URL, string(common.BrokerModeOpaque))
+	req := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ1", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
+	resp := apptest.CreatePeerWithMode(t, illRepo, "ISIL:RESP1", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1", string(iso18626.TypeActionReceived), "ISIL:RESP1")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
@@ -156,9 +156,9 @@ func TestMessageRequesterNoLastStatus(t *testing.T) {
 
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", adapter.MOCK_CLIENT_URL)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ1_1", adapter.MOCK_PEER_URL)
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ1_1", string(iso18626.TypeActionReceived), "ISIL:RESP1_1")
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", adapter.MOCK_CLIENT_URL)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP1_1", adapter.MOCK_PEER_URL)
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP1_1", "") //no status
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageRequester)
 	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
@@ -192,8 +192,8 @@ func TestMessageSupplier(t *testing.T) {
 
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 
-	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", adapter.MOCK_CLIENT_URL)
-	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", adapter.MOCK_CLIENT_URL)
+	req := apptest.CreatePeer(t, illRepo, "ISIL:REQ2", adapter.MOCK_PEER_URL)
+	resp := apptest.CreatePeer(t, illRepo, "ISIL:RESP2", adapter.MOCK_PEER_URL)
 	illId := createIllTrans(t, illRepo, req.ID, "ISIL:REQ2", string(iso18626.TypeActionReceived), "ISIL:RESP2")
 	apptest.CreateLocatedSupplier(t, illRepo, illId, resp.ID, "ISIL:RESP2", string(iso18626.TypeStatusLoaned))
 	eventId := apptest.GetEventId(t, eventRepo, illId, events.EventTypeTask, events.EventStatusNew, events.EventNameMessageSupplier)
@@ -553,7 +553,7 @@ func requestLocallyAvailableSetup(t *testing.T, appCtx common.ExtendedContext, b
 	data, err := os.ReadFile("../testdata/request-locally-available.xml")
 	assert.NoError(t, err)
 	dataString := strings.Replace(string(data), existingId, reqId, 1)
-	req, err := http.NewRequest("POST", adapter.MOCK_CLIENT_URL, bytes.NewReader([]byte(dataString)))
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(dataString)))
 	assert.NoError(t, err)
 	req.Header.Add("Content-Type", "application/xml")
 	httpClient := &http.Client{}

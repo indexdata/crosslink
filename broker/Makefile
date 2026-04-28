@@ -8,33 +8,44 @@ export HOST_DOCKER_INTERNAL=172.17.0.1
 endif
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
+BUILD_GOFILES := $(shell find . -path "./test" -prune -o -name "*.go" ! -name "*_test.go" ! -name "tools.go" -print)
 GOTOOLS=tools.go
 BINARY=broker
 MAIN_PACKAGE=cmd/broker
 MODULE=broker
 COMMIT_ID=vcs/commit.txt
+GIT_HEAD_FILE := $(shell $(GIT) rev-parse --git-path HEAD 2>/dev/null)
+GIT_HEAD_REF := $(shell $(GIT) symbolic-ref -q HEAD 2>/dev/null)
+GIT_HEAD_REF_FILE := $(if $(GIT_HEAD_REF),$(shell $(GIT) rev-parse --git-path $(GIT_HEAD_REF) 2>/dev/null))
+GIT_PACKED_REFS_FILE := $(shell $(GIT) rev-parse --git-path packed-refs 2>/dev/null)
+GIT_COMMIT_DEPS = $(GIT_HEAD_FILE) $(wildcard $(GIT_HEAD_REF_FILE)) $(wildcard $(GIT_PACKED_REFS_FILE))
 COVERAGE=coverage.out
 RETURNABLES_JSON=patron_request/service/statemodels/returnables.json
 RETURNABLES_YAML=../misc/returnables.yaml
+PULLSLIP_TEMPLATE=pullslip/service/pull_slip_template.html
 
 # SQLC
 SQLC ?= sqlc
 SQLC_CONFIG = sqlc/sqlc.yaml
-SQL_GEN_OUT_ILL_DB = ill_db/*_gen.go
-SQL_GEN_OUT_EVENT = events/*_gen.go
-SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT)
+SQL_GEN_OUT_ILL_DB = ill_db/ill_db_gen.go ill_db/ill_models_gen.go ill_db/ill_query.sql_gen.go
+SQL_GEN_OUT_EVENT = events/event_db_gen.go events/event_models_gen.go events/event_query.sql_gen.go
+SQL_GEN_OUT_PR = patron_request/db/pr_db_gen.go patron_request/db/pr_models_gen.go patron_request/db/pr_query.sql_gen.go
+SQL_GEN_OUT_PS = pullslip/db/ps_db_gen.go pullslip/db/ps_models_gen.go pullslip/db/ps_query.sql_gen.go
+SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS)
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
 OAPI_DIR=oapi
 OAPI_CFG = $(OAPI_DIR)/cfg.yaml
 OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
+OAPI_OVERLAY = $(OAPI_DIR)/overlay.yaml
 OAPI_GEN = $(OAPI_DIR)/openapi_gen.go
 
 # Patron request OpenAPI
 PR_OAPI_DIR=oapi
 PR_OAPI_CFG = $(PR_OAPI_DIR)/pr-cfg.yaml
 PR_OAPI_SPEC = $(PR_OAPI_DIR)/open-api.yaml
+PR_OAPI_OVERLAY = $(PR_OAPI_DIR)/pr-overlay.yaml
 PR_OAPI_GEN = patron_request/proapi/pr-openapi_gen.go
 
 # Pull slip OpenAPI
@@ -43,7 +54,7 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
@@ -62,10 +73,10 @@ $(RETURNABLES_JSON): $(RETURNABLES_YAML)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
-$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
+$(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) $(OAPI_OVERLAY)
 	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
 
-$(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC)
+$(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY)
 	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
 
 $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
@@ -74,13 +85,16 @@ $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
-$(COMMIT_ID):
-	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
+$(COMMIT_ID): $(GIT_COMMIT_DEPS)
+	commit="$$( $(GIT) rev-parse --short HEAD )"; \
+	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$commit" ]; then \
+		printf "%s" "$$commit" > "$@"; \
+	fi
 
-$(BINARY):  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES) $(RETURNABLES_JSON)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(GEN_SCHEMA_OUT) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(GOFILES) $(RETURNABLES_JSON)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate

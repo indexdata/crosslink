@@ -17,10 +17,9 @@ func TestCreateHoldings(t *testing.T) {
 	m[adapter.HoldingsAdapter] = "sru"
 
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
-	assert.Error(t, err)
-	assert.ErrorContains(t, err, "missing value for SRU_URL")
+	assert.ErrorContains(t, err, "missing value for HOLDINGS_SRU_URL")
 
-	m[adapter.SruUrl] = "http://example.com"
+	m[adapter.HoldingsSruURL] = "http://example.com"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_ISXN_LOOKUP")
