@@ -116,7 +116,7 @@ func TestCrud(t *testing.T) {
 			},
 		},
 	}
-	id := uuid.NewString()
+	id := "REQ-" + strings.ToUpper(uuid.NewString())
 	newPr := proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &requesterSymbol,
@@ -192,6 +192,26 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
+
+	// GET list symbol/requester_req_id params are translated to exact CQL fields.
+	respBytes = httpRequest(t, "GET", basePath+"?side=borrowing&symbol="+url.QueryEscape(strings.ToLower(*foundPr.RequesterSymbol)), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+
+	respBytes = httpRequest(t, "GET", basePath+"?requester_req_id="+url.QueryEscape(*newPr.Id), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 1)
+	assert.Equal(t, *newPr.Id, foundPrs.Items[0].Id)
+
+	respBytes = httpRequest(t, "GET", basePath+"?requester_req_id="+url.QueryEscape(strings.ToLower(*newPr.Id)), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
 
 	// GET list with offset in
 	respBytes = httpRequest(t, "GET", basePath+queryParams+"&offset=100000", []byte{}, 200)
