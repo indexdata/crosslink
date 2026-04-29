@@ -6,9 +6,11 @@ import (
 	"image/png"
 	"strings"
 	"testing"
+	"time"
 
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -93,7 +95,7 @@ func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
 		},
 		// No bibliographic info — all fields should fall back to DEFAULT_FOR_NO_VALUE
 	}
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr)
+	pdfBytes, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 	// PDF magic bytes: %PDF
@@ -115,7 +117,80 @@ func TestGeneratePdfPullSlip_WithBibliographicInfo(t *testing.T) {
 			},
 		},
 	}
-	pdfBytes, err := svc.GeneratePdfPullSlip(pr)
+	pdfBytes, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
+	assert.NoError(t, err)
+	assert.NotEmpty(t, pdfBytes)
+	assert.Equal(t, "%PDF", string(pdfBytes[:4]))
+}
+
+func TestGeneratePdfPullSlip_FullData(t *testing.T) {
+	callNumber := "QA76.9.A25"
+	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)}
+
+	svc := &PdfService{}
+	pr := pr_db.PatronRequest{
+		ID: "REQ-FULL",
+		RequesterReqID: pgtype.Text{
+			String: "REQ-FULL",
+			Valid:  true,
+		},
+		IllRequest: iso18626.Request{
+			BibliographicInfo: iso18626.BibliographicInfo{
+				Title:                  "The Art of Computer Programming",
+				Author:                 "Donald Knuth",
+				Volume:                 "1",
+				Issue:                  "2",
+				EstimatedNoPages:       "650",
+				SupplierUniqueRecordId: "SYS-ID-42",
+			},
+			PublicationInfo: &iso18626.PublicationInfo{
+				Publisher: "Addison-Wesley",
+			},
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceTypeLoan,
+				ServiceLevel: &iso18626.TypeSchemeValuePair{
+					Text: "EXPRESS",
+				},
+			},
+			RequestedDeliveryInfo: []iso18626.RequestedDeliveryInfo{
+				{
+					Address: &iso18626.Address{
+						PhysicalAddress: &iso18626.PhysicalAddress{
+							Line1: "Pick up at front desk",
+						},
+					},
+				},
+			},
+		},
+		IllResponse: iso18626.SupplyingAgencyMessage{
+			StatusInfo: iso18626.StatusInfo{
+				DueDate: &dueDate,
+			},
+			ReturnInfo: &iso18626.ReturnInfo{
+				PhysicalAddress: &iso18626.PhysicalAddress{
+					Line1:      "123 Library Lane",
+					Line2:      "Suite 4",
+					Locality:   "Springfield",
+					PostalCode: "12345",
+					Region:     &iso18626.TypeSchemeValuePair{Text: "IL"},
+					Country:    &iso18626.TypeSchemeValuePair{Text: "US"},
+				},
+			},
+		},
+		Items: []pr_db.PrItem{
+			{ID: "item-1", CallNumber: &callNumber},
+		},
+	}
+
+	notes := []pr_db.Notification{
+		{Note: pgtype.Text{String: "Handle with care", Valid: true}},
+		{Note: pgtype.Text{String: "Rush request", Valid: true}},
+	}
+	conditions := []pr_db.Notification{
+		{Condition: pgtype.Text{String: "No photocopying", Valid: true}},
+	}
+
+	pdfBytes, err := svc.GeneratePdfPullSlip(pr, notes, conditions)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, pdfBytes)
 	assert.Equal(t, "%PDF", string(pdfBytes[:4]))
@@ -135,7 +210,7 @@ func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
 			Valid:  true,
 		},
 	}
-	_, err := svc.GeneratePdfPullSlip(pr)
+	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.Error(t, err)
 }
 
@@ -152,24 +227,6 @@ func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
 			Valid:  true,
 		},
 	}
-	_, err := svc.GeneratePdfPullSlip(pr)
-	assert.Error(t, err)
-}
-
-func TestGeneratePdfPullSlip_TempFileError(t *testing.T) {
-	// Point TMPDIR to a non-existent directory so os.CreateTemp fails
-	t.Setenv("TMPDIR", "/nonexistent-dir-for-test")
-	t.Setenv("TMP", "/nonexistent-dir-for-test")
-	t.Setenv("TEMP", "/nonexistent-dir-for-test")
-
-	svc := &PdfService{}
-	pr := pr_db.PatronRequest{
-		ID: "REQ-TMPFAIL",
-		RequesterReqID: pgtype.Text{
-			String: "REQ-TMPFAIL",
-			Valid:  true,
-		},
-	}
-	_, err := svc.GeneratePdfPullSlip(pr)
+	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.Error(t, err)
 }

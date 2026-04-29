@@ -1,7 +1,7 @@
 meta {
   name: Lending side check notifications
   type: http
-  seq: 26
+  seq: 31
 }
 
 get {
@@ -33,20 +33,20 @@ script:post-response {
     expect(body.items).to.be.an("array");
     expect(body.about.count).to.equal(4);
     expect(body.items.length).to.equal(4);
-
+  
     const conditionNotification = body.items.find((n) => n.note === "please do not copy");
     expect(conditionNotification).to.not.equal(undefined);
     expect(conditionNotification.direction).to.equal("sent");
     expect(conditionNotification.condition).to.equal("NoReproduction");
-
+  
     const postAcceptNotification = body.items.find((n) => n.note === "thanks for accepting condition but I will need to ask for payment too");
     expect(postAcceptNotification).to.not.equal(undefined);
     expect(postAcceptNotification.direction).to.equal("sent");
-
+  
     const costNotification = body.items.find((n) => n.cost === 20 && n.currency === "USD");
     expect(costNotification).to.not.equal(undefined);
     expect(costNotification.direction).to.equal("sent");
-
+  
     const borrowerNotification = body.items.find((n) => n.note === "no problem");
     expect(borrowerNotification).to.not.equal(undefined);
     expect(borrowerNotification.direction).to.equal("received");

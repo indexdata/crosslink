@@ -78,6 +78,14 @@ sql:
             go_type:
               import: "github.com/indexdata/crosslink/iso18626"
               type: "Request"
+          - column: "patron_request.ill_response"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "SupplyingAgencyMessage"
+          - column: "patron_request_search_view.ill_response"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "SupplyingAgencyMessage"
           - column: "patron_request.state"
             go_type:
               type: "PatronRequestState"

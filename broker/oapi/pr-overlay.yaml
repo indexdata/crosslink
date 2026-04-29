@@ -8,6 +8,11 @@ actions:
       x-go-type: iso18626.Request
       x-go-type-import:
         path: github.com/indexdata/crosslink/iso18626
+  - target: $.components.schemas.PatronRequest.properties.illResponse
+    update:
+      x-go-type: iso18626.SupplyingAgencyMessage
+      x-go-type-import:
+        path: github.com/indexdata/crosslink/iso18626
   - target: $.components.schemas.CreatePatronRequest.properties.illRequest
     update:
       x-go-type: iso18626.Request
