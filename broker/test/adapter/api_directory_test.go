@@ -55,6 +55,16 @@ func TestGetVendorFromUrl(t *testing.T) {
 			expected: directory.ReShare,
 		},
 		{
+			name:     "illiad atlas-sys",
+			url:      "https://example.Atlas-Sys.com/ILLiad/ISO18626",
+			expected: directory.ILLiad,
+		},
+		{
+			name:     "illiad path",
+			url:      "https://example.org/ILLIAD/iso18626",
+			expected: directory.ILLiad,
+		},
+		{
 			name:     "unknown",
 			url:      "https://example.org/iso18626",
 			expected: directory.Unknown,
@@ -66,6 +76,10 @@ func TestGetVendorFromUrl(t *testing.T) {
 			assert.Equal(t, tt.expected, adapter.GetVendorFromUrl(tt.url))
 		})
 	}
+}
+
+func TestGetBrokerMode(t *testing.T) {
+	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(directory.ILLiad))
 }
 
 func TestLookup400(t *testing.T) {
