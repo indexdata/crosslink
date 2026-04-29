@@ -1,5 +1,5 @@
 GO ?= go
-SUBDIRS := iso18626 ncip directory sru marcxml httpclient illmock broker
+SUBDIRS := iso18626 ncip directory sru marcxml httpclient zoom illmock broker
 GOALS := $(or $(MAKECMDGOALS),all)
 
 .PHONY: $(GOALS) $(SUBDIRS) deps-update
