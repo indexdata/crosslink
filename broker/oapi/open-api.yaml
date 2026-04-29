@@ -1005,13 +1005,16 @@ components:
     CreatePullSlip:
       type: object
       title: Create Pull Slip
-      description: Create pull slip body
+      description: Create pull slip body. If both illTransactionIds and cql are provided, illTransactionIds will be used for pull slip generation and cql will be ignored.
       properties:
-        illTransactionId:
-          description: Patron request ID to create pull slips for
+        illTransactionIds:
+          type: array
+          description: Patron request IDs to create pull slips for
+          items:
+            type: string
+        cql:
+          description: CQL search for patron requests to create pull slips for
           type: string
-      required:
-        - illTransactionId
 
 paths:
   /:
@@ -1870,6 +1873,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PullSlip'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Pull slip not found
           content:
@@ -1910,6 +1919,12 @@ paths:
               schema:
                 type: string
                 format: binary
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Pull slip not found
           content:
@@ -1951,6 +1966,52 @@ paths:
                 format: binary
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pullslips/{id}/regenerate:
+    post:
+      summary: Regenerate pull slip PDF by ID
+      tags:
+        - pull-slips-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the pull slip whose PDF to regenerate
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Pull slip PDF regenerated successfully
+          headers:
+            Content-Disposition:
+              description: Attachment filename for the PDF
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Pull slip not found
           content:
             application/json:
               schema:

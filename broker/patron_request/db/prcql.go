@@ -91,6 +91,9 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
 
+	f = pgcql.NewFieldString().WithSplit().WithExact()
+	def.AddField("id", f)
+
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
 
