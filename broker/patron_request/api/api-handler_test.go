@@ -182,6 +182,25 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	}
 }
 
+func TestGetPatronRequestsWithSymbolNoSideGroupsOwnerRestriction(t *testing.T) {
+	repo := new(PrRepoCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	cql := "id = pr-1"
+	params := proapi.GetPatronRequestsParams{
+		Symbol: &symbol,
+		Cql:    &cql,
+	}
+
+	handler.GetPatronRequests(rr, req, params)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.cql) {
+		assert.Equal(t, "id = pr-1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))", *repo.cql)
+	}
+}
+
 func TestPostPatronRequests(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
 	id := "1"
