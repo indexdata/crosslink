@@ -1,3 +1,6 @@
+// file: zoom.go
+//go:build cgo
+
 package zoom
 
 /*

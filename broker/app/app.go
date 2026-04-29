@@ -21,7 +21,6 @@ import (
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
 	"github.com/indexdata/crosslink/broker/tenant"
-	"github.com/indexdata/crosslink/broker/zoom"
 
 	"github.com/dustin/go-humanize"
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -137,14 +136,6 @@ func Init(ctx context.Context) (Context, error) {
 	})
 	if err != nil {
 		return Context{}, err
-	}
-
-	// just to test that zoom can be used
-	zoom := zoom.NewConnection(zoom.Options{
-		"preferredRecordSyntax": "usmarc",
-	})
-	if zoom == nil {
-		return Context{}, fmt.Errorf("failed to create zoom connection")
 	}
 
 	adapter.DEFAULT_BROKER_MODE = getBrokerMode(BROKER_MODE)

@@ -187,6 +187,18 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		}
 	}
 
+	// Just to use the Availability adapter and see linking works..
+	availabilityAdapter, err := adapter.CreateAvailabilityAdapter(ctx, "sym")
+	if err != nil {
+		ctx.Logger().Error("failed to create availability adapter", "error", err)
+	}
+	_, err = availabilityAdapter.Lookup(adapter.AvailabilityLookupParams{
+		Identifier: "id",
+	})
+	if err != nil {
+		ctx.Logger().Error("failed to perform lookup using availability adapter", "error", err)
+	}
+
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
 	}
