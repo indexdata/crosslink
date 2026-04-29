@@ -179,6 +179,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.Tenant,
 			&i.RequesterReqID,
 			&i.NeedsAttention,
+			&i.HasCost,
 			&i.LastAction,
 			&i.LastActionOutcome,
 			&i.LastActionResult,

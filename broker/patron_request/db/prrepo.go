@@ -13,9 +13,11 @@ import (
 type PrRepo interface {
 	repo.Transactional[PrRepo]
 	GetPatronRequestById(ctx common.ExtendedContext, id string) (PatronRequest, error)
+	GetPatronRequestViewById(ctx common.ExtendedContext, id string) (PatronRequestView, error)
 	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
+	ListPatronRequestsView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestView, int64, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
@@ -62,6 +64,14 @@ func (r *PgPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string) (
 	return row.PatronRequest, err
 }
 
+func (r *PgPrRepo) GetPatronRequestViewById(ctx common.ExtendedContext, id string) (PatronRequestView, error) {
+	row, err := r.queries.GetPatronRequestViewById(ctx, r.GetConnOrTx(), id)
+	if err != nil {
+		return PatronRequestView{}, err
+	}
+	return patronRequestViewFromSearchView(row.PatronRequestSearchView), nil
+}
+
 func (r *PgPrRepo) GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error) {
 	row, err := r.queries.GetPatronRequestByIdForUpdate(ctx, r.GetConnOrTx(), id)
 	return row.PatronRequest, err
@@ -79,8 +89,34 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 }
 
 func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+	if err != nil {
+		return nil, fullCount, err
+	}
+	list := make([]PatronRequest, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, patronRequestFromListRow(row))
+	}
+	return list, fullCount, nil
+}
+
+func (r *PgPrRepo) ListPatronRequestsView(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequestView, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+	if err != nil {
+		return nil, fullCount, err
+	}
+	list := make([]PatronRequestView, 0, len(rows))
+	for _, row := range rows {
+		list = append(list, PatronRequestView{
+			PatronRequest: patronRequestFromListRow(row),
+			HasCost:       row.HasCost,
+		})
+	}
+	return list, fullCount, nil
+}
+
+func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]ListPatronRequestsRow, int64, error) {
 	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.explainAnalyze)
-	var list []PatronRequest
 	var fullCount int64
 	if err == nil {
 		for _, line := range explainResult {
@@ -88,39 +124,71 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 		}
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
-			for _, r := range rows {
-				fullCount = r.FullCount
-				list = append(list, PatronRequest{
-					ID:                r.ID,
-					CreatedAt:         r.CreatedAt,
-					IllRequest:        r.IllRequest,
-					State:             PatronRequestState(r.State),
-					Side:              PatronRequestSide(r.Side),
-					Patron:            r.Patron,
-					RequesterSymbol:   r.RequesterSymbol,
-					SupplierSymbol:    r.SupplierSymbol,
-					Tenant:            r.Tenant,
-					RequesterReqID:    r.RequesterReqID,
-					NeedsAttention:    r.NeedsAttention,
-					LastAction:        r.LastAction,
-					LastActionOutcome: r.LastActionOutcome,
-					LastActionResult:  r.LastActionResult,
-					Language:          r.Language,
-					Items:             r.Items,
-					TerminalState:     r.TerminalState,
-					UpdatedAt:         r.UpdatedAt,
-				})
+			for _, row := range rows {
+				fullCount = row.FullCount
 			}
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, _, err = r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
-			if err == nil && len(rows) > 0 {
-				fullCount = rows[0].FullCount
+			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
+			err = countErr
+			if err == nil && len(countRows) > 0 {
+				fullCount = countRows[0].FullCount
 			}
 		}
 	}
-	return list, fullCount, err
+	return rows, fullCount, err
+}
+
+func patronRequestFromListRow(r ListPatronRequestsRow) PatronRequest {
+	return PatronRequest{
+		ID:                r.ID,
+		CreatedAt:         r.CreatedAt,
+		IllRequest:        r.IllRequest,
+		State:             PatronRequestState(r.State),
+		Side:              PatronRequestSide(r.Side),
+		Patron:            r.Patron,
+		RequesterSymbol:   r.RequesterSymbol,
+		SupplierSymbol:    r.SupplierSymbol,
+		Tenant:            r.Tenant,
+		RequesterReqID:    r.RequesterReqID,
+		NeedsAttention:    r.NeedsAttention,
+		LastAction:        r.LastAction,
+		LastActionOutcome: r.LastActionOutcome,
+		LastActionResult:  r.LastActionResult,
+		Language:          r.Language,
+		Items:             r.Items,
+		TerminalState:     r.TerminalState,
+		UpdatedAt:         r.UpdatedAt,
+		IllResponse:       r.IllResponse,
+	}
+}
+
+func patronRequestViewFromSearchView(v PatronRequestSearchView) PatronRequestView {
+	return PatronRequestView{
+		PatronRequest: PatronRequest{
+			ID:                v.ID,
+			CreatedAt:         v.CreatedAt,
+			IllRequest:        v.IllRequest,
+			State:             PatronRequestState(v.State),
+			Side:              PatronRequestSide(v.Side),
+			Patron:            v.Patron,
+			RequesterSymbol:   v.RequesterSymbol,
+			SupplierSymbol:    v.SupplierSymbol,
+			Tenant:            v.Tenant,
+			RequesterReqID:    v.RequesterReqID,
+			NeedsAttention:    v.NeedsAttention,
+			LastAction:        v.LastAction,
+			LastActionOutcome: v.LastActionOutcome,
+			LastActionResult:  v.LastActionResult,
+			Language:          v.Language,
+			Items:             v.Items,
+			TerminalState:     v.TerminalState,
+			UpdatedAt:         v.UpdatedAt,
+			IllResponse:       v.IllResponse,
+		},
+		HasCost: v.HasCost,
+	}
 }
 
 func (r *PgPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error) {

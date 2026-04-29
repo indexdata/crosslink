@@ -484,6 +484,9 @@ components:
         needsAttention:
           type: boolean
           description: Indicates if the request needs attention
+        hasCost:
+          type: boolean
+          description: Indicates if the request has a cost notification
         lastAction:
           type: string
           description: Latest action on this request
@@ -526,6 +529,7 @@ components:
         - side
         - illRequest
         - needsAttention
+        - hasCost
         - terminalState
     PatronRequests:
       type: object

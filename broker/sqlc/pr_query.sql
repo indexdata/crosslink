@@ -4,6 +4,12 @@ FROM patron_request
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetPatronRequestViewById :one
+SELECT sqlc.embed(patron_request_search_view)
+FROM patron_request_search_view
+WHERE id = $1
+LIMIT 1;
+
 -- name: GetPatronRequestByIdForUpdate :one
 SELECT sqlc.embed(patron_request)
 FROM patron_request
@@ -12,7 +18,7 @@ WHERE id = $1
     LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, terminal_state, updated_at, ill_response, COUNT(*) OVER () as full_count
+SELECT id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, has_cost, last_action, last_action_outcome, last_action_result, language, items, terminal_state, updated_at, ill_response, COUNT(*) OVER () as full_count
 FROM patron_request_search_view
 WHERE ill_request IS NOT NULL
 ORDER BY created_at

@@ -174,14 +174,14 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		return
 	}
 	cqlStr := cql.String()
-	prs, count, err := a.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
+	prs, count, err := a.prRepo.ListPatronRequestsView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		api.AddInternalError(ctx, w, err)
 		return
 	}
 	var responseItems []proapi.PatronRequest
 	for _, pr := range prs {
-		responseItems = append(responseItems, toApiPatronRequest(r, pr, pr.IllRequest))
+		responseItems = append(responseItems, toApiPatronRequest(r, pr))
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
@@ -270,16 +270,16 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			api.AddInternalError(ctx, w, err)
 			return
 		}
-		pr, err = a.prRepo.GetPatronRequestById(ctx, pr.ID)
-		if err != nil {
-			api.AddInternalError(ctx, w, err)
-			return
-		}
+	}
+	prView, err := a.prRepo.GetPatronRequestViewById(ctx, pr.ID)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
 	}
 	w.Header().Set("Location", api.Link(r, api.Path("patron_requests", pr.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, pr, pr.IllRequest))
+	_ = json.NewEncoder(w).Encode(toApiPatronRequest(r, prView))
 }
 
 func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeletePatronRequestsIdParams) {
@@ -323,6 +323,18 @@ func getOwnerSymbol(pr pr_db.PatronRequest) string {
 
 func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
+	return a.checkPatronRequestAccess(w, ctx, &pr, err, side, tenant)
+}
+
+func (a *PatronRequestApiHandler) getPatronRequestViewById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequestView {
+	pr, err := a.prRepo.GetPatronRequestViewById(ctx, id)
+	if a.checkPatronRequestAccess(w, ctx, &pr.PatronRequest, err, side, tenant) == nil {
+		return nil
+	}
+	return &pr
+}
+
+func (a *PatronRequestApiHandler) checkPatronRequestAccess(w http.ResponseWriter, ctx common.ExtendedContext, pr *pr_db.PatronRequest, err error, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			api.AddNotFoundError(w)
@@ -331,13 +343,13 @@ func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ct
 		api.AddInternalError(ctx, w, err)
 		return nil
 	}
-	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(pr))
+	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(*pr))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return nil
 	}
 	if isOwner && (!isSideParamValid(side) || string(pr.Side) == *side) {
-		return &pr
+		return pr
 	}
 	api.AddNotFoundError(w)
 	return nil
@@ -365,11 +377,11 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getPatronRequestViewById(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
-	api.WriteJsonResponse(w, toApiPatronRequest(r, *pr, pr.IllRequest))
+	api.WriteJsonResponse(w, toApiPatronRequest(r, *pr))
 }
 
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
@@ -744,7 +756,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest iso18626.Request) proapi.PatronRequest {
+func toApiPatronRequest(r *http.Request, requestView pr_db.PatronRequestView) proapi.PatronRequest {
+	request := requestView.PatronRequest
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
@@ -784,9 +797,10 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 		Patron:               toString(request.Patron),
 		RequesterSymbol:      toString(request.RequesterSymbol),
 		SupplierSymbol:       toString(request.SupplierSymbol),
-		IllRequest:           illRequest,
+		IllRequest:           request.IllRequest,
 		RequesterRequestId:   toString(request.RequesterReqID),
 		NeedsAttention:       request.NeedsAttention,
+		HasCost:              requestView.HasCost,
 		LastAction:           toString(request.LastAction),
 		LastActionOutcome:    toString(request.LastActionOutcome),
 		LastActionResult:     toString(request.LastActionResult),
