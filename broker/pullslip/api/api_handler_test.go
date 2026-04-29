@@ -46,6 +46,11 @@ func (m *MockPrRepo) GetPatronRequestById(ctx common.ExtendedContext, id string)
 	return args.Get(0).(pr_db.PatronRequest), args.Error(1)
 }
 
+func (m *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
+	args := m.Called(params.PrID, params.Kind)
+	return args.Get(0).([]pr_db.Notification), args.Get(1).(int64), args.Error(2)
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 var sym = "ISIL:TEST"
@@ -183,6 +188,8 @@ func TestPostPullslips_OK(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
 	prRepo.On("GetPatronRequestById", "pr-1").Return(pr, nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("SavePullSlip", mock.AnythingOfType("ps_db.SavePullSlipParams")).
@@ -251,6 +258,8 @@ func TestPostPullslips_SaveError(t *testing.T) {
 
 	prRepo := new(MockPrRepo)
 	prRepo.On("GetPatronRequestById", "pr-1").Return(pr, nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
+	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
 	psRepo := new(MockPsRepo)
 	psRepo.On("SavePullSlip", mock.AnythingOfType("ps_db.SavePullSlipParams")).

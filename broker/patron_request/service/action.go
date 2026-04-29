@@ -555,6 +555,9 @@ func (a *PatronRequestActionService) willSupplyLenderRequest(ctx common.Extended
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		nil)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
@@ -618,6 +621,9 @@ func (a *PatronRequestActionService) addConditionsLenderRequest(ctx common.Exten
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusWillSupply},
 		deliveryInfo)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
 	execResult := a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 	if execResult.status != events.EventStatusSuccess {
 		return execResult
@@ -677,6 +683,9 @@ func (a *PatronRequestActionService) shipLenderRequest(ctx common.ExtendedContex
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusLoaned},
 		nil)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 

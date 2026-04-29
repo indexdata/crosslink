@@ -183,6 +183,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.Items,
 			&i.TerminalState,
 			&i.UpdatedAt,
+			&i.IllResponse,
 			&i.FullCount,
 		); err != nil {
 			return nil, nil, err

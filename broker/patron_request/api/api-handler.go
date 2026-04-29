@@ -750,9 +750,9 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 		items = append(items, toApiPrItem(item))
 	}
 	ownerSymbol := ""
-	if request.Side == pr_db.PatronRequestSide(prservice.SideBorrowing) && request.RequesterSymbol.Valid {
+	if request.Side == prservice.SideBorrowing && request.RequesterSymbol.Valid {
 		ownerSymbol = request.RequesterSymbol.String
-	} else if request.Side == pr_db.PatronRequestSide(prservice.SideLending) && request.SupplierSymbol.Valid {
+	} else if request.Side == prservice.SideLending && request.SupplierSymbol.Valid {
 		ownerSymbol = request.SupplierSymbol.String
 	}
 	var notificationsLink *string
@@ -800,6 +800,9 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
+	}
+	if request.IllResponse.StatusInfo.Status != "" { // If there is status that mean that message is not empty
+		pr.IllResponse = &request.IllResponse
 	}
 	return pr
 }
