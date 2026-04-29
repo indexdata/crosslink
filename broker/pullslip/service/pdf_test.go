@@ -230,21 +230,3 @@ func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
 	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
 	assert.Error(t, err)
 }
-
-func TestGeneratePdfPullSlip_TempFileError(t *testing.T) {
-	// Point TMPDIR to a non-existent directory so os.CreateTemp fails
-	t.Setenv("TMPDIR", "/nonexistent-dir-for-test")
-	t.Setenv("TMP", "/nonexistent-dir-for-test")
-	t.Setenv("TEMP", "/nonexistent-dir-for-test")
-
-	svc := &PdfService{}
-	pr := pr_db.PatronRequest{
-		ID: "REQ-TMPFAIL",
-		RequesterReqID: pgtype.Text{
-			String: "REQ-TMPFAIL",
-			Valid:  true,
-		},
-	}
-	_, err := svc.GeneratePdfPullSlip(pr, []pr_db.Notification{}, []pr_db.Notification{})
-	assert.Error(t, err)
-}

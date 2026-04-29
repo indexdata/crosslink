@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"html/template"
 	"image/png"
-	"os"
 	"strings"
 
 	"github.com/boombuler/barcode"
@@ -117,19 +116,7 @@ func (p *PdfService) GeneratePdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.N
 		return nil, err
 	}
 
-	tmp, err := os.CreateTemp("", "pull-slip-*.pdf")
-	if err != nil {
-		return nil, err
-	}
-	tmpPath := tmp.Name()
-	_ = tmp.Close()
-	defer os.Remove(tmpPath)
-
-	if err := doc.Save(tmpPath); err != nil {
-		return nil, err
-	}
-
-	return os.ReadFile(tmpPath)
+	return doc.ToBytes()
 }
 
 func renderPullSlipHTML(data PullSlipData) (string, error) {
