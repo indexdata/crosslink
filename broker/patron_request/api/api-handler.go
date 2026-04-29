@@ -207,10 +207,10 @@ func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 			BeginClause().
 			Search("side").Term(string(prservice.SideLending)).
 			And().Search("supplier_symbol_exact").Term(symbol).
-			EndClause().
 			Or().
 			BeginClause().Search("side").Term(string(prservice.SideBorrowing)).
 			And().Search("requester_symbol_exact").Term(symbol).
+			EndClause().
 			EndClause().
 			Build()
 	}
