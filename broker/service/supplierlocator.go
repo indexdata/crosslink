@@ -22,18 +22,20 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
-	eventBus        events.EventBus
-	illRepo         ill_db.IllRepo
-	dirAdapter      adapter.DirectoryLookupAdapter
-	holdingsAdapter adapter.HoldingsLookupAdapter
+	eventBus            events.EventBus
+	illRepo             ill_db.IllRepo
+	dirAdapter          adapter.DirectoryLookupAdapter
+	holdingsAdapter     adapter.HoldingsLookupAdapter
+	availabilityCreator availability.AvailabilityCreator
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
 	return SupplierLocator{
-		eventBus:        eventBus,
-		illRepo:         illRepo,
-		dirAdapter:      dirAdapter,
-		holdingsAdapter: holdingsAdapter,
+		eventBus:            eventBus,
+		illRepo:             illRepo,
+		dirAdapter:          dirAdapter,
+		holdingsAdapter:     holdingsAdapter,
+		availabilityCreator: availabilityCreator,
 	}
 }
 
@@ -189,15 +191,17 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	// Just to use the Availability adapter and see linking works..
-	availabilityAdapter, err := availability.CreateAvailabilityAdapter(ctx, "sym")
+	availabilityAdapter, err := s.availabilityCreator.GetAdapter(ctx, "sym")
 	if err != nil {
 		ctx.Logger().Error("failed to create availability adapter", "error", err)
 	}
-	_, err = availabilityAdapter.Lookup(availability.AvailabilityLookupParams{
-		Identifier: "id",
-	})
-	if err != nil {
-		ctx.Logger().Error("failed to perform lookup using availability adapter", "error", err)
+	if availabilityAdapter != nil {
+		_, err = availabilityAdapter.Lookup(availability.AvailabilityLookupParams{
+			Identifier: "id",
+		})
+		if err != nil {
+			ctx.Logger().Error("failed to perform lookup using availability adapter", "error", err)
+		}
 	}
 
 	return events.EventStatusSuccess, &events.EventResult{
