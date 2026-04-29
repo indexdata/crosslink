@@ -4,13 +4,9 @@
 package zoom
 
 import (
-	"strconv"
 	"testing"
 
-	"github.com/indexdata/go-utils/utils"
 	"github.com/stretchr/testify/assert"
-
-	test "github.com/indexdata/crosslink/broker/test/utils"
 )
 
 func TestConnection(t *testing.T) {
@@ -25,11 +21,9 @@ func TestConnection(t *testing.T) {
 }
 
 func TestConnect(t *testing.T) {
-	mockPort := utils.Must(test.GetFreePort())
-
 	conn := NewConnection(Options{})
 	assert.NotNil(t, conn)
-	err := conn.Connect("localhost:" + strconv.Itoa(mockPort))
+	err := conn.Connect("")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect")
 }

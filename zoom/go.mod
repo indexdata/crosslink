@@ -2,10 +2,7 @@ module github.com/indexdata/crosslink/zoom
 
 go 1.26
 
-require (
-	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
-	github.com/stretchr/testify v1.11.1
-)
+require github.com/stretchr/testify v1.11.1
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
