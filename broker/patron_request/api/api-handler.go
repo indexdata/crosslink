@@ -162,7 +162,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		}
 	}
 	if symbol != "" {
-		qb, err = addOwnerRestriction(qb, symbol, side)
+		qb, err = AddOwnerRestriction(qb, symbol, side)
 		if err != nil {
 			api.AddBadRequestError(ctx, w, err)
 			return
@@ -189,7 +189,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	api.WriteJsonResponse(w, resp)
 }
 
-func addOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
+func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
 	var err error
 	switch side {
 	case prservice.SideLending:

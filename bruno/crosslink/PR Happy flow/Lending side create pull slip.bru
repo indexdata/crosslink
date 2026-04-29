@@ -1,0 +1,47 @@
+meta {
+  name: Lending side create pull slip
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{host}}/pullslips
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantSup}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+body:json {
+  {
+    "illTransactionIds": ["{{lendingPrId}}"]
+  }
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("for successful slip creation", function() {
+      const body = res.getBody();
+      expect(body).to.not.be.null;
+      expect(body).to.not.be.undefined;
+      const location = res.getHeader("location");
+      const pullSlipId = location.split("/pullslips/")[1].split("/")[0];
+      bru.setVar("pullSlipId", pullSlipId);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
