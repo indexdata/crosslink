@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -188,11 +189,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	// Just to use the Availability adapter and see linking works..
-	availabilityAdapter, err := adapter.CreateAvailabilityAdapter(ctx, "sym")
+	availabilityAdapter, err := availability.CreateAvailabilityAdapter(ctx, "sym")
 	if err != nil {
 		ctx.Logger().Error("failed to create availability adapter", "error", err)
 	}
-	_, err = availabilityAdapter.Lookup(adapter.AvailabilityLookupParams{
+	_, err = availabilityAdapter.Lookup(availability.AvailabilityLookupParams{
 		Identifier: "id",
 	})
 	if err != nil {

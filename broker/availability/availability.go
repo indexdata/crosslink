@@ -1,4 +1,4 @@
-package adapter
+package availability
 
 type AvailabilityAdapter interface {
 	Lookup(params AvailabilityLookupParams) ([]Availability, error)

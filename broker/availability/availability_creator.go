@@ -1,4 +1,4 @@
-package adapter
+package availability
 
 import "github.com/indexdata/crosslink/broker/common"
 
