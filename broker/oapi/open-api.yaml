@@ -516,7 +516,7 @@ components:
         terminalState:
           type: boolean
           description: Indicates if the request is in terminal state
-        supplierMessage:
+        illResponse:
           type: object
           description: JSON of ISO18626 supplying agency message
       required:

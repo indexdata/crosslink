@@ -162,7 +162,7 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 				},
 			},
 		},
-		SupplierMessage: iso18626.SupplyingAgencyMessage{
+		IllResponse: iso18626.SupplyingAgencyMessage{
 			StatusInfo: iso18626.StatusInfo{
 				DueDate: &dueDate,
 			},

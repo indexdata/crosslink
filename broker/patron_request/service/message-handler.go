@@ -778,5 +778,5 @@ func safeConvertInt32(n int) (int32, error) {
 func setSupplierMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest) {
 	copySam := sam
 	copySam.Header = iso18626.Header{} // clear header
-	pr.SupplierMessage = copySam
+	pr.IllResponse = copySam
 }

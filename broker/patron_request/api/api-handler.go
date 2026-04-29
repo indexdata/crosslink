@@ -801,8 +801,8 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequest, illRequest
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
 	}
-	if request.SupplierMessage.StatusInfo.Status != "" { // If there is status that mean that message is not empty
-		pr.SupplierMessage = &request.SupplierMessage
+	if request.IllResponse.StatusInfo.Status != "" { // If there is status that mean that message is not empty
+		pr.IllResponse = &request.IllResponse
 	}
 	return pr
 }

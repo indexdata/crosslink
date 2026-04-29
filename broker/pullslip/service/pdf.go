@@ -91,11 +91,11 @@ func (p *PdfService) GeneratePdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.N
 	if pr.IllRequest.PublicationInfo != nil && pr.IllRequest.PublicationInfo.Publisher != "" {
 		data.Publisher = pr.IllRequest.PublicationInfo.Publisher
 	}
-	if pr.SupplierMessage.StatusInfo.DueDate != nil {
-		data.DueDate = pr.SupplierMessage.StatusInfo.DueDate.Format(DATE_LAYOUT)
+	if pr.IllResponse.StatusInfo.DueDate != nil {
+		data.DueDate = pr.IllResponse.StatusInfo.DueDate.Format(DATE_LAYOUT)
 	}
-	if pr.SupplierMessage.ReturnInfo != nil && pr.SupplierMessage.ReturnInfo.PhysicalAddress != nil {
-		data.ReturnAddress = formatPhysicalAddress(pr.SupplierMessage.ReturnInfo.PhysicalAddress)
+	if pr.IllResponse.ReturnInfo != nil && pr.IllResponse.ReturnInfo.PhysicalAddress != nil {
+		data.ReturnAddress = formatPhysicalAddress(pr.IllResponse.ReturnInfo.PhysicalAddress)
 	}
 	if pr.IllRequest.ServiceInfo != nil {
 		if pr.IllRequest.ServiceInfo.ServiceLevel != nil && pr.IllRequest.ServiceInfo.ServiceLevel.Text != "" {

@@ -1,7 +1,7 @@
 DROP VIEW IF EXISTS patron_request_search_view;
 
 ALTER TABLE patron_request
-    ADD COLUMN supplier_message jsonb NOT NULL DEFAULT '{}'::jsonb;
+    ADD COLUMN ill_response jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE OR REPLACE VIEW patron_request_search_view AS
 SELECT
