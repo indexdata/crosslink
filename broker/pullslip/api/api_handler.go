@@ -21,6 +21,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const MAX_RECORDS_PER_PDF = 100
+
 type PullSlipApiHandler struct {
 	psRepo         ps_db.PsRepo
 	prRepo         pr_db.PrRepo
@@ -100,7 +102,12 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		if len(*create.IllTransactionIds) == 1 {
 			pullSlipType = ps_db.PullSlipTypeSingle
 		}
-		cql = "id any \"" + strings.Join(*create.IllTransactionIds, " ") + "\""
+		query, err := cqlbuilder.NewQuery().Search("id").Rel("any").Term(strings.Join(*create.IllTransactionIds, " ")).Build()
+		if err != nil {
+			api.AddBadRequestError(ctx, w, err)
+			return
+		}
+		cql = query.String()
 	} else if create.Cql != nil {
 		cql = *create.Cql
 	}
@@ -155,7 +162,7 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 }
 
 func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *http.Request, id string, params psoapi.PostPullslipsIdRegenerateParams) {
-	logParams := map[string]string{"method": "GetPullslipsIdRegenerate", "id": id}
+	logParams := map[string]string{"method": "PostPullslipsIdRegenerate", "id": id}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 	ps := p.getPullSlip(ctx, w, r, id, psoapi.GetPullslipsIdParams(params), logParams)
 	if ps == nil {
@@ -168,6 +175,10 @@ func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *
 	}
 
 	ps.PdfBytes = pdf
+	ps.GeneratedAt = pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
+	}
 	_, err = p.psRepo.SavePullSlip(ctx, ps_db.SavePullSlipParams(*ps))
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
@@ -204,7 +215,7 @@ func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.Respo
 }
 
 func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, error) {
-	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: 100, Offset: 0}, &cql)
+	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, &cql)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			api.AddNotFoundError(w)

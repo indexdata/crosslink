@@ -1005,7 +1005,7 @@ components:
     CreatePullSlip:
       type: object
       title: Create Pull Slip
-      description: Create pull slip body
+      description: Create pull slip body. If both illTransactionIds and cql are provided, illTransactionIds will be used for pull slip generation and cql will be ignored.
       properties:
         illTransactionIds:
           type: array
@@ -1988,7 +1988,7 @@ paths:
           schema:
             type: string
           required: true
-          description: ID of the pull slip whose PDF to download
+          description: ID of the pull slip whose PDF to regenerate
         - $ref: '#/components/parameters/Tenant'
         - $ref: '#/components/parameters/Symbol'
       responses:

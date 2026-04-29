@@ -207,7 +207,7 @@ func patronRequest(id, requesterSym string) pr_db.PatronRequest {
 func TestPostPullslips_OK(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -249,7 +249,7 @@ func TestPostPullslips_InvalidJSON(t *testing.T) {
 
 func TestPostPullslips_PrNotFound(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-missing and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)").Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
+	prRepo.On("ListPatronRequests", "id any pr-missing and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-missing"))
@@ -262,7 +262,7 @@ func TestPostPullslips_PrNotFound(t *testing.T) {
 
 func TestPostPullslips_PrRepoError(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-err and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)").Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
+	prRepo.On("ListPatronRequests", "id any pr-err and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-err"))
@@ -277,7 +277,7 @@ func TestPostPullslips_SaveError(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -358,7 +358,7 @@ func TestPostPullslips_EmptyPrList(t *testing.T) {
 
 func TestPostPullslipsIdRegenerate_OK(t *testing.T) {
 	slip := pullSlipFixture("ps-1")
-	slip.SearchCriteria = "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)"
+	slip.SearchCriteria = "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))"
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
@@ -417,7 +417,7 @@ func TestPostPullslipsIdRegenerate_PrRepoError(t *testing.T) {
 
 func TestPostPullslipsIdRegenerate_SaveError(t *testing.T) {
 	slip := pullSlipFixture("ps-saveerr")
-	slip.SearchCriteria = "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST) or (side = borrowing and requester_symbol_exact = ISIL:TEST)"
+	slip.SearchCriteria = "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))"
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
