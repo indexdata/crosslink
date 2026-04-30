@@ -341,6 +341,20 @@ func TestListPatronRequests(t *testing.T) {
 				BibliographicInfo: iso18626.BibliographicInfo{
 					Title:  "Do Androids Dream of Electric Sheep?",
 					Author: "Ray Bradbury",
+					BibliographicItemId: []iso18626.BibliographicItemId{
+						{
+							BibliographicItemIdentifier: "978-3-16-148410-0",
+							BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+								Text: "ISBN",
+							},
+						},
+						{
+							BibliographicItemIdentifier: "2049-3630",
+							BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+								Text: "ISSN",
+							},
+						},
+					},
 				},
 				PatronInfo: &iso18626.PatronInfo{
 					GivenName: "John",
@@ -382,6 +396,24 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "requester_req_id = req-123"
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = `isbn = "978-3-16-148410-0"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = `issn = "2049-3630"`
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,

@@ -22,6 +22,41 @@ func (f *FieldAllRecords) Generate(sc cql.SearchClause, queryArgumentIndex int) 
 	return "TRUE", nil, nil
 }
 
+type FieldTextArrayContains struct {
+	column string
+}
+
+func NewFieldTextArrayContains(column string) *FieldTextArrayContains {
+	return &FieldTextArrayContains{column: column}
+}
+
+func (f *FieldTextArrayContains) GetColumn() string {
+	return f.column
+}
+
+func (f *FieldTextArrayContains) SetColumn(column string) {
+	f.column = column
+}
+
+func (f *FieldTextArrayContains) Sort() string {
+	return f.column
+}
+
+func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentIndex int) (string, []any, error) {
+	if sc.Term == "" && sc.Relation == cql.EQ {
+		return "cardinality(" + f.column + ") > 0", []any{}, nil
+	}
+
+	switch sc.Relation {
+	case "==", cql.EXACT, cql.EQ:
+		return f.column + fmt.Sprintf(" @> ARRAY[$%d]::text[]", queryArgumentIndex), []any{sc.Term}, nil
+	case cql.NE:
+		return "NOT (" + f.column + fmt.Sprintf(" @> ARRAY[$%d]::text[]", queryArgumentIndex) + ")", []any{sc.Term}, nil
+	default:
+		return "", nil, fmt.Errorf("unsupported relation %s", sc.Relation)
+	}
+}
+
 func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
@@ -87,6 +122,9 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 
 	f = pgcql.NewFieldString().WithFullText(LANGUAGE).WithColumn("ill_request->'bibliographicInfo'->>'author'")
 	def.AddField("author", f)
+
+	def.AddField("isbn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISBN')"))
+	def.AddField("issn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISSN')"))
 
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
