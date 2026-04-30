@@ -49,8 +49,7 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 	return a, nil
 }
 
-func (a *Z3950AvailabilityAdapter) sr(conn *zoom.Connection, query string) ([]Availability, error) {
-	fmt.Printf("Executing Z39.50 query: %s\n", query)
+func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]Availability, error) {
 	res, err := conn.Search(query)
 	if err != nil {
 		return nil, err
@@ -93,9 +92,6 @@ func pqfEncode(value string) string {
 }
 
 func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Availability, error) {
-	if a.zurl == "" {
-		return nil, nil // No Z39.50 server configured for this symbol, return no availability
-	}
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)
@@ -115,7 +111,7 @@ func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Av
 	}
 	for _, pm := range paramMappings {
 		if pm.value != "" {
-			avail, err := a.sr(conn, "@attr "+pm.mapping+" "+pqfEncode(pm.value))
+			avail, err := a.searchRetrieve(conn, "@attr "+pm.mapping+" "+pqfEncode(pm.value))
 			if err != nil {
 				return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
 			}
