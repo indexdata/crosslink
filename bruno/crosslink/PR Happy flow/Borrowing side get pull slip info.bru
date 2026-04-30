@@ -1,0 +1,37 @@
+meta {
+  name: Borrowing side get pull slip info
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{host}}/pullslips/{{borrowingPullSlipId}}
+  body: json
+  auth: basic
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:pre-request {
+  bru.sleep(Number(bru.getEnvVar("sleepDelay")))
+}
+
+script:post-response {
+  test("for successful slip creation", function() {
+      const ps = res.getBody();
+      expect(ps.type).to.equal("single")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

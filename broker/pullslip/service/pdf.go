@@ -11,6 +11,8 @@ import (
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/code128"
 	"github.com/carlos7ags/folio/document"
+	"github.com/carlos7ags/folio/reader"
+	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/iso18626"
 )
@@ -19,6 +21,13 @@ const DEFAULT_FOR_NO_VALUE = "n/a"
 const DATE_LAYOUT = "2006-01-02"
 
 type PdfService struct {
+	prRepo pr_db.PrRepo
+}
+
+func NewPdfService(prRepo pr_db.PrRepo) PdfService {
+	return PdfService{
+		prRepo: prRepo,
+	}
 }
 
 type PullSlipData struct {
@@ -44,6 +53,38 @@ type PullSlipData struct {
 
 //go:embed pull_slip_template.html
 var pullSlipTemplate string
+
+func (p *PdfService) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error) {
+	pdfs := []*reader.PdfReader{}
+	for _, pr := range prs {
+		notes, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
+		if err != nil {
+			return []byte{}, err
+		}
+		conditions, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindCondition)})
+		if err != nil {
+			return []byte{}, err
+		}
+		pdf, err := p.GeneratePdfPullSlip(pr, notes, conditions)
+		if err != nil {
+			return []byte{}, err
+		}
+		pdfReader, err := reader.Parse(pdf)
+		if err != nil {
+			return []byte{}, err
+		}
+		pdfs = append(pdfs, pdfReader)
+	}
+	merged, err := reader.Merge(pdfs...)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	if _, err := merged.WriteTo(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
 func (p *PdfService) GeneratePdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification) ([]byte, error) {
 	barcodeData, err := getBarcodeBase64(pr.RequesterReqID.String)

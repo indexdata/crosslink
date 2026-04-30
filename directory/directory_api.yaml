@@ -253,6 +253,7 @@ components:
             - Alma
             - ReShare
             - CrossLink
+            - ILLiad
             - Unknown
 
     Z3950Config:

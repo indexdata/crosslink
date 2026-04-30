@@ -89,7 +89,13 @@ sql:
           - column: "patron_request.state"
             go_type:
               type: "PatronRequestState"
+          - column: "patron_request_search_view.state"
+            go_type:
+              type: "PatronRequestState"
           - column: "patron_request.side"
+            go_type:
+              type: "PatronRequestSide"
+          - column: "patron_request_search_view.side"
             go_type:
               type: "PatronRequestSide"
           - column: "patron_request.items"

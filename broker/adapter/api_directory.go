@@ -331,10 +331,13 @@ func getPeerTiers(peerData directory.Entry) []Tier {
 }
 
 func GetVendorFromUrl(url string) directory.EntryVendor {
+	url = strings.ToLower(url)
 	if strings.Contains(url, "alma.exlibrisgroup.com") || strings.Contains(url, "rapido.exlibrisgroup.com") {
 		return directory.Alma
-	} else if strings.Contains(url, "/rs/externalApi/iso18626") {
+	} else if strings.Contains(url, "/rs/externalapi/iso18626") {
 		return directory.ReShare
+	} else if strings.Contains(url, "atlas-sys.com") || strings.Contains(url, "illiad") {
+		return directory.ILLiad
 	} else {
 		return directory.Unknown
 	}
@@ -343,6 +346,8 @@ func GetVendorFromUrl(url string) directory.EntryVendor {
 func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
 	switch vendor {
 	case directory.Alma:
+		return common.BrokerModeOpaque
+	case directory.ILLiad:
 		return common.BrokerModeOpaque
 	case directory.ReShare:
 		return common.BrokerModeTransparent
