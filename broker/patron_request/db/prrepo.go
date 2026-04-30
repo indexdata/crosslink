@@ -95,7 +95,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 	}
 	list := make([]PatronRequest, 0, len(rows))
 	for _, row := range rows {
-		list = append(list, patronRequestFromListRow(row))
+		list = append(list, patronRequestFromSearchView(row.PatronRequestSearchView))
 	}
 	return list, fullCount, nil
 }
@@ -107,7 +107,7 @@ func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, para
 	}
 	list := make([]PatronRequestSearchView, 0, len(rows))
 	for _, row := range rows {
-		list = append(list, patronRequestSearchViewFromListRow(row))
+		list = append(list, row.PatronRequestSearchView)
 	}
 	return list, fullCount, nil
 }
@@ -137,52 +137,27 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 	return rows, fullCount, err
 }
 
-func patronRequestFromListRow(r ListPatronRequestsRow) PatronRequest {
+func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 	return PatronRequest{
-		ID:                r.ID,
-		CreatedAt:         r.CreatedAt,
-		IllRequest:        r.IllRequest,
-		State:             r.State,
-		Side:              r.Side,
-		Patron:            r.Patron,
-		RequesterSymbol:   r.RequesterSymbol,
-		SupplierSymbol:    r.SupplierSymbol,
-		Tenant:            r.Tenant,
-		RequesterReqID:    r.RequesterReqID,
-		NeedsAttention:    r.NeedsAttention,
-		LastAction:        r.LastAction,
-		LastActionOutcome: r.LastActionOutcome,
-		LastActionResult:  r.LastActionResult,
-		Language:          r.Language,
-		Items:             r.Items,
-		TerminalState:     r.TerminalState,
-		UpdatedAt:         r.UpdatedAt,
-		IllResponse:       r.IllResponse,
-	}
-}
-
-func patronRequestSearchViewFromListRow(r ListPatronRequestsRow) PatronRequestSearchView {
-	return PatronRequestSearchView{
-		ID:                r.ID,
-		CreatedAt:         r.CreatedAt,
-		IllRequest:        r.IllRequest,
-		State:             r.State,
-		Side:              r.Side,
-		Patron:            r.Patron,
-		RequesterSymbol:   r.RequesterSymbol,
-		SupplierSymbol:    r.SupplierSymbol,
-		Tenant:            r.Tenant,
-		RequesterReqID:    r.RequesterReqID,
-		NeedsAttention:    r.NeedsAttention,
-		LastAction:        r.LastAction,
-		LastActionOutcome: r.LastActionOutcome,
-		LastActionResult:  r.LastActionResult,
-		Items:             r.Items,
-		Language:          r.Language,
-		TerminalState:     r.TerminalState,
-		UpdatedAt:         r.UpdatedAt,
-		IllResponse:       r.IllResponse,
-		HasCost:           r.HasCost,
+		ID:                v.ID,
+		CreatedAt:         v.CreatedAt,
+		IllRequest:        v.IllRequest,
+		State:             v.State,
+		Side:              v.Side,
+		Patron:            v.Patron,
+		RequesterSymbol:   v.RequesterSymbol,
+		SupplierSymbol:    v.SupplierSymbol,
+		Tenant:            v.Tenant,
+		RequesterReqID:    v.RequesterReqID,
+		NeedsAttention:    v.NeedsAttention,
+		LastAction:        v.LastAction,
+		LastActionOutcome: v.LastActionOutcome,
+		LastActionResult:  v.LastActionResult,
+		Language:          v.Language,
+		Items:             v.Items,
+		TerminalState:     v.TerminalState,
+		UpdatedAt:         v.UpdatedAt,
+		IllResponse:       v.IllResponse,
 	}
 }
 
