@@ -64,9 +64,6 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	fb = pgcql.NewFieldBool()
 	def.AddField("has_unread_notification", fb)
 
-	n := pgcql.NewFieldNumber()
-	def.AddField("unread_notifications_count", n)
-
 	fb = pgcql.NewFieldBool()
 	def.AddField("terminal_state", fb)
 
