@@ -30,18 +30,32 @@ type Record struct {
 	rec C.ZOOM_record
 }
 
+func (o *Options) toZoomOptions() C.ZOOM_options {
+	zo := C.ZOOM_options_create()
+	for key, value := range *o {
+		cKey := C.CString(key)
+		cValue := C.CString(value)
+		C.ZOOM_options_set(zo, cKey, cValue)
+		C.free(unsafe.Pointer(cKey))
+		C.free(unsafe.Pointer(cValue))
+	}
+	return zo
+}
+
 func NewConnection(options Options) *Connection {
 	c := &Connection{}
-	cOptions := options.ToZoomOptions()
+	cOptions := options.toZoomOptions()
 	defer C.ZOOM_options_destroy(cOptions)
 	c.conn = C.ZOOM_connection_create(cOptions)
-	runtime.SetFinalizer(c, func(c *Connection) {
-		if c.conn != nil {
-			C.ZOOM_connection_destroy(c.conn)
-			c.conn = nil
-		}
-	})
+	runtime.SetFinalizer(c, (*Connection).finalize)
 	return c
+}
+
+func (c *Connection) finalize() {
+	if c.conn != nil {
+		C.ZOOM_connection_destroy(c.conn)
+		c.conn = nil
+	}
 }
 
 func (c *Connection) Connect(host string) error {
@@ -57,8 +71,7 @@ func (c *Connection) Connect(host string) error {
 
 func (c *Connection) Close() {
 	if c.conn != nil {
-		C.ZOOM_connection_destroy(c.conn)
-		c.conn = nil
+		C.ZOOM_connection_close(c.conn)
 	}
 }
 
@@ -70,12 +83,7 @@ func (c *Connection) Search(query string) (*ResultSet, error) {
 	defer C.free(unsafe.Pointer(cQuery))
 	cSet := C.ZOOM_connection_search_pqf(c.conn, cQuery)
 	set := &ResultSet{rs: cSet, connection: c}
-	runtime.SetFinalizer(set, func(set *ResultSet) {
-		if set.rs != nil {
-			C.ZOOM_resultset_destroy(set.rs)
-			set.rs = nil
-		}
-	})
+	runtime.SetFinalizer(set, (*ResultSet).finalize)
 	code := C.ZOOM_connection_error(c.conn, nil, nil)
 	if code != 0 {
 		return nil, fmt.Errorf("search failed: %s", C.GoString(C.ZOOM_connection_errmsg(c.conn)))
@@ -83,40 +91,39 @@ func (c *Connection) Search(query string) (*ResultSet, error) {
 	return set, nil
 }
 
-func (o *Options) ToZoomOptions() C.ZOOM_options {
-	zo := C.ZOOM_options_create()
-	for key, value := range *o {
-		cKey := C.CString(key)
-		cValue := C.CString(value)
-		defer C.free(unsafe.Pointer(cKey))
-		defer C.free(unsafe.Pointer(cValue))
-		C.ZOOM_options_set(zo, cKey, cValue)
+func (s *ResultSet) finalize() {
+	if s.rs != nil {
+		C.ZOOM_resultset_destroy(s.rs)
+		s.rs = nil
 	}
-	return zo
 }
 
-func (r *ResultSet) Count() int {
-	return int(C.ZOOM_resultset_size(r.rs))
+func (s *ResultSet) Count() int {
+	return int(C.ZOOM_resultset_size(s.rs))
 }
 
-func (r *ResultSet) GetRecord(index int) (*Record, error) {
-	cRecord := C.ZOOM_resultset_record(r.rs, C.size_t(index))
+func (s *ResultSet) GetRecord(index int) (*Record, error) {
+	if index < 0 || index >= s.Count() {
+		return nil, nil
+	}
+	cRecord := C.ZOOM_resultset_record(s.rs, C.size_t(index))
 	if cRecord == nil {
 		return nil, nil
 	}
-	cRecord = C.ZOOM_record_clone(cRecord)
-	record := &Record{rec: cRecord}
-	runtime.SetFinalizer(record, func(record *Record) {
-		if record.rec != nil {
-			C.ZOOM_record_destroy(record.rec)
-			record.rec = nil
-		}
-	})
-	code := C.ZOOM_connection_error(r.connection.conn, nil, nil)
+	code := C.ZOOM_connection_error(s.connection.conn, nil, nil)
 	if code != 0 {
-		return nil, fmt.Errorf("get record failed: %s", C.GoString(C.ZOOM_connection_errmsg(r.connection.conn)))
+		return nil, fmt.Errorf("get record failed: %s", C.GoString(C.ZOOM_connection_errmsg(s.connection.conn)))
 	}
+	record := &Record{rec: C.ZOOM_record_clone(cRecord)}
+	runtime.SetFinalizer(record, (*Record).finalize)
 	return record, nil
+}
+
+func (r *Record) finalize() {
+	if r.rec != nil {
+		C.ZOOM_record_destroy(r.rec)
+		r.rec = nil
+	}
 }
 
 func (r *Record) Data(dataType string) string {

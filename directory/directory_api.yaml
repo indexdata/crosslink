@@ -265,6 +265,8 @@ components:
           description: Z39.50 server address and database (for example, "z3950.indexdata.com:210/marc")
         options:
           type: object
+          additionalProperties:
+            type: string
           description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
             Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
     LmsConfig:

@@ -39,11 +39,7 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 	}
 	if config.Options != nil {
 		for k, v := range *config.Options {
-			strVal, ok := v.(string)
-			if !ok {
-				return nil, fmt.Errorf("invalid type for option %s: expected string", k)
-			}
-			a.options[k] = strVal
+			a.options[k] = v
 		}
 	}
 	return a, nil

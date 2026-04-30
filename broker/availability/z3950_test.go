@@ -12,22 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOptions(t *testing.T) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	_, err := NewZ3950AvailabilityAdapter(ctx, directory.Z3950Config{
-		Options: &map[string]interface{}{
-			"otherOption": false,
-		},
-	})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid type for option otherOption: expected string")
-}
-
 func TestLookup(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	adapter, err := NewZ3950AvailabilityAdapter(ctx, directory.Z3950Config{
 		Address: "z3950.indexdata.com/marc",
-		Options: &map[string]interface{}{
+		Options: &map[string]string{
 			"count":                 "8",
 			"preferredRecordSyntax": "usmarc",
 		},

@@ -69,8 +69,13 @@ func TestSearch(t *testing.T) {
 
 	conn.Close()
 	_, err = conn.Search("@attr 1=4 computer")
+	assert.NoError(t, err)
+
+	conn.finalize()
+	_, err = conn.Search("@attr 1=4 computer")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "connection is not established")
+	conn.Close()
 }
 
 func TestRecordData(t *testing.T) {

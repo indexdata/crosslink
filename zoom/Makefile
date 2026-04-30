@@ -12,6 +12,9 @@ all:
 check:
 	$(GO) test -v -cover -coverpkg=./... -coverprofile=$(COVERAGE) ./...
 
+view-coverage: check
+	$(GO) tool cover -html=$(COVERAGE)
+
 lint:
 	$(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
 
