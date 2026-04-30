@@ -75,7 +75,6 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 		})
 	}
 	return avail, nil
-
 }
 
 func pqfEncode(value string) string {
