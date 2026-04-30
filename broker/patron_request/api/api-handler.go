@@ -174,7 +174,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		return
 	}
 	cqlStr := cql.String()
-	prs, count, err := a.prRepo.ListPatronRequestsView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
+	prs, count, err := a.prRepo.ListPatronRequestsSearchView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		api.AddInternalError(ctx, w, err)
 		return
@@ -271,7 +271,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	prView, err := a.prRepo.GetPatronRequestViewById(ctx, pr.ID)
+	prView, err := a.prRepo.GetPatronRequestSearchView(ctx, pr.ID)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -300,7 +300,7 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -314,45 +314,59 @@ func (a *PatronRequestApiHandler) DeletePatronRequestsId(w http.ResponseWriter, 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func getOwnerSymbol(pr pr_db.PatronRequest) string {
-	if pr.Side == prservice.SideBorrowing {
-		return pr.RequesterSymbol.String
+func getOwnerSymbol(side pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text) string {
+	if side == prservice.SideBorrowing && requesterSymbol.Valid {
+		return requesterSymbol.String
 	}
-	return pr.SupplierSymbol.String
+	if side == prservice.SideLending && supplierSymbol.Valid {
+		return supplierSymbol.String
+	}
+	return ""
 }
 
-func (a *PatronRequestApiHandler) getPatronRequestById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
+func (a *PatronRequestApiHandler) getOwnedPatronRequest(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
 	pr, err := a.prRepo.GetPatronRequestById(ctx, id)
-	return a.checkPatronRequestAccess(w, ctx, &pr, err, side, tenant)
-}
-
-func (a *PatronRequestApiHandler) getPatronRequestViewById(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequestView {
-	pr, err := a.prRepo.GetPatronRequestViewById(ctx, id)
-	if a.checkPatronRequestAccess(w, ctx, &pr.PatronRequest, err, side, tenant) == nil {
+	if err != nil {
+		handleDbError(w, ctx, err)
+		return nil
+	}
+	if !a.checkOwnership(w, ctx, pr.Side, pr.RequesterSymbol, pr.SupplierSymbol, side, tenant) {
 		return nil
 	}
 	return &pr
 }
 
-func (a *PatronRequestApiHandler) checkPatronRequestAccess(w http.ResponseWriter, ctx common.ExtendedContext, pr *pr_db.PatronRequest, err error, side *string, tenant tenant.Tenant) *pr_db.PatronRequest {
+func (a *PatronRequestApiHandler) getOwnedPatronRequestSearchView(w http.ResponseWriter, ctx common.ExtendedContext, id string, side *string, tenant tenant.Tenant) *pr_db.PatronRequestSearchView {
+	pr, err := a.prRepo.GetPatronRequestSearchView(ctx, id)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			api.AddNotFoundError(w)
-			return nil
-		}
-		api.AddInternalError(ctx, w, err)
+		handleDbError(w, ctx, err)
 		return nil
 	}
-	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(*pr))
-	if err != nil {
-		api.AddInternalError(ctx, w, err)
+	if !a.checkOwnership(w, ctx, pr.Side, pr.RequesterSymbol, pr.SupplierSymbol, side, tenant) {
 		return nil
 	}
-	if isOwner && (!isSideParamValid(side) || string(pr.Side) == *side) {
-		return pr
+	return &pr
+}
+
+func (a *PatronRequestApiHandler) checkOwnership(w http.ResponseWriter, ctx common.ExtendedContext, prSide pr_db.PatronRequestSide, requesterSymbol pgtype.Text, supplierSymbol pgtype.Text, side *string, tenant tenant.Tenant) bool {
+	isOwner, err := tenant.IsOwnerOf(getOwnerSymbol(prSide, requesterSymbol, supplierSymbol))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return false
+	}
+	if isOwner && (!isSideParamValid(side) || string(prSide) == *side) {
+		return true
 	}
 	api.AddNotFoundError(w)
-	return nil
+	return false
+}
+
+func handleDbError(w http.ResponseWriter, ctx common.ExtendedContext, err error) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		api.AddNotFoundError(w)
+		return
+	}
+	api.AddInternalError(ctx, w, err)
 }
 
 func isSideParamValid(side *string) bool {
@@ -377,7 +391,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestViewById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequestSearchView(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -403,7 +417,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -435,7 +449,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -520,7 +534,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdEvents(w http.ResponseWrite
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -558,7 +572,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdItems(w http.ResponseWriter
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -605,7 +619,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		offset = *params.Offset
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -662,7 +676,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdNotifications(w http.Respo
 		return
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -720,7 +734,7 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 		return
 	}
 
-	pr := a.getPatronRequestById(w, ctx, id, params.Side, tenant)
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
 	if pr == nil {
 		return
 	}
@@ -756,18 +770,12 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdNotificationsNotificationId
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func toApiPatronRequest(r *http.Request, requestView pr_db.PatronRequestView) proapi.PatronRequest {
-	request := requestView.PatronRequest
+func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) proapi.PatronRequest {
 	items := []proapi.PrItem{}
 	for _, item := range request.Items {
 		items = append(items, toApiPrItem(item))
 	}
-	ownerSymbol := ""
-	if request.Side == prservice.SideBorrowing && request.RequesterSymbol.Valid {
-		ownerSymbol = request.RequesterSymbol.String
-	} else if request.Side == prservice.SideLending && request.SupplierSymbol.Valid {
-		ownerSymbol = request.SupplierSymbol.String
-	}
+	ownerSymbol := getOwnerSymbol(request.Side, request.RequesterSymbol, request.SupplierSymbol)
 	var notificationsLink *string
 	var itemsLink *string
 	var availableActionsLink *string
@@ -800,7 +808,7 @@ func toApiPatronRequest(r *http.Request, requestView pr_db.PatronRequestView) pr
 		IllRequest:           request.IllRequest,
 		RequesterRequestId:   toString(request.RequesterReqID),
 		NeedsAttention:       request.NeedsAttention,
-		HasCost:              requestView.HasCost,
+		HasCost:              request.HasCost,
 		LastAction:           toString(request.LastAction),
 		LastActionOutcome:    toString(request.LastActionOutcome),
 		LastActionResult:     toString(request.LastActionResult),

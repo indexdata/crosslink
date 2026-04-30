@@ -33,8 +33,3 @@ type PrItem struct {
 	ItemID     *string   `json:"item_id"`
 	CreatedAt  time.Time `json:"created_at"`
 }
-
-type PatronRequestView struct {
-	PatronRequest
-	HasCost bool
-}

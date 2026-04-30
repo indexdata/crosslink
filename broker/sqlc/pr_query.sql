@@ -4,7 +4,7 @@ FROM patron_request
 WHERE id = $1
 LIMIT 1;
 
--- name: GetPatronRequestViewById :one
+-- name: GetPatronRequestSearchView :one
 SELECT sqlc.embed(patron_request_search_view)
 FROM patron_request_search_view
 WHERE id = $1
