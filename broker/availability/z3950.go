@@ -11,6 +11,8 @@ import (
 	"github.com/indexdata/crosslink/zoom"
 )
 
+func cgoEnabled() bool { return true }
+
 type Z3950AvailabilityAdapter struct {
 	options zoom.Options
 	zurl    string
