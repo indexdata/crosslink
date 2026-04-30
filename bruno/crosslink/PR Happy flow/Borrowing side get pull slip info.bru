@@ -1,17 +1,13 @@
 meta {
-  name: Borrowing side accept-cost-condition
+  name: Borrowing side get pull slip info
   type: http
-  seq: 19
+  seq: 28
 }
 
-post {
-  url: {{host}}/patron_requests/{{prId}}/action?side=borrowing
+get {
+  url: {{host}}/pullslips/{{borrowingPullSlipId}}
   body: json
   auth: basic
-}
-
-params:query {
-  side: borrowing
 }
 
 headers {
@@ -24,20 +20,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-      "action": "accept-condition"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
 script:post-response {
-  test("for success", function() {
-    const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+  test("for successful slip creation", function() {
+      const ps = res.getBody();
+      expect(ps.type).to.equal("single")
   });
 }
 

@@ -81,7 +81,11 @@ func TestToApiPatronRequestOmitsOwnerLinksWithoutDetectedSymbol(t *testing.T) {
 		},
 	}
 
-	apiPr := toApiPatronRequest(req, pr, iso18626.Request{})
+	prView := patronRequestSearchViewFromPatronRequest(pr, true)
+	prView.UnreadNotificationsCount = 3
+	apiPr := toApiPatronRequest(req, prView)
+	assert.True(t, apiPr.HasCost)
+	assert.Equal(t, int64(3), apiPr.UnreadNotificationsCount)
 	assert.Nil(t, apiPr.NotificationsLink)
 	assert.Nil(t, apiPr.ItemsLink)
 	assert.Nil(t, apiPr.AvailableActionsLink)
@@ -105,12 +109,37 @@ func TestToApiPatronRequestOmitsIllTransactionLinkWithoutRequesterReqID(t *testi
 		RequesterReqID: pgtype.Text{Valid: false},
 	}
 
-	apiPr := toApiPatronRequest(req, pr, iso18626.Request{})
+	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
 	assert.NotNil(t, apiPr.NotificationsLink)
 	assert.NotNil(t, apiPr.ItemsLink)
 	assert.NotNil(t, apiPr.AvailableActionsLink)
 	assert.NotNil(t, apiPr.EventsLink)
 	assert.Nil(t, apiPr.IllTransactionLink)
+}
+
+func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
+	return pr_db.PatronRequestSearchView{
+		ID:                pr.ID,
+		CreatedAt:         pr.CreatedAt,
+		IllRequest:        pr.IllRequest,
+		State:             pr.State,
+		Side:              pr.Side,
+		Patron:            pr.Patron,
+		RequesterSymbol:   pr.RequesterSymbol,
+		SupplierSymbol:    pr.SupplierSymbol,
+		Tenant:            pr.Tenant,
+		RequesterReqID:    pr.RequesterReqID,
+		NeedsAttention:    pr.NeedsAttention,
+		LastAction:        pr.LastAction,
+		LastActionOutcome: pr.LastActionOutcome,
+		LastActionResult:  pr.LastActionResult,
+		Items:             pr.Items,
+		Language:          pr.Language,
+		TerminalState:     pr.TerminalState,
+		UpdatedAt:         pr.UpdatedAt,
+		IllResponse:       pr.IllResponse,
+		HasCost:           hasCost,
+	}
 }
 
 func TestGetPatronRequests(t *testing.T) {
@@ -176,9 +205,28 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
 	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "requester_req_id = req-123")
+		assert.Contains(t, *repo.cql, "requester_req_id_exact = req-123")
 		assert.Contains(t, *repo.cql, "side = lending")
-		assert.Contains(t, *repo.cql, "supplier_symbol = ISIL:REQ")
+		assert.Contains(t, *repo.cql, "supplier_symbol_exact = ISIL:REQ")
+	}
+}
+
+func TestGetPatronRequestsWithSymbolNoSideGroupsOwnerRestriction(t *testing.T) {
+	repo := new(PrRepoCapture)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	cql := "id = pr-1"
+	params := proapi.GetPatronRequestsParams{
+		Symbol: &symbol,
+		Cql:    &cql,
+	}
+
+	handler.GetPatronRequests(rr, req, params)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	if assert.NotNil(t, repo.cql) {
+		assert.Equal(t, "id = pr-1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))", *repo.cql)
 	}
 }
 
@@ -770,6 +818,11 @@ func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id s
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
 
+func (r *PrRepoOkapiOwner) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	pr, err := r.GetPatronRequestById(ctx, id)
+	return patronRequestSearchViewFromPatronRequest(pr, false), err
+}
+
 type PrRepoCapture struct {
 	PrRepoError
 	cql *string
@@ -785,6 +838,11 @@ type PrRepoNotificationsCapture struct {
 func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
 	r.cql = cql
 	return []pr_db.PatronRequest{}, 0, nil
+}
+
+func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
+	r.cql = cql
+	return []pr_db.PatronRequestSearchView{}, 0, nil
 }
 
 func (r *PrRepoNotificationsCapture) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
@@ -808,8 +866,17 @@ func (r *PrRepoError) GetPatronRequestById(ctx common.ExtendedContext, id string
 	}
 }
 
+func (r *PrRepoError) GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (pr_db.PatronRequestSearchView, error) {
+	pr, err := r.GetPatronRequestById(ctx, id)
+	return patronRequestSearchViewFromPatronRequest(pr, false), err
+}
+
 func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
 	return []pr_db.PatronRequest{}, 0, errors.New("DB error")
+}
+
+func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
+	return []pr_db.PatronRequestSearchView{}, 0, errors.New("DB error")
 }
 
 func (r *PrRepoError) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {

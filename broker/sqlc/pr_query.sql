@@ -4,6 +4,12 @@ FROM patron_request
 WHERE id = $1
 LIMIT 1;
 
+-- name: GetPatronRequestSearchView :one
+SELECT sqlc.embed(patron_request_search_view)
+FROM patron_request_search_view
+WHERE id = $1
+LIMIT 1;
+
 -- name: GetPatronRequestByIdForUpdate :one
 SELECT sqlc.embed(patron_request)
 FROM patron_request
@@ -12,7 +18,7 @@ WHERE id = $1
     LIMIT 1;
 
 -- name: ListPatronRequests :many
-SELECT id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, language, items, terminal_state, updated_at, COUNT(*) OVER () as full_count
+SELECT sqlc.embed(patron_request_search_view), COUNT(*) OVER () as full_count
 FROM patron_request_search_view
 WHERE ill_request IS NOT NULL
 ORDER BY created_at
@@ -35,13 +41,14 @@ SET ill_request         = $3,
     items               = $15,
     language            = $16,
     terminal_state      = $17,
-    updated_at          = now()
+    updated_at          = now(),
+    ill_response    = $19
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 RETURNING sqlc.embed(patron_request);
 
 -- name: DeletePatronRequest :exec

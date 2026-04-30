@@ -118,8 +118,9 @@ func TestCreateSinglePullSlip(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Create pull slip
+	ids := []string{id}
 	createPullSlip := psoapi.CreatePullSlip{
-		IllTransactionId: id,
+		IllTransactionIds: &ids,
 	}
 	supQueryParams := "?symbol=" + supSymbol
 	createPullSlipBytes, err := json.Marshal(createPullSlip)
@@ -142,6 +143,13 @@ func TestCreateSinglePullSlip(t *testing.T) {
 	// Check pull slip pdf
 	_, respBytes = httpRequest(t, "GET", pullSlipUrl+"/pdf"+supQueryParams, []byte{}, 200)
 	assert.Equal(t, pdfBytes, respBytes)
+
+	// Regenerate pdf
+	resp, pdfBytes = httpRequest(t, "POST", pullSlipUrl+"/regenerate"+supQueryParams, []byte{}, 200)
+	assert.True(t, len(pdfBytes) > 100)
+	loc = resp.Header.Get("Location")
+	assert.True(t, strings.Contains(loc, basePath))
+	assert.True(t, strings.Contains(loc, "/pdf"))
 }
 
 func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {

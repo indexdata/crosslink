@@ -34,7 +34,8 @@
 
         .section {
             margin-bottom: 8px;
-            padding-left: 5px
+            padding-left: 5px;
+            line-height: 1.5;
         }
 
         .label {
@@ -70,23 +71,49 @@
     </div>
 
     <div class="section">
-        <span class="label">Title / Author</span>
-        <strong>{{.Title}}</strong><br> by {{.Author}}
+        <b>Service Type:</b> {{.ServiceType}} <br/>
+        <b>Service Level:</b> {{.ServiceLevel}} <br/>
+        <b>System Identifier:</b> {{.SystemIdentifier}} <br/>
+        <b>Title:</b> {{.Title}} <br/>
+        <b>Author:</b> {{.Author}} <br/>
+        <b>Publisher:</b> {{.Publisher}} <br/>
+        <b>Volume(s):</b> {{.Volume}} <br/>
+        <b>Issue:</b> {{.Issue}} <br/>
+        <b>Pages:</b> {{.Pages}} <br/>
     </div>
 
     <div class="warning">
         DO NOT REMOVE THIS SLIP<br>
-        Material on loan from a Trove Partner
+        This material is on loan from a Trove Partner
+    </div>
+    <div class="box">
+        <div class="section">
+            <span class="label">Staff Notes:</span>
+            <pre>
+                {{.StaffNotes}}
+            </pre>
+            <br/><br/>
+            <span class="label">Call Number:</span>
+            {{.CallNumber}}
+        </div>
+    </div>
+    <div class="box">
+        <div class="section">
+            <span class="label">Due Date:</span>
+            {{.DueDate}}
+            <br/><br/>
+            <span class="label">Loan Conditions:</span>
+            <pre>
+                {{.LoanConditions}}
+            </pre>
+        </div>
     </div>
 
-    <div class="section">
-        <span class="label">Due Date</span>
-        {{.DueDate}}
-    </div>
-
-    <div class="section">
-        <span class="label">Return Address</span>
-        {{.ReturnAddress}}
+    <div class="box">
+        <div class="section">
+            <span class="label">Return Address</span>
+            {{.ReturnAddress}}
+        </div>
     </div>
 </div>
 </body>

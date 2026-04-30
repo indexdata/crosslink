@@ -34,14 +34,23 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	f = pgcql.NewFieldString().WithExact()
 	def.AddField("side", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("requester_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithExact().WithColumn("requester_symbol")
+	def.AddField("requester_symbol_exact", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("supplier_symbol", f)
 
-	f = pgcql.NewFieldString().WithLikeOps()
+	f = pgcql.NewFieldString().WithExact().WithColumn("supplier_symbol")
+	def.AddField("supplier_symbol_exact", f)
+
+	f = pgcql.NewFieldString().WithLikeOps().WithLower()
 	def.AddField("requester_req_id", f)
+
+	f = pgcql.NewFieldString().WithExact().WithColumn("requester_req_id")
+	def.AddField("requester_req_id_exact", f)
 
 	fb := pgcql.NewFieldBool()
 	def.AddField("needs_attention", fb)
@@ -81,6 +90,9 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
+
+	f = pgcql.NewFieldString().WithSplit().WithExact()
+	def.AddField("id", f)
 
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
@@ -156,24 +168,32 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 	for rows.Next() {
 		var i ListPatronRequestsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.CreatedAt,
-			&i.IllRequest,
-			&i.State,
-			&i.Side,
-			&i.Patron,
-			&i.RequesterSymbol,
-			&i.SupplierSymbol,
-			&i.Tenant,
-			&i.RequesterReqID,
-			&i.NeedsAttention,
-			&i.LastAction,
-			&i.LastActionOutcome,
-			&i.LastActionResult,
-			&i.Language,
-			&i.Items,
-			&i.TerminalState,
-			&i.UpdatedAt,
+			&i.PatronRequestSearchView.ID,
+			&i.PatronRequestSearchView.CreatedAt,
+			&i.PatronRequestSearchView.IllRequest,
+			&i.PatronRequestSearchView.State,
+			&i.PatronRequestSearchView.Side,
+			&i.PatronRequestSearchView.Patron,
+			&i.PatronRequestSearchView.RequesterSymbol,
+			&i.PatronRequestSearchView.SupplierSymbol,
+			&i.PatronRequestSearchView.Tenant,
+			&i.PatronRequestSearchView.RequesterReqID,
+			&i.PatronRequestSearchView.NeedsAttention,
+			&i.PatronRequestSearchView.LastAction,
+			&i.PatronRequestSearchView.LastActionOutcome,
+			&i.PatronRequestSearchView.LastActionResult,
+			&i.PatronRequestSearchView.Items,
+			&i.PatronRequestSearchView.Language,
+			&i.PatronRequestSearchView.TerminalState,
+			&i.PatronRequestSearchView.UpdatedAt,
+			&i.PatronRequestSearchView.IllResponse,
+			&i.PatronRequestSearchView.HasNotification,
+			&i.PatronRequestSearchView.HasCost,
+			&i.PatronRequestSearchView.HasUnreadNotification,
+			&i.PatronRequestSearchView.ServiceType,
+			&i.PatronRequestSearchView.ServiceLevel,
+			&i.PatronRequestSearchView.NeededAt,
+			&i.PatronRequestSearchView.UnreadNotificationsCount,
 			&i.FullCount,
 		); err != nil {
 			return nil, nil, err

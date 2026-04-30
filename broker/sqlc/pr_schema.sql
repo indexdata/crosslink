@@ -18,7 +18,8 @@ CREATE TABLE patron_request
     items               JSONB NOT NULL DEFAULT '[]'::jsonb,
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
-    updated_at          TIMESTAMP
+    updated_at          TIMESTAMP,
+    ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -77,12 +78,14 @@ SELECT
         FROM notification n
         WHERE n.pr_id = pr.id and cost is not null
     ) AS has_cost,
-    EXISTS (
-        SELECT 1
-        FROM notification n
-        WHERE n.pr_id = pr.id and acknowledged_at is null
-    ) AS has_unread_notification,
+    (unread.unread_notifications_count > 0) AS has_unread_notification,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
-    immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at
-FROM patron_request pr;
+    immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at,
+    unread.unread_notifications_count AS unread_notifications_count
+FROM patron_request pr
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS unread_notifications_count
+    FROM notification n
+    WHERE n.pr_id = pr.id and n.acknowledged_at is null
+) unread ON true;

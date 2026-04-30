@@ -237,8 +237,10 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			eventName = SupplierCancelRejected
 		} else if strings.Contains(sam.MessageInfo.Note, shim.RESHARE_ADD_LOAN_CONDITION) {
 			eventName = SupplierWillSupplyCond
+			setSupplierMessage(sam, &pr)
 		} else {
 			eventName = SupplierWillSupply
+			setSupplierMessage(sam, &pr)
 		}
 	case iso18626.TypeStatusLoaned:
 		err := m.saveItems(ctx, pr, sam)
@@ -248,6 +250,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 				ErrorValue: err.Error(),
 			}, err)
 		}
+		setSupplierMessage(sam, &pr)
 		eventName = SupplierLoaned
 	case iso18626.TypeStatusLoanCompleted, iso18626.TypeStatusCopyCompleted:
 		eventName = SupplierCompleted
@@ -770,4 +773,10 @@ func safeConvertInt32(n int) (int32, error) {
 		return 0, fmt.Errorf("integer out of range for int32: %d", n)
 	}
 	return int32(n), nil
+}
+
+func setSupplierMessage(sam iso18626.SupplyingAgencyMessage, pr *pr_db.PatronRequest) {
+	copySam := sam
+	copySam.Header = iso18626.Header{} // clear header
+	pr.IllResponse = copySam
 }

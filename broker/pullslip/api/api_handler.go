@@ -3,13 +3,15 @@ package psapi
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
+	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
@@ -18,6 +20,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const MAX_RECORDS_PER_PDF = 100
 
 type PullSlipApiHandler struct {
 	psRepo         ps_db.PsRepo
@@ -31,7 +35,7 @@ func NewPsApiHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo, tenantResolver te
 		psRepo:         psRepo,
 		prRepo:         prRepo,
 		tenantResolver: tenantResolver,
-		pdfService:     psservice.PdfService{},
+		pdfService:     psservice.NewPdfService(prRepo),
 	}
 }
 
@@ -63,11 +67,7 @@ func (p PullSlipApiHandler) GetPullslipsIdPdf(w http.ResponseWriter, r *http.Req
 	if ps == nil {
 		return
 	}
-	pdfId := ps.ID
-	if ps.Type == ps_db.PullSlipTypeSingle {
-		pdfId = ps.SearchCriteria
-	}
-	writePdf(w, ps.PdfBytes, pdfId)
+	writePdf(w, ps.PdfBytes)
 }
 
 func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request, params psoapi.PostPullslipsParams) {
@@ -96,27 +96,47 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 	}
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-
-	pr, err := p.prRepo.GetPatronRequestById(ctx, create.IllTransactionId)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			api.AddNotFoundError(w)
+	cql := ""
+	pullSlipType := ps_db.PullSlipTypeBatch
+	if create.IllTransactionIds != nil && len(*create.IllTransactionIds) > 0 {
+		if len(*create.IllTransactionIds) == 1 {
+			pullSlipType = ps_db.PullSlipTypeSingle
+		}
+		query, err := cqlbuilder.NewQuery().Search("id").Rel("any").Term(strings.Join(*create.IllTransactionIds, " ")).Build()
+		if err != nil {
+			api.AddBadRequestError(ctx, w, err)
 			return
 		}
-		api.AddInternalError(ctx, w, err)
+		cql = query.String()
+	} else if create.Cql != nil {
+		cql = *create.Cql
+	}
+	if cql == "" {
+		api.AddBadRequestError(ctx, w, errors.New("search criteria is empty"))
 		return
 	}
-
-	if pr.RequesterSymbol.String != symbol && pr.SupplierSymbol.String != symbol {
-		api.AddBadRequestError(ctx, w, fmt.Errorf("patron request does not have the correct symbol"))
-		return
-	}
-
-	pdf, err := p.pdfService.GeneratePdfPullSlip(pr)
+	qb, err := cqlbuilder.NewQueryFromString(cql)
 	if err != nil {
-		api.AddInternalError(ctx, w, err)
+		api.AddBadRequestError(ctx, w, err)
 		return
 	}
+	var side pr_db.PatronRequestSide
+	qb, err = prapi.AddOwnerRestriction(qb, symbol, side)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	cqlQuery, err := qb.Build()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+
+	pdf, err := p.getPdfByte(ctx, w, cqlQuery.String())
+	if err != nil {
+		return // http response already added
+	}
+
 	psId := uuid.NewString()
 	_, err = p.psRepo.SavePullSlip(ctx, ps_db.SavePullSlipParams{
 		ID: psId,
@@ -128,9 +148,9 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 			Time:  time.Now(),
 			Valid: true,
 		},
-		Type:           ps_db.PullSlipTypeSingle,
+		Type:           pullSlipType,
 		Owner:          symbol,
-		SearchCriteria: create.IllTransactionId,
+		SearchCriteria: cqlQuery.String(),
 		PdfBytes:       pdf,
 	})
 	if err != nil {
@@ -138,7 +158,34 @@ func (p PullSlipApiHandler) PostPullslips(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set("Location", api.Link(r, api.Path("pullslips", psId, "pdf"), nil))
-	writePdf(w, pdf, pr.RequesterReqID.String)
+	writePdf(w, pdf)
+}
+
+func (p PullSlipApiHandler) PostPullslipsIdRegenerate(w http.ResponseWriter, r *http.Request, id string, params psoapi.PostPullslipsIdRegenerateParams) {
+	logParams := map[string]string{"method": "PostPullslipsIdRegenerate", "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	ps := p.getPullSlip(ctx, w, r, id, psoapi.GetPullslipsIdParams(params), logParams)
+	if ps == nil {
+		return
+	}
+
+	pdf, err := p.getPdfByte(ctx, w, ps.SearchCriteria)
+	if err != nil {
+		return // http response already added
+	}
+
+	ps.PdfBytes = pdf
+	ps.GeneratedAt = pgtype.Timestamp{
+		Time:  time.Now(),
+		Valid: true,
+	}
+	_, err = p.psRepo.SavePullSlip(ctx, ps_db.SavePullSlipParams(*ps))
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.Header().Set("Location", api.Link(r, api.Path("pullslips", ps.ID, "pdf"), nil))
+	writePdf(w, pdf)
 }
 
 func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.ResponseWriter, r *http.Request, id string, params psoapi.GetPullslipsIdParams, logParams map[string]string) *ps_db.PullSlip {
@@ -167,9 +214,33 @@ func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.Respo
 	return &ps
 }
 
-func writePdf(w http.ResponseWriter, bytes []byte, id string) {
+func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, error) {
+	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, &cql)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			api.AddNotFoundError(w)
+			return []byte{}, err
+		}
+		api.AddInternalError(ctx, w, err)
+		return []byte{}, err
+	}
+
+	if len(prs) == 0 {
+		api.AddBadRequestError(ctx, w, errors.New("no patron requests found"))
+		return []byte{}, errors.New("no patron requests found")
+	}
+
+	pdf, err := p.pdfService.GeneratePdfPullSlipForPrs(ctx, prs)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return []byte{}, err
+	}
+	return pdf, nil
+}
+
+func writePdf(w http.ResponseWriter, bytes []byte) {
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="pull-slip-%s.pdf"`, id))
+	w.Header().Set("Content-Disposition", `attachment; filename="pull-slips.pdf"`)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(bytes)
+	_, _ = w.Write(bytes) // #nosec G705 -- content is a generated PDF binary; Content-Type is set to application/pdf
 }

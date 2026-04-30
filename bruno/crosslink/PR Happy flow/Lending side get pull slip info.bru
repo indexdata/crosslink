@@ -1,17 +1,13 @@
 meta {
-  name: Lending side ship
+  name: Lending side get pull slip info
   type: http
-  seq: 22
+  seq: 15
 }
 
-post {
-  url: {{host}}/patron_requests/{{lendingPrId}}/action?side=lending
+get {
+  url: {{host}}/pullslips/{{pullSlipId}}
   body: json
   auth: basic
-}
-
-params:query {
-  side: lending
 }
 
 headers {
@@ -24,20 +20,14 @@ auth:basic {
   password: {{userPassword}}
 }
 
-body:json {
-  {
-      "action": "ship"
-  }
-}
-
 script:pre-request {
   bru.sleep(Number(bru.getEnvVar("sleepDelay")))
 }
 
 script:post-response {
-  test("for success", function() {
-    const pr = res.getBody();
-    expect(pr.result).to.equal("SUCCESS")
+  test("for successful slip creation", function() {
+      const ps = res.getBody();
+      expect(ps.type).to.equal("single")
   });
 }
 
