@@ -121,9 +121,6 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 		}
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
-			for _, row := range rows {
-				fullCount = row.FullCount
-			}
 		} else {
 			params.Limit = 1
 			params.Offset = 0
