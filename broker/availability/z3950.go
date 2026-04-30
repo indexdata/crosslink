@@ -4,6 +4,7 @@
 package availability
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -14,8 +15,12 @@ import (
 func cgoEnabled() bool { return true }
 
 type Z3950AvailabilityAdapter struct {
-	options zoom.Options
-	zurl    string
+	options           zoom.Options
+	zurl              string
+	identifierMapping string
+	isbnMapping       string
+	issnMapping       string
+	titleMapping      string
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (AvailabilityAdapter, error) {
@@ -25,6 +30,11 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 			"count":                 "10",
 			"preferredRecordSyntax": "usmarc",
 		},
+		identifierMapping: "1=12",
+		isbnMapping:       "1=7",
+		issnMapping:       "1=8",
+		titleMapping:      "1=4",
+
 		zurl: config.Address,
 	}
 	if config.Options != nil {
@@ -39,6 +49,49 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 	return a, nil
 }
 
+func (a *Z3950AvailabilityAdapter) sr(conn *zoom.Connection, query string) ([]Availability, error) {
+	fmt.Printf("Executing Z39.50 query: %s\n", query)
+	res, err := conn.Search(query)
+	if err != nil {
+		return nil, err
+	}
+	var avail []Availability
+	for i := 0; i < res.Count(); i++ {
+		rec, err := res.GetRecord(i)
+		if err != nil {
+			return nil, err
+		}
+		jsonString := rec.Data("json;charset=utf-8")
+		if jsonString == "" {
+			continue
+		}
+		// parse jsonString to "any" type
+		var jsonData map[string]any
+		err = json.Unmarshal([]byte(jsonString), &jsonData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse JSON from Z39.50 record: %w", err)
+		}
+		avail = append(avail, Availability{
+			Availability: jsonString,
+		})
+	}
+	return avail, nil
+
+}
+
+func pqfEncode(value string) string {
+	// escape backslashes and double quotes
+	escaped := "\""
+	for _, r := range value {
+		if r == '\\' || r == '"' {
+			escaped += "\\"
+		}
+		escaped += string(r)
+	}
+	escaped += "\""
+	return escaped
+}
+
 func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Availability, error) {
 	if a.zurl == "" {
 		return nil, nil // No Z39.50 server configured for this symbol, return no availability
@@ -49,6 +102,41 @@ func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Av
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
-	// TODO: connect and search
-	return nil, fmt.Errorf("not implemented")
+	if params.Identifier != "" {
+		avail, err := a.sr(conn, "@attr "+a.identifierMapping+" "+pqfEncode(params.Identifier))
+		if err != nil {
+			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+		}
+		if len(avail) > 0 {
+			return avail, nil
+		}
+	}
+	if params.Isbn != "" {
+		avail, err := a.sr(conn, "@attr "+a.isbnMapping+" "+pqfEncode(params.Isbn))
+		if err != nil {
+			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+		}
+		if len(avail) > 0 {
+			return avail, nil
+		}
+	}
+	if params.Issn != "" {
+		avail, err := a.sr(conn, "@attr "+a.issnMapping+" "+pqfEncode(params.Issn))
+		if err != nil {
+			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+		}
+		if len(avail) > 0 {
+			return avail, nil
+		}
+	}
+	if params.Title != "" {
+		avail, err := a.sr(conn, "@attr "+a.titleMapping+" "+pqfEncode(params.Title))
+		if err != nil {
+			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+		}
+		if len(avail) > 0 {
+			return avail, nil
+		}
+	}
+	return nil, nil
 }

@@ -6,6 +6,9 @@ type AvailabilityAdapter interface {
 
 type AvailabilityLookupParams struct {
 	Identifier string
+	Isbn       string
+	Issn       string
+	Title      string
 }
 
 type Availability struct {
