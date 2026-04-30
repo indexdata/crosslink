@@ -354,6 +354,12 @@ func TestListPatronRequests(t *testing.T) {
 								Text: "ISSN",
 							},
 						},
+						{
+							BibliographicItemIdentifier: "1234-567X",
+							BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+								Text: "ISSN",
+							},
+						},
 					},
 				},
 				PatronInfo: &iso18626.PatronInfo{
@@ -414,6 +420,33 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "2049-3630"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = `isbn = "9783161484100"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = `issn = "20493630"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 2)
+	assert.Equal(t, int64(2), fullCount)
+
+	cql = `issn = "1234567x"`
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
