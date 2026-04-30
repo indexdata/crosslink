@@ -1,0 +1,9 @@
+{
+  "id": "isxn",
+  "matcher": "isxn-matcher::matchkey",
+  "cql": {
+     "isbn" : "isxn-matcher::normIsbn",
+     "issn" : "isxn-matcher::normIssn"
+  },
+  "update": "ingest"
+}
