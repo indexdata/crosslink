@@ -102,40 +102,26 @@ func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Av
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
-	if params.Identifier != "" {
-		avail, err := a.sr(conn, "@attr "+a.identifierMapping+" "+pqfEncode(params.Identifier))
-		if err != nil {
-			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
-		}
-		if len(avail) > 0 {
-			return avail, nil
-		}
+	type paramMapping struct {
+		value   string
+		mapping string
 	}
-	if params.Isbn != "" {
-		avail, err := a.sr(conn, "@attr "+a.isbnMapping+" "+pqfEncode(params.Isbn))
-		if err != nil {
-			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
-		}
-		if len(avail) > 0 {
-			return avail, nil
-		}
+
+	paramMappings := []paramMapping{
+		{params.Identifier, a.identifierMapping},
+		{params.Isbn, a.isbnMapping},
+		{params.Issn, a.issnMapping},
+		{params.Title, a.titleMapping},
 	}
-	if params.Issn != "" {
-		avail, err := a.sr(conn, "@attr "+a.issnMapping+" "+pqfEncode(params.Issn))
-		if err != nil {
-			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
-		}
-		if len(avail) > 0 {
-			return avail, nil
-		}
-	}
-	if params.Title != "" {
-		avail, err := a.sr(conn, "@attr "+a.titleMapping+" "+pqfEncode(params.Title))
-		if err != nil {
-			return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
-		}
-		if len(avail) > 0 {
-			return avail, nil
+	for _, pm := range paramMappings {
+		if pm.value != "" {
+			avail, err := a.sr(conn, "@attr "+pm.mapping+" "+pqfEncode(pm.value))
+			if err != nil {
+				return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+			}
+			if len(avail) > 0 {
+				return avail, nil
+			}
 		}
 	}
 	return nil, nil
