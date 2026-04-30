@@ -54,7 +54,7 @@ func TestLookup(t *testing.T) {
 	params = AvailabilityLookupParams{
 		Isbn: "0836968433",
 	}
-	results, err = adapter.Lookup(params)
+	_, err = adapter.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search Z39.50 server")
 }
