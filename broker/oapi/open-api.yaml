@@ -487,6 +487,10 @@ components:
         hasCost:
           type: boolean
           description: Indicates if the request has a cost notification
+        unreadNotificationsCount:
+          type: integer
+          format: int64
+          description: Number of unread notifications for this request
         lastAction:
           type: string
           description: Latest action on this request
@@ -530,6 +534,7 @@ components:
         - illRequest
         - needsAttention
         - hasCost
+        - unreadNotificationsCount
         - terminalState
     PatronRequests:
       type: object

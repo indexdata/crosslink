@@ -248,6 +248,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.ServiceType,
 			&i.PatronRequestSearchView.ServiceLevel,
 			&i.PatronRequestSearchView.NeededAt,
+			&i.PatronRequestSearchView.UnreadNotificationsCount,
 			&i.FullCount,
 		); err != nil {
 			return nil, nil, err
