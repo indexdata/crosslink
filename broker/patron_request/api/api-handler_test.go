@@ -81,8 +81,11 @@ func TestToApiPatronRequestOmitsOwnerLinksWithoutDetectedSymbol(t *testing.T) {
 		},
 	}
 
-	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, true))
+	prView := patronRequestSearchViewFromPatronRequest(pr, true)
+	prView.UnreadNotificationsCount = 3
+	apiPr := toApiPatronRequest(req, prView)
 	assert.True(t, apiPr.HasCost)
+	assert.Equal(t, int64(3), apiPr.UnreadNotificationsCount)
 	assert.Nil(t, apiPr.NotificationsLink)
 	assert.Nil(t, apiPr.ItemsLink)
 	assert.Nil(t, apiPr.AvailableActionsLink)
