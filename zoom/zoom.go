@@ -99,11 +99,12 @@ func (c *Connection) Search(query string) (*ResultSet, error) {
 	defer C.free(unsafe.Pointer(cQuery))
 	cSet := C.ZOOM_connection_search_pqf(c.conn, cQuery)
 	set := &ResultSet{rs: cSet, connection: c}
-	runtime.SetFinalizer(set, (*ResultSet).finalize)
 	err := c.checkError()
 	if err != nil {
+		set.finalize()
 		return nil, err
 	}
+	runtime.SetFinalizer(set, (*ResultSet).finalize)
 	return set, nil
 }
 
