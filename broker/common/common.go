@@ -16,7 +16,7 @@ func StructToMap(obj any) (map[string]any, error) {
 		return nil, fmt.Errorf("input is not a struct")
 	}
 
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil, fmt.Errorf("input is not a struct")
 		}
