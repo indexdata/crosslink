@@ -56,6 +56,9 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 		if err != nil {
 			return nil, err
 		}
+		if rec == nil {
+			continue
+		}
 		jsonString := rec.Data("json;charset=utf-8")
 		if jsonString == "" {
 			continue
