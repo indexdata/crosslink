@@ -25,7 +25,8 @@ func TestConnect(t *testing.T) {
 	assert.NotNil(t, conn)
 	err := conn.Connect("")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to connect")
+	assert.Contains(t, err.Error(), "Connect failed")
+	assert.Equal(t, 10000, err.(*ZoomError).Code)
 }
 
 func TestSearch(t *testing.T) {
@@ -43,10 +44,6 @@ func TestSearch(t *testing.T) {
 	err = conn.Connect("z3950.indexdata.com/marc")
 	assert.NoError(t, err)
 
-	_, err = conn.Search("@attr 1=99 program")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "search failed: Unsupported Use attribute")
-
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
@@ -63,9 +60,17 @@ func TestSearch(t *testing.T) {
 	assert.Contains(t, record.Data("render"), "program")
 	assert.Equal(t, "", record.Data("unknown"))
 
+	record.finalize()
+
 	record, err = rs.GetRecord(-1)
 	assert.NoError(t, err)
 	assert.Nil(t, record)
+
+	rs.finalize()
+
+	_, err = rs.GetRecord(0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "result set is not available")
 
 	conn.Close()
 	_, err = conn.Search("@attr 1=4 computer")
@@ -85,11 +90,11 @@ func TestRecordData(t *testing.T) {
 
 func TestSearchUnsupportedSyntax(t *testing.T) {
 	options := Options{
-		"preferredRecordSyntax": "danmarc",
+		"preferredRecordSyntax": "danmarc", // not supported by the server
 	}
-
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
+	defer conn.finalize()
 	err := conn.Connect("z3950.indexdata.com/marc")
 	assert.NoError(t, err)
 
@@ -98,8 +103,23 @@ func TestSearchUnsupportedSyntax(t *testing.T) {
 	assert.NotNil(t, rs)
 	assert.Greater(t, rs.Count(), 7)
 
-	// would like to get error for this.
-	record, err := rs.GetRecord(0)
+	// getting surrogate diagnostic for unsupported record syntax when trying to access the record
+	_, err = rs.GetRecord(0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Record not available in requested syntax")
+	assert.Equal(t, 238, err.(*ZoomError).Code)
+}
+
+func TestSearchUnsupportedAttribute(t *testing.T) {
+	conn := NewConnection(Options{})
+	assert.NotNil(t, conn)
+	defer conn.finalize()
+	err := conn.Connect("z3950.indexdata.com/marc")
 	assert.NoError(t, err)
-	assert.NotNil(t, record)
+
+	_, err = conn.Search("@attr 1=99 computer")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Unsupported Use attribute (99)")
+	assert.Equal(t, "99", err.(*ZoomError).AdditionalInfo)
+	assert.Equal(t, 114, err.(*ZoomError).Code)
 }

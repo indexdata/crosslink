@@ -4,18 +4,35 @@
 package zoom
 
 /*
+// file: zoom.go
 #cgo pkg-config: yaz
 #include <yaz/zoom.h>
 #include <stdlib.h>
 */
 import "C"
 import (
-	"fmt"
 	"runtime"
 	"unsafe"
 )
 
 type Options map[string]string
+
+type ZoomError struct {
+	Code           int
+	Message        string
+	AdditionalInfo string
+}
+
+func (e *ZoomError) Error() string {
+	msg := "zoom error: "
+	if e.Message != "" {
+		msg += e.Message
+	}
+	if e.AdditionalInfo != "" {
+		msg += " (" + e.AdditionalInfo + ")"
+	}
+	return msg
+}
 
 type Connection struct {
 	conn C.ZOOM_connection
@@ -62,11 +79,7 @@ func (c *Connection) Connect(host string) error {
 	cHost := C.CString(host)
 	defer C.free(unsafe.Pointer(cHost))
 	C.ZOOM_connection_connect(c.conn, cHost, 0)
-	code := C.ZOOM_connection_error(c.conn, nil, nil)
-	if code != 0 {
-		return fmt.Errorf("failed to connect: %s", C.GoString(C.ZOOM_connection_errmsg(c.conn)))
-	}
-	return nil
+	return c.checkError()
 }
 
 func (c *Connection) Close() {
@@ -77,16 +90,16 @@ func (c *Connection) Close() {
 
 func (c *Connection) Search(query string) (*ResultSet, error) {
 	if c.conn == nil {
-		return nil, fmt.Errorf("connection is not established")
+		return nil, &ZoomError{Code: 0, Message: "connection is not established"}
 	}
 	cQuery := C.CString(query)
 	defer C.free(unsafe.Pointer(cQuery))
 	cSet := C.ZOOM_connection_search_pqf(c.conn, cQuery)
 	set := &ResultSet{rs: cSet, connection: c}
 	runtime.SetFinalizer(set, (*ResultSet).finalize)
-	code := C.ZOOM_connection_error(c.conn, nil, nil)
-	if code != 0 {
-		return nil, fmt.Errorf("search failed: %s", C.GoString(C.ZOOM_connection_errmsg(c.conn)))
+	err := c.checkError()
+	if err != nil {
+		return nil, err
 	}
 	return set, nil
 }
@@ -102,7 +115,26 @@ func (s *ResultSet) Count() int {
 	return int(C.ZOOM_resultset_size(s.rs))
 }
 
+func (c *Connection) checkError() error {
+	var cErrMsg, cAddInfo *C.char
+	code := C.ZOOM_connection_error(c.conn, (**C.char)(unsafe.Pointer(&cErrMsg)), (**C.char)(unsafe.Pointer(&cAddInfo)))
+	if code != 0 {
+		var errMsg, addInfo string
+		if cErrMsg != nil {
+			errMsg = C.GoString(cErrMsg)
+		}
+		if cAddInfo != nil {
+			addInfo = C.GoString(cAddInfo)
+		}
+		return &ZoomError{Code: int(code), Message: errMsg, AdditionalInfo: addInfo}
+	}
+	return nil
+}
+
 func (s *ResultSet) GetRecord(index int) (*Record, error) {
+	if s.rs == nil {
+		return nil, &ZoomError{Code: 0, Message: "result set is not available"}
+	}
 	if index < 0 || index >= s.Count() {
 		return nil, nil
 	}
@@ -110,9 +142,22 @@ func (s *ResultSet) GetRecord(index int) (*Record, error) {
 	if cRecord == nil {
 		return nil, nil
 	}
-	code := C.ZOOM_connection_error(s.connection.conn, nil, nil)
+	err := s.connection.checkError()
+	if err != nil {
+		return nil, err
+	}
+	// check for surrogate diagnostic
+	var cErrMsg, cAddInfo *C.char
+	code := C.ZOOM_record_error(cRecord, (**C.char)(unsafe.Pointer(&cErrMsg)), (**C.char)(unsafe.Pointer(&cAddInfo)), nil)
 	if code != 0 {
-		return nil, fmt.Errorf("get record failed: %s", C.GoString(C.ZOOM_connection_errmsg(s.connection.conn)))
+		var errMsg, addInfo string
+		if cErrMsg != nil {
+			errMsg = C.GoString(cErrMsg)
+		}
+		if cAddInfo != nil {
+			addInfo = C.GoString(cAddInfo)
+		}
+		return nil, &ZoomError{Code: int(code), Message: errMsg, AdditionalInfo: addInfo}
 	}
 	record := &Record{rec: C.ZOOM_record_clone(cRecord)}
 	runtime.SetFinalizer(record, (*Record).finalize)
