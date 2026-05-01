@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/availability"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -171,10 +172,11 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
+	availabilityCreator := availability.NewAvailabilityCreator(illRepo, dirAdapter)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, *tenantResolver, API_PAGE_SIZE)

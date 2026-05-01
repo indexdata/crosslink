@@ -243,6 +243,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
+        z3950Config:
+          description: Configuration for Z39.50 availability lookup
+          $ref: '#/components/schemas/Z3950Config'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -252,6 +255,20 @@ components:
             - CrossLink
             - ILLiad
             - Unknown
+
+    Z3950Config:
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          description: Z39.50 server address and database (for example, "z3950.indexdata.com:210/marc")
+        options:
+          type: object
+          additionalProperties:
+            type: string
+          description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
+            Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
     LmsConfig:
       required:
         - address

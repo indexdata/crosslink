@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -21,18 +22,20 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
-	eventBus        events.EventBus
-	illRepo         ill_db.IllRepo
-	dirAdapter      adapter.DirectoryLookupAdapter
-	holdingsAdapter adapter.HoldingsLookupAdapter
+	eventBus            events.EventBus
+	illRepo             ill_db.IllRepo
+	dirAdapter          adapter.DirectoryLookupAdapter
+	holdingsAdapter     adapter.HoldingsLookupAdapter
+	availabilityCreator availability.AvailabilityCreator
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
 	return SupplierLocator{
-		eventBus:        eventBus,
-		illRepo:         illRepo,
-		dirAdapter:      dirAdapter,
-		holdingsAdapter: holdingsAdapter,
+		eventBus:            eventBus,
+		illRepo:             illRepo,
+		dirAdapter:          dirAdapter,
+		holdingsAdapter:     holdingsAdapter,
+		availabilityCreator: availabilityCreator,
 	}
 }
 
@@ -184,6 +187,20 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			locatedSuppliers = append(locatedSuppliers, added)
 		} else {
 			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+		}
+	}
+
+	// Just to use the Availability adapter and see linking works..
+	availabilityAdapter, err := s.availabilityCreator.GetAdapter(ctx, "sym")
+	if err != nil {
+		ctx.Logger().Error("failed to create availability adapter", "error", err)
+	}
+	if availabilityAdapter != nil {
+		_, err = availabilityAdapter.Lookup(availability.AvailabilityLookupParams{
+			Identifier: "id",
+		})
+		if err != nil {
+			ctx.Logger().Error("failed to perform lookup using availability adapter", "error", err)
 		}
 	}
 

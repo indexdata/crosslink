@@ -1,5 +1,7 @@
 FROM golang:1.26 AS build
 
+RUN apt-get update && apt-get install -y libyaz-dev pkg-config
+
 # Builds from the workspace root dir
 WORKDIR /app
 COPY go.work go.work.sum ./
@@ -15,6 +17,7 @@ COPY marcxml/ ./marcxml
 COPY sru/ ./sru
 COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip
+COPY zoom/ ./zoom
 
 # copy broker manifests before sources to leverage docker cache for mod downloads
 COPY broker/go.mod broker/go.sum ./broker/
@@ -36,13 +39,13 @@ COPY broker/ ./
 # Build, reuse both module and build caches
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
     --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-    CGO_ENABLED=0 \
+    CGO_ENABLED=1 \
     GOOS=linux \
     go build -o /broker ./cmd/broker
 
 RUN --mount=type=cache,sharing=shared,target=/go/pkg/mod \
     --mount=type=cache,sharing=shared,target=/root/.cache/go-build \
-    CGO_ENABLED=0 \
+    CGO_ENABLED=1 \
     GOOS=linux \
     go build -o /archive ./cmd/archive
 
@@ -56,6 +59,10 @@ RUN adduser \
   --uid 65532 \
   broker-user
 
+# Save list of shared lib deps
+RUN ldd /broker | tr -s '[:blank:]' '\n' | grep '^/' | \
+    xargs -I % sh -c 'mkdir -p $(dirname deps%); cp % deps%;'
+
 # create small runtime image
 FROM scratch
 
@@ -64,6 +71,9 @@ COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /etc/group /etc/group
+
+# copy the shared libs
+COPY --from=build /app/broker/deps /
 
 # copy binaries
 COPY --from=build /broker .
