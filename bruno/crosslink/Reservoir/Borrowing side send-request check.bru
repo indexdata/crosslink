@@ -1,0 +1,40 @@
+meta {
+  name: Borrowing side send-request check
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/patron_requests/{{prId}}?side=borrowing
+  body: json
+  auth: basic
+}
+
+params:query {
+  side: borrowing
+}
+
+headers {
+  X-Okapi-User-Id: {{userName}}
+  X-Okapi-Tenant: {{OkapiTenantReq}}
+}
+
+auth:basic {
+  username: {{userName}}
+  password: {{userPassword}}
+}
+
+script:post-response {
+  test("for send-request", function() {
+    const pr = res.getBody();
+    expect(pr.lastAction).to.equal("send-request")
+    expect(pr.lastActionResult).to.equal("SUCCESS")
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+}
