@@ -21,9 +21,14 @@ func TestConnection(t *testing.T) {
 }
 
 func TestConnect(t *testing.T) {
-	conn := NewConnection(Options{})
-	assert.NotNil(t, conn)
+	conn := &Connection{}
 	err := conn.Connect("")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connection is not established")
+
+	conn = NewConnection(Options{})
+	assert.NotNil(t, conn)
+	err = conn.Connect("")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Connect failed")
 	assert.Equal(t, 10000, err.(*ZoomError).Code)

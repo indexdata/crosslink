@@ -76,6 +76,9 @@ func (c *Connection) finalize() {
 }
 
 func (c *Connection) Connect(host string) error {
+	if c.conn == nil {
+		return &ZoomError{Code: 0, Message: "connection is not established"}
+	}
 	cHost := C.CString(host)
 	defer C.free(unsafe.Pointer(cHost))
 	C.ZOOM_connection_connect(c.conn, cHost, 0)
