@@ -49,6 +49,11 @@ func (s *SupplierLocator) SelectSupplier(ctx common.ExtendedContext, event event
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.selectSupplier)
 }
 
+func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
+	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
+}
+
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
@@ -190,20 +195,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		}
 	}
 
-	// Just to use the Availability adapter and see linking works..
-	availabilityAdapter, err := s.availabilityCreator.GetAdapter(ctx, "sym")
-	if err != nil {
-		ctx.Logger().Error("failed to create availability adapter", "error", err)
-	}
-	if availabilityAdapter != nil {
-		_, err = availabilityAdapter.Lookup(availability.AvailabilityLookupParams{
-			Identifier: "id",
-		})
-		if err != nil {
-			ctx.Logger().Error("failed to perform lookup using availability adapter", "error", err)
-		}
-	}
-
 	return events.EventStatusSuccess, &events.EventResult{
 		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
 	}
@@ -224,6 +215,41 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 		LocalSupplier: supplier.Local,
 	})
 	return &sup, err
+}
+
+func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierStatus:   ill_db.SupplierStateNewPg,
+	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+	}
+	for _, sup := range suppliers {
+		if sup.ID == "" {
+			continue
+		}
+		peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not peer", err)
+		}
+		// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
+		adapter, err := s.availabilityCreator.GetAdapter(ctx, peer)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+		}
+		if adapter == nil {
+			ctx.Logger().Info("Skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
+			continue
+		}
+		// TODO: Skip supplier if it has adapter for now.
+		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
+		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
+		}
+	}
+	return events.EventStatusSuccess, &events.EventResult{}
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

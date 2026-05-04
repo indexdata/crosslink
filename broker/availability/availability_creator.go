@@ -1,8 +1,10 @@
 package availability
 
-import "github.com/indexdata/crosslink/broker/common"
+import (
+	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/ill_db"
+)
 
 type AvailabilityCreator interface {
-	// GetAdapter returns an AvailabilityAdapter for the given symbol, or nil if no adapter is available.
-	GetAdapter(ctx common.ExtendedContext, symbol string) (AvailabilityAdapter, error)
+	GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (AvailabilityAdapter, error)
 }

@@ -172,7 +172,7 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := availability.NewAvailabilityCreator(illRepo, dirAdapter)
+	availabilityCreator := availability.NewAvailabilityCreator()
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
@@ -328,12 +328,14 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, events.HandlerRoleConsumer, supplierLocator.SelectSupplier)
+	eventBus.HandleEventCreated(events.EventNameCheckAvailability, events.HandlerRoleConsumer, supplierLocator.CheckAvailability)
 
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, workflowManager.RequestReceived)
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, workflowManager.SupplierMessageReceived)
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, events.HandlerRoleConsumer, workflowManager.RequesterMessageReceived)
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, workflowManager.OnLocateSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, workflowManager.OnSelectSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameCheckAvailability, events.HandlerRoleConsumer, workflowManager.OnCheckAvailabilityComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, workflowManager.OnMessageRequesterComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)

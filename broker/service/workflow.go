@@ -46,6 +46,17 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
 		if event.EventStatus == events.EventStatusSuccess {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		} else {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+	}, "")
+}
+
+func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
+	common.Must(ctx, func() (string, error) {
+		if event.EventStatus == events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		} else {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
