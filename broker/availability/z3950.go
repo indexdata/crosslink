@@ -6,6 +6,7 @@ package availability
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
@@ -15,12 +16,9 @@ import (
 func cgoEnabled() bool { return true }
 
 type Z3950AvailabilityAdapter struct {
-	options           zoom.Options
-	zurl              string
-	identifierMapping string
-	isbnMapping       string
-	issnMapping       string
-	titleMapping      string
+	zurl        string
+	options     zoom.Options
+	pqfMappings directory.PqfMappings
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (AvailabilityAdapter, error) {
@@ -30,17 +28,10 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 			"count":                 "10",
 			"preferredRecordSyntax": "usmarc",
 		},
-		identifierMapping: "1=12",
-		isbnMapping:       "1=7",
-		issnMapping:       "1=8",
-		titleMapping:      "1=4",
-
 		zurl: config.Address,
 	}
-	if config.Options != nil {
-		for k, v := range *config.Options {
-			a.options[k] = v
-		}
+	if config.PqfMappings != nil {
+		a.pqfMappings = *config.PqfMappings
 	}
 	return a, nil
 }
@@ -98,20 +89,26 @@ func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Av
 	}
 	type paramMapping struct {
 		value   string
-		mapping string
+		mapping *string
+		dir     string
 	}
 
 	paramMappings := []paramMapping{
-		{params.Identifier, a.identifierMapping},
-		{params.Isbn, a.isbnMapping},
-		{params.Issn, a.issnMapping},
-		{params.Title, a.titleMapping},
+		{params.Identifier, a.pqfMappings.Identifier, "@attr 1=12 {term}"},
+		{params.Isbn, a.pqfMappings.Isbn, "@attr 1=7 {term}"},
+		{params.Issn, a.pqfMappings.Issn, "@attr 1=8 {term}"},
+		{params.Title, a.pqfMappings.Title, "@attr 1=4 {term}"},
 	}
 	for _, pm := range paramMappings {
 		if pm.value != "" {
-			avail, err := a.searchRetrieve(conn, "@attr "+pm.mapping+" "+pqfEncode(pm.value))
+			mapping := pm.dir
+			if pm.mapping != nil {
+				mapping = *pm.mapping
+			}
+			pqf := strings.ReplaceAll(mapping, "{term}", pqfEncode(pm.value))
+			avail, err := a.searchRetrieve(conn, pqf)
 			if err != nil {
-				return nil, fmt.Errorf("failed to search Z39.50 server: %w", err)
+				return nil, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
 			}
 			if len(avail) > 0 {
 				return avail, nil

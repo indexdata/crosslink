@@ -270,6 +270,25 @@ components:
             type: string
           description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
             Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
+        pqfMappings:
+          $ref: '#/components/schemas/PqfMappings'
+
+    PqfMappings:
+      type: object
+      properties:
+        title:
+          type: string
+          description: PQF format string for title search. Default is "@attr 1=4 {term}")
+        isbn:
+          type: string
+          description: PQF format string for ISBN search. Default is "@attr 1=7 {term}")
+        issn:
+          type: string
+          description: PQF format string for ISSN search. Default is "@attr 1=8 {term}")
+        identifier:
+          type: string
+          description: PQF format string for identifier search. Default is "@attr 1=12 {term}")
+
     LmsConfig:
       required:
         - address
