@@ -307,6 +307,7 @@ func TestNotification(t *testing.T) {
 
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
+	itemIds := []string{}
 
 	// Create 2 requests
 	for i := 0; i < 2; i++ {
@@ -373,6 +374,48 @@ func TestListPatronRequests(t *testing.T) {
 		})
 		assert.NoError(t, err)
 	}
+	firstItemId := uuid.NewString()
+	itemIds = append(itemIds, firstItemId)
+	_, err := prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      firstItemId,
+		PrID:    prIds[0],
+		Barcode: "barcode-123",
+		CallNumber: pgtype.Text{
+			String: "call-123",
+			Valid:  true,
+		},
+		Title: pgtype.Text{
+			String: "Item title",
+			Valid:  true,
+		},
+		ItemID: pgtype.Text{
+			String: "item-123",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
+	secondItemId := uuid.NewString()
+	itemIds = append(itemIds, secondItemId)
+	_, err = prRepo.SaveItem(appCtx, pr_db.SaveItemParams{
+		ID:      secondItemId,
+		PrID:    prIds[0],
+		Barcode: "barcode-456",
+		Title: pgtype.Text{
+			String: "Second item title",
+			Valid:  true,
+		},
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+	})
+	assert.NoError(t, err)
+
 	cql := "title = Androids"
 	list, fullCount, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
@@ -455,6 +498,76 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
+	cql = `item_id = "item-123"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-123"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode = "barcode-*"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = "call-123"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `barcode <> "barcode-123"`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number = ""`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[1], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
+	cql = `call_number <> ""`
+	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	assert.Len(t, list, 1)
+	assert.Equal(t, prIds[0], list[0].ID)
+	assert.Equal(t, int64(1), fullCount)
+
 	// not found
 	cql = "title = banners"
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
@@ -484,6 +597,10 @@ func TestListPatronRequests(t *testing.T) {
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
 
+	for _, itemId := range itemIds {
+		err = prRepo.DeleteItemById(appCtx, itemId)
+		assert.NoError(t, err)
+	}
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)
 		assert.NoError(t, err)

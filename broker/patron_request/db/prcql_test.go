@@ -98,6 +98,121 @@ func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 	}
 }
 
+func TestFieldExistsStringGenerate(t *testing.T) {
+	f := NewFieldExistsString("item", "i", "i.pr_id = pr.id", "i.barcode")
+
+	t.Run("eq uses exists with string field predicate", func(t *testing.T) {
+		sc := searchClauseForTest("abc", "=")
+		gotSQL, gotArgs, err := f.Generate(sc, 3)
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		wantSQL := "EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND i.barcode = $3)"
+		if gotSQL != wantSQL {
+			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
+		}
+		if len(gotArgs) != 1 || gotArgs[0] != "abc" {
+			t.Fatalf("args = %#v, want one raw term arg", gotArgs)
+		}
+	})
+
+	t.Run("wildcard eq uses exists with like predicate", func(t *testing.T) {
+		sc := searchClauseForTest("abc*", "=")
+		gotSQL, gotArgs, err := f.Generate(sc, 4)
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		wantSQL := "EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND i.barcode LIKE $4)"
+		if gotSQL != wantSQL {
+			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
+		}
+		if len(gotArgs) != 1 || gotArgs[0] != "abc%" {
+			t.Fatalf("args = %#v, want wildcard-converted term arg", gotArgs)
+		}
+	})
+
+	t.Run("ne uses not exists with positive string field predicate", func(t *testing.T) {
+		sc := searchClauseForTest("abc*", "<>")
+		gotSQL, gotArgs, err := f.Generate(sc, 5)
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		wantSQL := "NOT EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND i.barcode LIKE $5)"
+		if gotSQL != wantSQL {
+			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
+		}
+		if len(gotArgs) != 1 || gotArgs[0] != "abc%" {
+			t.Fatalf("args = %#v, want wildcard-converted term arg", gotArgs)
+		}
+	})
+
+	t.Run("empty eq checks no non-empty related value", func(t *testing.T) {
+		sc := searchClauseForTest("", "=")
+		gotSQL, gotArgs, err := f.Generate(sc, 6)
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		wantSQL := "NOT EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND COALESCE(i.barcode, '') <> '')"
+		if gotSQL != wantSQL {
+			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
+		}
+		if len(gotArgs) != 0 {
+			t.Fatalf("args = %#v, want empty args", gotArgs)
+		}
+	})
+
+	t.Run("empty ne checks at least one non-empty related value", func(t *testing.T) {
+		sc := searchClauseForTest("", "<>")
+		gotSQL, gotArgs, err := f.Generate(sc, 7)
+		if err != nil {
+			t.Fatalf("Generate() error = %v", err)
+		}
+		wantSQL := "EXISTS (SELECT 1 FROM item i WHERE i.pr_id = pr.id AND COALESCE(i.barcode, '') <> '')"
+		if gotSQL != wantSQL {
+			t.Fatalf("sql = %q, want %q", gotSQL, wantSQL)
+		}
+		if len(gotArgs) != 0 {
+			t.Fatalf("args = %#v, want empty args", gotArgs)
+		}
+	})
+}
+
+func TestHandlePatronRequestsQueryItemFieldsUseExists(t *testing.T) {
+	tests := []struct {
+		name      string
+		cql       string
+		wantWhere string
+	}{
+		{
+			name:      "item_id exact",
+			cql:       `item_id = "item-123"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.item_id = $3)",
+		},
+		{
+			name:      "barcode wildcard",
+			cql:       `barcode = "abc*"`,
+			wantWhere: "EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND cql_item.barcode LIKE $3)",
+		},
+		{
+			name:      "call_number empty",
+			cql:       `call_number = ""`,
+			wantWhere: "NOT EXISTS (SELECT 1 FROM item cql_item WHERE cql_item.pr_id = patron_request_search_view.id AND COALESCE(cql_item.call_number, '') <> '')",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			query, err := handlePatronRequestsQuery(tc.cql, 2)
+			if err != nil {
+				t.Fatalf("handlePatronRequestsQuery() error = %v", err)
+			}
+			if got := query.GetWhereClause(); got != tc.wantWhere {
+				t.Fatalf("where clause = %q, want %q", got, tc.wantWhere)
+			}
+		})
+	}
+}
+
 func searchClauseForTest(term, relation string) cql.SearchClause {
 	return cql.SearchClause{Term: term, Relation: cql.Relation(relation)}
 }
