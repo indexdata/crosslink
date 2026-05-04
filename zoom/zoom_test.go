@@ -42,6 +42,7 @@ func TestSearch(t *testing.T) {
 
 	options := Options{
 		"preferredRecordSyntax": "usmarc",
+		"count":                 "0",
 	}
 
 	conn = NewConnection(options)
@@ -65,7 +66,16 @@ func TestSearch(t *testing.T) {
 	assert.Contains(t, record.Data("render"), "program")
 	assert.Equal(t, "", record.Data("unknown"))
 
+	conn.Close()
+	record, err = rs.GetRecord(0)
+	assert.NoError(t, err)
+	assert.NotNil(t, record)
+
 	record.finalize()
+
+	record, err = rs.GetRecord(1)
+	assert.NoError(t, err)
+	assert.Nil(t, record)
 
 	record, err = rs.GetRecord(-1)
 	assert.NoError(t, err)
@@ -77,15 +87,6 @@ func TestSearch(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "result set is not available")
 
-	conn.Close()
-	_, err = conn.Search("@attr 1=4 computer")
-	assert.NoError(t, err)
-
-	conn.finalize()
-	_, err = conn.Search("@attr 1=4 computer")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "connection is not established")
-	conn.Close()
 }
 
 func TestRecordData(t *testing.T) {

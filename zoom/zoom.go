@@ -86,9 +86,7 @@ func (c *Connection) Connect(host string) error {
 }
 
 func (c *Connection) Close() {
-	if c.conn != nil {
-		C.ZOOM_connection_close(c.conn)
-	}
+	c.finalize()
 }
 
 func (c *Connection) Search(query string) (*ResultSet, error) {
@@ -120,6 +118,9 @@ func (s *ResultSet) Count() int {
 }
 
 func (c *Connection) checkError() error {
+	if c.conn == nil {
+		return nil
+	}
 	var cErrMsg, cAddInfo *C.char
 	code := C.ZOOM_connection_error(c.conn, (**C.char)(unsafe.Pointer(&cErrMsg)), (**C.char)(unsafe.Pointer(&cAddInfo)))
 	if code != 0 {
@@ -148,6 +149,7 @@ func (s *ResultSet) GetRecord(index int) (*Record, error) {
 	}
 	err := s.connection.checkError()
 	if err != nil {
+		// non-surrogate diagnostic error for PresentResponse
 		return nil, err
 	}
 	// check for surrogate diagnostic
