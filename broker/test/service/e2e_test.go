@@ -96,8 +96,8 @@ func TestRequestLOANED(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -143,8 +143,8 @@ func TestRequestUNFILLED(t *testing.T) {
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -204,8 +204,8 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -274,14 +274,15 @@ func TestMessageSkipped(t *testing.T) {
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -346,8 +347,8 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -399,8 +400,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
 	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
-		"TASK, check-availability = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, check-availability = SUCCESS\n"+
 		"TASK, message-requester = SUCCESS, reason=Notification, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, WillSupply\n"+
@@ -446,8 +447,8 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 	assert.Equal(t, requester.ID, illTrans.RequesterID.String)
 	assert.Equal(t, "NOTICE, request-received = SUCCESS\n"+
 		"TASK, locate-suppliers = SUCCESS\n"+
-		"TASK, check-availability = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, check-availability = SUCCESS\n"+
 		"TASK, message-requester = SUCCESS, reason=RequestResponse, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, requester-msg-received = SUCCESS, Cancel\n"+
@@ -456,6 +457,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, supplier-msg-received = SUCCESS, reason=CancelResponse, Cancelled\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n"+
 		"TASK, select-supplier = SUCCESS\n"+
+		"TASK, check-availability = SUCCESS\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, ExpectToSupply\n"+
 		"TASK, message-supplier = SUCCESS, Request\n"+
 		"NOTICE, supplier-msg-received = SUCCESS, reason=RequestResponse, Loaned\n"+
@@ -501,8 +503,8 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -512,6 +514,7 @@ func TestRequestUNFILLED_LOANED(t *testing.T) {
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -560,8 +563,8 @@ func TestRequestLOANED_OVERDUE(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -610,8 +613,8 @@ func TestRequestLOANED_OVERDUE_RENEW(t *testing.T) {
 	assert.Equal(t, string(iso18626.TypeActionShippedReturn), illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -705,8 +708,8 @@ func TestRequestRETRY_COST(t *testing.T) {
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -742,8 +745,8 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
@@ -791,8 +794,8 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +

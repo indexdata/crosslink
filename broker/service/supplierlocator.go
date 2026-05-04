@@ -220,18 +220,25 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
-		SupplierStatus:   ill_db.SupplierStateNewPg,
+		SupplierStatus:   ill_db.SupplierStateSelectedPg,
 	})
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
 	}
-	for _, sup := range suppliers {
-		if sup.ID == "" {
-			continue
-		}
+	if len(suppliers) == 0 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no selected suppliers", nil)
+	}
+	if len(suppliers) > 1 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
+	}
+	sup := suppliers[0]
+	eventData := map[string]any{}
+	eventData["skipped"] = false
+	eventData["localSupplier"] = event.EventData.CustomData["localSupplier"]
+	if sup.ID != "" {
 		peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not peer", err)
+			return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 		}
 		// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
 		adapter, err := s.availabilityCreator.GetAdapter(ctx, peer)
@@ -239,17 +246,17 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 		}
 		if adapter == nil {
-			ctx.Logger().Info("Skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
-			continue
-		}
-		// TODO: Skip supplier if it has adapter for now.
-		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
-		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
+			ctx.Logger().Info("skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
+		} else {
+			eventData["skipped"] = true
+			sup.SupplierStatus = ill_db.SupplierStateSkippedPg
+			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
+			}
 		}
 	}
-	return events.EventStatusSuccess, &events.EventResult{}
+	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

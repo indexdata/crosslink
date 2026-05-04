@@ -597,8 +597,8 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, check-availability = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+			"TASK, check-availability = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS, doNotSend=true\n",
@@ -631,8 +631,8 @@ func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 	assert.Equal(t,
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
-			"TASK, check-availability = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+			"TASK, check-availability = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
