@@ -257,6 +257,7 @@ components:
             - Unknown
 
     Z3950Config:
+      type: object
       required:
         - address
       properties:
