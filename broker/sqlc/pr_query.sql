@@ -133,7 +133,7 @@ SET receipt = sqlc.arg(receipt)::text,
 WHERE pr_id = sqlc.arg(pr_id)::text
   AND direction = sqlc.arg(direction)::text
   AND kind = 'condition'
-  AND (receipt IS NULL OR receipt NOT IN ('ACCEPTED', 'REJECTED'));
+  AND (receipt IS NULL OR receipt NOT IN ('ACCEPTED', 'REJECTED', 'FAILED_TO_SEND'));
 
 -- name: DeleteNotificationById :exec
 DELETE

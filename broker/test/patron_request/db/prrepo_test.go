@@ -367,8 +367,18 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 			FromSymbol: "ISIL:SUP",
 			ToSymbol:   "ISIL:REQ",
 			Direction:  pr_db.NotificationDirectionSent,
-			Kind:       pr_db.NotificationKindNote,
+			Kind:       pr_db.NotificationKindCondition,
+			Receipt:    pr_db.NotificationFailedToSend,
 			CreatedAt:  pgtype.Timestamp{Time: time.Now().Add(4 * time.Second), Valid: true},
+		},
+		{
+			ID:         uuid.NewString(),
+			PrID:       prId,
+			FromSymbol: "ISIL:SUP",
+			ToSymbol:   "ISIL:REQ",
+			Direction:  pr_db.NotificationDirectionSent,
+			Kind:       pr_db.NotificationKindNote,
+			CreatedAt:  pgtype.Timestamp{Time: time.Now().Add(5 * time.Second), Valid: true},
 		},
 	}
 	for _, notification := range notificationsToCreate {
@@ -396,7 +406,9 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 	assert.Equal(t, pr_db.NotificationRejected, byID[notificationsToCreate[2].ID].Receipt)
 	assert.False(t, byID[notificationsToCreate[2].ID].AcknowledgedAt.Valid)
 	assert.Empty(t, byID[notificationsToCreate[3].ID].Receipt)
-	assert.Empty(t, byID[notificationsToCreate[4].ID].Receipt)
+	assert.Equal(t, pr_db.NotificationFailedToSend, byID[notificationsToCreate[4].ID].Receipt)
+	assert.False(t, byID[notificationsToCreate[4].ID].AcknowledgedAt.Valid)
+	assert.Empty(t, byID[notificationsToCreate[5].ID].Receipt)
 
 	for _, notification := range notificationsToCreate {
 		err = prRepo.DeleteNotificationById(appCtx, notification.ID)
