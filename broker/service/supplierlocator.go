@@ -54,14 +54,9 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
-	}
+func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.HoldingLookupParams {
 	var holdingsParams adapter.HoldingLookupParams
-
-	bibliographicInfo := illTrans.IllTransactionData.BibliographicInfo
+	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
 	for _, id := range bibliographicInfo.BibliographicItemId {
 		code := id.BibliographicItemIdentifierCode.Text
@@ -72,6 +67,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			holdingsParams.Issn = id.BibliographicItemIdentifier
 		}
 	}
+	return holdingsParams
+}
+
+func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
+	}
+	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
 	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
 			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
@@ -240,18 +244,18 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
 	// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
-	adapter, err := s.availabilityCreator.GetAdapter(ctx, peer)
+	aa, err := s.availabilityCreator.GetAdapter(ctx, peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}
-	if adapter == nil {
+	if aa == nil {
 		ctx.Logger().Info("skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
 		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 	}
-	params := availability.AvailabilityLookupParams{
+	params := adapter.HoldingLookupParams{
 		Identifier: "x",
 	}
-	results, err := adapter.Lookup(params)
+	results, err := aa.Lookup(params)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}

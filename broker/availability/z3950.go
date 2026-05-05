@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/zoom"
@@ -41,12 +42,12 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 	return a, nil
 }
 
-func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]Availability, error) {
+func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
 	res, err := conn.Search(query)
 	if err != nil {
 		return nil, err
 	}
-	var avail []Availability
+	var avail []adapter.Holding
 	for i := 0; i < res.Count(); i++ {
 		rec, err := res.GetRecord(i)
 		if err != nil {
@@ -65,7 +66,7 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse JSON from Z39.50 record: %w", err)
 		}
-		avail = append(avail, Availability{
+		avail = append(avail, adapter.Holding{
 			Location: jsonString,
 		})
 	}
@@ -85,7 +86,7 @@ func pqfEncode(value string) string {
 	return escaped
 }
 
-func (a *Z3950AvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Availability, error) {
+func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)

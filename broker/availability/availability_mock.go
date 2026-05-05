@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/directory"
 )
 
 type MockAvailabilityAdapter struct {
-	Err          error
-	Availability []Availability
+	Err      error
+	Holdings []adapter.Holding
 }
 
 func NewMockAvailabilityAdapter(config directory.Z3950Config) (AvailabilityAdapter, error) {
@@ -26,7 +27,7 @@ func NewMockAvailabilityAdapter(config directory.Z3950Config) (AvailabilityAdapt
 		}
 		if val, ok := (*config.Options)["location"]; ok {
 			return &MockAvailabilityAdapter{
-				Availability: []Availability{
+				Holdings: []adapter.Holding{
 					{
 						Location: val,
 					},
@@ -37,9 +38,9 @@ func NewMockAvailabilityAdapter(config directory.Z3950Config) (AvailabilityAdapt
 	return &MockAvailabilityAdapter{}, nil
 }
 
-func (a *MockAvailabilityAdapter) Lookup(params AvailabilityLookupParams) ([]Availability, error) {
+func (a *MockAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, error) {
 	if a.Err != nil {
 		return nil, a.Err
 	}
-	return a.Availability, nil
+	return a.Holdings, nil
 }

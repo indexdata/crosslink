@@ -14,9 +14,9 @@ func TestGetAdapterEmpty(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
-	adapter, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
-	assert.Nil(t, adapter)
+	assert.Nil(t, aa)
 }
 
 func TestGetAdapterOther(t *testing.T) {
@@ -38,9 +38,9 @@ func TestGetAdapterMock(t *testing.T) {
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMock)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	adapter, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &MockAvailabilityAdapter{}, adapter)
+	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
 }
 
 func TestGetAdapterZ3950(t *testing.T) {
@@ -53,12 +53,12 @@ func TestGetAdapterZ3950(t *testing.T) {
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	adapter, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
-	if adapter == nil {
+	if aa == nil {
 		assert.False(t, cgoEnabled(), "Expected no adapter when cgo is disabled")
 		return
 	}
 	assert.True(t, cgoEnabled(), "Expected adapter when cgo is enabled")
-	assert.IsType(t, &Z3950AvailabilityAdapter{}, adapter)
+	assert.IsType(t, &Z3950AvailabilityAdapter{}, aa)
 }

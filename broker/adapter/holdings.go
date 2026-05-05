@@ -8,9 +8,14 @@ type HoldingLookupParams struct {
 	Identifier string
 	Isbn       string
 	Issn       string
+	Title      string
 }
 
 type Holding struct {
-	Symbol          string
-	LocalIdentifier string
+	Symbol           string
+	LocalIdentifier  string
+	Location         string
+	ShelvingLocation string
+	CallNumber       string
+	ItemId           string
 }
