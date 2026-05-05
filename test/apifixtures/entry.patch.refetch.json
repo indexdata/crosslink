@@ -9,7 +9,8 @@
   "lmsConfig": {
     "address":"https://also.not.real",
     "fromAgency":"rivendell",
-    "fromAgencyAuthentication":""
+    "fromAgencyAuthentication":"",
+    "acceptItemEnabled": true
   },
   "closures": [
     {

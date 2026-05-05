@@ -53,6 +53,13 @@ func derefOrDefault[T any](ptr *T, defaultValue T) T {
 	return defaultValue
 }
 
+func derefOrDefaultPtr[T any](ptr *T, defaultValue *T) *T {
+	if ptr != nil {
+		return ptr
+	}
+	return defaultValue
+}
+
 // Returns true if there is a struct in slice that has a prop with the given name
 // that either is equal to value or is a point to it
 // TODO: we could avoid reflection if we could somehow add a method to generated types

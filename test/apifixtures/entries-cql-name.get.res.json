@@ -29,7 +29,8 @@
       "lmsConfig": {
         "address":"https://also.not.real",
         "fromAgency":"rivendell",
-        "fromAgencyAuthentication":"pack_extra_lembas"
+        "fromAgencyAuthentication":"pack_extra_lembas",
+        "acceptItemEnabled": true
       },
       "closures": [
         {

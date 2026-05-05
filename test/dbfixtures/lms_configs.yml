@@ -8,3 +8,4 @@
   address: 'https://also.not.real'
   from_agency: rivendell
   from_agency_authentication: pack_extra_lembas
+  accept_item_enabled: true

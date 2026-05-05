@@ -1,0 +1,33 @@
+ {
+    "id": "00000000-0000-0000-0000-000000000003",
+    "name": "Eine Weitere Einrichtung",
+    "contactName": "Klaus",
+    "type":"Institution",
+    "addresses": [
+        "<<UNORDERED>>",
+        {
+            "id": "00000003-0000-0000-0000-000000000001",
+            "type": "Default",
+            "addressComponents": [
+            {"seq": 0, "type": "Thoroughfare", "value": "Unter den Linden 1"},
+            {"seq": 1, "type": "Locality", "value": "Berlin"},
+            {"seq": 2, "type": "PostalCode", "value": "10117"},
+            {"seq": 3, "type": "CountryCode", "value": "DE"}
+            ]
+        },
+        {
+            "id": "00000003-0000-0000-0000-000000000002",
+            "type": "Billing",
+            "addressComponents": [
+            {"seq": 0, "type": "Thoroughfare", "value": "Musterstraße 99"},
+            {"seq": 1, "type": "Locality", "value": "München"},
+            {"seq": 2, "type": "PostalCode", "value": "80331"}
+            ]
+        }
+    ],
+    "lmsConfig" : {
+        "address" : "https://the.red-door.org",
+        "fromAgency" : "paintitblack",
+        "acceptItemEnabled":false
+    }
+}

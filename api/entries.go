@@ -330,7 +330,11 @@ func (a ApiImpl) GetEntries(ctx context.Context, request GetEntriesRequestObject
 			return GetEntries500TextResponse("Internal server error"), nil
 		}
 		if !seeSensitive {
-			sanitizeEntry(&entry)
+			err = sanitizeEntry(&entry)
+			if err != nil {
+				slog.ErrorContext(ctx, "error sanitizing entry", "error", err)
+				return GetEntries500TextResponse("Internal server error"), nil
+			}
 		}
 
 		items = append(items, entry)
@@ -822,20 +826,20 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 			Entry:                            &orig.ID,
 			Address:                          derefOrDefault(lmsConfig.Address, originalLMSConfig.Address),
 			FromAgency:                       derefOrDefault(lmsConfig.FromAgency, originalLMSConfig.FromAgency),
-			FromAgencyAuthentication:         lmsConfig.FromAgencyAuthentication,
-			ToAgency:                         lmsConfig.ToAgency,
-			LookupUserEnabled:                lmsConfig.LookupUserEnabled,
-			AcceptItemEnabled:                lmsConfig.AcceptItemEnabled,
-			CheckinItemEnabled:               lmsConfig.CheckInItemEnabled,
-			CheckoutItemEnabled:              lmsConfig.CheckOutItemEnabled,
-			ItemLocation:                     lmsConfig.ItemLocation,
-			RequestItemRequestType:           lmsConfig.RequestItemRequestType,
-			RequestItemScopeType:             lmsConfig.RequestItemRequestScopeType,
-			RequestItemBibCode:               lmsConfig.RequestItemBibIdCode,
-			RequestItemPickupLocationEnabled: lmsConfig.RequestItemPickupLocationEnabled,
-			RequesterPickupLocation:          lmsConfig.RequesterPickupLocation,
-			SupplierPickupLocation:           lmsConfig.SupplierPickupLocation,
-			RequesterPatronPattern:           lmsConfig.RequesterPatronPattern,
+			FromAgencyAuthentication:         derefOrDefaultPtr(lmsConfig.FromAgencyAuthentication, originalLMSConfig.FromAgencyAuthentication),
+			ToAgency:                         derefOrDefaultPtr(lmsConfig.ToAgency, originalLMSConfig.ToAgency),
+			LookupUserEnabled:                derefOrDefaultPtr(lmsConfig.LookupUserEnabled, originalLMSConfig.LookupUserEnabled),
+			AcceptItemEnabled:                derefOrDefaultPtr(lmsConfig.AcceptItemEnabled, originalLMSConfig.AcceptItemEnabled),
+			CheckinItemEnabled:               derefOrDefaultPtr(lmsConfig.CheckInItemEnabled, originalLMSConfig.CheckinItemEnabled),
+			CheckoutItemEnabled:              derefOrDefaultPtr(lmsConfig.CheckOutItemEnabled, originalLMSConfig.CheckoutItemEnabled),
+			ItemLocation:                     derefOrDefaultPtr(lmsConfig.ItemLocation, originalLMSConfig.ItemLocation),
+			RequestItemRequestType:           derefOrDefaultPtr(lmsConfig.RequestItemRequestType, originalLMSConfig.RequestItemRequestType),
+			RequestItemScopeType:             derefOrDefaultPtr(lmsConfig.RequestItemRequestScopeType, originalLMSConfig.RequestItemScopeType),
+			RequestItemBibCode:               derefOrDefaultPtr(lmsConfig.RequestItemBibIdCode, originalLMSConfig.RequestItemBibCode),
+			RequestItemPickupLocationEnabled: derefOrDefaultPtr(lmsConfig.RequestItemPickupLocationEnabled, originalLMSConfig.RequestItemPickupLocationEnabled),
+			RequesterPickupLocation:          derefOrDefaultPtr(lmsConfig.RequesterPickupLocation, originalLMSConfig.RequesterPickupLocation),
+			SupplierPickupLocation:           derefOrDefaultPtr(lmsConfig.SupplierPickupLocation, originalLMSConfig.SupplierPickupLocation),
+			RequesterPatronPattern:           derefOrDefaultPtr(lmsConfig.RequesterPatronPattern, originalLMSConfig.RequesterPatronPattern),
 		})
 		if err != nil {
 			slog.ErrorContext(ctx, "unexpected database error during lmsConfig upsert", "error", err)

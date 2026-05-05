@@ -398,6 +398,33 @@ func TestEntryCases(t *testing.T) {
 			//refetchFile: "entry-with-lmsconfig.patch.refetch.json",
 			addlHeaders: consortiumPermissionHeaders,
 		},
+		{
+			name:        "PATCH entry with embedded lmsConfig, check other lms fields",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000002",
+			bodyFile:    "entry-with-lmsconfig-3.patch.req.json",
+			status:      http.StatusNoContent,
+			refetchFile: "entry-with-lmsconfig-3.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH entry with new lmsconfig",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000003",
+			bodyFile:    "entry-new-lmsconfig.patch.req.json",
+			status:      http.StatusNoContent,
+			refetchFile: "entry-new-lmsconfig.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "PATCH entry with new incomplete lmsconfig",
+			method:      http.MethodPatch,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000003",
+			bodyFile:    "entry-new-lmsconfig-incomplete.patch.req.json",
+			status:      http.StatusNoContent,
+			refetchFile: "entry-new-lmsconfig-incomplete.patch.refetch.json",
+			addlHeaders: consortiumPermissionHeaders,
+		},
 	}
 	testCases(t, cases)
 }

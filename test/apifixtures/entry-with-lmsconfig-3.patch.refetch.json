@@ -17,7 +17,7 @@
   ],
   "lmsConfig": {
     "address":"https://also.not.real",
-    "fromAgency":"rivendell",
+    "fromAgency":"imladris",
     "fromAgencyAuthentication":"pack_extra_lembas",
     "acceptItemEnabled": true
   },

@@ -20,8 +20,9 @@
     }
     ],
     "lmsConfig": {
-    "address" : "https://thedoor.ismadeofsoup.com",
-    "fromAgency" : "bongiornio",
-    "acceptItemEnabled":false
+        "address" : "https://thedoor.ismadeofsoup.com",
+        "fromAgency" : "bongiornio",
+        "fromAgencyAuthentication" : "the_beaver_flies_at_twilight",
+        "acceptItemEnabled":false
     }
 }
