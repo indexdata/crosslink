@@ -346,6 +346,170 @@ func TestIso18626DefaultShim(t *testing.T) {
 	}
 }
 
+func TestIso18626ILLiadShimRequest(t *testing.T) {
+	msg := newReq(&iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{
+			Note: "#seq:0#original note",
+			ServiceLevel: &iso18626.TypeSchemeValuePair{
+				Text: "secondarymail",
+			},
+		},
+		PublicationInfo: &iso18626.PublicationInfo{
+			PublicationType: &iso18626.TypeSchemeValuePair{
+				Text: "book",
+			},
+		},
+	})
+	msg.Request.BibliographicInfo.SupplierUniqueRecordId = "12345678"
+	msg.Request.BibliographicInfo.BibliographicItemId = append(msg.Request.BibliographicInfo.BibliographicItemId,
+		iso18626.BibliographicItemId{
+			BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+				Text: "isbn",
+			},
+			BibliographicItemIdentifier: "978-3-16-148410-0",
+		},
+		iso18626.BibliographicItemId{
+			BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+				Text: "badcode",
+			},
+			BibliographicItemIdentifier: "val",
+		},
+	)
+	msg.Request.BibliographicInfo.BibliographicRecordId = append(msg.Request.BibliographicInfo.BibliographicRecordId,
+		iso18626.BibliographicRecordId{
+			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+				Text: "lccn",
+			},
+			BibliographicRecordIdentifier: "2023000023",
+		},
+		iso18626.BibliographicRecordId{
+			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{
+				Text: "lccnNumber",
+			},
+			BibliographicRecordIdentifier: "val",
+		},
+	)
+
+	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "original note", resmsg.Request.ServiceInfo.Note)
+	assert.Equal(t, "SecondaryMail", resmsg.Request.ServiceInfo.ServiceLevel.Text)
+	assert.Equal(t, "Book", resmsg.Request.PublicationInfo.PublicationType.Text)
+	assert.Len(t, resmsg.Request.BibliographicInfo.BibliographicItemId, 1)
+	assert.Equal(t, "ISBN", resmsg.Request.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text)
+	assert.Len(t, resmsg.Request.BibliographicInfo.BibliographicRecordId, 2)
+	assert.Equal(t, "LCCN", resmsg.Request.BibliographicInfo.BibliographicRecordId[0].BibliographicRecordIdentifierCode.Text)
+	assert.Equal(t, "OCLC", resmsg.Request.BibliographicInfo.BibliographicRecordId[1].BibliographicRecordIdentifierCode.Text)
+}
+
+func TestIso18626ILLiadShimSupplyingAgencyMessage(t *testing.T) {
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		MessageInfo: iso18626.MessageInfo{
+			Note: RESHARE_SUPPLIER_AWAITING_CONDITION + "#seq:1#",
+		},
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			LoanCondition: &iso18626.TypeSchemeValuePair{
+				Text: "libraryuseonly",
+			},
+		},
+	})
+
+	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, ALMA_SUPPLIER_AWAITING_CONDITION, resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, string(iso18626.LoanConditionLibraryUseOnly), resmsg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition.Text)
+}
+
+func TestSetItemIdFromItemsNoteILLiad(t *testing.T) {
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send one item#seq:1#\n#MultipleItems#\n1\\|23\\\\\n#MultipleItemsEnd#",
+		},
+	})
+
+	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "1|23\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
+func TestIso18626ILLiadShimRequestingAgencyMessage(t *testing.T) {
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Action: iso18626.TypeActionNotification,
+		Note:   "#seq:2#" + RESHARE_LOAN_CONDITION_AGREE + "Accept",
+	})
+
+	msgBytes, err := GetShim(string(directory.ILLiad)).ApplyToOutgoingRequest(msg)
+	assert.Nil(t, err)
+
+	var resmsg iso18626.ISO18626Message
+	err = GetShim("default").ApplyToIncomingResponse(msgBytes, &resmsg)
+	assert.Nil(t, err)
+
+	assert.Equal(t, "Accept", resmsg.RequestingAgencyMessage.Note)
+}
+
+func TestIso18626ILLiadShimIncomingRequestingMessageLoanConditionReject(t *testing.T) {
+	msg := newRAM(&iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "BROKER",
+			},
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   "--ReJeCT;",
+	})
+
+	resmsg := GetShim(string(directory.ILLiad)).ApplyToIncomingRequest(msg, nil, &ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"})
+
+	assert.Equal(t, RESHARE_LOAN_CONDITION_REJECT+"--ReJeCT;", resmsg.RequestingAgencyMessage.Note)
+	assert.Equal(t, iso18626.TypeActionCancel, resmsg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "SUP1", resmsg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+
+	assert.Equal(t, iso18626.TypeActionNotification, msg.RequestingAgencyMessage.Action)
+	assert.Equal(t, "BROKER", msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue)
+}
+
+func TestIso18626ILLiadShimIncomingSupplyingAgencyMessageUnifiesItem(t *testing.T) {
+	msg := newSAM(&iso18626.SupplyingAgencyMessage{
+		DeliveryInfo: &iso18626.DeliveryInfo{
+			ItemId: "1|23\\,1|24\\",
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "send multiple items",
+		},
+	})
+
+	resmsg := GetShim(string(directory.ILLiad)).ApplyToIncomingRequest(msg, nil, nil)
+
+	assert.Equal(t, "1|23\\,1|24\\", resmsg.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+	assert.Equal(t, "send multiple items\n"+
+		"#MultipleItems#\n"+
+		"1\\|23\\\\\n"+
+		"1\\|24\\\\\n"+
+		"#MultipleItemsEnd#", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
+	assert.Equal(t, "send multiple items", msg.SupplyingAgencyMessage.MessageInfo.Note)
+}
+
 func TestIso18626AlmaShimRequest(t *testing.T) {
 	msg := newReq(&iso18626.Request{
 		RequestingAgencyInfo: &iso18626.RequestingAgencyInfo{
@@ -1006,7 +1170,7 @@ func TestProcessItemIdMultipleItemsReShareNoNote(t *testing.T) {
 	assert.Equal(t, "", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
-func TestProcessItemIdOneItemAlma(t *testing.T) {
+func TestSetItemIdFromItemsNoteOneItemAlma(t *testing.T) {
 	shimA := new(Iso18626AlmaShim)
 
 	sam := newSAM(&iso18626.SupplyingAgencyMessage{
@@ -1035,7 +1199,7 @@ func TestProcessItemIdOneItemAlma(t *testing.T) {
 	assert.Equal(t, "send one item", resmsg.SupplyingAgencyMessage.MessageInfo.Note)
 }
 
-func TestProcessItemIdMultipleItemsAlma(t *testing.T) {
+func TestSetItemIdFromItemsNoteMultipleItemsAlma(t *testing.T) {
 	shimA := new(Iso18626AlmaShim)
 
 	sam := newSAM(&iso18626.SupplyingAgencyMessage{
