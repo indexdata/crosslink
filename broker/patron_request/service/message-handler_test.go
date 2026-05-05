@@ -959,11 +959,34 @@ func TestHandleRequestingAgencyMessageConditionsAcceptedNotification(t *testing.
 		},
 		Action: iso18626.TypeActionNotification,
 		Note:   shim.RESHARE_LOAN_CONDITION_AGREE,
-	}, pr_db.PatronRequest{State: LenderStateConditionPending, Side: SideLending})
+	}, pr_db.PatronRequest{ID: patronRequestId, State: LenderStateConditionPending, Side: SideLending})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, LenderStateConditionAccepted, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
+}
+
+func TestHandleRequestingAgencyMessageConditionsAcceptedMarksSentConditionNotificationsAccepted(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, _, err := handler.handleRequestingAgencyMessage(appCtx, iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		Action: iso18626.TypeActionNotification,
+		Note:   shim.RESHARE_LOAN_CONDITION_AGREE,
+	}, pr_db.PatronRequest{ID: patronRequestId, State: LenderStateConditionPending, Side: SideLending})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NoError(t, err)
+	if assert.Len(t, mockPrRepo.markedConditionNotificationsReceipts, 1) {
+		assert.Equal(t, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationAccepted),
+			PrID:      patronRequestId,
+			Direction: string(pr_db.NotificationDirectionSent),
+		}, mockPrRepo.markedConditionNotificationsReceipts[0])
+	}
 }
 
 func TestHandleRequestingAgencyMessageConditionRejectedCancel(t *testing.T) {
@@ -976,11 +999,34 @@ func TestHandleRequestingAgencyMessageConditionRejectedCancel(t *testing.T) {
 		},
 		Action: iso18626.TypeActionCancel,
 		Note:   shim.RESHARE_LOAN_CONDITION_REJECT,
-	}, pr_db.PatronRequest{State: LenderStateConditionPending, Side: SideLending})
+	}, pr_db.PatronRequest{ID: patronRequestId, State: LenderStateConditionPending, Side: SideLending})
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, LenderStateCancelRequested, mockPrRepo.savedPr.State)
 	assert.NoError(t, err)
+}
+
+func TestHandleRequestingAgencyMessageConditionRejectedMarksSentConditionNotificationsRejected(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	handler := CreatePatronRequestMessageHandler(mockPrRepo, *new(events.EventRepo), *new(ill_db.IllRepo), *new(events.EventBus))
+
+	status, _, err := handler.handleRequestingAgencyMessage(appCtx, iso18626.RequestingAgencyMessage{
+		Header: iso18626.Header{
+			RequestingAgencyRequestId: patronRequestId,
+		},
+		Action: iso18626.TypeActionCancel,
+		Note:   shim.RESHARE_LOAN_CONDITION_REJECT,
+	}, pr_db.PatronRequest{ID: patronRequestId, State: LenderStateConditionPending, Side: SideLending})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NoError(t, err)
+	if assert.Len(t, mockPrRepo.markedConditionNotificationsReceipts, 1) {
+		assert.Equal(t, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationRejected),
+			PrID:      patronRequestId,
+			Direction: string(pr_db.NotificationDirectionSent),
+		}, mockPrRepo.markedConditionNotificationsReceipts[0])
+	}
 }
 
 func TestHandleRequestingAgencyMessageRegularCancelRemainsCancelRequest(t *testing.T) {
