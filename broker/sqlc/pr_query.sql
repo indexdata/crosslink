@@ -126,6 +126,15 @@ WHERE pr_id = $3
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: MarkConditionNotificationsReceipt :exec
+UPDATE notification
+SET receipt = sqlc.arg(receipt)::text,
+    acknowledged_at = COALESCE(acknowledged_at, now())
+WHERE pr_id = sqlc.arg(pr_id)::text
+  AND direction = sqlc.arg(direction)::text
+  AND kind = 'condition'
+  AND (receipt IS NULL OR receipt NOT IN ('ACCEPTED', 'REJECTED', 'FAILED_TO_SEND'));
+
 -- name: DeleteNotificationById :exec
 DELETE
 FROM notification
