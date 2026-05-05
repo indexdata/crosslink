@@ -305,6 +305,107 @@ func TestNotification(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestMarkConditionNotificationsReceipt(t *testing.T) {
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID: prId,
+		CreatedAt: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		Language:      "english",
+		Items:         []pr_db.PrItem{},
+		TerminalState: false,
+	})
+	assert.NoError(t, err)
+
+	acknowledgedAt := pgtype.Timestamp{Time: time.Now().Add(-time.Hour), Valid: true}
+	notificationsToCreate := []pr_db.SaveNotificationParams{
+		{
+			ID:         uuid.NewString(),
+			PrID:       prId,
+			FromSymbol: "ISIL:SUP",
+			ToSymbol:   "ISIL:REQ",
+			Direction:  pr_db.NotificationDirectionSent,
+			Kind:       pr_db.NotificationKindCondition,
+			Receipt:    pr_db.NotificationSent,
+			CreatedAt:  pgtype.Timestamp{Time: time.Now(), Valid: true},
+		},
+		{
+			ID:             uuid.NewString(),
+			PrID:           prId,
+			FromSymbol:     "ISIL:SUP",
+			ToSymbol:       "ISIL:REQ",
+			Direction:      pr_db.NotificationDirectionSent,
+			Kind:           pr_db.NotificationKindCondition,
+			Receipt:        pr_db.NotificationSeen,
+			CreatedAt:      pgtype.Timestamp{Time: time.Now().Add(time.Second), Valid: true},
+			AcknowledgedAt: acknowledgedAt,
+		},
+		{
+			ID:         uuid.NewString(),
+			PrID:       prId,
+			FromSymbol: "ISIL:SUP",
+			ToSymbol:   "ISIL:REQ",
+			Direction:  pr_db.NotificationDirectionSent,
+			Kind:       pr_db.NotificationKindCondition,
+			Receipt:    pr_db.NotificationRejected,
+			CreatedAt:  pgtype.Timestamp{Time: time.Now().Add(2 * time.Second), Valid: true},
+		},
+		{
+			ID:         uuid.NewString(),
+			PrID:       prId,
+			FromSymbol: "ISIL:REQ",
+			ToSymbol:   "ISIL:SUP",
+			Direction:  pr_db.NotificationDirectionReceived,
+			Kind:       pr_db.NotificationKindCondition,
+			CreatedAt:  pgtype.Timestamp{Time: time.Now().Add(3 * time.Second), Valid: true},
+		},
+		{
+			ID:         uuid.NewString(),
+			PrID:       prId,
+			FromSymbol: "ISIL:SUP",
+			ToSymbol:   "ISIL:REQ",
+			Direction:  pr_db.NotificationDirectionSent,
+			Kind:       pr_db.NotificationKindNote,
+			CreatedAt:  pgtype.Timestamp{Time: time.Now().Add(4 * time.Second), Valid: true},
+		},
+	}
+	for _, notification := range notificationsToCreate {
+		_, err = prRepo.SaveNotification(appCtx, notification)
+		assert.NoError(t, err)
+	}
+
+	err = prRepo.MarkConditionNotificationsReceipt(appCtx, pr_db.MarkConditionNotificationsReceiptParams{
+		Receipt:   string(pr_db.NotificationAccepted),
+		PrID:      prId,
+		Direction: string(pr_db.NotificationDirectionSent),
+	})
+	assert.NoError(t, err)
+
+	notifications, _, err := prRepo.GetNotificationsByPrId(appCtx, pr_db.GetNotificationsByPrIdParams{PrID: prId, Limit: 10, Offset: 0, Kind: ""})
+	assert.NoError(t, err)
+	byID := map[string]pr_db.Notification{}
+	for _, notification := range notifications {
+		byID[notification.ID] = notification
+	}
+	assert.Equal(t, pr_db.NotificationAccepted, byID[notificationsToCreate[0].ID].Receipt)
+	assert.True(t, byID[notificationsToCreate[0].ID].AcknowledgedAt.Valid)
+	assert.Equal(t, pr_db.NotificationAccepted, byID[notificationsToCreate[1].ID].Receipt)
+	assert.Equal(t, acknowledgedAt.Time.Format(time.DateTime), byID[notificationsToCreate[1].ID].AcknowledgedAt.Time.Format(time.DateTime))
+	assert.Equal(t, pr_db.NotificationRejected, byID[notificationsToCreate[2].ID].Receipt)
+	assert.False(t, byID[notificationsToCreate[2].ID].AcknowledgedAt.Valid)
+	assert.Empty(t, byID[notificationsToCreate[3].ID].Receipt)
+	assert.Empty(t, byID[notificationsToCreate[4].ID].Receipt)
+
+	for _, notification := range notificationsToCreate {
+		err = prRepo.DeleteNotificationById(appCtx, notification.ID)
+		assert.NoError(t, err)
+	}
+	err = prRepo.DeletePatronRequest(appCtx, prId)
+	assert.NoError(t, err)
+}
+
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 

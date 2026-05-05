@@ -493,6 +493,13 @@ func (a *PatronRequestActionService) acceptConditionBorrowingRequest(ctx common.
 		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
 	}
+	if err := a.prRepo.MarkConditionNotificationsReceipt(ctx, pr_db.MarkConditionNotificationsReceiptParams{
+		Receipt:   string(pr_db.NotificationAccepted),
+		PrID:      pr.ID,
+		Direction: string(pr_db.NotificationDirectionReceived),
+	}); err != nil {
+		ctx.Logger().Error("failed to mark condition notifications accepted", "pr_id", pr.ID, "error", err)
+	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
@@ -506,6 +513,13 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 		result.IncomingMessage.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus != iso18626.TypeMessageStatusOK {
 		result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeFailure}
 		return actionExecutionResult{status: events.EventStatusProblem, result: &result, pr: pr}
+	}
+	if err := a.prRepo.MarkConditionNotificationsReceipt(ctx, pr_db.MarkConditionNotificationsReceiptParams{
+		Receipt:   string(pr_db.NotificationRejected),
+		PrID:      pr.ID,
+		Direction: string(pr_db.NotificationDirectionReceived),
+	}); err != nil {
+		ctx.Logger().Error("failed to mark condition notifications rejected", "pr_id", pr.ID, "error", err)
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }

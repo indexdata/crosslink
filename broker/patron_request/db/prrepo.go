@@ -29,6 +29,7 @@ type PrRepo interface {
 	SaveNotification(ctx common.ExtendedContext, params SaveNotificationParams) (Notification, error)
 	GetNotificationById(ctx common.ExtendedContext, id string) (Notification, error)
 	GetNotificationsByPrId(ctx common.ExtendedContext, params GetNotificationsByPrIdParams) ([]Notification, int64, error)
+	MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
 }
@@ -238,6 +239,10 @@ func (r *PgPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params Get
 		}
 	}
 	return list, fullCount, err
+}
+
+func (r *PgPrRepo) MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error {
+	return r.queries.MarkConditionNotificationsReceipt(ctx, r.GetConnOrTx(), params)
 }
 
 func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string) error {
