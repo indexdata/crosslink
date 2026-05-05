@@ -177,17 +177,18 @@ func (r *Record) finalize() {
 	}
 }
 
-func (r *Record) Data(dataType string) string {
+func (r *Record) Data(dataType string) []byte {
 	if r.rec == nil {
-		return ""
+		return nil
 	}
 	cType := C.CString(dataType)
 	defer C.free(unsafe.Pointer(cType))
-	cData := C.ZOOM_record_get(r.rec, cType, nil)
-	if cData == nil {
-		return ""
+	cSize := C.int(0)
+	cData := C.ZOOM_record_get(r.rec, cType, &cSize)
+	if cData == nil || cSize <= 0 {
+		return nil
 	}
 	// the returned cData is owned by record and will be freed when the record is destroyed
-	data := C.GoString(cData)
+	data := C.GoBytes(unsafe.Pointer(cData), cSize)
 	return data
 }

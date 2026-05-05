@@ -63,8 +63,8 @@ func TestSearch(t *testing.T) {
 	record, err := rs.GetRecord(0)
 	assert.NoError(t, err)
 	assert.NotNil(t, record)
-	assert.Contains(t, record.Data("render"), "program")
-	assert.Equal(t, "", record.Data("unknown"))
+	assert.Contains(t, string(record.Data("render")), "program")
+	assert.Nil(t, record.Data("unknown"))
 
 	conn.Close()
 	record, err = rs.GetRecord(0)
@@ -91,7 +91,7 @@ func TestSearch(t *testing.T) {
 
 func TestRecordData(t *testing.T) {
 	record := &Record{}
-	assert.Equal(t, "", record.Data("render"))
+	assert.Nil(t, record.Data("render"))
 }
 
 func TestSearchUnsupportedSyntax(t *testing.T) {

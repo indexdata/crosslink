@@ -58,10 +58,10 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 			continue
 		}
 		xmlBuffer := rec.Data("xml;charset=utf-8")
-		if xmlBuffer == "" {
+		if xmlBuffer == nil {
 			continue
 		}
-		holdings, err := a.holdingsParser.Parse([]byte(xmlBuffer))
+		holdings, err := a.holdingsParser.Parse(xmlBuffer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
 		}
