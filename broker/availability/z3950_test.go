@@ -16,10 +16,11 @@ import (
 func TestLookup(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	imap := "@attr 1=1016 {term}"
+	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	aa, err := NewZ3950AvailabilityAdapter(ctx, directory.Z3950Config{
 		Address: "z3950.indexdata.com/marc",
 		Options: &map[string]string{
-			"count":                 "8",
+			"count":                 "3",
 			"preferredRecordSyntax": "usmarc",
 		},
 		PqfMappings: &directory.PqfMappings{
@@ -28,7 +29,8 @@ func TestLookup(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.Equal(t, "z3950.indexdata.com/marc", aa.(*Z3950AvailabilityAdapter).zurl)
-	assert.Equal(t, "8", aa.(*Z3950AvailabilityAdapter).options["count"])
+	assert.Equal(t, "3", aa.(*Z3950AvailabilityAdapter).options["count"])
+	aa.(*Z3950AvailabilityAdapter).holdingsParser = adapter.NewMarcHoldingsParserCfg("010", "a", "", "", "", "")
 
 	// existing title
 	params := adapter.HoldingLookupParams{
@@ -37,7 +39,7 @@ func TestLookup(t *testing.T) {
 	results, err := aa.Lookup(params)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
-	assert.Contains(t, results[0].Location, "scintillation")
+	assert.Contains(t, results[0].Location, "73090924")
 
 	// not-existing title
 	params = adapter.HoldingLookupParams{

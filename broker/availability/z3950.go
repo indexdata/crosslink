@@ -4,7 +4,6 @@
 package availability
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -17,9 +16,10 @@ import (
 func cgoEnabled() bool { return true }
 
 type Z3950AvailabilityAdapter struct {
-	zurl        string
-	options     zoom.Options
-	pqfMappings directory.PqfMappings
+	zurl           string
+	options        zoom.Options
+	pqfMappings    directory.PqfMappings
+	holdingsParser adapter.HoldingsParser
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (AvailabilityAdapter, error) {
@@ -29,7 +29,8 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 			"count":                 "10",
 			"preferredRecordSyntax": "usmarc",
 		},
-		zurl: config.Address,
+		zurl:           config.Address,
+		holdingsParser: adapter.NewMarcHoldingsParser(),
 	}
 	if config.Options != nil {
 		for k, v := range *config.Options {
@@ -56,19 +57,15 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 		if rec == nil {
 			continue
 		}
-		jsonString := rec.Data("json;charset=utf-8")
-		if jsonString == "" {
+		xmlBuffer := rec.Data("xml;charset=utf-8")
+		if xmlBuffer == "" {
 			continue
 		}
-		// parse jsonString to "any" type
-		var jsonData map[string]any
-		err = json.Unmarshal([]byte(jsonString), &jsonData)
+		holdings, err := a.holdingsParser.Parse([]byte(xmlBuffer))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse JSON from Z39.50 record: %w", err)
+			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
 		}
-		avail = append(avail, adapter.Holding{
-			Location: jsonString,
-		})
+		avail = append(avail, holdings...)
 	}
 	return avail, nil
 }

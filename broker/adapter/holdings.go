@@ -19,3 +19,7 @@ type Holding struct {
 	CallNumber       string
 	ItemId           string
 }
+
+type HoldingsParser interface {
+	Parse(record []byte) ([]Holding, error)
+}

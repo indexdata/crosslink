@@ -10,59 +10,24 @@ import (
 
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/httpclient"
-	"github.com/indexdata/crosslink/marcxml"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/crosslink/sru/diag"
 )
 
 type SruHoldingsLookupAdapter struct {
-	sruUrl []string
-	isxn   bool
-	client *http.Client
+	sruUrl         []string
+	isxn           bool
+	client         *http.Client
+	holdingsParser HoldingsParser
 }
 
 const isilPrefix = "ISIL:"
 
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn bool) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn}
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn, holdingsParser: &ReservoirHoldingsParser{}}
 }
 
-func parseHoldingsForIndicator(rec *marcxml.Record, holdings *[]Holding, ind2 string) {
-	for _, df := range rec.Datafield {
-		if df.Tag != "999" || df.Ind1 != "1" || df.Ind2 != ind2 {
-			continue
-		}
-		var holding Holding
-		for _, sf := range df.Subfield {
-			// l comes before s, so append happens when s is found
-			if sf.Code == "l" {
-				holding.LocalIdentifier = string(sf.Text)
-			}
-			if sf.Code == "s" {
-				symbol := string(sf.Text)
-				if symbol != "" {
-					scheme, _, found := strings.Cut(symbol, ":")
-					if !found || strings.TrimSpace(scheme) == "" {
-						symbol = isilPrefix + symbol
-					}
-				}
-				holding.Symbol = symbol
-				*holdings = append(*holdings, holding)
-			}
-		}
-	}
-}
-
-func parseHoldings(rec *marcxml.Record, holdings *[]Holding) {
-	// skipped and ignored if there is no 999, which suggests that something is wrong with the record
-	holdingCount := len(*holdings)
-	parseHoldingsForIndicator(rec, holdings, "1")
-	if len(*holdings) == holdingCount {
-		parseHoldingsForIndicator(rec, holdings, "0")
-	}
-}
-
-func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
+func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 	if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
 		return fmt.Errorf("unsupported RecordXMLEscapiong: %s", *record.RecordXMLEscaping)
 	}
@@ -79,12 +44,12 @@ func parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 		record.RecordSchema != "marcxml" {
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
-	var rec marcxml.Record
-	err := xml.Unmarshal(record.RecordData.XMLContent, &rec)
+
+	ret, err := s.holdingsParser.Parse(record.RecordData.XMLContent)
 	if err != nil {
-		return fmt.Errorf("decoding marcxml failed: %s", err.Error())
+		return fmt.Errorf("parsing holdings failed: %s", err.Error())
 	}
-	parseHoldings(&rec, holdings)
+	*holdings = append(*holdings, ret...)
 	return nil
 }
 
@@ -146,7 +111,7 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLook
 	}
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
-			err := parseRecord(&record, &holdings)
+			err := s.parseRecord(&record, &holdings)
 			if err != nil {
 				return nil, query, err
 			}
