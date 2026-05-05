@@ -235,27 +235,36 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	eventData := map[string]any{}
 	eventData["skipped"] = false
 	eventData["localSupplier"] = event.EventData.CustomData["localSupplier"]
-	if sup.ID != "" {
-		peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
+	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
+	}
+	// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
+	adapter, err := s.availabilityCreator.GetAdapter(ctx, peer)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+	}
+	if adapter == nil {
+		ctx.Logger().Info("skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
+		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+	}
+	params := availability.AvailabilityLookupParams{
+		Identifier: "x",
+	}
+	results, err := adapter.Lookup(params)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
+	}
+	if len(results) == 0 {
+		ctx.Logger().Info("no availability found for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
+		eventData["skipped"] = true
+		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
+		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
 		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
-		}
-		// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
-		adapter, err := s.availabilityCreator.GetAdapter(ctx, peer)
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
-		}
-		if adapter == nil {
-			ctx.Logger().Info("skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
-		} else {
-			eventData["skipped"] = true
-			sup.SupplierStatus = ill_db.SupplierStateSkippedPg
-			_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
-			if err != nil {
-				return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
-			}
+			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
 		}
 	}
+
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 

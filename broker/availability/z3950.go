@@ -30,6 +30,11 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 		},
 		zurl: config.Address,
 	}
+	if config.Options != nil {
+		for k, v := range *config.Options {
+			a.options[k] = v
+		}
+	}
 	if config.PqfMappings != nil {
 		a.pqfMappings = *config.PqfMappings
 	}
@@ -61,7 +66,7 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 			return nil, fmt.Errorf("failed to parse JSON from Z39.50 record: %w", err)
 		}
 		avail = append(avail, Availability{
-			Availability: jsonString,
+			Location: jsonString,
 		})
 	}
 	return avail, nil

@@ -26,6 +26,8 @@ func TestLookup(t *testing.T) {
 		},
 	})
 	assert.NoError(t, err)
+	assert.Equal(t, "z3950.indexdata.com/marc", adapter.(*Z3950AvailabilityAdapter).zurl)
+	assert.Equal(t, "8", adapter.(*Z3950AvailabilityAdapter).options["count"])
 
 	// existing title
 	params := AvailabilityLookupParams{
@@ -34,6 +36,7 @@ func TestLookup(t *testing.T) {
 	results, err := adapter.Lookup(params)
 	assert.NoError(t, err)
 	assert.Len(t, results, 1)
+	assert.Contains(t, results[0].Location, "scintillation")
 
 	// not-existing title
 	params = AvailabilityLookupParams{

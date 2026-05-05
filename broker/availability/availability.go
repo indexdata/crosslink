@@ -1,5 +1,10 @@
 package availability
 
+const (
+	AvailabilityAdapterZoom string = "zoom" // yaz zoom adapter
+	AvailabilityAdapterMock string = "mock" // mock adapter for testing
+)
+
 type AvailabilityAdapter interface {
 	Lookup(params AvailabilityLookupParams) ([]Availability, error)
 }
@@ -12,5 +17,8 @@ type AvailabilityLookupParams struct {
 }
 
 type Availability struct {
-	Availability string
+	Location         string
+	ShelvingLocation string
+	CallNumber       string
+	ItemId           string
 }

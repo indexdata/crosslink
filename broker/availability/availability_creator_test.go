@@ -11,12 +11,36 @@ import (
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
-	creator := NewAvailabilityCreator()
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
 	adapter, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
 	assert.Nil(t, adapter)
+}
+
+func TestGetAdapterOther(t *testing.T) {
+	creator := NewAvailabilityCreator("other")
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := ill_db.Peer{}
+	_, err := creator.GetAdapter(ctx, peer)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "bad value for")
+}
+
+func TestGetAdapterMock(t *testing.T) {
+	peer := ill_db.Peer{
+		CustomData: directory.Entry{
+			Z3950Config: &directory.Z3950Config{
+				Address: "z3950.indexdata.com/marc",
+			},
+		},
+	}
+	creator := NewAvailabilityCreator(AvailabilityAdapterMock)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	adapter, err := creator.GetAdapter(ctx, peer)
+	assert.NoError(t, err)
+	assert.IsType(t, &MockAvailabilityAdapter{}, adapter)
 }
 
 func TestGetAdapterZ3950(t *testing.T) {
@@ -27,7 +51,7 @@ func TestGetAdapterZ3950(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator()
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	adapter, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/events"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -51,6 +52,7 @@ func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
+	app.AVAILABILITY_ADAPTER = availability.AvailabilityAdapterMock
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
