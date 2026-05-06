@@ -23,7 +23,7 @@ type Z3950AvailabilityAdapter struct {
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
-
+	// TODO: holdingsParser based on config
 	a := &Z3950AvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{

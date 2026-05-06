@@ -17,7 +17,7 @@ type MarcHoldingsParserConfiguration struct {
 	RestrictedSubField       string `json:"restrictedSubField"`
 }
 
-func MarcHoldingsParserConfigurationNew() *MarcHoldingsParserConfiguration {
+func NewMarcHoldingsParserConfiguration() *MarcHoldingsParserConfiguration {
 	return &MarcHoldingsParserConfiguration{
 		MainField:                "852",
 		LocationSubField:         "b",
@@ -64,7 +64,7 @@ type MarcHoldingsParser struct {
 
 func NewMarcHoldingsParser(config *MarcHoldingsParserConfiguration) HoldingsParser {
 	if config == nil {
-		config = MarcHoldingsParserConfigurationNew()
+		config = NewMarcHoldingsParserConfiguration()
 	}
 	return &MarcHoldingsParser{
 		config: *config,

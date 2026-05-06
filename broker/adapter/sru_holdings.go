@@ -19,12 +19,13 @@ type SruHoldingsLookupAdapter struct {
 	isxn           bool
 	client         *http.Client
 	holdingsParser HoldingsParser
+	xTarget        string
 }
 
 const isilPrefix = "ISIL:"
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, isxn bool) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn, holdingsParser: &ReservoirHoldingsParser{}}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, isxn bool, parser HoldingsParser) HoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn, holdingsParser: parser}
 }
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
@@ -97,6 +98,9 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLook
 		return nil, "", err
 	}
 	query := "?maximumRecords=1000&recordSchema=marcxml&query=" + url.QueryEscape(cql)
+	if s.xTarget != "" {
+		query += "&x-target=" + url.QueryEscape(s.xTarget)
+	}
 	var sruResponse sru.SearchRetrieveResponse
 	err = httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	if err != nil {

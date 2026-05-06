@@ -11,6 +11,7 @@ import (
 const (
 	AvailabilityAdapterZoom string = "zoom" // yaz zoom adapter
 	AvailabilityAdapterMock string = "mock" // mock adapter for testing
+	AvailabilityAdapterSru  string = "sru"  // sru adapter
 )
 
 type AvailabilityCreatorImpl struct {
@@ -33,6 +34,10 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	case AvailabilityAdapterZoom:
 		if entry.Z3950Config != nil {
 			return NewZ3950AvailabilityAdapter(ctx, *entry.Z3950Config)
+		}
+	case AvailabilityAdapterSru:
+		if entry.Z3950Config != nil {
+			return NewSruAvailabilityAdapter(ctx, *entry.Z3950Config)
 		}
 	default:
 		return nil, fmt.Errorf("bad value for %s", c.mode)

@@ -23,3 +23,8 @@ type Holding struct {
 type HoldingsParser interface {
 	Parse(record []byte) ([]Holding, error)
 }
+
+type HoldingsQueryBuilder interface {
+	// Build should return the query
+	Build(params HoldingLookupParams) (cql string, pqf string, err error)
+}
