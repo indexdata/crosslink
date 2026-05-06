@@ -5,7 +5,7 @@ OS ?= $(shell uname)
 XSLT ?= xsltproc
 GEN_FILES = MARC21slim_gen.go opacxml_gen.go
 .PHONY: all generate generate-schema lint vulncheck check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@latest
+XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@912e22d86f2c44d700dbabf3411442f81553f39b
 
 all: generate
 
