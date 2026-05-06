@@ -30,7 +30,10 @@ func TestLookup(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "z3950.indexdata.com/marc", aa.(*Z3950AvailabilityAdapter).zurl)
 	assert.Equal(t, "3", aa.(*Z3950AvailabilityAdapter).options["count"])
-	aa.(*Z3950AvailabilityAdapter).holdingsParser = adapter.NewMarcHoldingsParserCfg("010", "a", "", "", "", "")
+	config := adapter.MarcHoldingsParserConfigurationNew().
+		WithMainField("010").WithLocationSubField("a").
+		WithItemIdSubField("").WithRestrictedSubField("").WithCallNumberSubField("")
+	aa.(*Z3950AvailabilityAdapter).holdingsParser = adapter.NewMarcHoldingsParser(config)
 
 	// existing title
 	params := adapter.HoldingLookupParams{

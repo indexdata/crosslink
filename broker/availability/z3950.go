@@ -23,6 +23,7 @@ type Z3950AvailabilityAdapter struct {
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (AvailabilityAdapter, error) {
+
 	a := &Z3950AvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
@@ -30,7 +31,7 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 			"preferredRecordSyntax": "usmarc",
 		},
 		zurl:           config.Address,
-		holdingsParser: adapter.NewMarcHoldingsParser(),
+		holdingsParser: adapter.NewMarcHoldingsParser(nil),
 	}
 	if config.Options != nil {
 		for k, v := range *config.Options {

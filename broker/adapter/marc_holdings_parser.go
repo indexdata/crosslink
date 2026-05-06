@@ -8,34 +8,66 @@ import (
 	"github.com/indexdata/crosslink/marcxml"
 )
 
-type MarcHoldingsParser struct {
-	mainField                string
-	locationSubField         string
-	shelvingLocationSubField string
-	callNumberSubField       string
-	itemIdSubField           string
-	restrictedSubField       string
+type MarcHoldingsParserConfiguration struct {
+	MainField                string `json:"mainField"`
+	LocationSubField         string `json:"locationSubField"`
+	ShelvingLocationSubField string `json:"shelvingLocationSubField"`
+	CallNumberSubField       string `json:"callNumberSubField"`
+	ItemIdSubField           string `json:"itemIdSubField"`
+	RestrictedSubField       string `json:"restrictedSubField"`
 }
 
-func NewMarcHoldingsParser() HoldingsParser {
-	return &MarcHoldingsParser{
-		mainField:                "852",
-		locationSubField:         "b",
-		shelvingLocationSubField: "c",
-		callNumberSubField:       "h",
-		itemIdSubField:           "p",
-		restrictedSubField:       "r",
+func MarcHoldingsParserConfigurationNew() *MarcHoldingsParserConfiguration {
+	return &MarcHoldingsParserConfiguration{
+		MainField:                "852",
+		LocationSubField:         "b",
+		ShelvingLocationSubField: "c",
+		CallNumberSubField:       "h",
+		ItemIdSubField:           "p",
+		RestrictedSubField:       "r",
 	}
 }
 
-func NewMarcHoldingsParserCfg(mainField string, locationField string, shelvingLocationField string, callNumberField string, itemIdField string, restrictedField string) HoldingsParser {
+func (c *MarcHoldingsParserConfiguration) WithMainField(f string) *MarcHoldingsParserConfiguration {
+	c.MainField = f
+	return c
+}
+
+func (c *MarcHoldingsParserConfiguration) WithLocationSubField(f string) *MarcHoldingsParserConfiguration {
+	c.LocationSubField = f
+	return c
+}
+
+func (c *MarcHoldingsParserConfiguration) WithShelvingLocationSubField(f string) *MarcHoldingsParserConfiguration {
+	c.ShelvingLocationSubField = f
+	return c
+}
+
+func (c *MarcHoldingsParserConfiguration) WithCallNumberSubField(f string) *MarcHoldingsParserConfiguration {
+	c.CallNumberSubField = f
+	return c
+}
+
+func (c *MarcHoldingsParserConfiguration) WithItemIdSubField(f string) *MarcHoldingsParserConfiguration {
+	c.ItemIdSubField = f
+	return c
+}
+
+func (c *MarcHoldingsParserConfiguration) WithRestrictedSubField(f string) *MarcHoldingsParserConfiguration {
+	c.RestrictedSubField = f
+	return c
+}
+
+type MarcHoldingsParser struct {
+	config MarcHoldingsParserConfiguration
+}
+
+func NewMarcHoldingsParser(config *MarcHoldingsParserConfiguration) HoldingsParser {
+	if config == nil {
+		config = MarcHoldingsParserConfigurationNew()
+	}
 	return &MarcHoldingsParser{
-		mainField:                mainField,
-		locationSubField:         locationField,
-		shelvingLocationSubField: shelvingLocationField,
-		callNumberSubField:       callNumberField,
-		itemIdSubField:           itemIdField,
-		restrictedSubField:       restrictedField,
+		config: *config,
 	}
 }
 
@@ -48,7 +80,7 @@ func (p *MarcHoldingsParser) Parse(record []byte) ([]Holding, error) {
 	}
 	var holdings []Holding
 	for _, field := range marcRecord.Datafield {
-		if field.Tag == p.mainField {
+		if field.Tag == p.config.MainField {
 			restricted := false
 			var location string
 			var shelvingLocation string
@@ -56,15 +88,15 @@ func (p *MarcHoldingsParser) Parse(record []byte) ([]Holding, error) {
 			var itemId string
 			for _, subfield := range field.Subfield {
 				switch subfield.Code {
-				case p.locationSubField:
+				case p.config.LocationSubField:
 					location = strings.TrimSpace(string(subfield.Text))
-				case p.shelvingLocationSubField:
+				case p.config.ShelvingLocationSubField:
 					shelvingLocation = strings.TrimSpace(string(subfield.Text))
-				case p.callNumberSubField:
+				case p.config.CallNumberSubField:
 					callNumber = strings.TrimSpace(string(subfield.Text))
-				case p.itemIdSubField:
+				case p.config.ItemIdSubField:
 					itemId = strings.TrimSpace(string(subfield.Text))
-				case p.restrictedSubField:
+				case p.config.RestrictedSubField:
 					restricted = true
 				}
 			}
