@@ -11,7 +11,7 @@ import (
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(ctx, peer)
@@ -20,7 +20,7 @@ func TestGetAdapterEmpty(t *testing.T) {
 }
 
 func TestGetAdapterOther(t *testing.T) {
-	creator := NewAvailabilityCreator("other")
+	creator := NewAvailabilityCreator("other", "")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
 	_, err := creator.GetAdapter(ctx, peer)
@@ -36,7 +36,7 @@ func TestGetAdapterMock(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMock)
+	creator := NewAvailabilityCreator(AvailabilityAdapterMock, "")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
@@ -51,7 +51,7 @@ func TestGetAdapterZ3950(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom)
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)

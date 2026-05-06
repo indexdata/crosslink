@@ -5,7 +5,6 @@ package availability
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -18,8 +17,8 @@ func cgoEnabled() bool { return true }
 type Z3950AvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
-	pqfMappings    directory.PqfMappings
 	holdingsParser adapter.HoldingsParser
+	queryBuilder   adapter.HoldingsQueryBuilder
 }
 
 func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
@@ -38,9 +37,7 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 			a.options[k] = v
 		}
 	}
-	if config.PqfMappings != nil {
-		a.pqfMappings = *config.PqfMappings
-	}
+	a.queryBuilder = adapter.NewQueryBuilderPqf(config.PqfMappings)
 	return a, nil
 }
 
@@ -71,19 +68,6 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 	return avail, nil
 }
 
-func pqfEncode(value string) string {
-	// escape backslashes and double quotes
-	escaped := "\""
-	for _, r := range value {
-		if r == '\\' || r == '"' {
-			escaped += "\\"
-		}
-		escaped += string(r)
-	}
-	escaped += "\""
-	return escaped
-}
-
 func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
@@ -91,33 +75,24 @@ func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
-	type paramMapping struct {
-		value   string
-		mapping *string
-		dir     string
+	cqlList, pqfList, err := a.queryBuilder.Build(params)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build query: %w", err)
 	}
-
-	paramMappings := []paramMapping{
-		{params.Identifier, a.pqfMappings.Identifier, "@attr 1=12 {term}"},
-		{params.Isbn, a.pqfMappings.Isbn, "@attr 1=7 {term}"},
-		{params.Issn, a.pqfMappings.Issn, "@attr 1=8 {term}"},
-		{params.Title, a.pqfMappings.Title, "@attr 1=4 {term}"},
+	if len(cqlList) > 0 {
+		return nil, "", fmt.Errorf("Z39.50 server does not support CQL queries: %v", cqlList)
 	}
-	for _, pm := range paramMappings {
-		if pm.value != "" {
-			mapping := pm.dir
-			if pm.mapping != nil {
-				mapping = *pm.mapping
-			}
-			pqf := strings.ReplaceAll(mapping, "{term}", pqfEncode(pm.value))
-			avail, err := a.searchRetrieve(conn, pqf)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
-			}
-			if len(avail) > 0 {
-				return avail, pqf, nil
-			}
+	if len(pqfList) == 0 {
+		return nil, "", fmt.Errorf("no valid query parameters provided")
+	}
+	for _, pqf := range pqfList {
+		avail, err := a.searchRetrieve(conn, pqf)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
+		}
+		if len(avail) > 0 {
+			return avail, pqf, nil
 		}
 	}
-	return nil, "", nil
+	return nil, pqfList[0], nil
 }

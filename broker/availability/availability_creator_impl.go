@@ -9,18 +9,21 @@ import (
 )
 
 const (
-	AvailabilityAdapterZoom string = "zoom" // yaz zoom adapter
-	AvailabilityAdapterMock string = "mock" // mock adapter for testing
-	AvailabilityAdapterSru  string = "sru"  // sru adapter
+	AvailabilityAdapterZoom      string = "zoom"      // yaz zoom adapter
+	AvailabilityAdapterMock      string = "mock"      // mock adapter for testing
+	AvailabilityAdapterSru       string = "sru"       // sru adapter
+	AvailabilityAdapterMetaproxy string = "metaproxy" // metaproxy adapter
 )
 
 type AvailabilityCreatorImpl struct {
-	mode string
+	mode         string
+	metaproxyUrl string
 }
 
-func NewAvailabilityCreator(mode string) AvailabilityCreator {
+func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreator {
 	return &AvailabilityCreatorImpl{
-		mode: mode,
+		mode:         mode,
+		metaproxyUrl: metaproxyUrl,
 	}
 }
 
@@ -38,6 +41,13 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	case AvailabilityAdapterSru:
 		if entry.Z3950Config != nil {
 			return NewSruAvailabilityAdapter(ctx, *entry.Z3950Config)
+		}
+	case AvailabilityAdapterMetaproxy:
+		if c.metaproxyUrl == "" {
+			return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
+		}
+		if entry.Z3950Config != nil {
+			return NewMetaproxyAvailabilityAdapter(ctx, *entry.Z3950Config, c.metaproxyUrl)
 		}
 	default:
 		return nil, fmt.Errorf("bad value for %s", c.mode)

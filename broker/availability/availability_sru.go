@@ -13,10 +13,10 @@ type SruAvailabilityAdapter struct {
 }
 
 func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
-	// TODO: holdingsParser based on config
 	holdingsParser := adapter.NewMarcHoldingsParser(nil)
+	queryBuilder := adapter.NewQueryBuilderCql(config.PqfMappings)
 	a := &SruAvailabilityAdapter{
-		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", true, holdingsParser),
+		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser),
 	}
 	return a, nil
 }

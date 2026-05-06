@@ -79,10 +79,3 @@ func TestConnectFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")
 }
-
-func TestPqfEncode(t *testing.T) {
-	input := `Special characters: + - & | ! ( ) { } [ ] ^ " ~ * ? : \`
-	expected := `"Special characters: + - & | ! ( ) { } [ ] ^ \" ~ * ? : \\"`
-	encoded := pqfEncode(input)
-	assert.Equal(t, expected, encoded)
-}

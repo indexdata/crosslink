@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/httpclient"
@@ -16,16 +15,16 @@ import (
 
 type SruHoldingsLookupAdapter struct {
 	sruUrl         []string
-	isxn           bool
 	client         *http.Client
 	holdingsParser HoldingsParser
+	queryBuilder   HoldingsQueryBuilder
 	xTarget        string
 }
 
 const isilPrefix = "ISIL:"
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, isxn bool, parser HoldingsParser) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, isxn: isxn, holdingsParser: parser}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder HoldingsQueryBuilder, parser HoldingsParser) HoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser}
 }
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
@@ -62,47 +61,13 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 	return cqlQuery.String(), nil
 }
 
-func (s *SruHoldingsLookupAdapter) genCql(params HoldingLookupParams) (string, error) {
-	var comps []string
-	if params.Identifier != "" {
-		cql, err := encodeCqlSearchClause("rec.id", params.Identifier)
-		if err != nil {
-			return "", err
-		}
-		comps = append(comps, cql)
-	}
-	if s.isxn && params.Isbn != "" {
-		cql, err := encodeCqlSearchClause("isbn", params.Isbn)
-		if err != nil {
-			return "", err
-		}
-		comps = append(comps, cql)
-	}
-	if s.isxn && params.Issn != "" {
-		cql, err := encodeCqlSearchClause("issn", params.Issn)
-		if err != nil {
-			return "", err
-		}
-		comps = append(comps, cql)
-	}
-	if len(comps) == 0 {
-		return "", errors.New("no search parameters provided for SRU lookup")
-	}
-	return strings.Join(comps, " or "), nil
-}
-
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLookupParams) ([]Holding, string, error) {
-	var holdings []Holding
-	cql, err := s.genCql(params)
-	if err != nil {
-		return nil, "", err
-	}
-	query := "?maximumRecords=1000&recordSchema=marcxml&query=" + url.QueryEscape(cql)
+func (s *SruHoldingsLookupAdapter) search(sruUrl string, query string) ([]Holding, string, error) {
+	var sruResponse sru.SearchRetrieveResponse
+	query = "?maximumRecords=1000&recordSchema=marcxml&" + query
 	if s.xTarget != "" {
 		query += "&x-target=" + url.QueryEscape(s.xTarget)
 	}
-	var sruResponse sru.SearchRetrieveResponse
-	err = httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
+	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	if err != nil {
 		return nil, query, err
 	}
@@ -113,6 +78,7 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLook
 			return nil, query, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
+	var holdings []Holding
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
 			err := s.parseRecord(&record, &holdings)
@@ -122,6 +88,36 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLook
 		}
 	}
 	return holdings, query, nil
+}
+
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLookupParams) ([]Holding, string, error) {
+	var holdings []Holding
+	cqlList, pqfList, err := s.queryBuilder.Build(params)
+	if err != nil {
+		return nil, "", err
+	}
+	var queryParams string
+	for _, cql := range cqlList {
+		sruQuery := "query=" + url.QueryEscape(cql)
+		holdings, queryParams, err = s.search(sruUrl, sruQuery)
+		if err != nil {
+			return nil, queryParams, err
+		}
+		if len(holdings) > 0 {
+			return holdings, queryParams, nil
+		}
+	}
+	for _, pqf := range pqfList {
+		sruQuery := "x-pquery=" + url.QueryEscape(pqf)
+		holdings, queryParams, err = s.search(sruUrl, sruQuery)
+		if err != nil {
+			return nil, queryParams, err
+		}
+		if len(holdings) > 0 {
+			return holdings, queryParams, nil
+		}
+	}
+	return holdings, queryParams, nil
 }
 
 func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, string, error) {

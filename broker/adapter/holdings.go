@@ -25,6 +25,6 @@ type HoldingsParser interface {
 }
 
 type HoldingsQueryBuilder interface {
-	// Build should return the query
-	Build(params HoldingLookupParams) (cql string, pqf string, err error)
+	// Build should return the query stategy
+	Build(params HoldingLookupParams) (cql []string, pqf []string, err error)
 }
