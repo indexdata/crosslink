@@ -22,7 +22,7 @@ type Z3950AvailabilityAdapter struct {
 	holdingsParser adapter.HoldingsParser
 }
 
-func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (AvailabilityAdapter, error) {
+func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
 
 	a := &Z3950AvailabilityAdapter{
 		// default options, can be overridden by config.Options
@@ -84,12 +84,12 @@ func pqfEncode(value string) string {
 	return escaped
 }
 
-func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, error) {
+func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
+		return nil, "", fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
 	type paramMapping struct {
 		value   string
@@ -112,12 +112,12 @@ func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([
 			pqf := strings.ReplaceAll(mapping, "{term}", pqfEncode(pm.value))
 			avail, err := a.searchRetrieve(conn, pqf)
 			if err != nil {
-				return nil, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
+				return nil, "", fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
 			}
 			if len(avail) > 0 {
-				return avail, nil
+				return avail, pqf, nil
 			}
 		}
 	}
-	return nil, nil
+	return nil, "", nil
 }

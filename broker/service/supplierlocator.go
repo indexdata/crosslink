@@ -255,7 +255,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	params := adapter.HoldingLookupParams{
 		Identifier: "x",
 	}
-	results, err := aa.Lookup(params)
+	results, _, err := aa.Lookup(params)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}

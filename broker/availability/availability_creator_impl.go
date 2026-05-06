@@ -3,8 +3,14 @@ package availability
 import (
 	"fmt"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
+)
+
+const (
+	AvailabilityAdapterZoom string = "zoom" // yaz zoom adapter
+	AvailabilityAdapterMock string = "mock" // mock adapter for testing
 )
 
 type AvailabilityCreatorImpl struct {
@@ -17,7 +23,7 @@ func NewAvailabilityCreator(mode string) AvailabilityCreator {
 	}
 }
 
-func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (AvailabilityAdapter, error) {
+func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.HoldingsLookupAdapter, error) {
 	entry := peer.CustomData
 	switch c.mode {
 	case AvailabilityAdapterMock:
