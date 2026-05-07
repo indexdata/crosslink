@@ -578,8 +578,14 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx common.Extended
 	}
 
 	if msgTarget.status == "" {
-		resData := events.EventResult{}
+		resData := events.EventResult{
+			CustomData: map[string]any{common.DO_NOT_SEND: true},
+		}
 		resData.Note = msgTarget.note
+		if msgTarget.problemDetails != nil {
+			resData.Note = *msgTarget.problemDetails
+			return events.EventStatusProblem, &resData
+		}
 		return events.EventStatusSuccess, &resData
 	}
 

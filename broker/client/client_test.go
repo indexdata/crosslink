@@ -556,6 +556,49 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Er
 	assert.Equal(t, "supplier isil:sup1 is not in skipped state", err.Error())
 }
 
+type MockIllRepositorySkippedNotificationOpaque struct {
+	MockIllRepositorySkippedSup
+}
+
+func (r *MockIllRepositorySkippedNotificationOpaque) GetIllTransactionById(_ common.ExtendedContext, id string) (ill_db.IllTransaction, error) {
+	return ill_db.IllTransaction{
+		ID:              id,
+		RequesterID:     getPgText("requester"),
+		RequesterSymbol: getPgText("isil:req"),
+	}, nil
+}
+
+func (r *MockIllRepositorySkippedNotificationOpaque) GetPeerById(_ common.ExtendedContext, id string) (ill_db.Peer, error) {
+	return ill_db.Peer{
+		ID:         id,
+		BrokerMode: string(common.BrokerModeOpaque),
+	}, nil
+}
+
+func (r *MockIllRepositorySkippedNotificationOpaque) GetSelectedSupplierForIllTransaction(_ common.ExtendedContext, _ string) (ill_db.LocatedSupplier, error) {
+	return ill_db.LocatedSupplier{
+		SupplierID:     "selected",
+		SupplierSymbol: "isil:sup2",
+	}, nil
+}
+
+func TestCreateAndSendSupplyingAgencyMessage_SkippedNotificationOpaqueDoesNotSend(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedNotificationOpaque), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
+	event := createSupplyingAgencyMessageEvent(true)
+	event.IllTransactionID = "ill-1"
+
+	status, resData := client.createAndSendSupplyingAgencyMessage(appCtx, event)
+
+	assert.Equal(t, events.EventStatusProblem, status)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", resData.Note)
+	assert.Nil(t, resData.IncomingMessage)
+	assert.Nil(t, resData.OutgoingMessage)
+	doNotSend, ok := resData.CustomData[common.DO_NOT_SEND].(bool)
+	assert.True(t, ok)
+	assert.True(t, doNotSend)
+}
+
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	client := CreateIso18626Client(new(events.PostgresEventBus), new(MockIllRepositorySkippedSup), *new(prservice.PatronRequestMessageHandler), 1, 0*time.Second)
