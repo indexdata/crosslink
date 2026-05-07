@@ -68,6 +68,7 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, query string) ([]Holdin
 		query += "&x-target=" + url.QueryEscape(s.xTarget)
 	}
 	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
+	// notice: returning query even in case of error, to allow logging the query that caused the error
 	if err != nil {
 		return nil, query, err
 	}

@@ -88,7 +88,7 @@ func (a *ZoomAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]
 	for _, pqf := range pqfList {
 		avail, err := a.searchRetrieve(conn, pqf)
 		if err != nil {
-			return nil, "", fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
+			return nil, pqf, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
 		}
 		if len(avail) > 0 {
 			return avail, pqf, nil

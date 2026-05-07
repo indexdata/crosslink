@@ -85,7 +85,7 @@ func TestGetAdapterZ3950WithType(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Type:    &dtype,
-				Address: "https://z3950.indexdata.com/marc", // wouold be treated as SRU if type was not specified
+				Address: "https://z3950.indexdata.com/marc", // would be treated as SRU if type was not specified
 			},
 		},
 	}
