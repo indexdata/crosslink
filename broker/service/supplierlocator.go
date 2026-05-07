@@ -238,7 +238,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	sup := suppliers[0]
 	eventData := map[string]any{}
 	eventData["skipped"] = false
-	eventData["localSupplier"] = event.EventData.CustomData["localSupplier"]
+	eventData["localSupplier"] = sup.LocalSupplier
 	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
@@ -324,7 +324,6 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	}
 	eventData["supplierId"] = locSup.SupplierID
 	eventData["supplierSymbol"] = locSup.SupplierSymbol
-	eventData["localSupplier"] = locSup.LocalSupplier
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 

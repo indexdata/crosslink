@@ -88,14 +88,7 @@ func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, e
 		if event.EventStatus != events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
-		local, ok := event.ResultData.CustomData["localSupplier"].(bool)
-		if !ok {
-			return "", fmt.Errorf("failed to detect local supplier from event result data")
-		}
-		nEvents := events.EventData{
-			CustomData: map[string]any{"localSupplier": local},
-		}
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, nEvents, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
 }
 
