@@ -592,6 +592,8 @@ func TestCreateAndSendSupplyingAgencyMessage_SkippedNotificationOpaqueDoesNotSen
 
 	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", resData.Note)
+	assert.Equal(t, KindMessageNotForwarded, resData.Problem.Kind)
+	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", resData.Problem.Details)
 	assert.Nil(t, resData.IncomingMessage)
 	assert.Nil(t, resData.OutgoingMessage)
 	doNotSend, ok := resData.CustomData[common.DO_NOT_SEND].(bool)

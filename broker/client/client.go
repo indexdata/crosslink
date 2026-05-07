@@ -36,6 +36,7 @@ const InvalidState = "invalid state"
 const FailedToDetermineTarget = "failed to determine target"
 
 const KindConfirmationError = "confirmation-error"
+const KindMessageNotForwarded = "message-not-forwarded"
 
 const BrokerInfoStatus = iso18626.TypeStatusExpectToSupply
 
@@ -584,6 +585,11 @@ func (c *Iso18626Client) createAndSendSupplyingAgencyMessage(ctx common.Extended
 		resData.Note = msgTarget.note
 		if msgTarget.problemDetails != nil {
 			resData.Note = *msgTarget.problemDetails
+			resData.Problem = &events.Problem{
+				Kind:    KindMessageNotForwarded,
+				Details: *msgTarget.problemDetails,
+			}
+			ctx.Logger().Info(*msgTarget.problemDetails, "problem", KindMessageNotForwarded)
 			return events.EventStatusProblem, &resData
 		}
 		return events.EventStatusSuccess, &resData
