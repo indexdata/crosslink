@@ -918,7 +918,7 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	test.WaitForPredicateToBeTrue(func() bool {
 		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
 		if err != nil || len(supList) == 0 {
-			return true // stop already if error or no suppliers
+			return false
 		}
 		updatedSupplier = supList[0]
 		return updatedSupplier.SupplierStatus == ill_db.SupplierStateSkippedPg
@@ -970,7 +970,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	test.WaitForPredicateToBeTrue(func() bool {
 		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
 		if err != nil || len(supList) == 0 {
-			return true // stop already if error or no suppliers
+			return false
 		}
 		updatedSupplier = supList[0]
 		return updatedSupplier.SupplierStatus == ill_db.SupplierStateSkippedPg
