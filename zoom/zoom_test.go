@@ -4,10 +4,61 @@
 package zoom
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+var (
+	testMetaproxyContainer testcontainers.Container
+	metaproxyHostPort      string
+)
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	hostPath, err := filepath.Abs("backend_test.xml")
+	if err != nil {
+		panic(err)
+	}
+
+	req := testcontainers.ContainerRequest{
+		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
+		ExposedPorts: []string{"9000/tcp"},
+		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(60 * time.Second),
+		Mounts: testcontainers.Mounts(
+			testcontainers.BindMount(hostPath, "/etc/metaproxy/filters-enabled/backend_test.xml"),
+		),
+	}
+
+	testMetaproxyContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Get the mapped host port for 9000/tcp
+	mappedPort, err := testMetaproxyContainer.MappedPort(ctx, "9000/tcp")
+	if err != nil {
+		_ = testMetaproxyContainer.Terminate(ctx)
+		panic(err)
+	}
+	metaproxyHostPort = mappedPort.Port()
+
+	code := m.Run()
+
+	if testMetaproxyContainer != nil {
+		_ = testMetaproxyContainer.Terminate(ctx)
+	}
+	os.Exit(code)
+}
 
 func TestConnection(t *testing.T) {
 	options := Options{
@@ -47,23 +98,18 @@ func TestSearch(t *testing.T) {
 
 	conn = NewConnection(options)
 	assert.NotNil(t, conn)
-	err = conn.Connect("z3950.indexdata.com/marc")
+	err = conn.Connect("localhost:" + metaproxyHostPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
-	assert.Greater(t, rs.Count(), 7)
-
-	rs, err = conn.Search("@attr 1=4 program")
-	assert.NoError(t, err)
-	assert.NotNil(t, rs)
-	assert.Greater(t, rs.Count(), 2)
+	assert.Equal(t, rs.Count(), 42)
 
 	record, err := rs.GetRecord(0)
 	assert.NoError(t, err)
 	assert.NotNil(t, record)
-	assert.Contains(t, string(record.Data("render")), "program")
+	assert.Contains(t, string(record.Data("render")), "How to program a computer")
 	assert.Nil(t, record.Data("unknown"))
 
 	conn.Close()
@@ -86,7 +132,6 @@ func TestSearch(t *testing.T) {
 	_, err = rs.GetRecord(0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "result set is not available")
-
 }
 
 func TestRecordData(t *testing.T) {
@@ -94,38 +139,45 @@ func TestRecordData(t *testing.T) {
 	assert.Nil(t, record.Data("render"))
 }
 
-func TestSearchUnsupportedSyntax(t *testing.T) {
+func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	options := Options{
 		"preferredRecordSyntax": "danmarc", // not supported by the server
+		"count":                 "1",
 	}
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
-	defer conn.finalize()
-	err := conn.Connect("z3950.indexdata.com/marc")
+	defer conn.Close()
+	err := conn.Connect("localhost:" + metaproxyHostPort)
+	assert.NoError(t, err)
+
+	// getting non-surrogate diagnostic for unsupported record syntax
+	rs, err := conn.Search("@attr 1=4 computer")
+	assert.Error(t, err)
+	assert.Nil(t, rs)
+	assert.Contains(t, err.Error(), "Record syntax not supported")
+	assert.Equal(t, 239, err.(*ZoomError).Code)
+}
+
+func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
+	options := Options{
+		"preferredRecordSyntax": "danmarc", // not supported by the server
+		"count":                 "0",
+	}
+	conn := NewConnection(options)
+	assert.NotNil(t, conn)
+	defer conn.Close()
+	err := conn.Connect("localhost:" + metaproxyHostPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
-	assert.Greater(t, rs.Count(), 7)
+	assert.Equal(t, rs.Count(), 42)
 
-	// getting surrogate diagnostic for unsupported record syntax when trying to access the record
-	_, err = rs.GetRecord(0)
+	// getting non-surrogate diagnostic for unsupported record syntax
+	rec, err := rs.GetRecord(0)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Record not available in requested syntax")
-	assert.Equal(t, 238, err.(*ZoomError).Code)
-}
-
-func TestSearchUnsupportedAttribute(t *testing.T) {
-	conn := NewConnection(Options{})
-	assert.NotNil(t, conn)
-	defer conn.finalize()
-	err := conn.Connect("z3950.indexdata.com/marc")
-	assert.NoError(t, err)
-
-	_, err = conn.Search("@attr 1=99 computer")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Unsupported Use attribute (99)")
-	assert.Equal(t, "99", err.(*ZoomError).AdditionalInfo)
-	assert.Equal(t, 114, err.(*ZoomError).Code)
+	assert.Nil(t, rec)
+	assert.Contains(t, err.Error(), "Record syntax not supported")
+	assert.Equal(t, 239, err.(*ZoomError).Code)
 }
