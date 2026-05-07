@@ -98,14 +98,8 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	aa, err := creator.GetAdapter(ctx, peer)
-	if !cgoEnabled() {
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "requires cgo")
-		assert.Nil(t, aa)
-	} else {
-		assert.NoError(t, err)
-		assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
-	}
+	assert.NoError(t, err)
+	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
 }
 
 func TestGetAdapterSRU(t *testing.T) {

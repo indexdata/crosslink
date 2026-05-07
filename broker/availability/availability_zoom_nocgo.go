@@ -13,6 +13,8 @@ import (
 
 func cgoEnabled() bool { return false }
 
+type ZoomAvailabilityAdapter struct{}
+
 func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, queryBuilder adapter.HoldingsQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
 	return nil, fmt.Errorf("ZOOM availability adapter requires cgo, but cgo is not enabled")
 }
