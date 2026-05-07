@@ -14,18 +14,19 @@ type MockAvailabilityAdapter struct {
 }
 
 func NewMockAvailabilityAdapter(config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
-	if config.Options != nil {
+	if config.Z3950 != nil && config.Z3950.Options != nil {
+		options := *config.Z3950.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response
-		if val, ok := (*config.Options)["adapter-error"]; ok && strings.ToLower(val) == "true" {
+		if val, ok := options["adapter-error"]; ok && strings.ToLower(val) == "true" {
 			return nil, fmt.Errorf("mock error triggered by config")
 		}
 		// For testing purposes, we can use the presence of "lookup-error" in options to trigger an error response
-		if val, ok := (*config.Options)["lookup-error"]; ok && strings.ToLower(val) == "true" {
+		if val, ok := options["lookup-error"]; ok && strings.ToLower(val) == "true" {
 			return &MockAvailabilityAdapter{
 				Err: fmt.Errorf("mock error triggered by config"),
 			}, nil
 		}
-		if val, ok := (*config.Options)["location"]; ok {
+		if val, ok := options["location"]; ok {
 			return &MockAvailabilityAdapter{
 				Holdings: []adapter.Holding{
 					{

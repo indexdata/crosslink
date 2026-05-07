@@ -34,20 +34,24 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Address: "z3950.indexdata.com/marc",
+				Z3950: &directory.Z3950Config{
+					Address: "z3950.indexdata.com/marc",
+				},
 			},
 		},
 	}
 	_, err := creator.GetAdapter(ctx, peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "bad value for")
+	assert.Contains(t, err.Error(), "must specify either sru or z3950 properties")
 }
 
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Address: "z3950.indexdata.com/marc",
+				Z3950: &directory.Z3950Config{
+					Address: "z3950.indexdata.com/marc",
+				},
 			},
 		},
 	}
@@ -58,11 +62,13 @@ func TestGetAdapterMock(t *testing.T) {
 	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
 }
 
-func TestGetAdapterZ3950WithoutType(t *testing.T) {
+func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Address: "z3950.indexdata.com/marc",
+				Z3950: &directory.Z3950Config{
+					Address: "z3950.indexdata.com/marc",
+				},
 			},
 		},
 	}
@@ -79,17 +85,17 @@ func TestGetAdapterZ3950WithoutType(t *testing.T) {
 	}
 }
 
-func TestGetAdapterZ3950WithType(t *testing.T) {
-	dtype := directory.Z3950
+func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Type:    &dtype,
-				Address: "https://z3950.indexdata.com/marc", // would be treated as SRU if type was not specified
+				Z3950: &directory.Z3950Config{
+					Address: "z3950.indexdata.com/marc",
+				},
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	aa, err := creator.GetAdapter(ctx, peer)
 	if !cgoEnabled() {
@@ -98,7 +104,7 @@ func TestGetAdapterZ3950WithType(t *testing.T) {
 		assert.Nil(t, aa)
 	} else {
 		assert.NoError(t, err)
-		assert.IsType(t, &ZoomAvailabilityAdapter{}, aa)
+		assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
 	}
 }
 
@@ -106,7 +112,9 @@ func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Address: "http://sru.indexdata.com/marc",
+				Sru: &directory.SruConfig{
+					Address: "http://sru.indexdata.com/marc",
+				},
 			},
 		},
 	}

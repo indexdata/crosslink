@@ -2,7 +2,6 @@ package availability
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -50,33 +49,25 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)
 	}
-
 	holdingsParser, err := getParser(config.ParserConfig)
 	if err != nil {
 		return nil, err
 	}
-	aType := directory.Z3950
-	if config.Type != nil {
-		aType = *config.Type
-	} else {
-		if strings.HasPrefix(config.Address, "http:/") || strings.HasPrefix(config.Address, "https:/") {
-			aType = directory.SRU
-		}
+	if config.Sru != nil {
+		queryBuilder := adapter.NewQueryBuilderCql(config.QueryConfig)
+		return NewSruAvailabilityAdapter(ctx, *config.Sru, queryBuilder, holdingsParser)
 	}
-	switch aType {
-	case directory.SRU:
-		return NewSruAvailabilityAdapter(ctx, *config, holdingsParser)
-	case directory.Z3950:
-		// Z39.50 can be supported by Metaproxy or yaz zoom adapter, but not both at the same time
+	if config.Z3950 != nil {
+		queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
 		if c.mode == AvailabilityAdapterMetaproxy {
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(ctx, *config, c.metaproxyUrl, holdingsParser)
+			return NewMetaproxyAvailabilityAdapter(ctx, *config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
 		}
 		if c.mode == AvailabilityAdapterZoom {
-			return NewZoomAvailabilityAdapter(ctx, *config, holdingsParser)
+			return NewZoomAvailabilityAdapter(ctx, *config.Z3950, queryBuilder, holdingsParser)
 		}
 	}
-	return nil, fmt.Errorf("bad value for availability adapter type: %s", aType)
+	return nil, fmt.Errorf("must specify either sru or z3950 properties for availability adapter type")
 }

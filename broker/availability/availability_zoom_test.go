@@ -15,22 +15,26 @@ import (
 
 func TestLookup(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	imap := "@attr 1=1016 {term}"
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	config := directory.MarcParserConfig{
 		MainField:        adapter.NewString("010"),
 		LocationSubField: adapter.NewString("a"),
 	}
-	aa, err := NewZoomAvailabilityAdapter(ctx, directory.AvailabilityConfig{
-		Address: "z3950.indexdata.com/marc",
-		Options: &map[string]string{
-			"count":                 "3",
-			"preferredRecordSyntax": "usmarc",
+	queryBuilder := adapter.NewQueryBuilderPqf(&directory.QueryConfig{
+		Identifier: adapter.NewString("@attr 1=1016 {term}"),
+	})
+	holdingsParser := adapter.NewMarcHoldingsParser(config)
+	aa, err := NewZoomAvailabilityAdapter(ctx,
+		directory.Z3950Config{
+			Address: "z3950.indexdata.com/marc",
+			Options: &map[string]string{
+				"count":                 "3",
+				"preferredRecordSyntax": "usmarc",
+			},
 		},
-		QueryConfig: &directory.QueryConfig{
-			Identifier: &imap,
-		},
-	}, adapter.NewMarcHoldingsParser(config))
+		queryBuilder,
+		holdingsParser,
+	)
 	assert.NoError(t, err)
 	assert.Equal(t, "z3950.indexdata.com/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "3", aa.(*ZoomAvailabilityAdapter).options["count"])
@@ -71,9 +75,27 @@ func TestLookup(t *testing.T) {
 
 func TestConnectFailure(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := NewZoomAvailabilityAdapter(ctx, directory.AvailabilityConfig{}, adapter.NewMarcHoldingsParser(directory.MarcParserConfig{}))
-	assert.NoError(t, err)
 
+	config := directory.MarcParserConfig{
+		MainField:        adapter.NewString("010"),
+		LocationSubField: adapter.NewString("a"),
+	}
+	queryBuilder := adapter.NewQueryBuilderPqf(&directory.QueryConfig{
+		Identifier: adapter.NewString("@attr 1=1016 {term}"),
+	})
+	holdingsParser := adapter.NewMarcHoldingsParser(config)
+	aa, err := NewZoomAvailabilityAdapter(ctx,
+		directory.Z3950Config{
+			Address: "",
+			Options: &map[string]string{
+				"count":                 "3",
+				"preferredRecordSyntax": "usmarc",
+			},
+		},
+		queryBuilder,
+		holdingsParser,
+	)
+	assert.NoError(t, err)
 	params := adapter.HoldingLookupParams{}
 	_, _, err = aa.Lookup(params)
 	assert.Error(t, err)

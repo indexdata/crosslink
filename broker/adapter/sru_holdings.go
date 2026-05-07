@@ -19,12 +19,13 @@ type SruHoldingsLookupAdapter struct {
 	holdingsParser HoldingsParser
 	queryBuilder   HoldingsQueryBuilder
 	xTarget        string
+	recordSchema   string
 }
 
 const isilPrefix = "ISIL:"
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder HoldingsQueryBuilder, parser HoldingsParser) HoldingsLookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder HoldingsQueryBuilder, parser HoldingsParser, recordSchema string) HoldingsLookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, xTarget: xTarget, recordSchema: recordSchema}
 }
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
@@ -41,7 +42,7 @@ func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, hol
 	}
 	if record.RecordSchema != "" &&
 		record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" &&
-		record.RecordSchema != "marcxml" {
+		record.RecordSchema != s.recordSchema {
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
 
@@ -63,7 +64,7 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 
 func (s *SruHoldingsLookupAdapter) search(sruUrl string, query string) ([]Holding, string, error) {
 	var sruResponse sru.SearchRetrieveResponse
-	query = "?maximumRecords=1000&recordSchema=marcxml&" + query
+	query = "?maximumRecords=1000&recordSchema=" + url.QueryEscape(s.recordSchema) + "&" + query
 	if s.xTarget != "" {
 		query += "&x-target=" + url.QueryEscape(s.xTarget)
 	}

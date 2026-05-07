@@ -33,7 +33,7 @@ func CreateHoldingsLookupAdapter(cfg map[string]any) (HoldingsLookupAdapter, err
 		}
 		queryBuilder := QueryBuilderIsxn{isxn: isxnLookup}
 		parser := &ReservoirHoldingsParser{}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser), nil
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil

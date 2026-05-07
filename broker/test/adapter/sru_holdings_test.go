@@ -16,7 +16,7 @@ import (
 func createSruAdapter(t *testing.T, isxn bool, url ...string) adapter.HoldingsLookupAdapter {
 	parser := &adapter.ReservoirHoldingsParser{}
 	queryBuilder := adapter.NewQueryBuilderIsxn(isxn)
-	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser)
+	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, "marcxml")
 	assert.NotNil(t, ad)
 	return ad
 }

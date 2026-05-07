@@ -941,8 +941,11 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{
-		Options: &map[string]string{
-			"location": "1234",
+		Z3950: &directory.Z3950Config{
+			Address: "z3950.indexdata.com/marc",
+			Options: &map[string]string{
+				"location": "1234",
+			},
 		},
 	}}
 	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
@@ -990,8 +993,11 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
 		AvailabilityConfig: &directory.AvailabilityConfig{
-			Options: &map[string]string{
-				"adapter-error": "true",
+			Z3950: &directory.Z3950Config{
+				Address: "z3950.indexdata.com/marc",
+				Options: &map[string]string{
+					"adapter-error": "true",
+				},
 			},
 		},
 	}
@@ -1027,8 +1033,11 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
 		AvailabilityConfig: &directory.AvailabilityConfig{
-			Options: &map[string]string{
-				"lookup-error": "true",
+			Z3950: &directory.Z3950Config{
+				Address: "z3950.indexdata.com/marc",
+				Options: &map[string]string{
+					"lookup-error": "true",
+				},
 			},
 		},
 	}

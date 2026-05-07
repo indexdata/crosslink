@@ -261,12 +261,32 @@ components:
       required:
         - address
       properties:
-        type:
+        sru:
+          $ref: '#/components/schemas/SruConfig'
+        z3950:
+          $ref: '#/components/schemas/Z3950Config'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        parserConfig:
+          $ref: '#/components/schemas/ParserConfig'
+
+    SruConfig:
+      type: object
+      required:
+        - address
+      properties:
+        address:
           type: string
-          description: Adapter type
-          enum:
-            - SRU
-            - Z39.50
+          description: SRU server address (for example, "http://sru.indexdata.com:8080/marc")
+        recordSchema:
+          type: string
+          description: Record schema to use for parsing holdings records (for example, "marcxml")
+
+    Z3950Config:
+      type: object
+      required:
+        - address
+      properties:
         address:
           type: string
           description: Z39.50 server address and database (for example, "z3950.indexdata.com:210/marc")
@@ -276,10 +296,6 @@ components:
             type: string
           description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
             Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
-        queryConfig:
-          $ref: '#/components/schemas/QueryConfig'
-        parserConfig:
-          $ref: '#/components/schemas/ParserConfig'
 
     QueryConfig:
       type: object
@@ -329,13 +345,6 @@ components:
 
     OpacParserConfig:
       type: object
-      properties:
-        locationField:
-          type: string
-          description: OPAC field to use for location
-        availableValue:
-          type: string
-          description: Value in the availability field that indicates the item is available
 
     LmsConfig:
       required:
