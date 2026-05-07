@@ -4,6 +4,8 @@
 package availability
 
 import (
+	"fmt"
+
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
@@ -11,6 +13,6 @@ import (
 
 func cgoEnabled() bool { return false }
 
-func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
-	return nil, nil
+func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
+	return nil, fmt.Errorf("ZOOM availability adapter requires cgo, but cgo is not enabled")
 }

@@ -13,7 +13,7 @@ type MockAvailabilityAdapter struct {
 	Holdings []adapter.Holding
 }
 
-func NewMockAvailabilityAdapter(config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
+func NewMockAvailabilityAdapter(config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
 	if config.Options != nil {
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response
 		if val, ok := (*config.Options)["adapter-error"]; ok && strings.ToLower(val) == "true" {

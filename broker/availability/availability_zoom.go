@@ -14,16 +14,16 @@ import (
 
 func cgoEnabled() bool { return true }
 
-type Z3950AvailabilityAdapter struct {
+type ZoomAvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
 	holdingsParser adapter.HoldingsParser
 	queryBuilder   adapter.HoldingsQueryBuilder
 }
 
-func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
+func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
 	// TODO: holdingsParser based on config
-	a := &Z3950AvailabilityAdapter{
+	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
 			"count":                 "10",
@@ -41,7 +41,7 @@ func NewZ3950AvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3
 	return a, nil
 }
 
-func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
 	res, err := conn.Search(query)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (a *Z3950AvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query s
 	return avail, nil
 }
 
-func (a *Z3950AvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
+func (a *ZoomAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)

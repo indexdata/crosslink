@@ -243,9 +243,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        z3950Config:
-          description: Configuration for Z39.50 availability lookup
-          $ref: '#/components/schemas/Z3950Config'
+        availabilityConfig:
+          description: Configuration for availability lookup
+          $ref: '#/components/schemas/AvailabilityConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -256,11 +256,17 @@ components:
             - ILLiad
             - Unknown
 
-    Z3950Config:
+    AvailabilityConfig:
       type: object
       required:
         - address
       properties:
+        type:
+          type: string
+          description: Adapter type
+          enum:
+            - SRU
+            - Z39.50
         address:
           type: string
           description: Z39.50 server address and database (for example, "z3950.indexdata.com:210/marc")

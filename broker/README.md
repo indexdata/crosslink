@@ -104,7 +104,7 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
-| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock`, `zoom`, `sru`, `metaproxy`                              | `zoom`                                    |
+| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`                                    | `zoom`                                    |
 | `METAPROXY_URL`           | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                               | (empty value)                             |
 | `PEER_REFRESH_INTERVAL`   | Peer refresh interval (via Directory lookup)                                          | `5m`                                      |
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |

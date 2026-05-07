@@ -12,7 +12,7 @@ type SruAvailabilityAdapter struct {
 	holdingsLookupAdapter adapter.HoldingsLookupAdapter
 }
 
-func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config) (adapter.HoldingsLookupAdapter, error) {
+func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
 	holdingsParser := adapter.NewMarcHoldingsParser(nil)
 	queryBuilder := adapter.NewQueryBuilderCql(config.PqfMappings)
 	a := &SruAvailabilityAdapter{
