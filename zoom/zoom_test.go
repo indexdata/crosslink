@@ -30,10 +30,14 @@ func TestMain(m *testing.M) {
 	req := testcontainers.ContainerRequest{
 		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
 		ExposedPorts: []string{"9000/tcp"},
-		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(60 * time.Second),
-		Mounts: testcontainers.Mounts(
-			testcontainers.BindMount(hostPath, "/etc/metaproxy/filters-enabled/backend_test.xml"),
-		),
+		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(5 * time.Second),
+		Files: []testcontainers.ContainerFile{
+			{
+				HostFilePath:      hostPath,
+				ContainerFilePath: "/etc/metaproxy/filters-enabled/backend_test.xml",
+				FileMode:          0444, // Read-only
+			},
+		},
 	}
 
 	testMetaproxyContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
