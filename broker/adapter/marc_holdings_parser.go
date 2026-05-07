@@ -5,69 +5,26 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
-type MarcHoldingsParserConfiguration struct {
-	MainField                string `json:"mainField"`
-	LocationSubField         string `json:"locationSubField"`
-	ShelvingLocationSubField string `json:"shelvingLocationSubField"`
-	CallNumberSubField       string `json:"callNumberSubField"`
-	ItemIdSubField           string `json:"itemIdSubField"`
-	RestrictedSubField       string `json:"restrictedSubField"`
-}
-
-func NewMarcHoldingsParserConfiguration() *MarcHoldingsParserConfiguration {
-	return &MarcHoldingsParserConfiguration{
-		MainField:                "852",
-		LocationSubField:         "b",
-		ShelvingLocationSubField: "c",
-		CallNumberSubField:       "h",
-		ItemIdSubField:           "p",
-		RestrictedSubField:       "r",
-	}
-}
-
-func (c *MarcHoldingsParserConfiguration) WithMainField(f string) *MarcHoldingsParserConfiguration {
-	c.MainField = f
-	return c
-}
-
-func (c *MarcHoldingsParserConfiguration) WithLocationSubField(f string) *MarcHoldingsParserConfiguration {
-	c.LocationSubField = f
-	return c
-}
-
-func (c *MarcHoldingsParserConfiguration) WithShelvingLocationSubField(f string) *MarcHoldingsParserConfiguration {
-	c.ShelvingLocationSubField = f
-	return c
-}
-
-func (c *MarcHoldingsParserConfiguration) WithCallNumberSubField(f string) *MarcHoldingsParserConfiguration {
-	c.CallNumberSubField = f
-	return c
-}
-
-func (c *MarcHoldingsParserConfiguration) WithItemIdSubField(f string) *MarcHoldingsParserConfiguration {
-	c.ItemIdSubField = f
-	return c
-}
-
-func (c *MarcHoldingsParserConfiguration) WithRestrictedSubField(f string) *MarcHoldingsParserConfiguration {
-	c.RestrictedSubField = f
-	return c
-}
-
 type MarcHoldingsParser struct {
-	config MarcHoldingsParserConfiguration
+	config directory.MarcParserConfig
 }
 
-func NewMarcHoldingsParser(config *MarcHoldingsParserConfiguration) HoldingsParser {
-	if config == nil {
-		config = NewMarcHoldingsParserConfiguration()
+func NewMarcHoldingsParser(config directory.MarcParserConfig) HoldingsParser {
+	if config.MainField == nil && config.LocationSubField == nil && config.ShelvingLocationSubField == nil && config.CallNumberSubField == nil && config.ItemIdSubField == nil && config.RestrictedSubField == nil {
+		config.MainField = NewString("852")
+		config.LocationSubField = NewString("b")
+		config.ShelvingLocationSubField = NewString("c")
+		config.CallNumberSubField = NewString("h")
+		config.ItemIdSubField = NewString("p")
+		config.RestrictedSubField = NewString("r")
 	}
+	// perhaps should check if mainField is specified
 	return &MarcHoldingsParser{
-		config: *config,
+		config: config,
 	}
 }
 
@@ -80,23 +37,26 @@ func (p *MarcHoldingsParser) Parse(record []byte) ([]Holding, error) {
 	}
 	var holdings []Holding
 	for _, field := range marcRecord.Datafield {
-		if field.Tag == p.config.MainField {
+		if p.config.MainField != nil && field.Tag == *p.config.MainField {
 			restricted := false
 			var location string
 			var shelvingLocation string
 			var callNumber string
 			var itemId string
 			for _, subfield := range field.Subfield {
-				switch subfield.Code {
-				case p.config.LocationSubField:
+				if p.config.LocationSubField != nil && subfield.Code == *p.config.LocationSubField {
 					location = strings.TrimSpace(string(subfield.Text))
-				case p.config.ShelvingLocationSubField:
+				}
+				if p.config.ShelvingLocationSubField != nil && subfield.Code == *p.config.ShelvingLocationSubField {
 					shelvingLocation = strings.TrimSpace(string(subfield.Text))
-				case p.config.CallNumberSubField:
+				}
+				if p.config.CallNumberSubField != nil && subfield.Code == *p.config.CallNumberSubField {
 					callNumber = strings.TrimSpace(string(subfield.Text))
-				case p.config.ItemIdSubField:
+				}
+				if p.config.ItemIdSubField != nil && subfield.Code == *p.config.ItemIdSubField {
 					itemId = strings.TrimSpace(string(subfield.Text))
-				case p.config.RestrictedSubField:
+				}
+				if p.config.RestrictedSubField != nil && subfield.Code == *p.config.RestrictedSubField {
 					restricted = true
 				}
 			}

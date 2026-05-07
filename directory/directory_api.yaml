@@ -276,24 +276,66 @@ components:
             type: string
           description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
             Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
-        pqfMappings:
-          $ref: '#/components/schemas/PqfMappings'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        parserConfig:
+          $ref: '#/components/schemas/ParserConfig'
 
-    PqfMappings:
+    QueryConfig:
       type: object
       properties:
         title:
           type: string
-          description: PQF format string for title search. Default is "@attr 1=4 {term}")
+          description: PQF/CQL format string for title search. Default is "@attr 1=4 {term}"
         isbn:
           type: string
-          description: PQF format string for ISBN search. Default is "@attr 1=7 {term}")
+          description: PQF/CQL format string for ISBN search. Default is "@attr 1=7 {term}"
         issn:
           type: string
-          description: PQF format string for ISSN search. Default is "@attr 1=8 {term}")
+          description: PQF/CQL format string for ISSN search. Default is "@attr 1=8 {term}"
         identifier:
           type: string
-          description: PQF format string for identifier search. Default is "@attr 1=12 {term}")
+          description: PQF/CQL format string for identifier search. Default is "@attr 1=12 {term}"
+
+    ParserConfig:
+      type: object
+      properties:
+        marc:
+          $ref: '#/components/schemas/MarcParserConfig'
+        opac:
+          $ref: '#/components/schemas/OpacParserConfig'
+
+    MarcParserConfig:
+      type: object
+      properties:
+        mainField:
+          type: string
+          description: MARC field to use as the main field for holdings parsing (for example, "852")
+        locationSubField:
+          type: string
+          description: Subfield code to use for location (for example, "b")
+        shelvingLocationSubField:
+          type: string
+          description: Subfield code to use for shelving location (for example, "c")
+        itemIdSubField:
+          type: string
+          description: Subfield code to use for item id (for example, "p")
+        restrictedSubField:
+          type: string
+          description: Subfield code to use for restricted status (for example, "k")
+        callNumberSubField:
+          type: string
+          description: Subfield code to use for call number (for example, "h")
+
+    OpacParserConfig:
+      type: object
+      properties:
+        locationField:
+          type: string
+          description: OPAC field to use for location
+        availableValue:
+          type: string
+          description: Value in the availability field that indicates the item is available
 
     LmsConfig:
       required:

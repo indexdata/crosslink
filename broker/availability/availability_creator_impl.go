@@ -28,6 +28,19 @@ func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreato
 	}
 }
 
+func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
+	if config == nil {
+		return adapter.NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
+	}
+	if config.Marc != nil {
+		return adapter.NewMarcHoldingsParser(*config.Marc), nil
+	}
+	if config.Opac != nil {
+		return adapter.NewOpacHoldingsParser(*config.Opac), nil
+	}
+	return nil, fmt.Errorf("bad value for availability parser type")
+}
+
 func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.HoldingsLookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.AvailabilityConfig
@@ -36,6 +49,11 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	}
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)
+	}
+
+	holdingsParser, err := getParser(config.ParserConfig)
+	if err != nil {
+		return nil, err
 	}
 	aType := directory.Z3950
 	if config.Type != nil {
@@ -47,17 +65,17 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	}
 	switch aType {
 	case directory.SRU:
-		return NewSruAvailabilityAdapter(ctx, *config)
+		return NewSruAvailabilityAdapter(ctx, *config, holdingsParser)
 	case directory.Z3950:
 		// Z39.50 can be supported by Metaproxy or yaz zoom adapter, but not both at the same time
 		if c.mode == AvailabilityAdapterMetaproxy {
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(ctx, *config, c.metaproxyUrl)
+			return NewMetaproxyAvailabilityAdapter(ctx, *config, c.metaproxyUrl, holdingsParser)
 		}
 		if c.mode == AvailabilityAdapterZoom {
-			return NewZoomAvailabilityAdapter(ctx, *config)
+			return NewZoomAvailabilityAdapter(ctx, *config, holdingsParser)
 		}
 	}
 	return nil, fmt.Errorf("bad value for availability adapter type: %s", aType)

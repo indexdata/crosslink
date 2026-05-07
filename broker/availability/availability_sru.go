@@ -12,9 +12,8 @@ type SruAvailabilityAdapter struct {
 	holdingsLookupAdapter adapter.HoldingsLookupAdapter
 }
 
-func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
-	holdingsParser := adapter.NewMarcHoldingsParser(nil)
-	queryBuilder := adapter.NewQueryBuilderCql(config.PqfMappings)
+func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
+	queryBuilder := adapter.NewQueryBuilderCql(config.QueryConfig)
 	a := &SruAvailabilityAdapter{
 		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser),
 	}

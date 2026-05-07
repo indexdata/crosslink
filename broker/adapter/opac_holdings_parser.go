@@ -4,12 +4,13 @@ import (
 	"encoding/xml"
 	"fmt"
 
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
 type OpacHoldingsParser struct{}
 
-func NewOpacHoldingsParser() HoldingsParser {
+func NewOpacHoldingsParser(config directory.OpacParserConfig) HoldingsParser {
 	return &OpacHoldingsParser{}
 }
 

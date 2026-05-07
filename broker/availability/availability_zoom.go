@@ -21,8 +21,7 @@ type ZoomAvailabilityAdapter struct {
 	queryBuilder   adapter.HoldingsQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig) (adapter.HoldingsLookupAdapter, error) {
-	// TODO: holdingsParser based on config
+func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
@@ -30,14 +29,14 @@ func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Ava
 			"preferredRecordSyntax": "usmarc",
 		},
 		zurl:           config.Address,
-		holdingsParser: adapter.NewMarcHoldingsParser(nil),
+		holdingsParser: holdingsParser,
 	}
 	if config.Options != nil {
 		for k, v := range *config.Options {
 			a.options[k] = v
 		}
 	}
-	a.queryBuilder = adapter.NewQueryBuilderPqf(config.PqfMappings)
+	a.queryBuilder = adapter.NewQueryBuilderPqf(config.QueryConfig)
 	return a, nil
 }
 

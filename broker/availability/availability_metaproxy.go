@@ -12,10 +12,8 @@ type MetaproxyAvailabilityAdapter struct {
 	holdingsLookupAdapter adapter.HoldingsLookupAdapter
 }
 
-func NewMetaproxyAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig, metaproxyUrl string) (adapter.HoldingsLookupAdapter, error) {
-	// TODO: holdingsParser
-	holdingsParser := adapter.NewMarcHoldingsParser(nil)
-	queryBuilder := adapter.NewQueryBuilderPqf(config.PqfMappings)
+func NewMetaproxyAvailabilityAdapter(ctx common.ExtendedContext, config directory.AvailabilityConfig, metaproxyUrl string, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
+	queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
 	a := &MetaproxyAvailabilityAdapter{
 		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser),
 	}

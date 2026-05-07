@@ -17,23 +17,23 @@ func TestLookup(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	imap := "@attr 1=1016 {term}"
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
+	config := directory.MarcParserConfig{
+		MainField:        adapter.NewString("010"),
+		LocationSubField: adapter.NewString("a"),
+	}
 	aa, err := NewZoomAvailabilityAdapter(ctx, directory.AvailabilityConfig{
 		Address: "z3950.indexdata.com/marc",
 		Options: &map[string]string{
 			"count":                 "3",
 			"preferredRecordSyntax": "usmarc",
 		},
-		PqfMappings: &directory.PqfMappings{
+		QueryConfig: &directory.QueryConfig{
 			Identifier: &imap,
 		},
-	})
+	}, adapter.NewMarcHoldingsParser(config))
 	assert.NoError(t, err)
 	assert.Equal(t, "z3950.indexdata.com/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "3", aa.(*ZoomAvailabilityAdapter).options["count"])
-	config := adapter.NewMarcHoldingsParserConfiguration().
-		WithMainField("010").WithLocationSubField("a").
-		WithItemIdSubField("").WithRestrictedSubField("").WithCallNumberSubField("")
-	aa.(*ZoomAvailabilityAdapter).holdingsParser = adapter.NewMarcHoldingsParser(config)
 
 	// existing title
 	params := adapter.HoldingLookupParams{
@@ -71,7 +71,7 @@ func TestLookup(t *testing.T) {
 
 func TestConnectFailure(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := NewZoomAvailabilityAdapter(ctx, directory.AvailabilityConfig{})
+	aa, err := NewZoomAvailabilityAdapter(ctx, directory.AvailabilityConfig{}, adapter.NewMarcHoldingsParser(directory.MarcParserConfig{}))
 	assert.NoError(t, err)
 
 	params := adapter.HoldingLookupParams{}

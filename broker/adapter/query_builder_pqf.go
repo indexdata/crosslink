@@ -7,8 +7,8 @@ import (
 )
 
 type QueryBuilderPqf struct {
-	pqfMappings directory.PqfMappings
-	defaultMap  directory.PqfMappings
+	mappings   directory.QueryConfig
+	defaultMap directory.QueryConfig
 }
 
 func NewString(s string) *string {
@@ -18,11 +18,11 @@ func NewString(s string) *string {
 	return nil
 }
 
-func NewQueryBuilderPqf(pqfMappings *directory.PqfMappings) *QueryBuilderPqf {
-	if pqfMappings == nil {
-		pqfMappings = &directory.PqfMappings{}
+func NewQueryBuilderPqf(queryConfig *directory.QueryConfig) *QueryBuilderPqf {
+	if queryConfig == nil {
+		queryConfig = &directory.QueryConfig{}
 	}
-	return &QueryBuilderPqf{pqfMappings: *pqfMappings, defaultMap: directory.PqfMappings{
+	return &QueryBuilderPqf{mappings: *queryConfig, defaultMap: directory.QueryConfig{
 		Identifier: NewString("@attr 1=12 {term}"),
 		Isbn:       NewString("@attr 1=7 {term}"),
 		Issn:       NewString("@attr 1=8 {term}"),
@@ -30,11 +30,11 @@ func NewQueryBuilderPqf(pqfMappings *directory.PqfMappings) *QueryBuilderPqf {
 	}}
 }
 
-func NewQueryBuilderCql(pqfMappings *directory.PqfMappings) *QueryBuilderPqf {
-	if pqfMappings == nil {
-		pqfMappings = &directory.PqfMappings{}
+func NewQueryBuilderCql(queryConfig *directory.QueryConfig) *QueryBuilderPqf {
+	if queryConfig == nil {
+		queryConfig = &directory.QueryConfig{}
 	}
-	return &QueryBuilderPqf{pqfMappings: *pqfMappings, defaultMap: directory.PqfMappings{
+	return &QueryBuilderPqf{mappings: *queryConfig, defaultMap: directory.QueryConfig{
 		Identifier: NewString("rec.id = {term}"),
 		Isbn:       NewString("isbn = {term}"),
 		Issn:       NewString("issn = {term}"),
@@ -76,10 +76,10 @@ func (s *QueryBuilderPqf) Build(params HoldingLookupParams) (cql []string, pqf [
 	}
 
 	paramMappings := []paramMapping{
-		{params.Identifier, s.pqfMappings.Identifier, *s.defaultMap.Identifier},
-		{params.Isbn, s.pqfMappings.Isbn, *s.defaultMap.Isbn},
-		{params.Issn, s.pqfMappings.Issn, *s.defaultMap.Issn},
-		{params.Title, s.pqfMappings.Title, *s.defaultMap.Title},
+		{params.Identifier, s.mappings.Identifier, *s.defaultMap.Identifier},
+		{params.Isbn, s.mappings.Isbn, *s.defaultMap.Isbn},
+		{params.Issn, s.mappings.Issn, *s.defaultMap.Issn},
+		{params.Title, s.mappings.Title, *s.defaultMap.Title},
 	}
 	var pqfList []string
 	var cqlList []string
