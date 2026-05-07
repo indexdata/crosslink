@@ -6,63 +6,29 @@ package availability
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
+	"github.com/indexdata/crosslink/zoom"
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var (
-	testMetaproxyContainer testcontainers.Container
-	metaproxyHostPort      string
-)
+var mappedPort string
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	hostPath, err := filepath.Abs("../../zoom/backend_test.xml")
+	var err error
+	metaproxyContainer, err := zoom.MetaproxyContainerStart(ctx)
 	if err != nil {
 		panic(err)
 	}
-
-	req := testcontainers.ContainerRequest{
-		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
-		ExposedPorts: []string{"9000/tcp"},
-		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(5 * time.Second),
-		Files: []testcontainers.ContainerFile{
-			{
-				HostFilePath:      hostPath,
-				ContainerFilePath: "/etc/metaproxy/filters-enabled/backend_test.xml",
-				FileMode:          0444, // Read-only
-			},
-		},
-	}
-
-	testMetaproxyContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	// Get the mapped host port for 9000/tcp
-	mappedPort, err := testMetaproxyContainer.MappedPort(ctx, "9000/tcp")
-	if err != nil {
-		_ = testMetaproxyContainer.Terminate(ctx)
-		panic(err)
-	}
-	metaproxyHostPort = mappedPort.Port()
-
+	mappedPort = metaproxyContainer.MappedPort()
 	code := m.Run()
 
-	if testMetaproxyContainer != nil {
-		_ = testMetaproxyContainer.Terminate(ctx)
+	if metaproxyContainer != nil {
+		_ = metaproxyContainer.Terminate(ctx)
 	}
 	os.Exit(code)
 }
@@ -80,7 +46,7 @@ func TestLookupFound(t *testing.T) {
 	holdingsParser := adapter.NewMarcHoldingsParser(config)
 	aa, err := NewZoomAvailabilityAdapter(ctx,
 		directory.Z3950Config{
-			Address: "localhost:" + metaproxyHostPort + "/marc",
+			Address: "localhost:" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"count":                 "20",
 				"preferredRecordSyntax": "usmarc",
@@ -90,7 +56,7 @@ func TestLookupFound(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+metaproxyHostPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "20", aa.(*ZoomAvailabilityAdapter).options["count"])
 
 	params := adapter.HoldingLookupParams{
@@ -109,7 +75,7 @@ func TestLookupDiagnostics(t *testing.T) {
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(ctx,
 		directory.Z3950Config{
-			Address: "localhost:" + metaproxyHostPort + "/marc",
+			Address: "localhost:" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "danmarc",
 			},
@@ -118,7 +84,7 @@ func TestLookupDiagnostics(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+metaproxyHostPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
 
 	params := adapter.HoldingLookupParams{Identifier: "1234"}

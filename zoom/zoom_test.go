@@ -6,78 +6,22 @@ package zoom
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-type MetaproxyContainer struct {
-	mappedPort string
-	container  testcontainers.Container
-}
-
-func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
-	a := &MetaproxyContainer{}
-
-	hostPath, err := filepath.Abs("backend_test.xml")
-	if err != nil {
-		return nil, err
-	}
-	req := testcontainers.ContainerRequest{
-		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
-		ExposedPorts: []string{"9000/tcp"},
-		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(5 * time.Second),
-		Files: []testcontainers.ContainerFile{
-			{
-				HostFilePath:      hostPath,
-				ContainerFilePath: "/etc/metaproxy/filters-enabled/backend_test.xml",
-				FileMode:          0444, // Read-only
-			},
-		},
-	}
-
-	a.container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		return nil, err
-	}
-	port, err := a.container.MappedPort(ctx, "9000/tcp")
-	if err != nil {
-		_ = a.container.Terminate(ctx)
-		return nil, err
-	}
-	a.mappedPort = port.Port()
-
-	// Get the mapped host port for 9000/tcp
-	return a, nil
-}
-
-func (a *MetaproxyContainer) MappedPort() string {
-	return a.mappedPort
-}
-
-func (a *MetaproxyContainer) Terminate(ctx context.Context) error {
-	if a.container != nil {
-		return a.container.Terminate(ctx)
-	}
-	return nil
-}
-
-var metaproxyContainer *MetaproxyContainer
+var mappedPort string
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	var err error
-	metaproxyContainer, err = MetaproxyContainerStart(ctx)
+	metaproxyContainer, err := MetaproxyContainerStart(ctx)
 	if err != nil {
 		panic(err)
 	}
+	mappedPort = metaproxyContainer.MappedPort()
+
 	code := m.Run()
 
 	if metaproxyContainer != nil {
@@ -124,7 +68,7 @@ func TestSearch(t *testing.T) {
 
 	conn = NewConnection(options)
 	assert.NotNil(t, conn)
-	err = conn.Connect("localhost:" + metaproxyContainer.MappedPort())
+	err = conn.Connect("localhost:" + mappedPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
@@ -173,7 +117,7 @@ func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + metaproxyContainer.MappedPort())
+	err := conn.Connect("localhost:" + mappedPort)
 	assert.NoError(t, err)
 
 	// getting non-surrogate diagnostic for unsupported record syntax
@@ -192,7 +136,7 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + metaproxyContainer.MappedPort())
+	err := conn.Connect("localhost:" + mappedPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
