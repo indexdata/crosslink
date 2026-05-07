@@ -35,7 +35,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Z3950: &directory.Z3950Config{
-					Address: "z3950.indexdata.com/marc",
+					Address: "a",
 				},
 			},
 		},
@@ -50,7 +50,7 @@ func TestGetAdapterMock(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Z3950: &directory.Z3950Config{
-					Address: "z3950.indexdata.com/marc",
+					Address: "a",
 				},
 			},
 		},
@@ -67,7 +67,7 @@ func TestGetAdapterZoom(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Z3950: &directory.Z3950Config{
-					Address: "z3950.indexdata.com/marc",
+					Address: "a",
 				},
 			},
 		},
@@ -90,7 +90,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Z3950: &directory.Z3950Config{
-					Address: "z3950.indexdata.com/marc",
+					Address: "a",
 				},
 			},
 		},
@@ -107,7 +107,7 @@ func TestGetAdapterSRU(t *testing.T) {
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
 				Sru: &directory.SruConfig{
-					Address: "http://sru.indexdata.com/marc",
+					Address: "a",
 				},
 			},
 		},

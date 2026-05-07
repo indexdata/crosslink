@@ -15,18 +15,18 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var (
-	testMetaproxyContainer testcontainers.Container
-	metaproxyHostPort      string
-)
+type MetaproxyContainer struct {
+	mappedPort string
+	container  testcontainers.Container
+}
 
-func TestMain(m *testing.M) {
-	ctx := context.Background()
+func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
+	a := &MetaproxyContainer{}
+
 	hostPath, err := filepath.Abs("backend_test.xml")
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-
 	req := testcontainers.ContainerRequest{
 		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
 		ExposedPorts: []string{"9000/tcp"},
@@ -40,26 +40,48 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	testMetaproxyContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+	a.container, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
 	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
+	port, err := a.container.MappedPort(ctx, "9000/tcp")
+	if err != nil {
+		_ = a.container.Terminate(ctx)
+		return nil, err
+	}
+	a.mappedPort = port.Port()
 
 	// Get the mapped host port for 9000/tcp
-	mappedPort, err := testMetaproxyContainer.MappedPort(ctx, "9000/tcp")
+	return a, nil
+}
+
+func (a *MetaproxyContainer) MappedPort() string {
+	return a.mappedPort
+}
+
+func (a *MetaproxyContainer) Terminate(ctx context.Context) error {
+	if a.container != nil {
+		return a.container.Terminate(ctx)
+	}
+	return nil
+}
+
+var metaproxyContainer *MetaproxyContainer
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	var err error
+	metaproxyContainer, err = MetaproxyContainerStart(ctx)
 	if err != nil {
-		_ = testMetaproxyContainer.Terminate(ctx)
 		panic(err)
 	}
-	metaproxyHostPort = mappedPort.Port()
-
 	code := m.Run()
 
-	if testMetaproxyContainer != nil {
-		_ = testMetaproxyContainer.Terminate(ctx)
+	if metaproxyContainer != nil {
+		_ = metaproxyContainer.Terminate(ctx)
 	}
 	os.Exit(code)
 }
@@ -102,7 +124,7 @@ func TestSearch(t *testing.T) {
 
 	conn = NewConnection(options)
 	assert.NotNil(t, conn)
-	err = conn.Connect("localhost:" + metaproxyHostPort)
+	err = conn.Connect("localhost:" + metaproxyContainer.MappedPort())
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
@@ -151,7 +173,7 @@ func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + metaproxyHostPort)
+	err := conn.Connect("localhost:" + metaproxyContainer.MappedPort())
 	assert.NoError(t, err)
 
 	// getting non-surrogate diagnostic for unsupported record syntax
@@ -170,7 +192,7 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + metaproxyHostPort)
+	err := conn.Connect("localhost:" + metaproxyContainer.MappedPort())
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
