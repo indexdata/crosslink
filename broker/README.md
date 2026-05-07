@@ -43,7 +43,7 @@ CrossLink Broker relies on regular ISO18626 exchanges to provide broker-specific
    Regular `Unfilled` status is communicated at the end of the transaction when the broker exhausts all suppliers ("end of rota").
 3. _local supply_ feature: detects when the supplier is part of or the same institution as the requester and acts accordingly to the selected mode
 
-To remain compatible with exiting external ISO18626 peers, CrossLink Broker can operate in two modes:
+To remain compatible with existing external ISO18626 peers, CrossLink Broker can operate in two modes:
 
 1. `opaque` -- in this mode, Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the headers of outgoing messages, behaving as a regular ISO18626 peer.
    Actual supplier is identified by prepending `Supplier: {symbol}` to the message note field.
