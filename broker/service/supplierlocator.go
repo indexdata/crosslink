@@ -243,19 +243,22 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	// for now skip suppliers with z3950 config, later we will implement actual availability check for them instead of skipping
 	aa, err := s.availabilityCreator.GetAdapter(ctx, peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}
 	if aa == nil {
-		ctx.Logger().Info("skipping availability check for supplier without Z39.50 config", "supplierSymbol", sup.SupplierSymbol)
+		ctx.Logger().Info("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
 		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 	}
-	params := adapter.HoldingLookupParams{
-		Identifier: "x",
+
+	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	results, _, err := aa.Lookup(params)
+	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams.Identifier = sup.LocalID.String
+	results, _, err := aa.Lookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}
@@ -268,7 +271,6 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
 		}
 	}
-
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 
