@@ -258,8 +258,6 @@ components:
 
     AvailabilityConfig:
       type: object
-      required:
-        - address
       properties:
         sru:
           $ref: '#/components/schemas/SruConfig'
