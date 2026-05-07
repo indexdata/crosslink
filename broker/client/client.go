@@ -44,7 +44,6 @@ var appendSupplierInfo, _ = utils.GetEnvBool("SUPPLIER_INFO", true)
 var appendRequestingAgencyInfo, _ = utils.GetEnvBool("REQ_AGENCY_INFO", true)
 var appendReturnInfo, _ = utils.GetEnvBool("RETURN_INFO", true)
 var vendorNote, _ = utils.GetEnvBool("VENDOR_NOTE", true)
-var supplierSymbolNote, _ = utils.GetEnvBool("SUPPLIER_SYMBOL_NOTE", true)
 
 type Iso18626Client struct {
 	eventBus         events.EventBus
@@ -618,18 +617,11 @@ func (c *Iso18626Client) handleSkippedSupplierNotification(ctx common.ExtendedCo
 		return nil, err
 	}
 
-	if trCtx.requester.BrokerMode == string(common.BrokerModeTransparent) {
-		return &messageTarget{
-			supplier:      skipped,
-			peer:          skippedPeer,
-			status:        iso18626.TypeStatus(trCtx.transaction.LastSupplierStatus.String),
-			brokerMessage: false,
-		}, nil
-	}
-
-	problem := fmt.Sprintf("ignored notification from skipped supplier %s due to requester mode %s", msgSupplierSymbol, trCtx.requester.BrokerMode)
 	return &messageTarget{
-		problemDetails: &problem,
+		supplier:      skipped,
+		peer:          skippedPeer,
+		status:        iso18626.TypeStatus(trCtx.transaction.LastSupplierStatus.String),
+		brokerMessage: false,
 	}, nil
 }
 
@@ -680,9 +672,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	shouldInjectSyntheticNotes := !isCrossLinkVendor(trCtx.requester) &&
 		!isCrossLinkVendor(trCtx.selectedPeer) &&
 		!isCrossLinkVendor(target.peer)
-	if supplierSymbolNote && shouldInjectSyntheticNotes {
-		prependSupplierSymbolNote(trCtx, sam)
-	}
+	prependSupplierSymbolNote(trCtx, target, sam)
 	if vendorNote && shouldInjectSyntheticNotes && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNote(sam, target.peer.Vendor)
 	}
@@ -693,12 +683,10 @@ func isCrossLinkVendor(peer *ill_db.Peer) bool {
 	return peer != nil && strings.EqualFold(peer.Vendor, string(directory.CrossLink))
 }
 
-func prependSupplierSymbolNote(trCtx transactionContext, sam *iso18626.SupplyingAgencyMessage) {
+func prependSupplierSymbolNote(trCtx transactionContext, target *messageTarget, sam *iso18626.SupplyingAgencyMessage) {
 	if trCtx.requester != nil && trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) &&
-		trCtx.selectedSupplier != nil &&
-		!isCrossLinkVendor(trCtx.requester) &&
-		!isCrossLinkVendor(trCtx.selectedPeer) {
-		_, symbol := common.SplitAgencySymbol(trCtx.selectedSupplier.SupplierSymbol)
+		target != nil && target.supplier != nil {
+		_, symbol := common.SplitAgencySymbol(target.supplier.SupplierSymbol)
 		if sam.MessageInfo.Note != "" {
 			sep := shim.NOTE_FIELD_SEP
 			if strings.HasPrefix(sam.MessageInfo.Note, "#") {

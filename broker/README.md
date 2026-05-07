@@ -46,7 +46,7 @@ CrossLink Broker relies on regular ISO18626 exchanges to provide broker-specific
 To remain compatible with exiting external ISO18626 peers, CrossLink Broker can operate in two modes:
 
 1. `opaque` -- in this mode, Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the headers of outgoing messages, behaving as a regular ISO18626 peer.
-   Actual supplier is identified by prepending `Supplier: {symbol}` to the message note field, see `SUPPLIER_SYMBOL_NOTE` env var.
+   Actual supplier is identified by prepending `Supplier: {symbol}` to the message note field.
    `ExpectToSupply` messages after a supplier change are sent as a `Notification` rather than a `StatusChange`.
    Upon detecting _local supply_, the supplier is skipped.
 
@@ -93,7 +93,6 @@ Configuration is provided via environment variables:
 | `SUPPLIER_INFO`           | Should `request/supplierInfo` be populated from Directory                             | `true`                                    |
 | `RETURN_INFO`             | Should `returnInfo` be populated from Directory for supplier `Loaned` message         | `true`                                    |
 | `VENDOR_NOTE`             | Should `note` field be prepended with `Vendor: {vendor}` text                         | `true`                                    |
-| `SUPPLIER_SYMBOL_NOTE`    | Should `note` field be prepended with a `Supplier: {symbol}` text, `opaque` mode only | `true`                                    |
 | `OFFERED_COSTS`           | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters | `false`                                   |
 | `NOTE_FIELD_SEP`          | Separator for fields (e.g. Vendor) prepended to the note                              | `, `                                      |
 | `CLIENT_DELAY`            | Delay duration for outgoing ISO18626 messages                                         | `0ms`                                     |

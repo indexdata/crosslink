@@ -439,6 +439,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
 
 	// Check notification requester side
+	forwardedWillShipNote := "Supplier: " + strings.Split(supplierSymbol, ":")[1] + ", Will ship"
 	findNotificationByNote := func(list []proapi.PrNotification, note string) *proapi.PrNotification {
 		for i := range list {
 			if list[i].Note != nil && *list[i].Note == note {
@@ -452,9 +453,9 @@ func TestActionsToCompleteState(t *testing.T) {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &notifications)
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
-		return findNotificationByNote(notifications.Items, "Will ship") != nil
+		return findNotificationByNote(notifications.Items, forwardedWillShipNote) != nil
 	})
-	willShipNotification := findNotificationByNote(notifications.Items, "Will ship")
+	willShipNotification := findNotificationByNote(notifications.Items, forwardedWillShipNote)
 	assert.NotNil(t, willShipNotification)
 
 	// Set seen notification
@@ -470,10 +471,10 @@ func TestActionsToCompleteState(t *testing.T) {
 		respBytes = httpRequest(t, "GET", requesterPrPath+"/notifications"+queryParams, []byte{}, 200)
 		err = json.Unmarshal(respBytes, &notifications)
 		assert.NoError(t, err, "failed to unmarshal patron request notifications")
-		found := findNotificationByNote(notifications.Items, "Will ship")
+		found := findNotificationByNote(notifications.Items, forwardedWillShipNote)
 		return found != nil && found.Receipt != nil && *found.Receipt == "SEEN" && found.AcknowledgedAt != nil
 	})
-	willShipNotification = findNotificationByNote(notifications.Items, "Will ship")
+	willShipNotification = findNotificationByNote(notifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, willShipNotification) {
 		assert.Equal(t, "SEEN", *willShipNotification.Receipt)
 		assert.NotNil(t, willShipNotification.AcknowledgedAt)
@@ -610,7 +611,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	err = json.Unmarshal(respBytes, &prNotifications)
 	assert.NoError(t, err, "failed to unmarshal patron request notifications")
 	assert.True(t, prNotifications.About.Count >= 1)
-	finalWillShipNotification := findNotificationByNote(prNotifications.Items, "Will ship")
+	finalWillShipNotification := findNotificationByNote(prNotifications.Items, forwardedWillShipNote)
 	if assert.NotNil(t, finalWillShipNotification) {
 		assert.NotNil(t, finalWillShipNotification.Receipt)
 		assert.Equal(t, "SEEN", *finalWillShipNotification.Receipt)
