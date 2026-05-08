@@ -351,6 +351,8 @@ func GetBrokerMode(vendor directory.EntryVendor) common.BrokerMode {
 		return common.BrokerModeOpaque
 	case directory.ReShare:
 		return common.BrokerModeTransparent
+	case directory.CrossLink:
+		return common.BrokerModeTransparent
 	default:
 		return DEFAULT_BROKER_MODE
 	}

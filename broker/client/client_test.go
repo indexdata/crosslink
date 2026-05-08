@@ -389,7 +389,7 @@ func TestReadTransactionContextSuccess(t *testing.T) {
 	assert.NotNil(t, trCtx.transaction)
 	assert.NotNil(t, trCtx.requester)
 	assert.NotNil(t, trCtx.selectedSupplier)
-	assert.NotNil(t, trCtx.selectedPeer)
+	assert.NotNil(t, trCtx.selectedSupplierPeer)
 	assert.Equal(t, event, trCtx.event)
 }
 
@@ -402,7 +402,7 @@ func TestReadTransactionContextError(t *testing.T) {
 	assert.Nil(t, trCtx.transaction)
 	assert.Nil(t, trCtx.requester)
 	assert.Nil(t, trCtx.selectedSupplier)
-	assert.Nil(t, trCtx.selectedPeer)
+	assert.Nil(t, trCtx.selectedSupplierPeer)
 	assert.Equal(t, event, trCtx.event)
 }
 
@@ -446,9 +446,9 @@ func createTransactionContext(event events.Event, selectedSupplier *ill_db.Locat
 			Name:       "Requester",
 			BrokerMode: string(brokerMode),
 		},
-		selectedSupplier: selectedSupplier,
-		selectedPeer:     selectedPeer,
-		event:            event,
+		selectedSupplier:     selectedSupplier,
+		selectedSupplierPeer: selectedPeer,
+		event:                event,
 	}
 }
 
@@ -494,7 +494,7 @@ func TestDetermineMessageTarget_handleSkippedSupplierNotification_BrokerModeOpaq
 	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Nil(t, err)
-	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
+	assert.Equal(t, "skipped", msgTarget.supplier.SupplierID)
 }
 
 func TestDetermineMessageTarget_handleSkippedSupplierNotification_Error(t *testing.T) {
@@ -518,7 +518,7 @@ func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) 
 
 	assert.Nil(t, err)
 	assert.Equal(t, iso18626.TypeStatusUnfilled, msgTarget.status)
-	assert.False(t, msgTarget.brokerMessage)
+	assert.False(t, msgTarget.brokerInfoMessage)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
@@ -542,7 +542,7 @@ func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Br
 	msgTarget, err := client.determineMessageTarget(appCtx, trCtx)
 
 	assert.Nil(t, err)
-	assert.Equal(t, "ignored notification from skipped supplier isil:sup1 due to requester mode opaque", *msgTarget.problemDetails)
+	assert.Equal(t, "skipped", msgTarget.supplier.SupplierID)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_Error(t *testing.T) {
@@ -570,7 +570,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusLoaned, msgTarget.status)
-	assert.False(t, msgTarget.brokerMessage)
+	assert.False(t, msgTarget.brokerInfoMessage)
 }
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
@@ -599,9 +599,9 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 
 	assert.Nil(t, err)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.Nil(t, msgTarget.peer)
+	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, sup, msgTarget.supplier)
-	assert.True(t, msgTarget.brokerMessage)
+	assert.True(t, msgTarget.brokerInfoMessage)
 }
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -616,9 +616,9 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 
 	assert.Nil(t, err)
 	assert.Equal(t, sup, msgTarget.supplier)
-	assert.Nil(t, msgTarget.peer)
+	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.brokerMessage)
+	assert.True(t, msgTarget.brokerInfoMessage)
 }
 
 func TestBuildSupplyingAgencyMessage(t *testing.T) {
@@ -634,10 +634,10 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
@@ -663,10 +663,10 @@ func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusWillSupply,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusWillSupply,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
@@ -686,10 +686,10 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Nil(t, message.DeliveryInfo)
@@ -701,7 +701,32 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	assert.Equal(t, "isil:sup1 (isil:sup1)", message.ReturnInfo.Name)
 }
 
-func TestBuildSupplyingAgencyMessage_NoSyntheticNotesForCrossLinkInternalVendor(t *testing.T) {
+func TestBuildSupplyingAgencyMessage_SkippedNotificationOpaqueUsesTargetSupplierNote(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "already supplied elsewhere"
+	selected := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup2"}
+	skipped := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	skippedPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(directory.Alma),
+	}
+	trCtx := createTransactionContext(event, selected, &ill_db.Peer{Vendor: string(directory.Alma)}, common.BrokerModeOpaque)
+	msgTarget := messageTarget{
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: false,
+		supplier:          skipped,
+		peer:              skippedPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+
+	assert.Equal(t, "BROKER", message.Header.SupplyingAgencyId.AgencyIdValue)
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, message.MessageInfo.ReasonForMessage)
+	assert.Equal(t, "Supplier: sup1, already supplied elsewhere", message.MessageInfo.Note)
+	assert.Equal(t, iso18626.TypeStatusLoaned, message.StatusInfo.Status)
+}
+
+func TestBuildSupplyingAgencyMessage_SupplierAndVendorNoteForCrossLinkToAlma(t *testing.T) {
 	event := createSupplyingAgencyMessageEvent(true)
 	event.EventData.IncomingMessage = nil
 	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
@@ -712,15 +737,37 @@ func TestBuildSupplyingAgencyMessage_NoSyntheticNotesForCrossLinkInternalVendor(
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
 	trCtx.requester.Vendor = string(directory.CrossLink)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
-	assert.Equal(t, "", message.MessageInfo.Note)
+	assert.Equal(t, "Vendor: Alma, Supplier: sup1", message.MessageInfo.Note)
 }
+
+func TestBuildSupplyingAgencyMessage_NoSupplierNoteForCrossLinkToCrossLink(t *testing.T) {
+	event := createSupplyingAgencyMessageEvent(true)
+	event.EventData.IncomingMessage.SupplyingAgencyMessage.MessageInfo.Note = "Original note"
+	sup := &ill_db.LocatedSupplier{SupplierSymbol: "isil:sup1"}
+	supPeer := &ill_db.Peer{
+		Name:   "isil:sup1",
+		Vendor: string(directory.CrossLink),
+	}
+	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
+	trCtx.requester.Vendor = string(directory.CrossLink)
+	msgTarget := messageTarget{
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
+	}
+
+	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
+	assert.Equal(t, "Original note", message.MessageInfo.Note)
+}
+
 func TestSendAndUpdateStatus_DontSend(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	event := createSupplyingAgencyMessageEvent(true)
@@ -857,46 +904,46 @@ func TestBlockUnfilled(t *testing.T) {
 func TestPrependSupplierSymbolNote(t *testing.T) {
 	sam := iso18626.SupplyingAgencyMessage{}
 	trCtx := transactionContext{}
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, nil, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	requester := ill_db.Peer{BrokerMode: string(common.BrokerModeTransparent)}
 	trCtx.requester = &requester
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, nil, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	requester.BrokerMode = string(common.BrokerModeOpaque)
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, nil, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	sam.StatusInfo.Status = iso18626.TypeStatusExpectToSupply
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, nil, &sam)
 	assert.Equal(t, "", sam.MessageInfo.Note)
 
 	supplier := ill_db.LocatedSupplier{SupplierSymbol: "ISIL:SUP1"}
-	trCtx.selectedSupplier = &supplier
-	prependSupplierSymbolNote(trCtx, &sam)
+	target := messageTarget{supplier: &supplier}
+	prependSupplierSymbolNote(trCtx, &target, &sam)
 	assert.Equal(t, "Supplier: SUP1", sam.MessageInfo.Note)
 
 	sam.MessageInfo.Note = "Original note"
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &target, &sam)
 	assert.Equal(t, "Supplier: SUP1, Original note", sam.MessageInfo.Note)
 
 	sam.StatusInfo.Status = iso18626.TypeStatusUnfilled
 	sam.MessageInfo.Note = "#special note#"
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &target, &sam)
 	assert.Equal(t, "Supplier: SUP1#special note#", sam.MessageInfo.Note)
 
 	supplier.SupplierSymbol = "SUP2"
 	sam.MessageInfo.Note = ""
-	prependSupplierSymbolNote(trCtx, &sam)
+	prependSupplierSymbolNote(trCtx, &target, &sam)
 	assert.Equal(t, "Supplier: SUP2", sam.MessageInfo.Note)
 
-	// No synthetic supplier note for internal CrossLink requester/supplier flows.
+	// Supplier attribution is mandatory in opaque mode, including internal CrossLink flows.
 	requester.Vendor = string(directory.CrossLink)
 	sam.MessageInfo.Note = "Original note"
-	prependSupplierSymbolNote(trCtx, &sam)
-	assert.Equal(t, "Original note", sam.MessageInfo.Note)
+	prependSupplierSymbolNote(trCtx, &target, &sam)
+	assert.Equal(t, "Supplier: SUP2, Original note", sam.MessageInfo.Note)
 }
 
 func TestHandleIllMessage(t *testing.T) {
