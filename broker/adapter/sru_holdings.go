@@ -30,9 +30,10 @@ func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarge
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, holdings *[]Holding) error {
 	if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
-		return fmt.Errorf("unsupported RecordXMLEscapiong: %s", *record.RecordXMLEscaping)
+		return fmt.Errorf("unsupported RecordXMLEscaping: %s", *record.RecordXMLEscaping)
 	}
-	if record.RecordSchema == "info:srw/schema/1/diagnostics-v1.1" { // surrogate diagnostic record
+	receivedSchema := record.RecordSchema
+	if receivedSchema == "info:srw/schema/1/diagnostics-v1.1" { // surrogate diagnostic record
 		var diagnostic diag.Diagnostic
 		err := xml.Unmarshal(record.RecordData.XMLContent, &diagnostic)
 		if err != nil {
@@ -40,9 +41,10 @@ func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, hol
 		}
 		return errors.New("surrogate diagnostic: " + diagnostic.Message + ": " + diagnostic.Details)
 	}
-	if record.RecordSchema != "" &&
-		record.RecordSchema != "info:srw/schema/1/marcxml-v1.1" &&
-		record.RecordSchema != s.recordSchema {
+	if receivedSchema == "info:srw/schema/1/marcxml-v1.1" {
+		receivedSchema = "marcxml"
+	}
+	if receivedSchema != "" && receivedSchema != s.recordSchema {
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
 

@@ -149,7 +149,7 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	}
 	_, query, err := ad.Lookup(p)
 	assert.NotEmpty(t, query)
-	assert.ErrorContains(t, err, "unsupported RecordXMLEscapiong: string")
+	assert.ErrorContains(t, err, "unsupported RecordXMLEscaping: string")
 }
 
 func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
