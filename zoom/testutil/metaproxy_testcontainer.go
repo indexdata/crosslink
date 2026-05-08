@@ -1,4 +1,6 @@
-package zoom
+//go:build !testutil
+
+package testutil
 
 import (
 	"bytes"

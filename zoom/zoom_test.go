@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/indexdata/crosslink/zoom/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,7 +16,7 @@ var mappedPort string
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	var err error
-	metaproxyContainer, err := MetaproxyContainerStart(ctx)
+	metaproxyContainer, err := testutil.MetaproxyContainerStart(ctx)
 	if err != nil {
 		panic(err)
 	}

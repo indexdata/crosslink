@@ -10,7 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
-	"github.com/indexdata/crosslink/zoom"
+	zoomtestutil "github.com/indexdata/crosslink/zoom/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,7 +19,7 @@ var mappedPort string
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 	var err error
-	metaproxyContainer, err := zoom.MetaproxyContainerStart(ctx)
+	metaproxyContainer, err := zoomtestutil.MetaproxyContainerStart(ctx)
 	if err != nil {
 		panic(err)
 	}
