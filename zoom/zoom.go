@@ -145,25 +145,22 @@ func (s *ResultSet) GetRecord(index int) (*Record, error) {
 	}
 	cRecord := C.ZOOM_resultset_record(s.rs, C.size_t(index))
 	if cRecord == nil {
+		// non-surrogate diagnostic error for PresentResponse
 		err := s.connection.checkError()
-		if err != nil {
-			// non-surrogate diagnostic error for PresentResponse
-			return nil, err
+		return nil, err
+	}
+	// check for surrogate diagnostic
+	var cErrMsg, cAddInfo *C.char
+	code := C.ZOOM_record_error(cRecord, (**C.char)(unsafe.Pointer(&cErrMsg)), (**C.char)(unsafe.Pointer(&cAddInfo)), nil)
+	if code != 0 {
+		var errMsg, addInfo string
+		if cErrMsg != nil {
+			errMsg = C.GoString(cErrMsg)
 		}
-		// check for surrogate diagnostic
-		var cErrMsg, cAddInfo *C.char
-		code := C.ZOOM_record_error(cRecord, (**C.char)(unsafe.Pointer(&cErrMsg)), (**C.char)(unsafe.Pointer(&cAddInfo)), nil)
-		if code != 0 {
-			var errMsg, addInfo string
-			if cErrMsg != nil {
-				errMsg = C.GoString(cErrMsg)
-			}
-			if cAddInfo != nil {
-				addInfo = C.GoString(cAddInfo)
-			}
-			return nil, &ZoomError{Code: int(code), Message: errMsg, AdditionalInfo: addInfo}
+		if cAddInfo != nil {
+			addInfo = C.GoString(cAddInfo)
 		}
-		return nil, nil
+		return nil, &ZoomError{Code: int(code), Message: errMsg, AdditionalInfo: addInfo}
 	}
 	record := &Record{rec: C.ZOOM_record_clone(cRecord)}
 	runtime.SetFinalizer(record, (*Record).finalize)
