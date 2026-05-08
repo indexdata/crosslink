@@ -144,48 +144,80 @@ func (w *WorkflowManager) OnMessageSupplierComplete(ctx common.ExtendedContext, 
 }
 
 func (w *WorkflowManager) shouldForwardSAM(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {
-	if !cancelSuccessful(sam) {
-		// always forward rejected cancellation
+	if !supplierAcceptedCancel(sam) {
+		// always forward non-cancel response and rejected cancellation
 		return true
 	}
-	lastEvent, err := w.eventBus.GetLatestRequestEventByAction(ctx, illTransId, string(iso18626.TypeActionCancel))
-	if err != nil {
-		ctx.Logger().Error("failed to to find last event with action cancel", "error", err)
+	cancelTarget, ok := w.latestRequesterCancelTarget(ctx, illTransId)
+	if !ok {
 		return true
 	}
-	if lastEvent.EventData.IncomingMessage == nil || lastEvent.EventData.IncomingMessage.RequestingAgencyMessage == nil {
-		ctx.Logger().Error("last cancel event is missing requesting agency message")
-		return true
-	}
-	if getSupplierSymbol(*lastEvent.EventData.IncomingMessage.RequestingAgencyMessage) == brokerSymbol {
+	if cancelTarget == brokerSymbol {
 		// if requester used broker symbol to cancel we already terminated, so forward the response
 		return true
 	}
-	return false
+	// Suppress only the supplier's direct response to the requester cancel
+	// unrelated cancel responses may be forwarded to the requester.
+	return agencySymbol(sam.Header.SupplyingAgencyId) != cancelTarget
 }
 
-func cancelSuccessful(sam iso18626.SupplyingAgencyMessage) bool {
+func (w *WorkflowManager) latestRequesterCancelTarget(ctx common.ExtendedContext, illTransId string) (string, bool) {
+	lastEvent, err := w.eventBus.GetLatestRequestEventByAction(ctx, illTransId, string(iso18626.TypeActionCancel))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.Logger().Warn("latest requester cancel event not found", "error", err)
+		} else {
+			ctx.Logger().Error("failed to find latest requester cancel event", "error", err)
+		}
+		return "", false
+	}
+	if lastEvent.EventData.IncomingMessage == nil || lastEvent.EventData.IncomingMessage.RequestingAgencyMessage == nil {
+		ctx.Logger().Error("last cancel event is missing requesting agency message")
+		return "", false
+	}
+	return getSupplierSymbol(*lastEvent.EventData.IncomingMessage.RequestingAgencyMessage), true
+}
+
+func supplierAcceptedCancel(sam iso18626.SupplyingAgencyMessage) bool {
 	if sam.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageCancelResponse {
 		return false
 	}
 	return sam.StatusInfo.Status == iso18626.TypeStatusCancelled || (sam.MessageInfo.AnswerYesNo != nil && *sam.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY)
 }
 
+func supplierUnsolicitedCancel(sam iso18626.SupplyingAgencyMessage) bool {
+	return sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange &&
+		sam.StatusInfo.Status == iso18626.TypeStatusCancelled
+}
+
+func (w *WorkflowManager) supplierAcceptedTerminalCancel(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {
+	if !supplierAcceptedCancel(sam) {
+		return false
+	}
+	cancelTarget, ok := w.latestRequesterCancelTarget(ctx, illTransId)
+	return ok && cancelTarget == brokerSymbol
+}
+
 func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	if event.EventData.IncomingMessage != nil && event.EventData.IncomingMessage.SupplyingAgencyMessage != nil {
+		sam := *event.EventData.IncomingMessage.SupplyingAgencyMessage
 		// action message was send by supplier so we must relay the confirmation
 		common.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 		}, "")
-		if event.EventData.IncomingMessage.SupplyingAgencyMessage.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+		if sam.StatusInfo.Status == iso18626.TypeStatusUnfilled {
 			common.Must(ctx, func() (string, error) {
 				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 			}, "")
 		}
-		if cancelSuccessful(*event.EventData.IncomingMessage.SupplyingAgencyMessage) {
-			// If successful cancel is forwarded to requester then skip currently selected supplier
+		if w.supplierAcceptedTerminalCancel(ctx, sam, event.IllTransactionID) {
+			// If requester sent terminal cancel we already skipped new suppliers but we also need to skip currently selected supplier
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
+		}
+		if supplierUnsolicitedCancel(sam) {
+			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
+			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
 		}
 	}
 }
@@ -241,12 +273,15 @@ func (w *WorkflowManager) skipAllSuppliersByStatus(ctx common.ExtendedContext, i
 func getSymbol(msg *iso18626.ISO18626Message) string {
 	symbol := ""
 	if msg != nil && msg.SupplyingAgencyMessage != nil {
-		symbol = msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdType.Text + ":" +
-			msg.SupplyingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue
+		symbol = agencySymbol(msg.SupplyingAgencyMessage.Header.SupplyingAgencyId)
 	}
 	return symbol
 }
 
 func getSupplierSymbol(ram iso18626.RequestingAgencyMessage) string {
-	return ram.Header.SupplyingAgencyId.AgencyIdType.Text + ":" + ram.Header.SupplyingAgencyId.AgencyIdValue
+	return agencySymbol(ram.Header.SupplyingAgencyId)
+}
+
+func agencySymbol(agencyId iso18626.TypeAgencyId) string {
+	return agencyId.AgencyIdType.Text + ":" + agencyId.AgencyIdValue
 }
