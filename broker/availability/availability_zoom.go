@@ -40,13 +40,14 @@ func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z39
 }
 
 func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
-	res, err := conn.Search(query)
+	set, err := conn.Search(query)
 	if err != nil {
 		return nil, err
 	}
+	defer set.Close()
 	var avail []adapter.Holding
-	for i := 0; i < res.Count(); i++ {
-		rec, err := res.GetRecord(i)
+	for i := 0; i < set.Count(); i++ {
+		rec, err := set.GetRecord(i)
 		if err != nil {
 			return nil, err
 		}
@@ -54,6 +55,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query st
 			continue
 		}
 		xmlBuffer := rec.Data("xml;charset=utf-8")
+		rec.Close()
 		if xmlBuffer == nil {
 			continue
 		}
