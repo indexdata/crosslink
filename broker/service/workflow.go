@@ -164,7 +164,11 @@ func (w *WorkflowManager) shouldForwardSAM(ctx common.ExtendedContext, sam iso18
 func (w *WorkflowManager) latestRequesterCancelTarget(ctx common.ExtendedContext, illTransId string) (string, bool) {
 	lastEvent, err := w.eventBus.GetLatestRequestEventByAction(ctx, illTransId, string(iso18626.TypeActionCancel))
 	if err != nil {
-		ctx.Logger().Error("failed to to find last event with action cancel", "error", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx.Logger().Warn("latest requester cancel event not found", "error", err)
+		} else {
+			ctx.Logger().Error("failed to find latest requester cancel event", "error", err)
+		}
 		return "", false
 	}
 	if lastEvent.EventData.IncomingMessage == nil || lastEvent.EventData.IncomingMessage.RequestingAgencyMessage == nil {

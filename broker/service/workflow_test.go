@@ -10,6 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -46,10 +47,10 @@ func TestShouldForwardSAM_CancelResponseNotAccepted(t *testing.T) {
 	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "1"))
 }
 
-func TestShouldForwardSAM_ErrorReadingLatestRequesterCancel(t *testing.T) {
+func TestShouldForwardSAM_LatestRequesterCancelNotFound(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
-	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositoryError), WorkflowConfig{})
+	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryNoRequesterCancel), "")
+	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
 	yes := iso18626.TypeYesNoY
 	sam := iso18626.SupplyingAgencyMessage{
 		MessageInfo: iso18626.MessageInfo{
@@ -322,6 +323,7 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 		{
 			name: "Supply message unsolicited supplier cancel",
 			event: events.Event{
+				IllTransactionID: "unsolicited-cancel",
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
 						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
@@ -356,7 +358,8 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			for _, supplierStatus := range tt.supplierStatuses {
 				mockIllRepo.AssertCalled(t, "GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything,
 					mock.MatchedBy(func(params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) bool {
-						return params.SupplierStatus.String == supplierStatus
+						return params.IllTransactionID == tt.event.IllTransactionID &&
+							params.SupplierStatus.String == supplierStatus
 					}))
 			}
 			assert.Equal(t, tt.broadcastCreated, eventBus.BroadcastCreated)
@@ -400,6 +403,14 @@ func (r *MockEventRepositoryIncorrect) GetLatestRequestEventByAction(ctx common.
 
 type MockEventRepositoryCorrect struct {
 	mocks.MockEventRepositorySuccess
+}
+
+type MockEventRepositoryNoRequesterCancel struct {
+	mocks.MockEventRepositorySuccess
+}
+
+func (r *MockEventRepositoryNoRequesterCancel) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
+	return events.Event{}, pgx.ErrNoRows
 }
 
 func (r *MockEventRepositoryCorrect) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
