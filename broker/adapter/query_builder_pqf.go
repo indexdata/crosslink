@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/indexdata/crosslink/directory"
@@ -97,6 +98,9 @@ func (s *QueryBuilderPqf) Build(params HoldingLookupParams) (cql []string, pqf [
 				cqlList = append(cqlList, cql)
 			}
 		}
+	}
+	if len(cqlList) == 0 && len(pqfList) == 0 {
+		return nil, nil, errors.New("no search parameters provided for PQF/CQL query")
 	}
 	return cqlList, pqfList, nil
 }
