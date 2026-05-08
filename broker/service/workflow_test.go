@@ -10,11 +10,12 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/test/mocks"
 	"github.com/indexdata/crosslink/iso18626"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_EmptyMessageInfo(t *testing.T) {
+func TestShouldForwardSAM_EmptyMessageInfo(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
@@ -22,7 +23,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_EmptyMessageInfo(t *
 	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotCancelReason(t *testing.T) {
+func TestShouldForwardSAM_NotCancelReason(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
@@ -34,7 +35,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotCancelReason(t *t
 	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotAccepted(t *testing.T) {
+func TestShouldForwardSAM_CancelResponseNotAccepted(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
@@ -46,10 +47,10 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_NotAccepted(t *testi
 	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingTransaction(t *testing.T) {
+func TestShouldForwardSAM_LatestRequesterCancelNotFound(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositorySuccess), "")
-	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositoryError), WorkflowConfig{})
+	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryNoRequesterCancel), "")
+	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
 	yes := iso18626.TypeYesNoY
 	sam := iso18626.SupplyingAgencyMessage{
 		MessageInfo: iso18626.MessageInfo{
@@ -61,21 +62,21 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingTransact
 	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ErrorReadingEvent(t *testing.T) {
+func TestShouldForwardSAM_ErrorReadingLatestRequesterCancelEvent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(mocks.MockEventRepositoryError), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
 	assert.True(t, manager.shouldForwardSAM(appCtx, getCorrectSam(), "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_IncorrectEvent(t *testing.T) {
+func TestShouldForwardSAM_LatestRequesterCancelMissingMessage(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryIncorrect), "")
 	manager := CreateWorkflowManager(eventBus, new(mocks.MockIllRepositorySuccess), WorkflowConfig{})
 	assert.True(t, manager.shouldForwardSAM(appCtx, getCorrectSam(), "1"))
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToBroker(t *testing.T) {
+func TestShouldForwardSAM_AcceptedResponseToBrokerCancel(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
 	mockIllRepo := new(MockIllRepositoryRequester)
@@ -85,7 +86,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToBroker(t *testing.
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplier(t *testing.T) {
+func TestShouldForwardSAM_AcceptedResponseToSupplierCancel(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
 	mockIllRepo := new(MockIllRepositoryRequester)
@@ -95,7 +96,19 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplier(t *testin
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerNoStatusCancel(t *testing.T) {
+func TestShouldForwardSAM_AcceptedResponseFromDifferentSupplier(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
+	mockIllRepo := new(MockIllRepositoryRequester)
+	mockIllRepo.On("GetLocatedSuppliersByIllTransactionAndStatus", appCtx, mock.Anything).Return()
+	manager := CreateWorkflowManager(eventBus, mockIllRepo, WorkflowConfig{})
+	sam := getCorrectSam()
+	sam.Header.SupplyingAgencyId.AgencyIdValue = "SUP2"
+	assert.True(t, manager.shouldForwardSAM(appCtx, sam, "3"))
+	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
+}
+
+func TestShouldForwardSAM_AcceptedResponseToSupplierCancelByStatus(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
 	mockIllRepo := new(MockIllRepositoryRequester)
@@ -108,7 +121,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerNoSt
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerYesStatusUnfilled(t *testing.T) {
+func TestShouldForwardSAM_AcceptedResponseToSupplierCancelByAnswer(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
 	mockIllRepo := new(MockIllRepositoryRequester)
@@ -120,7 +133,7 @@ func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerYesS
 	mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", 0)
 }
 
-func TestHandleCancelStatusAndCheckIfMessageRequesterNeeded_ToSupplierAnswerNoStatusUnfilled(t *testing.T) {
+func TestShouldForwardSAM_RejectedResponseToSupplierCancel(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	eventBus := events.NewPostgresEventBus(new(MockEventRepositoryCorrect), "")
 	mockIllRepo := new(MockIllRepositoryRequester)
@@ -208,7 +221,7 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 	tests := []struct {
 		name             string
 		event            events.Event
-		supMethodCalls   int
+		supplierStatuses []string
 		tasksCreated     int
 		broadcastCreated int
 	}{
@@ -269,8 +282,9 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			broadcastCreated: 1,
 		},
 		{
-			name: "Supply message cancel response valid",
+			name: "Supply message broker cancel response valid",
 			event: events.Event{
+				IllTransactionID: "2",
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
 						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
@@ -285,7 +299,49 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 				},
 			},
 			broadcastCreated: 1,
-			supMethodCalls:   1,
+			supplierStatuses: []string{ill_db.SupplierStateSelectedPg.String},
+		},
+		{
+			name: "Supply message supplier cancel response valid",
+			event: events.Event{
+				IllTransactionID: "3",
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
+							},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusCancelled,
+							},
+						}),
+					},
+				},
+			},
+			broadcastCreated: 1,
+		},
+		{
+			name: "Supply message unsolicited supplier cancel",
+			event: events.Event{
+				IllTransactionID: "unsolicited-cancel",
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+							},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusCancelled,
+							},
+						}),
+					},
+				},
+			},
+			broadcastCreated: 1,
+			supplierStatuses: []string{
+				ill_db.SupplierStateSelectedPg.String,
+				ill_db.SupplierStateNewPg.String,
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -298,7 +354,14 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 
 			manager.OnMessageRequesterComplete(appCtx, tt.event)
 
-			mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", tt.supMethodCalls)
+			mockIllRepo.AssertNumberOfCalls(t, "GetLocatedSuppliersByIllTransactionAndStatus", len(tt.supplierStatuses))
+			for _, supplierStatus := range tt.supplierStatuses {
+				mockIllRepo.AssertCalled(t, "GetLocatedSuppliersByIllTransactionAndStatus", mock.Anything,
+					mock.MatchedBy(func(params ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams) bool {
+						return params.IllTransactionID == tt.event.IllTransactionID &&
+							params.SupplierStatus.String == supplierStatus
+					}))
+			}
 			assert.Equal(t, tt.broadcastCreated, eventBus.BroadcastCreated)
 			assert.Equal(t, tt.tasksCreated, eventBus.TasksCreated)
 		})
@@ -308,6 +371,14 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 func getCorrectSam() iso18626.SupplyingAgencyMessage {
 	yes := iso18626.TypeYesNoY
 	return iso18626.SupplyingAgencyMessage{
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{
+				AgencyIdType: iso18626.TypeSchemeValuePair{
+					Text: "ISIL",
+				},
+				AgencyIdValue: "SUP1",
+			},
+		},
 		MessageInfo: iso18626.MessageInfo{
 			ReasonForMessage: iso18626.TypeReasonForMessageCancelResponse,
 			AnswerYesNo:      &yes,
@@ -332,6 +403,14 @@ func (r *MockEventRepositoryIncorrect) GetLatestRequestEventByAction(ctx common.
 
 type MockEventRepositoryCorrect struct {
 	mocks.MockEventRepositorySuccess
+}
+
+type MockEventRepositoryNoRequesterCancel struct {
+	mocks.MockEventRepositorySuccess
+}
+
+func (r *MockEventRepositoryNoRequesterCancel) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
+	return events.Event{}, pgx.ErrNoRows
 }
 
 func (r *MockEventRepositoryCorrect) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
@@ -376,6 +455,10 @@ func (r *MockEventBus) CreateTask(illTransactionID string, eventName events.Even
 		return "id2", nil
 	}
 	return "id1", nil
+}
+
+func (r *MockEventBus) GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (events.Event, error) {
+	return (&MockEventRepositoryCorrect{}).GetLatestRequestEventByAction(ctx, illTransId, action)
 }
 
 type MockIllRepositoryRequester struct {
