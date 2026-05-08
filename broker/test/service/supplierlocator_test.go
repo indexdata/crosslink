@@ -899,7 +899,7 @@ func getSupplierId(i int, result map[string]interface{}) string {
 
 func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	// Create a peer with Z39.50 config in CustomData
+	// Create a peer with Availability config in CustomData
 	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{}}
 	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
 
@@ -917,7 +917,10 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	var updatedSupplier ill_db.LocatedSupplier
 	test.WaitForPredicateToBeTrue(func() bool {
 		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
-		if err != nil || len(supList) == 0 {
+		if err != nil {
+			t.Errorf("failed to find located supplier by ill transaction by ill transaction id %v", illTrId)
+		}
+		if len(supList) == 0 {
 			return false
 		}
 		updatedSupplier = supList[0]
@@ -944,7 +947,7 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 		Z3950: &directory.Z3950Config{
 			Address: "a",
 			Options: &map[string]string{
-				"location": "1234",
+				"location": "1234", // ensures that availability lookup returns a result and supplier is not skipped
 			},
 		},
 	}}
@@ -969,10 +972,14 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	var updatedSupplier ill_db.LocatedSupplier
 	test.WaitForPredicateToBeTrue(func() bool {
 		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
-		if err != nil || len(supList) == 0 {
+		if err != nil {
+			t.Errorf("failed to find located supplier by ill transaction by ill transaction id %v", illTrId)
+		}
+		if len(supList) == 0 {
 			return false
 		}
 		updatedSupplier = supList[0]
+		// eventually supplier will be marked skipped in OnMessageRequesterComplete
 		return updatedSupplier.SupplierStatus == ill_db.SupplierStateSkippedPg
 	})
 	assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
@@ -1015,18 +1022,27 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 
 	test.WaitForPredicateToBeTrue(func() bool {
 		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-		return err == nil && len(eventsList) > 1
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
+		}
+		for _, ev := range eventsList {
+			if ev.EventStatus == events.EventStatusError {
+				return true
+			}
+		}
+		return false
 	})
-	// Check that the event log contains the skipped flag
 	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 	assert.NoError(t, err)
-	found := false
+	var found *events.Event
 	for _, ev := range eventsList {
 		if ev.EventStatus == events.EventStatusError {
-			found = true
+			found = &ev
+			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event error")
+	assert.NotNil(t, found, "Expected check-availability event error")
+	assert.Contains(t, found.ResultData.EventError.Message, "could not create availability adapter")
 }
 
 func TestCheckAvailability_Z3950LookupError(t *testing.T) {
@@ -1055,18 +1071,25 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 
 	test.WaitForPredicateToBeTrue(func() bool {
 		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
-		return err == nil && len(eventsList) > 1
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
+		}
+		for _, ev := range eventsList {
+			if ev.EventStatus == events.EventStatusError {
+				return true
+			}
+		}
+		return false
 	})
-	// assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
-
-	// Check that the event log contains the skipped flag
 	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 	assert.NoError(t, err)
-	found := false
+	var found *events.Event
 	for _, ev := range eventsList {
 		if ev.EventStatus == events.EventStatusError {
-			found = true
+			found = &ev
+			break
 		}
 	}
-	assert.True(t, found, "Expected check-availability event error")
+	assert.NotNil(t, found, "Expected check-availability event error")
+	assert.Contains(t, found.ResultData.EventError.Message, "failed to perform availability lookup")
 }

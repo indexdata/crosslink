@@ -74,11 +74,10 @@ func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext
 		if !ok {
 			return "", fmt.Errorf("failed to detect local supplier from event result data")
 		}
-		if !local {
-			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
-		} else {
+		if local {
 			return "", nil
 		}
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
 }
 
