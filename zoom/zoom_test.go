@@ -86,7 +86,7 @@ func TestSearch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, record)
 
-	record.finalize()
+	record.Close()
 
 	record, err = rs.GetRecord(1)
 	assert.NoError(t, err)
@@ -96,7 +96,7 @@ func TestSearch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, record)
 
-	rs.finalize()
+	rs.Close()
 
 	_, err = rs.GetRecord(0)
 	assert.Error(t, err)

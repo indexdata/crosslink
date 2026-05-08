@@ -111,6 +111,10 @@ func (s *ResultSet) finalize() {
 	}
 }
 
+func (s *ResultSet) Close() {
+	s.finalize()
+}
+
 func (s *ResultSet) Count() int {
 	return int(C.ZOOM_resultset_size(s.rs))
 }
@@ -170,6 +174,10 @@ func (r *Record) finalize() {
 		C.ZOOM_record_destroy(r.rec)
 		r.rec = nil
 	}
+}
+
+func (r *Record) Close() {
+	r.finalize()
 }
 
 func (r *Record) Data(dataType string) []byte {
