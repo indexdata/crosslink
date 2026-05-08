@@ -1,4 +1,3 @@
-// file: z3950.go
 //go:build cgo
 
 package availability

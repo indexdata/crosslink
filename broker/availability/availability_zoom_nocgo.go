@@ -1,4 +1,3 @@
-// file: z3950_nocgo.go
 //go:build !cgo
 
 package availability

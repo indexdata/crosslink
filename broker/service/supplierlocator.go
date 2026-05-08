@@ -248,7 +248,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}
 	if aa == nil {
-		ctx.Logger().Info("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
+		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
 		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 	}
 
@@ -263,7 +263,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}
 	if len(results) == 0 {
-		ctx.Logger().Info("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
+		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
 		eventData["skipped"] = true
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
 		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
@@ -271,7 +271,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
 		}
 	} else {
-		ctx.Logger().Info("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
+		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
 	}
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }

@@ -1,10 +1,8 @@
-// file: zoom.go
 //go:build cgo
 
 package zoom
 
 /*
-// file: zoom.go
 #cgo pkg-config: yaz
 #include <yaz/zoom.h>
 #include <stdlib.h>
