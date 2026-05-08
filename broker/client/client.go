@@ -63,12 +63,12 @@ type transactionContext struct {
 }
 
 type messageTarget struct {
-	supplier       *ill_db.LocatedSupplier
-	peer           *ill_db.Peer
-	status         iso18626.TypeStatus
-	brokerMessage  bool
-	note           string
-	problemDetails *string
+	supplier          *ill_db.LocatedSupplier
+	peer              *ill_db.Peer
+	status            iso18626.TypeStatus
+	brokerInfoMessage bool
+	note              string
+	problemDetails    *string
 }
 
 func CreateIso18626Client(eventBus events.EventBus, illRepo ill_db.IllRepo, prMessageHandler prservice.PatronRequestMessageHandler, maxMsgSize int, delay time.Duration) Iso18626Client {
@@ -606,8 +606,8 @@ func (c *Iso18626Client) handleNoSelectedSupplier(ctx common.ExtendedContext, tr
 	if isNotification && msgSupplierSymbol != "" {
 		return c.handleSkippedSupplierNotification(ctx, trCtx, msgSupplierSymbol)
 	}
-
-	return &messageTarget{status: iso18626.TypeStatusUnfilled, brokerMessage: false}, nil
+	// end-of-rota unfilled
+	return &messageTarget{status: iso18626.TypeStatusUnfilled, brokerInfoMessage: false}, nil
 }
 
 // Handle message from skipped supplier
@@ -618,10 +618,10 @@ func (c *Iso18626Client) handleSkippedSupplierNotification(ctx common.ExtendedCo
 	}
 
 	return &messageTarget{
-		supplier:      skipped,
-		peer:          skippedPeer,
-		status:        iso18626.TypeStatus(trCtx.transaction.LastSupplierStatus.String),
-		brokerMessage: false,
+		supplier:          skipped,
+		peer:              skippedPeer,
+		status:            iso18626.TypeStatus(trCtx.transaction.LastSupplierStatus.String),
+		brokerInfoMessage: false,
 	}, nil
 }
 
@@ -630,12 +630,12 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 	lastReceivedStatus := trCtx.selectedSupplier.LastStatus
 	if s, ok := iso18626.StatusMap[lastReceivedStatus.String]; ok {
 		// Forward supplier message to requester
-		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: s, brokerMessage: false}, nil
+		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: s, brokerInfoMessage: false}, nil
 	}
 
 	if !lastReceivedStatus.Valid {
 		// Send first ExpectToSupply message when supplier has confirmed
-		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: BrokerInfoStatus, brokerMessage: true}, nil
+		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: BrokerInfoStatus, brokerInfoMessage: true}, nil
 	}
 
 	return nil, fmt.Errorf(FailedToResolveStatus, lastReceivedStatus.String)
@@ -648,7 +648,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	} else {
 		message = iso18626.NewISO18626Message()
 		message.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{}
-		if trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) && target.brokerMessage {
+		if trCtx.requester.BrokerMode == string(common.BrokerModeOpaque) && target.brokerInfoMessage {
 			message.SupplyingAgencyMessage.MessageInfo.ReasonForMessage = iso18626.TypeReasonForMessageNotification
 		}
 	}
@@ -672,7 +672,7 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 	if !isInternalCrossLinkMessage(trCtx, target) {
 		prependSupplierSymbolNote(trCtx, target, sam)
 	}
-	if vendorNote && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+	if vendorNote && target.brokerInfoMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNote(sam, target.peer.Vendor)
 	}
 	return message

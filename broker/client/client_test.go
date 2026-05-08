@@ -518,7 +518,7 @@ func TestDetermineMessageTarget_handleNoSelectedSupplier_Unfilled(t *testing.T) 
 
 	assert.Nil(t, err)
 	assert.Equal(t, iso18626.TypeStatusUnfilled, msgTarget.status)
-	assert.False(t, msgTarget.brokerMessage)
+	assert.False(t, msgTarget.brokerInfoMessage)
 }
 
 func TestDetermineMessageTargetWithSupplier_handleSkippedSupplierNotification_BrokerModeTransparent(t *testing.T) {
@@ -570,7 +570,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_StatusLoaned(t *testing.T
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusLoaned, msgTarget.status)
-	assert.False(t, msgTarget.brokerMessage)
+	assert.False(t, msgTarget.brokerInfoMessage)
 }
 
 func TestDetermineMessageTarget_handleSelectedSupplier_StatusInvalid(t *testing.T) {
@@ -601,7 +601,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, sup, msgTarget.supplier)
-	assert.True(t, msgTarget.brokerMessage)
+	assert.True(t, msgTarget.brokerInfoMessage)
 }
 func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_BrokerModeTransparent(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
@@ -618,7 +618,7 @@ func TestDetermineMessageTarget_handleSelectedSupplier_NoStatus_NoMessage_Broker
 	assert.Equal(t, sup, msgTarget.supplier)
 	assert.Equal(t, supPeer, msgTarget.peer)
 	assert.Equal(t, iso18626.TypeStatusExpectToSupply, msgTarget.status)
-	assert.True(t, msgTarget.brokerMessage)
+	assert.True(t, msgTarget.brokerInfoMessage)
 }
 
 func TestBuildSupplyingAgencyMessage(t *testing.T) {
@@ -634,10 +634,10 @@ func TestBuildSupplyingAgencyMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Equal(t, "testId1", message.DeliveryInfo.ItemId)
@@ -663,10 +663,10 @@ func TestBuildSupplyingAgencyMessageDateSentOnlyForLoaned(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusWillSupply,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusWillSupply,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
@@ -686,10 +686,10 @@ func TestBuildSupplyingAgencyMessage_NoIncomingMessage(t *testing.T) {
 	}
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeTransparent)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
 	assert.Nil(t, message.DeliveryInfo)
@@ -712,10 +712,10 @@ func TestBuildSupplyingAgencyMessage_SkippedNotificationOpaqueUsesTargetSupplier
 	}
 	trCtx := createTransactionContext(event, selected, &ill_db.Peer{Vendor: string(directory.Alma)}, common.BrokerModeOpaque)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: false,
-		supplier:      skipped,
-		peer:          skippedPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: false,
+		supplier:          skipped,
+		peer:              skippedPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
@@ -737,10 +737,10 @@ func TestBuildSupplyingAgencyMessage_SupplierAndVendorNoteForCrossLinkToAlma(t *
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
 	trCtx.requester.Vendor = string(directory.CrossLink)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
@@ -758,10 +758,10 @@ func TestBuildSupplyingAgencyMessage_NoSupplierNoteForCrossLinkToCrossLink(t *te
 	trCtx := createTransactionContext(event, sup, supPeer, common.BrokerModeOpaque)
 	trCtx.requester.Vendor = string(directory.CrossLink)
 	msgTarget := messageTarget{
-		status:        iso18626.TypeStatusLoaned,
-		brokerMessage: true,
-		supplier:      sup,
-		peer:          supPeer,
+		status:            iso18626.TypeStatusLoaned,
+		brokerInfoMessage: true,
+		supplier:          sup,
+		peer:              supPeer,
 	}
 
 	message := createSupplyingAgencyMessage(trCtx, &msgTarget).SupplyingAgencyMessage
