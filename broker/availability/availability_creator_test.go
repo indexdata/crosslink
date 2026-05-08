@@ -42,6 +42,19 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(ctx, peer)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported availability adapter type: other")
+}
+
+func TestGetAdapterMissingProperties(t *testing.T) {
+	creator := NewAvailabilityCreator("zoom", "")
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := ill_db.Peer{
+		CustomData: directory.Entry{
+			AvailabilityConfig: &directory.AvailabilityConfig{},
+		},
+	}
+	_, err := creator.GetAdapter(ctx, peer)
+	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must specify either sru or z3950 properties")
 }
 

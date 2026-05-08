@@ -59,14 +59,16 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	}
 	if config.Z3950 != nil {
 		queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
-		if c.mode == AvailabilityAdapterMetaproxy {
+		switch c.mode {
+		case AvailabilityAdapterMetaproxy:
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
 			return NewMetaproxyAvailabilityAdapter(ctx, *config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
-		}
-		if c.mode == AvailabilityAdapterZoom {
+		case AvailabilityAdapterZoom:
 			return NewZoomAvailabilityAdapter(ctx, *config.Z3950, queryBuilder, holdingsParser)
+		default:
+			return nil, fmt.Errorf("unsupported availability adapter type: %s", c.mode)
 		}
 	}
 	return nil, fmt.Errorf("must specify either sru or z3950 properties for availability adapter type")
