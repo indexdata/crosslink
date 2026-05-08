@@ -55,11 +55,11 @@ type Iso18626Client struct {
 }
 
 type transactionContext struct {
-	transaction      *ill_db.IllTransaction
-	requester        *ill_db.Peer
-	selectedSupplier *ill_db.LocatedSupplier
-	selectedPeer     *ill_db.Peer
-	event            events.Event
+	transaction          *ill_db.IllTransaction
+	requester            *ill_db.Peer
+	selectedSupplier     *ill_db.LocatedSupplier
+	selectedSupplierPeer *ill_db.Peer
+	event                events.Event
 }
 
 type messageTarget struct {
@@ -558,7 +558,7 @@ func (c *Iso18626Client) readTransactionContext(ctx common.ExtendedContext, even
 		return transCtx, fmt.Errorf("%s: %w", FailedToGetSupplier, err)
 	}
 	transCtx.selectedSupplier = selected
-	transCtx.selectedPeer = supplier
+	transCtx.selectedSupplierPeer = supplier
 	return transCtx, nil
 }
 
@@ -630,12 +630,12 @@ func handleSelectedSupplier(trCtx transactionContext) (*messageTarget, error) {
 	lastReceivedStatus := trCtx.selectedSupplier.LastStatus
 	if s, ok := iso18626.StatusMap[lastReceivedStatus.String]; ok {
 		// Forward supplier message to requester
-		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedPeer, status: s, brokerMessage: false}, nil
+		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: s, brokerMessage: false}, nil
 	}
 
 	if !lastReceivedStatus.Valid {
 		// Send first ExpectToSupply message when supplier has confirmed
-		return &messageTarget{supplier: trCtx.selectedSupplier, status: BrokerInfoStatus, brokerMessage: true}, nil
+		return &messageTarget{supplier: trCtx.selectedSupplier, peer: trCtx.selectedSupplierPeer, status: BrokerInfoStatus, brokerMessage: true}, nil
 	}
 
 	return nil, fmt.Errorf(FailedToResolveStatus, lastReceivedStatus.String)
@@ -669,14 +669,19 @@ func createSupplyingAgencyMessage(trCtx transactionContext, target *messageTarge
 		name, agencyId, address, _ := getPeerInfo(target.peer, target.supplier.SupplierSymbol)
 		populateReturnAddress(message, name, agencyId, address)
 	}
-	shouldInjectSyntheticNotes := !isCrossLinkVendor(trCtx.requester) &&
-		!isCrossLinkVendor(trCtx.selectedPeer) &&
-		!isCrossLinkVendor(target.peer)
-	prependSupplierSymbolNote(trCtx, target, sam)
-	if vendorNote && shouldInjectSyntheticNotes && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
+	if !isInternalCrossLinkMessage(trCtx, target) {
+		prependSupplierSymbolNote(trCtx, target, sam)
+	}
+	if vendorNote && target.brokerMessage && target.peer != nil && target.peer.Vendor != trCtx.requester.Vendor {
 		prependVendorNote(sam, target.peer.Vendor)
 	}
 	return message
+}
+
+func isInternalCrossLinkMessage(trCtx transactionContext, target *messageTarget) bool {
+	return target != nil &&
+		isCrossLinkVendor(trCtx.requester) &&
+		isCrossLinkVendor(target.peer)
 }
 
 func isCrossLinkVendor(peer *ill_db.Peer) bool {
@@ -756,7 +761,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = iso18626.NewISO18626Message()
 	message.Request = &iso18626.Request{
-		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedPeer.BrokerMode),
+		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedSupplierPeer.BrokerMode),
 		BibliographicInfo:     trCtx.transaction.IllTransactionData.BibliographicInfo,
 		PublicationInfo:       trCtx.transaction.IllTransactionData.PublicationInfo,
 		ServiceInfo:           trCtx.transaction.IllTransactionData.ServiceInfo,
@@ -773,7 +778,7 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	}
 	populateDeliveryAddress(message, deliveryAddress, email)
 	if appendSupplierInfo {
-		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedPeer, trCtx.selectedSupplier.SupplierSymbol)
+		supplierName, suppAgencyId, supplierAddress, _ := getPeerInfo(trCtx.selectedSupplierPeer, trCtx.selectedSupplier.SupplierSymbol)
 		populateSupplierInfo(message, supplierName, suppAgencyId, supplierAddress)
 	}
 	return message, ill_db.RequestAction
@@ -790,7 +795,7 @@ func createRequestingAgencyMessage(trCtx transactionContext) (*iso18626.ISO18626
 		note = trCtx.event.EventData.IncomingMessage.RequestingAgencyMessage.Note
 	}
 	message.RequestingAgencyMessage = &iso18626.RequestingAgencyMessage{
-		Header: createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedPeer.BrokerMode),
+		Header: createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedSupplierPeer.BrokerMode),
 		Action: found,
 		Note:   note,
 	}
@@ -802,7 +807,7 @@ func (c *Iso18626Client) sendAndUpdateSupplier(ctx common.ExtendedContext, trCtx
 	resData := events.EventResult{}
 	resData.OutgoingMessage = message
 	if !isDoNotSend(trCtx.event) {
-		response, err := c.HandleIllMessage(ctx, trCtx.selectedPeer, message)
+		response, err := c.HandleIllMessage(ctx, trCtx.selectedSupplierPeer, message)
 		if response != nil {
 			resData.IncomingMessage = response
 		}

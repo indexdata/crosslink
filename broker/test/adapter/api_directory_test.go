@@ -80,6 +80,7 @@ func TestGetVendorFromUrl(t *testing.T) {
 
 func TestGetBrokerMode(t *testing.T) {
 	assert.Equal(t, common.BrokerModeOpaque, adapter.GetBrokerMode(directory.ILLiad))
+	assert.Equal(t, common.BrokerModeTransparent, adapter.GetBrokerMode(directory.CrossLink))
 }
 
 func TestLookup400(t *testing.T) {

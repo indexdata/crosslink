@@ -439,7 +439,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.Equal(t, "Will ship", *notifications.Items[0].Note)
 
 	// Check notification requester side
-	forwardedWillShipNote := "Supplier: " + strings.Split(supplierSymbol, ":")[1] + ", Will ship"
+	forwardedWillShipNote := "Will ship"
 	findNotificationByNote := func(list []proapi.PrNotification, note string) *proapi.PrNotification {
 		for i := range list {
 			if list[i].Note != nil && *list[i].Note == note {
