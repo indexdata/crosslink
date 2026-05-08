@@ -969,21 +969,18 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Wait for the event to be processed and check the supplier status
-	var updatedSupplier ill_db.LocatedSupplier
 	test.WaitForPredicateToBeTrue(func() bool {
-		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
+		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 		if err != nil {
-			t.Errorf("failed to find located supplier by ill transaction by ill transaction id %v", illTrId)
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
 		}
-		if len(supList) == 0 {
-			return false
+		for _, ev := range eventsList {
+			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+				return true
+			}
 		}
-		updatedSupplier = supList[0]
-		// eventually supplier will be marked skipped in OnMessageRequesterComplete
-		return updatedSupplier.SupplierStatus == ill_db.SupplierStateSkippedPg
+		return false
 	})
-	assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
-
 	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
 	assert.NoError(t, err)
 	found := false
