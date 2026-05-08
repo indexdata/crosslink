@@ -74,7 +74,7 @@ func TestSearch(t *testing.T) {
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
-	assert.Equal(t, rs.Count(), 42)
+	assert.Equal(t, 42, rs.Count())
 
 	record, err := rs.GetRecord(0)
 	assert.NoError(t, err)
@@ -142,7 +142,6 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
-	assert.Equal(t, rs.Count(), 42)
 
 	// getting non-surrogate diagnostic for unsupported record syntax
 	rec, err := rs.GetRecord(0)
@@ -165,7 +164,6 @@ func TestSearchSurrogateDiagnostic(t *testing.T) {
 	rs, err := conn.Search("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
-	assert.Equal(t, rs.Count(), 42)
 
 	// getting surrogate diagnostic for element set name not supported
 	rec, err := rs.GetRecord(0)
