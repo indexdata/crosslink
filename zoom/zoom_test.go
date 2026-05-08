@@ -151,3 +151,26 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	assert.Contains(t, err.Error(), "Record syntax not supported")
 	assert.Equal(t, 239, err.(*ZoomError).Code)
 }
+
+func TestSearchSurrogateDiagnostic(t *testing.T) {
+	options := Options{
+		"elementSetName": "SD", // trigger surrogate diagnostic response from the server
+	}
+	conn := NewConnection(options)
+	assert.NotNil(t, conn)
+	defer conn.Close()
+	err := conn.Connect("localhost:" + mappedPort)
+	assert.NoError(t, err)
+
+	rs, err := conn.Search("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, rs)
+	assert.Equal(t, rs.Count(), 42)
+
+	// getting surrogate diagnostic for element set name not supported
+	rec, err := rs.GetRecord(0)
+	assert.Error(t, err)
+	assert.Nil(t, rec)
+	assert.Contains(t, err.Error(), "Specified element set name not valid for specified database")
+	assert.Equal(t, 25, err.(*ZoomError).Code)
+}

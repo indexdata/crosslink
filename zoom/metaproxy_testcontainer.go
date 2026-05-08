@@ -22,7 +22,7 @@ func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
 	c := &MetaproxyContainer{}
 
 	req := testcontainers.ContainerRequest{
-		Image:        "ghcr.io/indexdata/metaproxy:sha-475f9b5",
+		Image:        "ghcr.io/indexdata/metaproxy:sha-c8a458f",
 		ExposedPorts: []string{"9000/tcp"},
 		WaitingFor:   wait.ForListeningPort("9000/tcp").WithStartupTimeout(5 * time.Second),
 		Files: []testcontainers.ContainerFile{
