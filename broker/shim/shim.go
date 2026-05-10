@@ -33,9 +33,8 @@ const ACCEPT = "ACCEPT"
 const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
 const RESHARE_LOAN_CONDITION_REJECT = "#ReShareLoanConditionRejectResponse#"
-const LOAN_CONDITION_OTHER = "other"          //non-standard LC used by ReShare
-const REASON_UNFILLED_DUPLICATE = "Duplicate" //non-standard RU used to terminate duplicate transactions
-const ALMA_DUPLICATE_NOTE_PREFIX = "DUPLICATE"
+const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
+const DUPLICATE_NOTE_PREFIX = "DUPLICATE"
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 var edgeNonWord = regexp.MustCompile(`^\W+|\W+$`)
@@ -124,11 +123,11 @@ func applyToIncomingRequest(message *iso18626.ISO18626Message, supplier *ill_db.
 func setDuplicateReasonUnfilled(sam *iso18626.SupplyingAgencyMessage) {
 	if sam == nil ||
 		sam.StatusInfo.Status != iso18626.TypeStatusUnfilled ||
-		!strings.HasPrefix(sam.MessageInfo.Note, ALMA_DUPLICATE_NOTE_PREFIX) {
+		!strings.HasPrefix(sam.MessageInfo.Note, DUPLICATE_NOTE_PREFIX) {
 		return
 	}
 	sam.MessageInfo.ReasonUnfilled = &iso18626.TypeSchemeValuePair{
-		Text: REASON_UNFILLED_DUPLICATE,
+		Text: string(iso18626.ReasonUnfilledDuplicate),
 	}
 }
 

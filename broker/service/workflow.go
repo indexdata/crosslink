@@ -202,7 +202,7 @@ func supplierUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
 func supplierTerminalUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
 	return supplierUnfilled(sam) &&
 		sam.MessageInfo.ReasonUnfilled != nil &&
-		strings.EqualFold(sam.MessageInfo.ReasonUnfilled.Text, "Duplicate")
+		strings.EqualFold(sam.MessageInfo.ReasonUnfilled.Text, string(iso18626.ReasonUnfilledDuplicate))
 }
 
 func (w *WorkflowManager) supplierAcceptedTerminalCancel(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {

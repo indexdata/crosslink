@@ -298,7 +298,7 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 							MessageInfo: iso18626.MessageInfo{
 								ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
 								ReasonUnfilled: &iso18626.TypeSchemeValuePair{
-									Text: "Duplicate",
+									Text: string(iso18626.ReasonUnfilledDuplicate),
 								},
 							},
 							StatusInfo: iso18626.StatusInfo{

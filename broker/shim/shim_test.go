@@ -1029,14 +1029,14 @@ func TestApplyToIncomingRequestSetDuplicateReasonUnfilled(t *testing.T) {
 			Status: iso18626.TypeStatusUnfilled,
 		},
 		MessageInfo: iso18626.MessageInfo{
-			Note: "DUPLICATE request",
+			Note: DUPLICATE_NOTE_PREFIX + " request",
 		},
 	}
 
 	result := shima.ApplyToIncomingRequest(msg, nil, nil)
 
 	if assert.NotNil(t, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled) {
-		assert.Equal(t, REASON_UNFILLED_DUPLICATE, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled.Text)
+		assert.Equal(t, string(iso18626.ReasonUnfilledDuplicate), result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled.Text)
 	}
 	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
 }
