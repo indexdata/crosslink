@@ -244,7 +244,7 @@ func traverse(v reflect.Value, level int) {
 	if !v.IsValid() {
 		return
 	}
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return
 		}

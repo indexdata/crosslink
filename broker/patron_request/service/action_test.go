@@ -448,7 +448,7 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionAcceptCondition
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -464,6 +464,28 @@ func TestHandleInvokeActionAcceptCondition(t *testing.T) {
 	assert.Equal(t, BorrowerStateWillSupply, mockPrRepo.savedPr.State)
 }
 
+func TestHandleInvokeActionAcceptConditionMarksReceivedConditionNotificationsAccepted(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	action := BorrowerActionAcceptCondition
+
+	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockPrRepo.markedConditionNotificationsReceipts, 1) {
+		assert.Equal(t, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationAccepted),
+			PrID:      patronRequestId,
+			Direction: string(pr_db.NotificationDirectionReceived),
+		}, mockPrRepo.markedConditionNotificationsReceipts[0])
+	}
+}
+
 func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
@@ -471,7 +493,7 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	action := BorrowerActionRejectCondition
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
 
@@ -485,6 +507,28 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
+}
+
+func TestHandleInvokeActionRejectConditionMarksReceivedConditionNotificationsRejected(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REC1").Return(createLmsAdapterMockFail(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	action := BorrowerActionRejectCondition
+
+	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.Len(t, mockPrRepo.markedConditionNotificationsReceipts, 1) {
+		assert.Equal(t, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationRejected),
+			PrID:      patronRequestId,
+			Direction: string(pr_db.NotificationDirectionReceived),
+		}, mockPrRepo.markedConditionNotificationsReceipts[0])
+	}
 }
 
 func TestSendBorrowingRequestInvalidSymbol(t *testing.T) {
@@ -1529,10 +1573,11 @@ func (m *MockEventBus) CreateNoticeWithParent(id string, eventName events.EventN
 type MockPrRepo struct {
 	mock.Mock
 	pr_db.PgPrRepo
-	savedPr            pr_db.PatronRequest
-	savedItems         []pr_db.Item
-	savedNotifications []pr_db.Notification
-	saveItemFail       bool
+	savedPr                              pr_db.PatronRequest
+	savedItems                           []pr_db.Item
+	savedNotifications                   []pr_db.Notification
+	markedConditionNotificationsReceipts []pr_db.MarkConditionNotificationsReceiptParams
+	saveItemFail                         bool
 }
 
 func (r *MockPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(repo pr_db.PrRepo) error) error {
@@ -1610,6 +1655,36 @@ func (r *MockPrRepo) SaveItem(ctx common.ExtendedContext, params pr_db.SaveItemP
 func (r *MockPrRepo) GetItemsByPrId(ctx common.ExtendedContext, id string) ([]pr_db.Item, error) {
 	args := r.Called(id)
 	return args.Get(0).([]pr_db.Item), args.Error(1)
+}
+
+func (r *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params pr_db.GetNotificationsByPrIdParams) ([]pr_db.Notification, int64, error) {
+	notifications := make([]pr_db.Notification, 0, len(r.savedNotifications))
+	for _, notification := range r.savedNotifications {
+		if notification.PrID != params.PrID {
+			continue
+		}
+		if params.Kind != "" && string(notification.Kind) != params.Kind {
+			continue
+		}
+		notifications = append(notifications, notification)
+	}
+	fullCount := int64(len(notifications))
+	if params.Offset >= int32(len(notifications)) {
+		return nil, fullCount, nil
+	}
+	end := params.Offset + params.Limit
+	if end > int32(len(notifications)) {
+		end = int32(len(notifications))
+	}
+	return notifications[params.Offset:end], fullCount, nil
+}
+
+func (r *MockPrRepo) MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params pr_db.MarkConditionNotificationsReceiptParams) error {
+	r.markedConditionNotificationsReceipts = append(r.markedConditionNotificationsReceipts, params)
+	if params.PrID == "error" {
+		return errors.New("db error")
+	}
+	return nil
 }
 
 func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.SaveNotificationParams) (pr_db.Notification, error) {

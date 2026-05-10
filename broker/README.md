@@ -38,16 +38,17 @@ ISO18626 is designed as a peer-to-peer protocol and, as such, does not include a
 
 CrossLink Broker relies on regular ISO18626 exchanges to provide broker-specific functionality in a protocol-compliant manner:
 
-1. Automatically sends ISO18626 `ExpectToSupply` message to the requester each time a new supplier is selected
-2. Forwards the ISO18626 `Unfilled` message from the supplier as a `Notification` rather than a `StatusChange`, to avoid terminating the lending request too early.
+1. Automatically sends a requester-facing ISO18626 `ExpectToSupply` message each time a new supplier is selected.
+2. Forwards supplier `Unfilled` messages as `Notification` messages rather than `StatusChange` messages, to avoid terminating the borrowing request too early.
    Regular `Unfilled` status is communicated at the end of the transaction when the broker exhausts all suppliers ("end of rota").
 3. _local supply_ feature: detects when the supplier is part of or the same institution as the requester and acts accordingly to the selected mode
 
-To remain compatible with exiting external ISO18626 peers, CrossLink Broker can operate in two modes:
+To remain compatible with existing external ISO18626 peers, CrossLink Broker can operate in two modes:
 
 1. `opaque` -- in this mode, Broker's own symbol (set via the `BROKER_SYMBOL` env var) is used in the headers of outgoing messages, behaving as a regular ISO18626 peer.
-   Actual supplier is identified by prepending `Supplier: {symbol}` to the message note field, see `SUPPLIER_SYMBOL_NOTE` env var.
+   For external peer messages, the actual supplier is identified by prepending `Supplier: {symbol}` to the message note field.
    `ExpectToSupply` messages after a supplier change are sent as a `Notification` rather than a `StatusChange`.
+   Supplier notifications from skipped suppliers are still forwarded, with the original supplier identified in the note.
    Upon detecting _local supply_, the supplier is skipped.
 
 2. `transparent` -- the requester and supplier symbols are used in the forwarded message headers, thus fully revealing both parties.
@@ -57,6 +58,7 @@ The broker mode can be configured for each peer individually by setting the `Bro
 
 * vendor `Alma` -> external peer in `opaque` mode
 * vendor `ReShare` -> external peer in `transparent` mode
+* vendor `ILLiad` -> external peer in `opaque` mode
 * vendor `CrossLink` -> internal peer, ILL requests are managed via the Patron Requests API, no outgoing ISO18626
 * vendor `Unknown` -> mode set via the fallback `BROKER_MODE` env var, `opaque` by default
 
@@ -93,7 +95,6 @@ Configuration is provided via environment variables:
 | `SUPPLIER_INFO`           | Should `request/supplierInfo` be populated from Directory                             | `true`                                    |
 | `RETURN_INFO`             | Should `returnInfo` be populated from Directory for supplier `Loaned` message         | `true`                                    |
 | `VENDOR_NOTE`             | Should `note` field be prepended with `Vendor: {vendor}` text                         | `true`                                    |
-| `SUPPLIER_SYMBOL_NOTE`    | Should `note` field be prepended with a `Supplier: {symbol}` text, `opaque` mode only | `true`                                    |
 | `OFFERED_COSTS`           | Should `deliveryCosts` be transferred to `offeredCosts` for ReShare vendor requesters | `false`                                   |
 | `NOTE_FIELD_SEP`          | Separator for fields (e.g. Vendor) prepended to the note                              | `, `                                      |
 | `CLIENT_DELAY`            | Delay duration for outgoing ISO18626 messages                                         | `0ms`                                     |

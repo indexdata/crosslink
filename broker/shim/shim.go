@@ -51,6 +51,8 @@ func GetShim(vendor string) Iso18626Shim {
 	switch vendor {
 	case string(directory.Alma):
 		shim = new(Iso18626AlmaShim)
+	case string(directory.ILLiad):
+		shim = new(Iso18626ILLiadShim)
 	case string(directory.ReShare):
 		shim = new(Iso18626ReShareShim)
 	default:
@@ -87,6 +89,10 @@ type Iso18626AlmaShim struct {
 }
 
 func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	return applyToIncomingRequest(message, supplier)
+}
+
+func applyToIncomingRequest(message *iso18626.ISO18626Message, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
 	if message == nil {
 		return message
 	}
@@ -94,7 +100,7 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 	if message.RequestingAgencyMessage != nil {
 		copyRam := *message.RequestingAgencyMessage
 		copyMessage.RequestingAgencyMessage = &copyRam
-		conditionNote := i.fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
+		conditionNote := fixRequesterConditionNote(copyMessage.RequestingAgencyMessage)
 		if conditionNote == RESHARE_LOAN_CONDITION_REJECT && supplier != nil && supplier.SupplierSymbol != "" {
 			// condition reject is handled as a non-terminal Cancel addressed to the supplier
 			// regular Cancel is always terminal (addressed to broker)
@@ -107,7 +113,7 @@ func (i *Iso18626AlmaShim) ApplyToIncomingRequest(message *iso18626.ISO18626Mess
 	if message.SupplyingAgencyMessage != nil {
 		copySam := *message.SupplyingAgencyMessage
 		copyMessage.SupplyingAgencyMessage = &copySam
-		i.unifyItem(copyMessage.SupplyingAgencyMessage)
+		packItemIdIntoItemsNote(copyMessage.SupplyingAgencyMessage)
 	}
 	return &copyMessage
 }
@@ -118,48 +124,88 @@ func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Mess
 			suppMsg := message.SupplyingAgencyMessage
 			i.fixStatus(suppMsg)
 			i.fixReasonForMessage(suppMsg)
-			i.fixLoanCondition(suppMsg)
+			fixLoanCondition(suppMsg)
 			i.transferOfferedCostsToDeliveryCosts(suppMsg)
-			i.stripReShareSuppMsgSeqNote(suppMsg)
-			i.humanizeReShareSupplierConditionNote(suppMsg)
+			stripReShareSuppMsgSeqNote(suppMsg)
+			humanizeReShareSupplierConditionNote(suppMsg)
 			i.prependURLToSuppMsgNote(suppMsg)
 			i.prependLoanConditionOrCostToNote(suppMsg)
 			if suppMsg.StatusInfo.Status == iso18626.TypeStatusLoaned {
 				i.appendReturnAddressToSuppMsgNote(suppMsg)
 			}
 			i.appendUnfilledStatusAndReasonUnfilled(suppMsg)
-			i.setItemId(suppMsg)
+			setItemIdFromItemsNote(suppMsg)
 		}
 		if message.Request != nil {
 			request := message.Request
-			i.fixServiceLevel(request)
-			i.fixBibItemIds(request)
-			i.fixBibRecIds(request)
-			i.fixPublicationType(request)
-			i.stripReShareReqSeqNote(request)
+			fixServiceLevel(request)
+			fixBibItemIds(request)
+			fixBibRecIds(request)
+			fixPublicationType(request)
+			stripReShareReqSeqNote(request)
 			i.appendMaxCostToReqNote(request)
 			i.appendDeliveryAddressToReqNote(request)
 			i.appendReturnAddressToReqNote(request)
 		}
 		if message.RequestingAgencyMessage != nil {
 			reqMsg := message.RequestingAgencyMessage
-			i.stripReShareReqMsgSeqNote(reqMsg)
-			i.humanizeReShareRequesterNote(reqMsg)
+			stripReShareReqMsgSeqNote(reqMsg)
+			humanizeReShareRequesterNote(reqMsg)
 		}
 	}
 	return xml.Marshal(message)
 }
 
-func (i *Iso18626AlmaShim) stripReShareSuppMsgSeqNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+type Iso18626ILLiadShim struct {
+	Iso18626DefaultShim
+}
+
+func (i *Iso18626ILLiadShim) ApplyToIncomingRequest(message *iso18626.ISO18626Message, requester *ill_db.Peer, supplier *ill_db.LocatedSupplier) *iso18626.ISO18626Message {
+	return applyToIncomingRequest(message, supplier)
+}
+
+func (i *Iso18626ILLiadShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
+	if message != nil {
+		if message.SupplyingAgencyMessage != nil {
+			suppMsg := message.SupplyingAgencyMessage
+			fixLoanCondition(suppMsg)
+			stripReShareSuppMsgSeqNote(suppMsg)
+			humanizeReShareSupplierConditionNote(suppMsg)
+			setItemIdFromItemsNote(suppMsg)
+		}
+		if message.Request != nil {
+			request := message.Request
+			fixServiceLevel(request)
+			fixBibItemIds(request)
+			fixBibRecIds(request)
+			fixPublicationType(request)
+			stripReShareReqSeqNote(request)
+		}
+		if message.RequestingAgencyMessage != nil {
+			reqMsg := message.RequestingAgencyMessage
+			stripReShareReqMsgSeqNote(reqMsg)
+			humanizeReShareRequesterNote(reqMsg)
+		}
+	}
+	return xml.Marshal(message)
+}
+
+func stripReShareSuppMsgSeqNote(suppMsg *iso18626.SupplyingAgencyMessage) {
+	if suppMsg == nil {
+		return
+	}
 	suppMsg.MessageInfo.Note = rsNoteRegexp.ReplaceAllString(suppMsg.MessageInfo.Note, "")
 }
 
-func (i *Iso18626AlmaShim) stripReShareReqMsgSeqNote(reqMsg *iso18626.RequestingAgencyMessage) {
+func stripReShareReqMsgSeqNote(reqMsg *iso18626.RequestingAgencyMessage) {
+	if reqMsg == nil {
+		return
+	}
 	reqMsg.Note = rsNoteRegexp.ReplaceAllString(reqMsg.Note, "")
 }
 
-func (i *Iso18626AlmaShim) stripReShareReqSeqNote(request *iso18626.Request) {
-	if request.ServiceInfo == nil {
+func stripReShareReqSeqNote(request *iso18626.Request) {
+	if request == nil || request.ServiceInfo == nil {
 		return
 	}
 	request.ServiceInfo.Note = rsNoteRegexp.ReplaceAllString(request.ServiceInfo.Note, "")
@@ -220,7 +266,10 @@ func (i *Iso18626AlmaShim) appendUnfilledStatusAndReasonUnfilled(suppMsg *iso186
 	}
 }
 
-func (i *Iso18626AlmaShim) setItemId(sam *iso18626.SupplyingAgencyMessage) {
+func setItemIdFromItemsNote(sam *iso18626.SupplyingAgencyMessage) {
+	if sam == nil || sam.DeliveryInfo == nil {
+		return
+	}
 	result, startIdx, endIdx := common.UnpackItemsNote(sam.MessageInfo.Note)
 	if result == nil {
 		return
@@ -320,7 +369,10 @@ func (*Iso18626AlmaShim) fixReasonForMessage(suppMsg *iso18626.SupplyingAgencyMe
 	}
 }
 
-func (i *Iso18626AlmaShim) fixLoanCondition(request *iso18626.SupplyingAgencyMessage) {
+func fixLoanCondition(request *iso18626.SupplyingAgencyMessage) {
+	if request == nil {
+		return
+	}
 	if request.DeliveryInfo == nil || request.DeliveryInfo.LoanCondition == nil {
 		return
 	}
@@ -395,8 +447,8 @@ func (i *Iso18626AlmaShim) appendReturnAddressToReqNote(request *iso18626.Reques
 	}
 }
 
-func (i *Iso18626AlmaShim) fixServiceLevel(request *iso18626.Request) {
-	if request.ServiceInfo == nil || request.ServiceInfo.ServiceLevel == nil {
+func fixServiceLevel(request *iso18626.Request) {
+	if request == nil || request.ServiceInfo == nil || request.ServiceInfo.ServiceLevel == nil {
 		return
 	}
 	serviceLevel, ok := iso18626.ServiceLevelFromStringCI(request.ServiceInfo.ServiceLevel.Text)
@@ -406,8 +458,8 @@ func (i *Iso18626AlmaShim) fixServiceLevel(request *iso18626.Request) {
 	request.ServiceInfo.ServiceLevel.Text = string(serviceLevel)
 }
 
-func (i *Iso18626AlmaShim) fixPublicationType(request *iso18626.Request) {
-	if request.PublicationInfo == nil || request.PublicationInfo.PublicationType == nil {
+func fixPublicationType(request *iso18626.Request) {
+	if request == nil || request.PublicationInfo == nil || request.PublicationInfo.PublicationType == nil {
 		return
 	}
 	pubType, ok := iso18626.PublicationTypeFromStringCI(request.PublicationInfo.PublicationType.Text)
@@ -416,7 +468,10 @@ func (i *Iso18626AlmaShim) fixPublicationType(request *iso18626.Request) {
 	}
 }
 
-func (i *Iso18626AlmaShim) fixBibItemIds(request *iso18626.Request) {
+func fixBibItemIds(request *iso18626.Request) {
+	if request == nil {
+		return
+	}
 	var bibItemIds []iso18626.BibliographicItemId
 	for _, bibItemId := range request.BibliographicInfo.BibliographicItemId {
 		val, err := iso18626.BibliographicItemIdCodeFromString(strings.ToUpper(bibItemId.BibliographicItemIdentifierCode.Text))
@@ -432,7 +487,10 @@ func (i *Iso18626AlmaShim) fixBibItemIds(request *iso18626.Request) {
 	request.BibliographicInfo.BibliographicItemId = bibItemIds
 }
 
-func (i *Iso18626AlmaShim) fixBibRecIds(request *iso18626.Request) {
+func fixBibRecIds(request *iso18626.Request) {
+	if request == nil {
+		return
+	}
 	var bibRecIds []iso18626.BibliographicRecordId
 	for _, bibRecId := range request.BibliographicInfo.BibliographicRecordId {
 		val, err := iso18626.BibliographicRecordIdCodeFromString(strings.ToUpper(bibRecId.BibliographicRecordIdentifierCode.Text))
@@ -517,7 +575,10 @@ func MarshalAddress(sb *strings.Builder, addr *iso18626.PhysicalAddress) {
 	}
 }
 
-func (i *Iso18626AlmaShim) humanizeReShareRequesterNote(ram *iso18626.RequestingAgencyMessage) {
+func humanizeReShareRequesterNote(ram *iso18626.RequestingAgencyMessage) {
+	if ram == nil {
+		return
+	}
 	if strings.Contains(ram.Note, RESHARE_LOAN_CONDITION_AGREE) {
 		note := strings.ReplaceAll(ram.Note, RESHARE_LOAN_CONDITION_AGREE, "")
 		note = strings.TrimSpace(note)
@@ -525,7 +586,10 @@ func (i *Iso18626AlmaShim) humanizeReShareRequesterNote(ram *iso18626.Requesting
 	}
 }
 
-func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
+func humanizeReShareSupplierConditionNote(supplyingAgencyMessage *iso18626.SupplyingAgencyMessage) {
+	if supplyingAgencyMessage == nil {
+		return
+	}
 	if strings.TrimSpace(supplyingAgencyMessage.MessageInfo.Note) == RESHARE_SUPPLIER_AWAITING_CONDITION {
 		supplyingAgencyMessage.MessageInfo.Note = ALMA_SUPPLIER_AWAITING_CONDITION
 		return
@@ -542,7 +606,10 @@ func (i *Iso18626AlmaShim) humanizeReShareSupplierConditionNote(supplyingAgencyM
 	}
 }
 
-func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) string {
+func fixRequesterConditionNote(requestingAgencyMessage *iso18626.RequestingAgencyMessage) string {
+	if requestingAgencyMessage == nil {
+		return ""
+	}
 	if requestingAgencyMessage.Action == iso18626.TypeActionNotification {
 		note := rsNoteRegexp.ReplaceAllString(requestingAgencyMessage.Note, "") //this is only needed to test human-notes from ReShare
 		note = edgeNonWord.ReplaceAllString(note, "")
@@ -557,7 +624,10 @@ func (i *Iso18626AlmaShim) fixRequesterConditionNote(requestingAgencyMessage *is
 	return ""
 }
 
-func (i *Iso18626AlmaShim) unifyItem(sam *iso18626.SupplyingAgencyMessage) {
+func packItemIdIntoItemsNote(sam *iso18626.SupplyingAgencyMessage) {
+	if sam == nil {
+		return
+	}
 	if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
 		var sb strings.Builder
 		//retain original note

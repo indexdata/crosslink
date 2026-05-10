@@ -493,7 +493,7 @@ func (m *PatronRequestMessageHandler) handleRequestingAgencyMessageWithParent(ct
 	if !eventDefined {
 		return unsupported()
 	}
-	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged, parentEventID)
+	return m.updatePatronRequestAndCreateRamResponse(ctx, updatedPr, ram, &ram.Action, stateChanged, parentEventID, eventName)
 }
 
 func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18626.TypeMessageStatus, action *iso18626.TypeAction, errorData *iso18626.ErrorData, err error) (events.EventStatus, *iso18626.ISO18626Message, error) {
@@ -517,13 +517,31 @@ func createRAMResponse(ram iso18626.RequestingAgencyMessage, messageStatus iso18
 	return eventStatus, message, err
 }
 
-func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string) (events.EventStatus, *iso18626.ISO18626Message, error) {
+func (m *PatronRequestMessageHandler) updatePatronRequestAndCreateRamResponse(ctx common.ExtendedContext, pr pr_db.PatronRequest, ram iso18626.RequestingAgencyMessage, action *iso18626.TypeAction, stateChanged bool, parentEventID *string, eventName MessageEvent) (events.EventStatus, *iso18626.ISO18626Message, error) {
 	_, err := m.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(pr))
 	if err != nil {
 		return createRAMResponse(ram, iso18626.TypeMessageStatusERROR, action, &iso18626.ErrorData{
 			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
 			ErrorValue: err.Error(),
 		}, err)
+	}
+	switch eventName {
+	case RequesterCondAccepted:
+		if err = m.prRepo.MarkConditionNotificationsReceipt(ctx, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationAccepted),
+			PrID:      pr.ID,
+			Direction: string(pr_db.NotificationDirectionSent),
+		}); err != nil {
+			ctx.Logger().Error("failed to mark condition notifications accepted", "pr_id", pr.ID, "error", err)
+		}
+	case RequesterCondRejected:
+		if err = m.prRepo.MarkConditionNotificationsReceipt(ctx, pr_db.MarkConditionNotificationsReceiptParams{
+			Receipt:   string(pr_db.NotificationRejected),
+			PrID:      pr.ID,
+			Direction: string(pr_db.NotificationDirectionSent),
+		}); err != nil {
+			ctx.Logger().Error("failed to mark condition notifications rejected", "pr_id", pr.ID, "error", err)
+		}
 	}
 	err = m.extractRamNotifications(ctx, pr, ram)
 	if err != nil {
