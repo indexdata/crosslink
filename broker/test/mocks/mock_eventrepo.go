@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -63,6 +64,10 @@ func (r *MockEventRepositorySuccess) GetEventForUpdate(ctx common.ExtendedContex
 	return r.GetEvent(ctx, id)
 }
 
+func (r *MockEventRepositorySuccess) GetOlderIncompleteEvent(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	return events.Event{}, pgx.ErrNoRows
+}
+
 func (r *MockEventRepositorySuccess) ClaimEventForSignal(ctx common.ExtendedContext, id string, signal events.Signal) (events.Event, error) {
 	return r.GetEvent(ctx, id)
 }
@@ -112,6 +117,10 @@ func (r *MockEventRepositoryError) GetEvent(ctx common.ExtendedContext, id strin
 }
 
 func (r *MockEventRepositoryError) GetEventForUpdate(ctx common.ExtendedContext, id string) (events.Event, error) {
+	return events.Event{}, errors.New("DB error")
+}
+
+func (r *MockEventRepositoryError) GetOlderIncompleteEvent(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
 	return events.Event{}, errors.New("DB error")
 }
 

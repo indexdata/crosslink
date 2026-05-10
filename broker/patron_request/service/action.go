@@ -74,7 +74,7 @@ func (a *PatronRequestActionService) ProcessInvokeActionTask(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) processInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
-	return a.eventBus.ProcessTask(ctx, event, events.SignalConsumers, a.handleInvokeAction)
+	return a.eventBus.ProcessExclusiveTask(ctx, event, events.SignalConsumers, a.handleInvokeAction)
 }
 
 func logActionErrorAndReturnResult(ctx common.ExtendedContext, message string, err error) (events.EventStatus, *events.EventResult) {

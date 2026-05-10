@@ -39,6 +39,8 @@ type EventBus interface {
 	HandleTaskCompleted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event))
 	// ProcessTask runs h inside BeginTask/CompleteTask block and signals the selected target.
 	ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
+	// ProcessExclusiveTask runs h only when no older incomplete task exists for the same domain object and event name.
+	ProcessExclusiveTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 }
@@ -324,6 +326,43 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 	event, err := p.BeginTask(event.ID, target)
 	if err != nil {
 		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
+		return event, err
+	}
+
+	status, result := h(ctx, event)
+
+	event, err = p.CompleteTask(event.ID, result, status, target)
+	if err != nil {
+		p.getEventContext(inEvent).Logger().Warn("failed to complete processing TASK event", "error", err, "eventName", inEvent.EventName)
+		return event, err
+	}
+	return event, nil
+}
+
+func (p *PostgresEventBus) ProcessExclusiveTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
+	inEvent := &event
+	event, err := p.BeginTask(event.ID, target)
+	if err != nil {
+		p.getEventContext(inEvent).Logger().Warn("failed to start processing TASK event", "error", err, "eventName", inEvent.EventName)
+		return event, err
+	}
+
+	conflict, err := p.repo.GetOlderIncompleteEvent(ctx, event)
+	if err == nil {
+		status, result := NewErrorResult(fmt.Sprintf("another %s task in progress", event.EventName), fmt.Sprintf("conflicting event %s", conflict.ID))
+		event, err = p.CompleteTask(event.ID, result, status, target)
+		if err != nil {
+			p.getEventContext(inEvent).Logger().Warn("failed to complete conflicting TASK event", "error", err, "eventName", inEvent.EventName)
+			return event, err
+		}
+		p.getEventContext(&event).Logger().Warn("exclusive task blocked by older incomplete task",
+			"eventName", event.EventName,
+			"conflictingEventId", conflict.ID,
+			"conflictingEventStatus", conflict.EventStatus)
+		return event, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		p.getEventContext(inEvent).Logger().Warn("failed to check exclusive TASK event", "error", err, "eventName", inEvent.EventName)
 		return event, err
 	}
 
