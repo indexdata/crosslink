@@ -251,11 +251,14 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			broadcastCreated: 1,
 		},
 		{
-			name: "Supply message unfilled",
+			name: "Supply message request response unfilled",
 			event: events.Event{
 				EventData: events.EventData{
 					CommonEventData: events.CommonEventData{
 						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageRequestResponse,
+							},
 							StatusInfo: iso18626.StatusInfo{
 								Status: iso18626.TypeStatusUnfilled,
 							},
@@ -265,6 +268,69 @@ func TestOnMessageRequesterComplete(t *testing.T) {
 			},
 			broadcastCreated: 1,
 			tasksCreated:     1,
+		},
+		{
+			name: "Supply message status change unfilled",
+			event: events.Event{
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+							},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusUnfilled,
+							},
+						}),
+					},
+				},
+			},
+			broadcastCreated: 1,
+			tasksCreated:     1,
+		},
+		{
+			name: "Supply message duplicate terminal unfilled",
+			event: events.Event{
+				IllTransactionID: "duplicate-unfilled",
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+								ReasonUnfilled: &iso18626.TypeSchemeValuePair{
+									Text: "Duplicate",
+								},
+							},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusUnfilled,
+							},
+						}),
+					},
+				},
+			},
+			broadcastCreated: 1,
+			supplierStatuses: []string{
+				ill_db.SupplierStateSelectedPg.String,
+				ill_db.SupplierStateNewPg.String,
+			},
+		},
+		{
+			name: "Supply message notification unfilled",
+			event: events.Event{
+				EventData: events.EventData{
+					CommonEventData: events.CommonEventData{
+						IncomingMessage: messageFromSam(&iso18626.SupplyingAgencyMessage{
+							MessageInfo: iso18626.MessageInfo{
+								ReasonForMessage: iso18626.TypeReasonForMessageNotification,
+							},
+							StatusInfo: iso18626.StatusInfo{
+								Status: iso18626.TypeStatusUnfilled,
+							},
+						}),
+					},
+				},
+			},
+			broadcastCreated: 1,
 		},
 		{
 			name: "Supply message cancel response not valid",
