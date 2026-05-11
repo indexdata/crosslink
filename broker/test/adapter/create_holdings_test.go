@@ -42,6 +42,10 @@ func TestCreateHoldings(t *testing.T) {
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.ErrorContains(t, err, "bad value for HOLDINGS_FORMAT: other")
 
+	m[adapter.HoldingsFormat] = true
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.ErrorContains(t, err, "missing value for HOLDINGS_FORMAT")
+
 	m["HOLDINGS_ADAPTER"] = "mock"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.NoError(t, err)

@@ -44,7 +44,11 @@ func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, isxnLookup)
 		}
 		queryBuilder := QueryBuilderIsxn{isxn: isxnLookup}
-		parser, err := getParser(cfg[HoldingsFormat].(string))
+		format, ok := cfg[HoldingsFormat].(string)
+		if !ok {
+			return nil, fmt.Errorf("missing value for %s", HoldingsFormat)
+		}
+		parser, err := getParser(format)
 		if err != nil {
 			return nil, err
 		}
