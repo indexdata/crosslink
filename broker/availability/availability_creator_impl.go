@@ -37,7 +37,7 @@ func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
 	if config.Opac != nil {
 		return adapter.NewOpacHoldingsParser(*config.Opac), nil
 	}
-	return nil, fmt.Errorf("bad value for availability parser type")
+	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc or opac properties")
 }
 
 func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
@@ -26,6 +27,55 @@ func TestGetAdapterOtherNoConfig(t *testing.T) {
 	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
+}
+
+func TestParserNil(t *testing.T) {
+	parser, err := getParser(nil)
+	assert.NoError(t, err)
+	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+}
+
+func TestParserMissing(t *testing.T) {
+	parserConfig := &directory.ParserConfig{}
+	_, err := getParser(parserConfig)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must set marc or opac properties")
+}
+
+func TestParserMarc(t *testing.T) {
+	parserConfig := &directory.ParserConfig{
+		Marc: &directory.MarcParserConfig{},
+	}
+	parser, err := getParser(parserConfig)
+	assert.NoError(t, err)
+	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+}
+
+func TestParserOpac(t *testing.T) {
+	parserConfig := &directory.ParserConfig{
+		Opac: &directory.OpacParserConfig{},
+	}
+	parser, err := getParser(parserConfig)
+	assert.NoError(t, err)
+	assert.IsType(t, &adapter.OpacHoldingsParser{}, parser)
+}
+
+func TestGetAdapterBadParser(t *testing.T) {
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	peer := ill_db.Peer{
+		CustomData: directory.Entry{
+			AvailabilityConfig: &directory.AvailabilityConfig{
+				Z3950: &directory.Z3950Config{
+					Address: "a",
+				},
+				ParserConfig: &directory.ParserConfig{},
+			},
+		},
+	}
+	_, err := creator.GetAdapter(ctx, peer)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must set marc or opac properties")
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
@@ -113,6 +163,23 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 	aa, err := creator.GetAdapter(ctx, peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
+}
+
+func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
+	peer := ill_db.Peer{
+		CustomData: directory.Entry{
+			AvailabilityConfig: &directory.AvailabilityConfig{
+				Z3950: &directory.Z3950Config{
+					Address: "a",
+				},
+			},
+		},
+	}
+	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "")
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	_, err := creator.GetAdapter(ctx, peer)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "METAPROXY_URL")
 }
 
 func TestGetAdapterSRU(t *testing.T) {

@@ -918,7 +918,7 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	test.WaitForPredicateToBeTrue(func() bool {
 		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
 		if err != nil {
-			t.Errorf("failed to find located supplier by ill transaction by ill transaction id %v", illTrId)
+			t.Errorf("failed to find located supplier by ill transaction id %v", illTrId)
 		}
 		if len(supList) == 0 {
 			return false
