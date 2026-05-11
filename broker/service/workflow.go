@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -190,6 +191,20 @@ func supplierUnsolicitedCancel(sam iso18626.SupplyingAgencyMessage) bool {
 		sam.StatusInfo.Status == iso18626.TypeStatusCancelled
 }
 
+func supplierUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
+	if sam.StatusInfo.Status != iso18626.TypeStatusUnfilled {
+		return false
+	}
+	return sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageRequestResponse ||
+		sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange
+}
+
+func supplierTerminalUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
+	return supplierUnfilled(sam) &&
+		sam.MessageInfo.ReasonUnfilled != nil &&
+		strings.EqualFold(sam.MessageInfo.ReasonUnfilled.Text, string(iso18626.ReasonUnfilledDuplicate))
+}
+
 func (w *WorkflowManager) supplierAcceptedTerminalCancel(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {
 	if !supplierAcceptedCancel(sam) {
 		return false
@@ -206,7 +221,7 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext,
 		common.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 		}, "")
-		if sam.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+		if supplierUnfilled(sam) && !supplierTerminalUnfilled(sam) {
 			common.Must(ctx, func() (string, error) {
 				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 			}, "")
@@ -215,7 +230,7 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext,
 			// If requester sent terminal cancel we already skipped new suppliers but we also need to skip currently selected supplier
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 		}
-		if supplierUnsolicitedCancel(sam) {
+		if supplierUnsolicitedCancel(sam) || supplierTerminalUnfilled(sam) {
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
 		}

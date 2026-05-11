@@ -11,6 +11,12 @@ const (
 	ReasonRetryLoanCondition      ReasonRetry = "LoanCondition"
 )
 
+type ReasonUnfilled string
+
+const (
+	ReasonUnfilledDuplicate ReasonUnfilled = "Duplicate"
+)
+
 type SentVia string
 
 const (

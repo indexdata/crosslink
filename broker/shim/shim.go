@@ -34,6 +34,7 @@ const REJECT = "REJECT"
 const RESHARE_LOAN_CONDITION_AGREE = "#ReShareLoanConditionAgreeResponse#"
 const RESHARE_LOAN_CONDITION_REJECT = "#ReShareLoanConditionRejectResponse#"
 const LOAN_CONDITION_OTHER = "other" //non-standard LC used by ReShare
+const DUPLICATE_NOTE_PREFIX = "DUPLICATE"
 
 var rsNoteRegexp = regexp.MustCompile(`#seq:[0-9]+#`)
 var edgeNonWord = regexp.MustCompile(`^\W+|\W+$`)
@@ -113,9 +114,21 @@ func applyToIncomingRequest(message *iso18626.ISO18626Message, supplier *ill_db.
 	if message.SupplyingAgencyMessage != nil {
 		copySam := *message.SupplyingAgencyMessage
 		copyMessage.SupplyingAgencyMessage = &copySam
+		setDuplicateReasonUnfilled(copyMessage.SupplyingAgencyMessage)
 		packItemIdIntoItemsNote(copyMessage.SupplyingAgencyMessage)
 	}
 	return &copyMessage
+}
+
+func setDuplicateReasonUnfilled(sam *iso18626.SupplyingAgencyMessage) {
+	if sam == nil ||
+		sam.StatusInfo.Status != iso18626.TypeStatusUnfilled ||
+		!strings.HasPrefix(sam.MessageInfo.Note, DUPLICATE_NOTE_PREFIX) {
+		return
+	}
+	sam.MessageInfo.ReasonUnfilled = &iso18626.TypeSchemeValuePair{
+		Text: string(iso18626.ReasonUnfilledDuplicate),
+	}
 }
 
 func (i *Iso18626AlmaShim) ApplyToOutgoingRequest(message *iso18626.ISO18626Message) ([]byte, error) {
