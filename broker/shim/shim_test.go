@@ -1021,6 +1021,77 @@ func TestAppendUnfilledStatusAndReasonUnfilled(t *testing.T) {
 	assert.Equal(t, "", sam.MessageInfo.Note)
 }
 
+func TestApplyToIncomingRequestSetDuplicateReasonUnfilled(t *testing.T) {
+	shima := new(Iso18626AlmaShim)
+	msg := iso18626.NewISO18626Message()
+	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: DUPLICATE_NOTE_PREFIX + " request",
+		},
+	}
+
+	result := shima.ApplyToIncomingRequest(msg, nil, nil)
+
+	if assert.NotNil(t, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled) {
+		assert.Equal(t, string(iso18626.ReasonUnfilledDuplicate), result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled.Text)
+	}
+	assert.Nil(t, msg.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
+}
+
+func TestApplyToIncomingRequestDoesNotSetDuplicateReasonUnfilledForOtherStatus(t *testing.T) {
+	shima := new(Iso18626AlmaShim)
+	msg := iso18626.NewISO18626Message()
+	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusWillSupply,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "This is a duplicate request",
+		},
+	}
+
+	result := shima.ApplyToIncomingRequest(msg, nil, nil)
+
+	assert.Nil(t, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
+}
+
+func TestApplyToIncomingRequestDoesNotSetDuplicateReasonUnfilledForLowercaseNote(t *testing.T) {
+	shima := new(Iso18626AlmaShim)
+	msg := iso18626.NewISO18626Message()
+	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "duplicate request",
+		},
+	}
+
+	result := shima.ApplyToIncomingRequest(msg, nil, nil)
+
+	assert.Nil(t, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
+}
+
+func TestApplyToIncomingRequestDoesNotSetDuplicateReasonUnfilledForDuplicateLaterInNote(t *testing.T) {
+	shima := new(Iso18626AlmaShim)
+	msg := iso18626.NewISO18626Message()
+	msg.SupplyingAgencyMessage = &iso18626.SupplyingAgencyMessage{
+		StatusInfo: iso18626.StatusInfo{
+			Status: iso18626.TypeStatusUnfilled,
+		},
+		MessageInfo: iso18626.MessageInfo{
+			Note: "This is a DUPLICATE request",
+		},
+	}
+
+	result := shima.ApplyToIncomingRequest(msg, nil, nil)
+
+	assert.Nil(t, result.SupplyingAgencyMessage.MessageInfo.ReasonUnfilled)
+}
+
 func TestProcessItemIdOneItemSimpleReShare(t *testing.T) {
 	shimR := new(Iso18626ReShareShim)
 
