@@ -10,7 +10,19 @@ const (
 	HoldingsAdapter    string = "HOLDINGS_ADAPTER"
 	HoldingsSruURL     string = "HOLDINGS_SRU_URL"
 	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
+	HoldingsFormat     string = "HOLDINGS_FORMAT"
 )
+
+func getParser(format string) (HoldingsParser, error) {
+	switch format {
+	case "reservoir":
+		return &ReservoirHoldingsParser{}, nil
+	case "MARC-21plus-1":
+		return &Marc21Plus1HoldingsParser{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported holdings format: %s", format)
+	}
+}
 
 func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
@@ -32,7 +44,10 @@ func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, isxnLookup)
 		}
 		queryBuilder := QueryBuilderIsxn{isxn: isxnLookup}
-		parser := &ReservoirHoldingsParser{}
+		parser, err := getParser(cfg[HoldingsFormat].(string))
+		if err != nil {
+			return nil, err
+		}
 		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {

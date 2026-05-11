@@ -64,6 +64,7 @@ var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var HOLDINGS_SRU_URL = common.GetEnvWithDeprecated("HOLDINGS_SRU_URL", "SRU_URL", "http://localhost:8081/sru")
 var HOLDINGS_ISXN_LOOKUP, _ = utils.GetEnvBool("HOLDINGS_ISXN_LOOKUP", false)
+var HOLDINGS_FORMAT = utils.GetEnv("HOLDINGS_FORMAT", "reservoir")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var AVAILABILITY_ADAPTER = utils.GetEnv("AVAILABILITY_ADAPTER", "zoom")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
@@ -136,6 +137,7 @@ func Init(ctx context.Context) (Context, error) {
 		adapter.HoldingsAdapter:    HOLDINGS_ADAPTER,
 		adapter.HoldingsSruURL:     HOLDINGS_SRU_URL,
 		adapter.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+		adapter.HoldingsFormat:     HOLDINGS_FORMAT,
 	})
 	if err != nil {
 		return Context{}, err
