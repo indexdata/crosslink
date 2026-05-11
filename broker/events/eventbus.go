@@ -39,6 +39,8 @@ type EventBus interface {
 	HandleTaskCompleted(eventName EventName, role HandlerRole, f func(ctx common.ExtendedContext, event Event))
 	// ProcessTask runs h inside BeginTask/CompleteTask block and signals the selected target.
 	ProcessTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
+	// ProcessExclusiveTask runs h only when no older incomplete task exists for the same domain object and event name.
+	ProcessExclusiveTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error)
 	FindAncestor(descendant *Event, eventName EventName) *Event
 	GetLatestRequestEventByAction(ctx common.ExtendedContext, illTransId string, action string) (Event, error)
 }
@@ -335,6 +337,31 @@ func (p *PostgresEventBus) ProcessTask(ctx common.ExtendedContext, event Event, 
 		return event, err
 	}
 	return event, nil
+}
+
+func (p *PostgresEventBus) ProcessExclusiveTask(ctx common.ExtendedContext, event Event, target SignalTarget, h func(common.ExtendedContext, Event) (EventStatus, *EventResult)) (Event, error) {
+	var exclusivityCheckErr error
+	event, err := p.ProcessTask(ctx, event, target, func(ctx common.ExtendedContext, event Event) (EventStatus, *EventResult) {
+		conflict, err := p.repo.GetOlderIncompleteEvent(ctx, event)
+		if err == nil {
+			p.getEventContext(&event).Logger().Warn("exclusive task blocked by older incomplete task",
+				"eventName", event.EventName,
+				"conflictingEventId", conflict.ID,
+				"conflictingEventStatus", conflict.EventStatus)
+			return NewErrorResult(fmt.Sprintf("another %s task in progress", event.EventName), fmt.Sprintf("conflicting event %s", conflict.ID))
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			p.getEventContext(&event).Logger().Warn("failed to check exclusive TASK event", "error", err, "eventName", event.EventName)
+			exclusivityCheckErr = err
+			return NewErrorResult("failed to check exclusive task", err.Error())
+		}
+
+		return h(ctx, event)
+	})
+	if err != nil {
+		return event, err
+	}
+	return event, exclusivityCheckErr
 }
 
 func (p *PostgresEventBus) registerHandler(signal Signal, role HandlerRole, eventName EventName, f func(ctx common.ExtendedContext, event Event)) {

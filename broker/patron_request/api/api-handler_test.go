@@ -447,6 +447,28 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	assert.Equal(t, "okapi-user-1", eventBus.lastData.User)
 }
 
+func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
+	eventBus := new(MockEventBusCapture)
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessorExclusiveError{})
+
+	reqBody := `{"action":"` + string(prservice.BorrowerActionSendRequest) + `"}`
+	req, _ := http.NewRequest("POST", "/", strings.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var result proapi.ActionResult
+	err := json.Unmarshal(rr.Body.Bytes(), &result)
+	assert.NoError(t, err)
+	assert.Equal(t, string(events.EventStatusError), result.Result)
+	assert.Equal(t, prservice.ActionOutcomeFailure, result.Outcome)
+	if assert.NotNil(t, result.Message) {
+		assert.Equal(t, "another invoke-action task in progress", *result.Message)
+	}
+}
+
 func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, *tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -954,6 +976,20 @@ func (m *MockActionTaskProcessor) ProcessInvokeActionTask(ctx common.ExtendedCon
 		ResultData: events.EventResult{
 			CommonEventData: events.CommonEventData{
 				ActionResult: &events.ActionResult{Outcome: prservice.ActionOutcomeSuccess},
+			},
+		},
+	}, nil
+}
+
+type MockActionTaskProcessorExclusiveError struct{}
+
+func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx common.ExtendedContext, event events.Event) (events.Event, error) {
+	return events.Event{
+		ID:          event.ID,
+		EventStatus: events.EventStatusError,
+		ResultData: events.EventResult{
+			CommonEventData: events.CommonEventData{
+				EventError: &events.EventError{Message: "another invoke-action task in progress"},
 			},
 		},
 	}, nil

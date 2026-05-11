@@ -34,11 +34,11 @@ func TestInvokeAction(t *testing.T) {
 	event := events.Event{
 		ID: "action-1",
 	}
-	mockEventBus.On("ProcessTask", event.ID).Return(event, nil)
+	mockEventBus.On("ProcessExclusiveTask", event.ID).Return(event, nil)
 
 	prAction.InvokeAction(appCtx, event)
 
-	mockEventBus.AssertNumberOfCalls(t, "ProcessTask", 1)
+	mockEventBus.AssertNumberOfCalls(t, "ProcessExclusiveTask", 1)
 }
 
 func TestHandleInvokeActionNotSpecifiedAction(t *testing.T) {
@@ -1517,6 +1517,30 @@ func (m *MockEventBus) ProcessTask(ctx common.ExtendedContext, event events.Even
 	}
 	for _, call := range m.ExpectedCalls {
 		if call.Method == "ProcessTask" {
+			args := m.Called(event.ID)
+			return args.Get(0).(events.Event), args.Error(1)
+		}
+	}
+	status, result := h(ctx, event)
+	event.EventStatus = status
+	if result != nil {
+		event.ResultData = *result
+	}
+	m.processedTaskEvents = append(m.processedTaskEvents, event)
+	return event, nil
+}
+
+func (m *MockEventBus) ProcessExclusiveTask(ctx common.ExtendedContext, event events.Event, target events.SignalTarget, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
+	if m.runTaskHandler {
+		status, result := h(ctx, event)
+		event.EventStatus = status
+		if result != nil {
+			event.ResultData = *result
+		}
+		return event, nil
+	}
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "ProcessExclusiveTask" {
 			args := m.Called(event.ID)
 			return args.Get(0).(events.Event), args.Error(1)
 		}
