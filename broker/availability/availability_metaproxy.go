@@ -9,16 +9,16 @@ import (
 )
 
 type MetaproxyAvailabilityAdapter struct {
-	holdingsLookupAdapter adapter.HoldingsLookupAdapter
+	holdingsLookupAdapter adapter.LookupAdapter
 }
 
-func NewMetaproxyAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, metaproxyUrl string, queryBuilder adapter.HoldingsQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
+func NewMetaproxyAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, metaproxyUrl string, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	a := &MetaproxyAvailabilityAdapter{
 		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser, "marcxml"),
 	}
 	return a, nil
 }
 
-func (a *MetaproxyAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
+func (a *MetaproxyAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter.Holding, string, error) {
 	return a.holdingsLookupAdapter.Lookup(params)
 }

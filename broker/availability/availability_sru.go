@@ -9,10 +9,10 @@ import (
 )
 
 type SruAvailabilityAdapter struct {
-	holdingsLookupAdapter adapter.HoldingsLookupAdapter
+	holdingsLookupAdapter adapter.LookupAdapter
 }
 
-func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.SruConfig, queryBuilder adapter.HoldingsQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
+func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.SruConfig, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	var recordSchema string
 	if config.RecordSchema != nil {
 		recordSchema = *config.RecordSchema
@@ -26,6 +26,6 @@ func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.SruC
 	return a, nil
 }
 
-func (a *SruAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
+func (a *SruAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter.Holding, string, error) {
 	return a.holdingsLookupAdapter.Lookup(params)
 }

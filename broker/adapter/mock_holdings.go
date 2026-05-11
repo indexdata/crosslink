@@ -10,7 +10,7 @@ import (
 type MockHoldingsLookupAdapter struct {
 }
 
-func (m *MockHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, string, error) {
+func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
 	ids := strings.Split(params.Identifier, ";")
 	i := 1
 	var holdings []Holding

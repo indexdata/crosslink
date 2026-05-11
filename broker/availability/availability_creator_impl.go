@@ -40,7 +40,7 @@ func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
 	return nil, fmt.Errorf("bad value for availability parser type")
 }
 
-func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.HoldingsLookupAdapter, error) {
+func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.AvailabilityConfig
 	if config == nil {

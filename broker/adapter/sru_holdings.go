@@ -17,14 +17,14 @@ type SruHoldingsLookupAdapter struct {
 	sruUrl         []string
 	client         *http.Client
 	holdingsParser HoldingsParser
-	queryBuilder   HoldingsQueryBuilder
+	queryBuilder   LookupQueryBuilder
 	xTarget        string
 	recordSchema   string
 }
 
 const isilPrefix = "ISIL:"
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder HoldingsQueryBuilder, parser HoldingsParser, recordSchema string) HoldingsLookupAdapter {
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, recordSchema string) LookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, xTarget: xTarget, recordSchema: recordSchema}
 }
 
@@ -94,7 +94,7 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, query string) ([]Holdin
 	return holdings, query, nil
 }
 
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLookupParams) ([]Holding, string, error) {
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParams) ([]Holding, string, error) {
 	var holdings []Holding
 	cqlList, pqfList, err := s.queryBuilder.Build(params)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params HoldingLook
 	return holdings, queryParams, nil
 }
 
-func (s *SruHoldingsLookupAdapter) Lookup(params HoldingLookupParams) ([]Holding, string, error) {
+func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
 	var holdings []Holding
 	logQuery := ""
 	for _, sruUrl := range s.sruUrl {

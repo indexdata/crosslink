@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func createSruAdapter(t *testing.T, isxn bool, url ...string) adapter.HoldingsLookupAdapter {
+func createSruAdapter(t *testing.T, isxn bool, url ...string) adapter.LookupAdapter {
 	parser := &adapter.ReservoirHoldingsParser{}
 	queryBuilder := adapter.NewQueryBuilderIsxn(isxn)
 	ad := adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, "marcxml")
@@ -30,7 +30,7 @@ func TestSru500(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -47,7 +47,7 @@ func TestSruBadXml(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -81,7 +81,7 @@ func TestSruBadDiagnostics(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -106,7 +106,7 @@ func TestSruMarcxmlNoHits(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -144,7 +144,7 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -181,7 +181,7 @@ func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -218,7 +218,7 @@ func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -261,7 +261,7 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -300,7 +300,7 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	_, query, err := ad.Lookup(p)
@@ -371,7 +371,7 @@ func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -449,7 +449,7 @@ func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -512,7 +512,7 @@ func TestSruMarcxmlLeavesSchemedSymbolUnchanged(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -586,7 +586,7 @@ func TestSruMarcxmlUsesFallbackWhenPrimaryFieldHasNoUsableHolding(t *testing.T) 
 	defer server.Close()
 
 	ad := createSruAdapter(t, false, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -692,7 +692,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	defer server.Close()
 
 	ad := createSruAdapter(t, true, server.URL)
-	p := adapter.HoldingLookupParams{
+	p := adapter.LookupParams{
 		Identifier: "123",
 	}
 	holdings, query, err := ad.Lookup(p)
@@ -708,7 +708,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "ISIL:s3", holdings[2].Symbol)
 
 	ad = createSruAdapter(t, true, server.URL, server.URL)
-	p = adapter.HoldingLookupParams{
+	p = adapter.LookupParams{
 		Identifier: "123",
 		Isbn:       "99-222",
 		Issn:       "99-333",
@@ -733,7 +733,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.Equal(t, "ISIL:s3", holdings[5].Symbol)
 
 	ad = createSruAdapter(t, false, server.URL)
-	p = adapter.HoldingLookupParams{
+	p = adapter.LookupParams{
 		Isbn: "99-222",
 	}
 	_, _, err = ad.Lookup(p)

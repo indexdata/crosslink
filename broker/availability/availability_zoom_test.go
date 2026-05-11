@@ -58,7 +58,7 @@ func TestLookupFound(t *testing.T) {
 	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "20", aa.(*ZoomAvailabilityAdapter).options["count"])
 
-	params := adapter.HoldingLookupParams{
+	params := adapter.LookupParams{
 		Title: "Computer",
 	}
 	results, pqf, err := aa.Lookup(params)
@@ -86,7 +86,7 @@ func TestLookupDiagnostics(t *testing.T) {
 	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
 
-	params := adapter.HoldingLookupParams{Identifier: "1234"}
+	params := adapter.LookupParams{Identifier: "1234"}
 	_, pqf, err := aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Record syntax not supported")
@@ -105,7 +105,7 @@ func TestConnectFailure(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	params := adapter.HoldingLookupParams{}
+	params := adapter.LookupParams{}
 	_, _, err = aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")

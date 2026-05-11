@@ -13,7 +13,7 @@ func NewQueryBuilderIsxn(isxn bool) *QueryBuilderIsxn {
 	return &QueryBuilderIsxn{isxn: isxn}
 }
 
-func (s *QueryBuilderIsxn) Build(params HoldingLookupParams) (cql []string, pqf []string, err error) {
+func (s *QueryBuilderIsxn) Build(params LookupParams) (cql []string, pqf []string, err error) {
 	var comps []string
 	if params.Identifier != "" {
 		cql, err := encodeCqlSearchClause("rec.id", params.Identifier)

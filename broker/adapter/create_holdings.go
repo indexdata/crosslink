@@ -12,7 +12,7 @@ const (
 	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
 )
 
-func CreateHoldingsLookupAdapter(cfg map[string]any) (HoldingsLookupAdapter, error) {
+func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)

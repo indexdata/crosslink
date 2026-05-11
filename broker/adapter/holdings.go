@@ -1,10 +1,10 @@
 package adapter
 
-type HoldingsLookupAdapter interface {
-	Lookup(params HoldingLookupParams) ([]Holding, string, error)
+type LookupAdapter interface {
+	Lookup(params LookupParams) ([]Holding, string, error)
 }
 
-type HoldingLookupParams struct {
+type LookupParams struct {
 	Identifier string
 	Isbn       string
 	Issn       string
@@ -24,7 +24,7 @@ type HoldingsParser interface {
 	Parse(record []byte) ([]Holding, error)
 }
 
-type HoldingsQueryBuilder interface {
+type LookupQueryBuilder interface {
 	// Build should return the query strategy
-	Build(params HoldingLookupParams) (cql []string, pqf []string, err error)
+	Build(params LookupParams) (cql []string, pqf []string, err error)
 }

@@ -17,10 +17,10 @@ type ZoomAvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
 	holdingsParser adapter.HoldingsParser
-	queryBuilder   adapter.HoldingsQueryBuilder
+	queryBuilder   adapter.LookupQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, queryBuilder adapter.HoldingsQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.HoldingsLookupAdapter, error) {
+func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
@@ -68,7 +68,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query st
 	return avail, nil
 }
 
-func (a *ZoomAvailabilityAdapter) Lookup(params adapter.HoldingLookupParams) ([]adapter.Holding, string, error) {
+func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter.Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)

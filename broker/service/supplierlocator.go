@@ -25,11 +25,11 @@ type SupplierLocator struct {
 	eventBus            events.EventBus
 	illRepo             ill_db.IllRepo
 	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     adapter.HoldingsLookupAdapter
+	holdingsAdapter     adapter.LookupAdapter
 	availabilityCreator availability.AvailabilityCreator
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.LookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
 	return SupplierLocator{
 		eventBus:            eventBus,
 		illRepo:             illRepo,
@@ -54,8 +54,8 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.HoldingLookupParams {
-	var holdingsParams adapter.HoldingLookupParams
+func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.LookupParams {
+	var holdingsParams adapter.LookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
 	holdingsParams.Title = bibliographicInfo.Title

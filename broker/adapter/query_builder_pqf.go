@@ -69,7 +69,7 @@ func cqlEncode(value string) string {
 	return escaped
 }
 
-func (s *QueryBuilderPqf) Build(params HoldingLookupParams) (cql []string, pqf []string, err error) {
+func (s *QueryBuilderPqf) Build(params LookupParams) (cql []string, pqf []string, err error) {
 	type paramMapping struct {
 		value   string
 		mapping *string

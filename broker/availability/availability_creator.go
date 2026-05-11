@@ -7,5 +7,5 @@ import (
 )
 
 type AvailabilityCreator interface {
-	GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.HoldingsLookupAdapter, error)
+	GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error)
 }
