@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestLookupFound(t *testing.T) {
+func TestLookupFoundMarc(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	config := directory.MarcParserConfig{
@@ -66,6 +66,35 @@ func TestLookupFound(t *testing.T) {
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].Location, "11224466")
 	assert.Equal(t, "@attr 1=1016 \"Computer\"", pqf)
+}
+
+func TestLookupFoundOpac(t *testing.T) {
+	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	queryBuilder := adapter.NewQueryBuilderPqf(nil)
+	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
+	aa, err := NewZoomAvailabilityAdapter(ctx,
+		directory.Z3950Config{
+			Address: "localhost:" + mappedPort + "/marc",
+			Options: &map[string]string{
+				"preferredRecordSyntax": "opac",
+			},
+		},
+		queryBuilder,
+		holdingsParser,
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, "10", aa.(*ZoomAvailabilityAdapter).options["count"])
+
+	params := adapter.LookupParams{
+		Title: "Computer",
+	}
+	results, pqf, err := aa.Lookup(params)
+	assert.NoError(t, err)
+	assert.Len(t, results, 42)
+	assert.Contains(t, results[0].ItemId, "test__000000001_")
+	assert.Contains(t, results[1].ItemId, "test__000000002_")
+	assert.Equal(t, "@attr 1=4 \"Computer\"", pqf)
 }
 
 func TestLookupDiagnostics(t *testing.T) {
