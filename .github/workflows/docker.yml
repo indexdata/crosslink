@@ -207,7 +207,7 @@ jobs:
           echo "short-sha=${sha:0:7}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata (tags, annotations) for Docker
         id: meta
         uses: docker/metadata-action@v6
         with:
