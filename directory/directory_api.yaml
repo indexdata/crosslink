@@ -267,6 +267,7 @@ components:
           $ref: '#/components/schemas/QueryConfig'
         parserConfig:
           $ref: '#/components/schemas/ParserConfig'
+      additionalProperties: false
 
     SruConfig:
       type: object
@@ -279,6 +280,7 @@ components:
         recordSchema:
           type: string
           description: Record schema to use for parsing holdings records (for example, "marcxml")
+      additionalProperties: false
 
     Z3950Config:
       type: object
@@ -294,6 +296,7 @@ components:
             type: string
           description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
             Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
+      additionalProperties: false
 
     QueryConfig:
       type: object
@@ -310,6 +313,7 @@ components:
         identifier:
           type: string
           description: PQF/CQL format string for identifier search. Default is "@attr 1=12 {term}"
+      additionalProperties: false
 
     ParserConfig:
       type: object
@@ -318,6 +322,7 @@ components:
           $ref: '#/components/schemas/MarcParserConfig'
         opac:
           $ref: '#/components/schemas/OpacParserConfig'
+      additionalProperties: false
 
     MarcParserConfig:
       type: object
@@ -340,9 +345,14 @@ components:
         callNumberSubField:
           type: string
           description: Subfield code to use for call number (for example, "h")
+      additionalProperties: false
 
     OpacParserConfig:
       type: object
+      description: |
+        Configuration for OPAC parser. Currently must be empty; no properties allowed.
+      properties: {}
+      additionalProperties: false
 
     LmsConfig:
       required:
