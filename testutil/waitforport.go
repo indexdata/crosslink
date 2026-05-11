@@ -1,12 +1,11 @@
-//go:build !testutil
-
 package testutil
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // WaitForPort tries to connect to the specified address until timeout.

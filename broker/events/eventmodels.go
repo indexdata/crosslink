@@ -48,6 +48,7 @@ const (
 	EventNameLmsRequesterMessage  EventName = "lms-requester-message"
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
 	EventNameSendNotification     EventName = "send-notification"
+	EventNameCheckAvailability    EventName = "check-availability"
 )
 
 type Signal string

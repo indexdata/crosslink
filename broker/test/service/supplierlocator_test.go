@@ -896,3 +896,197 @@ func getSupplierId(i int, result map[string]interface{}) string {
 	}
 	return ""
 }
+
+func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	// Create a peer with Availability config in CustomData
+	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+
+	// Create an ILL transaction and a located supplier for it
+	illTrId := apptest.GetIllTransId(t, illRepo)
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
+	assert.NotNil(t, supplier)
+
+	// Create and notify the check-availability event
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	// Wait for the event to be processed and check the supplier status
+	var updatedSupplier ill_db.LocatedSupplier
+	test.WaitForPredicateToBeTrue(func() bool {
+		supList, _, err := illRepo.GetLocatedSuppliersByIllTransaction(appCtx, illTrId)
+		if err != nil {
+			t.Errorf("failed to find located supplier by ill transaction id %v", illTrId)
+		}
+		if len(supList) == 0 {
+			return false
+		}
+		updatedSupplier = supList[0]
+		return updatedSupplier.SupplierStatus == ill_db.SupplierStateSkippedPg
+	})
+	assert.Equal(t, ill_db.SupplierStateSkippedPg, updatedSupplier.SupplierStatus)
+
+	// Check that the event log contains the skipped flag
+	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+	assert.NoError(t, err)
+	found := false
+	for _, ev := range eventsList {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == true {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Expected check-availability event with skipped=true in CustomData")
+}
+
+func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{
+		Z3950: &directory.Z3950Config{
+			Address: "a",
+			Options: &map[string]string{
+				"location": "1234", // ensures that availability lookup returns a result and supplier is not skipped
+			},
+		},
+	}}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+
+	// Create an ILL transaction and a located supplier for it
+	illTrId := apptest.GetIllTransId(t, illRepo)
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
+	assert.NotNil(t, supplier)
+
+	// Create and notify the check-availability event
+	eventData := events.EventData{
+		CustomData: map[string]interface{}{
+			"localSupplier": false,
+		},
+	}
+	eventId := apptest.GetEventIdWithData(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability, eventData)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	// Wait for the event to be processed and check the supplier status
+	test.WaitForPredicateToBeTrue(func() bool {
+		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
+		}
+		for _, ev := range eventsList {
+			if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+				return true
+			}
+		}
+		return false
+	})
+	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+	assert.NoError(t, err)
+	found := false
+	for _, ev := range eventsList {
+		if ev.EventName == events.EventNameCheckAvailability && ev.ResultData.CustomData["skipped"] == false {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Expected check-availability event with skipped=false in CustomData")
+}
+
+func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	customData := directory.Entry{
+		AvailabilityConfig: &directory.AvailabilityConfig{
+			Z3950: &directory.Z3950Config{
+				Address: "a",
+				Options: &map[string]string{
+					"adapter-error": "true",
+				},
+			},
+		},
+	}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+
+	// Create an ILL transaction and a located supplier for it
+	illTrId := apptest.GetIllTransId(t, illRepo)
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
+	assert.NotNil(t, supplier)
+
+	// Create and notify the check-availability event
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	test.WaitForPredicateToBeTrue(func() bool {
+		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
+		}
+		for _, ev := range eventsList {
+			if ev.EventStatus == events.EventStatusError {
+				return true
+			}
+		}
+		return false
+	})
+	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+	assert.NoError(t, err)
+	var found *events.Event
+	for _, ev := range eventsList {
+		if ev.EventStatus == events.EventStatusError {
+			found = &ev
+			break
+		}
+	}
+	assert.NotNil(t, found, "Expected check-availability event error")
+	assert.Contains(t, found.ResultData.EventError.Message, "could not create availability adapter")
+}
+
+func TestCheckAvailability_Z3950LookupError(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	customData := directory.Entry{
+		AvailabilityConfig: &directory.AvailabilityConfig{
+			Z3950: &directory.Z3950Config{
+				Address: "a",
+				Options: &map[string]string{
+					"lookup-error": "true",
+				},
+			},
+		},
+	}
+	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
+
+	// Create an ILL transaction and a located supplier for it
+	illTrId := apptest.GetIllTransId(t, illRepo)
+	supplier := apptest.CreateLocatedSupplier(t, illRepo, illTrId, peer.ID, "ISIL:Z3950-SUP", "")
+	assert.NotNil(t, supplier)
+
+	// Create and notify the check-availability event
+	eventId := apptest.GetEventId(t, eventRepo, illTrId, events.EventTypeTask, events.EventStatusNew, events.EventNameCheckAvailability)
+	err := eventRepo.Notify(appCtx, eventId, events.SignalTaskCreated, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	test.WaitForPredicateToBeTrue(func() bool {
+		eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+		if err != nil {
+			t.Errorf("failed to find events for ill transaction for id %v", illTrId)
+		}
+		for _, ev := range eventsList {
+			if ev.EventStatus == events.EventStatusError {
+				return true
+			}
+		}
+		return false
+	})
+	eventsList, _, err := eventRepo.GetIllTransactionEvents(appCtx, illTrId)
+	assert.NoError(t, err)
+	var found *events.Event
+	for _, ev := range eventsList {
+		if ev.EventStatus == events.EventStatusError {
+			found = &ev
+			break
+		}
+	}
+	assert.NotNil(t, found, "Expected check-availability event error")
+	assert.Contains(t, found.ResultData.EventError.Message, "failed to perform availability lookup")
+}

@@ -105,6 +105,11 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
+| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`                                    | `zoom`                                    |
+|                           | `zoom` is the default availability adapter, but it depends on CGO being enabled and   |                                           |
+|                           | on `libyaz` being available for build/runtime. If CGO is disabled, builds using       |                                           |
+|                           | `zoom` will fail; use `metaproxy` instead in such deployments                         |                                           |
+| `METAPROXY_URL`           | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                               | (empty value)                             |
 | `PEER_REFRESH_INTERVAL`   | Peer refresh interval (via Directory lookup)                                          | `5m`                                      |
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
 | `API_PAGE_SIZE`           | Default value for the `limit` query parameter when paging the API                     | `10`                                      |

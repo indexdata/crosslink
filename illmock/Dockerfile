@@ -14,6 +14,8 @@ COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip
 COPY marcxml/ ./marcxml
 COPY sru/ ./sru
+COPY zoom/ ./zoom
+COPY testutil/ ./testutil
 
 # copy illmock manifests before sources to leverage docker cache for mod downloads
 COPY illmock/go.mod illmock/go.sum ./illmock/

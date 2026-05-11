@@ -54,26 +54,41 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 	}, "")
 }
 
+func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
+	common.Must(ctx, func() (string, error) {
+		if event.EventStatus != events.EventStatusSuccess {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		skipped, ok := event.ResultData.CustomData["skipped"].(bool)
+		if !ok {
+			return "", fmt.Errorf("failed to detect if supplier is skipped by availability check")
+		}
+		if skipped {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		if err != nil {
+			return id, err
+		}
+		local, ok := event.ResultData.CustomData["localSupplier"].(bool)
+		if !ok {
+			return "", fmt.Errorf("failed to detect local supplier from event result data")
+		}
+		if local {
+			return "", nil
+		}
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+	}, "")
+}
+
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		if event.EventStatus == events.EventStatusSuccess {
-			id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
-			if err != nil {
-				return id, err
-			}
-			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
-				if !local {
-					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
-				} else {
-					return "", nil
-				}
-			} else {
-				return "", fmt.Errorf("failed to detect local supplier from event result data")
-			}
-		} else {
+		if event.EventStatus != events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
 }
 
