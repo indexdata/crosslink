@@ -1,2 +1,3 @@
--- Remove index for located_supplier ordering (rollback)
-DROP INDEX IF EXISTS idx_located_supplier_illtx_ordinal;
+-- Remove unique constraint on located_supplier ordinal (rollback)
+ALTER TABLE located_supplier
+    DROP CONSTRAINT IF EXISTS uq_located_supplier_illtx_ordinal;
