@@ -5,12 +5,37 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
+// Holding Information to be used for routing is part of
+// repeatable MARC 924 fields (one for each holding library).
+
+// First Indicator  Resource Type
+
+// "0"  Non-electronic (= default)
+
+// "1"  Electronic
+
+// $a (NR) Local IDN of the holding record
+// $b (NR) ISIL as an identifier of the owning institution
+// $c (NR) Interlibrary loan region
+// $d (NR) Interlibrary loan indicator
+//            "a" - Loan of volumes possible, no copies
+//            "b" - No loan of volumes, only paper copies aresent
+//            "c" - Unrestricted interlibrary loan, copying and loan
+//            "d" - No interlibrary loan
+//            "e" - No loan of volumes, the end user receives an
+//                   electronic copy
+// $k (R)  Electronic address (URL) for a remotely accessed file
+// $1 (R)  Identification "Produktsigel" for national licenses
+//          and digital collections, so called "ProduktSigel"
+//          (it is an ISIL according to the German ISIL-Agency)
+
+// Full documentation Result format is MARC21, see from Deutsche
+// Nationalbibliothek (DNB), https://d-nb.info/1282570226/34
+
 type Marc21Plus1HoldingsParser struct {
-	config directory.MarcParserConfig
 }
 
 func NewMarc21Plus1HoldingsParser() HoldingsParser {
@@ -25,35 +50,22 @@ func (p *Marc21Plus1HoldingsParser) Parse(record []byte) ([]Holding, error) {
 	}
 	var holdings []Holding
 	for _, field := range marcRecord.Datafield {
-		if p.config.MainField != nil && field.Tag == *p.config.MainField {
-			restricted := false
-			var location string
-			var shelvingLocation string
-			var callNumber string
-			var itemId string
+		if field.Tag == "924" {
+			var localIdentifier string
+			var symbol string
+			// TODO: serviceType subfield d
 			for _, subfield := range field.Subfield {
-				if p.config.LocationSubField != nil && subfield.Code == *p.config.LocationSubField {
-					location = strings.TrimSpace(string(subfield.Text))
+				if subfield.Code == "a" {
+					localIdentifier = strings.TrimSpace(string(subfield.Text))
 				}
-				if p.config.ShelvingLocationSubField != nil && subfield.Code == *p.config.ShelvingLocationSubField {
-					shelvingLocation = strings.TrimSpace(string(subfield.Text))
-				}
-				if p.config.CallNumberSubField != nil && subfield.Code == *p.config.CallNumberSubField {
-					callNumber = strings.TrimSpace(string(subfield.Text))
-				}
-				if p.config.ItemIdSubField != nil && subfield.Code == *p.config.ItemIdSubField {
-					itemId = strings.TrimSpace(string(subfield.Text))
-				}
-				if p.config.RestrictedSubField != nil && subfield.Code == *p.config.RestrictedSubField {
-					restricted = true
+				if subfield.Code == "b" {
+					symbol = strings.TrimSpace(string(subfield.Text))
 				}
 			}
-			if !restricted && location != "" {
+			if localIdentifier != "" && symbol != "" {
 				holdings = append(holdings, Holding{
-					Location:         location,
-					ShelvingLocation: shelvingLocation,
-					CallNumber:       callNumber,
-					ItemId:           itemId,
+					LocalIdentifier: localIdentifier,
+					Symbol:          symbol,
 				})
 			}
 		}
