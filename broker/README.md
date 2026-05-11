@@ -105,10 +105,8 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
-| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`                                    | `zoom`                                    |
-|                           | `zoom` is the default availability adapter, but it depends on CGO being enabled and   |                                           |
-|                           | on `libyaz` being available for build/runtime. If CGO is disabled, builds using       |                                           |
-|                           | `zoom` will fail; use `metaproxy` instead in such deployments                         |                                           |
+| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`.                                   | `zoom`                                    |
+|                           | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)     |                                           |
 | `METAPROXY_URL`           | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                               | (empty value)                             |
 | `PEER_REFRESH_INTERVAL`   | Peer refresh interval (via Directory lookup)                                          | `5m`                                      |
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
@@ -142,6 +140,25 @@ or run test for selected `_test` package
 ```
 go test -v -coverpkg=./... -cover ./cmd/broker
 ```
+
+## Building with native extensions (CGO)
+
+The `zoom` availability adapter requires the native `libyaz` library and CGO to be enabled during the build (the default).
+
+Install `libyaz` using your OS package manager:
+
+- **Debian/Ubuntu:** `sudo apt-get install libyaz-dev`
+- **RHEL/CentOS** (requires EPEL)**:** `sudo yum install libyaz-devel`
+- **Fedora:** `sudo dnf install libyaz-devel`
+- **macOS:** `brew install yaz`
+
+To build without native extensions, disable CGO:
+
+```
+CGO_ENABLED=0 make
+```
+
+This will make `zoom` adapter unavailable and the `metaproxy` adapter should be used instead.
 
 # Run locally
 
