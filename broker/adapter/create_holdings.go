@@ -20,7 +20,7 @@ func getParser(format string) (HoldingsParser, error) {
 	case "MARC-21plus-1":
 		return &Marc21Plus1HoldingsParser{}, nil
 	default:
-		return nil, fmt.Errorf("unsupported holdings format: %s", format)
+		return nil, fmt.Errorf("bad value for %s: %s", HoldingsFormat, format)
 	}
 }
 

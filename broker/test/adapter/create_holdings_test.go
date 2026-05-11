@@ -30,8 +30,17 @@ func TestCreateHoldings(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid value for HOLDINGS_ISXN_LOOKUP")
 
 	m[adapter.HoldingsIsxnLookup] = true
+	m[adapter.HoldingsFormat] = "reservoir"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
 	assert.NoError(t, err)
+
+	m[adapter.HoldingsFormat] = "MARC-21plus-1"
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.NoError(t, err)
+
+	m[adapter.HoldingsFormat] = "other"
+	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	assert.ErrorContains(t, err, "bad value for HOLDINGS_FORMAT: other")
 
 	m["HOLDINGS_ADAPTER"] = "mock"
 	_, err = adapter.CreateHoldingsLookupAdapter(m)
