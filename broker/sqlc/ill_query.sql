@@ -142,7 +142,8 @@ ORDER BY ordinal;
 SELECT sqlc.embed(located_supplier)
 FROM located_supplier
 WHERE ill_transaction_id = $1
-  and supplier_status = $2;
+  AND supplier_status = $2
+ORDER BY ordinal;
 
 -- name: GetLocatedSupplierByPeerId :many
 SELECT sqlc.embed(located_supplier)
