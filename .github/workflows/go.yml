@@ -36,11 +36,6 @@ on:
   release:
     types: [published]
 
-env:
-  GO_VERSION: stable
-  GOLANGCI_LINT_VERSION: latest
-  SQLC_VERSION: '1.29.0'
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,6 +45,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
+
+    - name: Load tool versions
+      run: cat .github/tool-versions.env >> "$GITHUB_ENV"
 
     - uses: awalsh128/cache-apt-pkgs-action@latest
       with:
@@ -64,7 +62,7 @@ jobs:
           go.work.sum
           ${{ matrix.modules }}/go.sum
 
-    - name : Ensure sqlc is installed
+    - name: Ensure sqlc is installed
       uses: sqlc-dev/setup-sqlc@v5
       with:
         sqlc-version: ${{ env.SQLC_VERSION }}
