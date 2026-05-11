@@ -174,12 +174,10 @@ jobs:
         include:
           - module: broker
             image: ghcr.io/${{ github.repository }}-broker
-            title: CrossLink Broker
             description: ISO18626 transaction broker for CrossLink
             licenses: AGPL-3.0-only
           - module: illmock
             image: ghcr.io/${{ github.repository }}-illmock
-            title: CrossLink ILL Mock
             description: ISO18626 and SRU mocking service for CrossLink
             licenses: AGPL-3.0-only
     permissions:
