@@ -3,8 +3,9 @@
 CrossLink broker is a system to manage inter-library loans (ILL), specifically it:
 
 * accepts and handles ILL requests from external requesters (e.g Alma or ReShare) via the ISO18626 protocol
-* locates suppliers with available holdings using the _Search/Retrieval via URL_ (SRU) protocol
+* locates suppliers and their holdings from a Union Catalog using the _Search/Retrieval via URL_ (SRU) protocol
 * resolves supplier information via the [Directory API](./../directory/directory_api.yaml)
+* checks item availability using the Z3.50 or the SRU protocol
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
 * provides ILS integration for internal requesters and suppliers via NCIP
