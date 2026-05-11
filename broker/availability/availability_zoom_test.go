@@ -10,7 +10,7 @@ import (
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
-	zoomtestutil "github.com/indexdata/crosslink/zoom/testutil"
+	zoomtestutil "github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
 )
 

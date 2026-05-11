@@ -1,5 +1,3 @@
-//go:build !testutil
-
 package testutil
 
 import (

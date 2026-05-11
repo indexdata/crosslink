@@ -18,6 +18,7 @@ COPY sru/ ./sru
 COPY iso18626/ ./iso18626
 COPY ncip/ ./ncip
 COPY zoom/ ./zoom
+COPY testutil/ ./testutil
 
 # copy broker manifests before sources to leverage docker cache for mod downloads
 COPY broker/go.mod broker/go.sum ./broker/

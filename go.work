@@ -10,4 +10,5 @@ use (
 	./ncip
 	./sru
 	./zoom
+	./testutil
 )

@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/indexdata/crosslink/zoom/testutil"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
