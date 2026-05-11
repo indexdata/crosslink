@@ -15,6 +15,7 @@ import (
 )
 
 var mappedPort string
+var containerHost string
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -24,6 +25,8 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	mappedPort = metaproxyContainer.MappedPort()
+	containerHost = metaproxyContainer.ContainerHost()
+
 	code := m.Run()
 
 	if metaproxyContainer != nil {
@@ -45,7 +48,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	holdingsParser := adapter.NewMarcHoldingsParser(config)
 	aa, err := NewZoomAvailabilityAdapter(ctx,
 		directory.Z3950Config{
-			Address: "localhost:" + mappedPort + "/marc",
+			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"count":                 "20",
 				"preferredRecordSyntax": "usmarc",
@@ -55,7 +58,7 @@ func TestLookupFoundMarc(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "20", aa.(*ZoomAvailabilityAdapter).options["count"])
 
 	params := adapter.LookupParams{
@@ -74,7 +77,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(ctx,
 		directory.Z3950Config{
-			Address: "localhost:" + mappedPort + "/marc",
+			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "opac",
 			},
@@ -83,7 +86,7 @@ func TestLookupFoundOpac(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "10", aa.(*ZoomAvailabilityAdapter).options["count"])
 
 	params := adapter.LookupParams{
@@ -103,7 +106,7 @@ func TestLookupDiagnostics(t *testing.T) {
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(ctx,
 		directory.Z3950Config{
-			Address: "localhost:" + mappedPort + "/marc",
+			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "danmarc",
 			},

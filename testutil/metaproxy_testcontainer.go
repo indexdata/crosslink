@@ -3,6 +3,8 @@ package testutil
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -14,8 +16,9 @@ const metaproxyBackendTestXML = `<?xml version="1.0"?>
 `
 
 type MetaproxyContainer struct {
-	mappedPort string
-	container  testcontainers.Container
+	mappedPort    string
+	containerHost string
+	container     testcontainers.Container
 }
 
 func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
@@ -49,12 +52,34 @@ func MetaproxyContainerStart(ctx context.Context) (*MetaproxyContainer, error) {
 	}
 	c.mappedPort = port.Port()
 
-	// Get the mapped host port for 9000/tcp
-	return c, nil
+	c.containerHost, err = c.container.Host(ctx)
+	if err != nil {
+		_ = c.container.Terminate(ctx)
+		return nil, err
+	}
+	for i := 0; i < 10; i++ { // retry a few times to allow metaproxy to start up and load filters
+		res, err := http.Get("http://" + c.containerHost + ":" + c.mappedPort)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		// Metaproxy most likely returns 400 on this one, but we just want to verify that it responds at all
+		_ = res.Body.Close()
+		return c, nil
+	}
+	err = c.container.Terminate(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("metaproxy did not start in time, and failed to terminate container: %w", err)
+	}
+	return nil, fmt.Errorf("metaproxy did not start in time")
 }
 
 func (c *MetaproxyContainer) MappedPort() string {
 	return c.mappedPort
+}
+
+func (c *MetaproxyContainer) ContainerHost() string {
+	return c.containerHost
 }
 
 func (c *MetaproxyContainer) Terminate(ctx context.Context) error {

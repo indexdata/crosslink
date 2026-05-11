@@ -12,6 +12,7 @@ import (
 )
 
 var mappedPort string
+var containerHost string
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -21,6 +22,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	mappedPort = metaproxyContainer.MappedPort()
+	containerHost = metaproxyContainer.ContainerHost()
 
 	code := m.Run()
 
@@ -68,7 +70,7 @@ func TestSearch(t *testing.T) {
 
 	conn = NewConnection(options)
 	assert.NotNil(t, conn)
-	err = conn.Connect("localhost:" + mappedPort)
+	err = conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
@@ -117,7 +119,7 @@ func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + mappedPort)
+	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
 	// getting non-surrogate diagnostic for unsupported record syntax
@@ -136,7 +138,7 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + mappedPort)
+	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
@@ -158,7 +160,7 @@ func TestSearchSurrogateDiagnostic(t *testing.T) {
 	conn := NewConnection(options)
 	assert.NotNil(t, conn)
 	defer conn.Close()
-	err := conn.Connect("localhost:" + mappedPort)
+	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
 	rs, err := conn.Search("@attr 1=4 computer")
