@@ -39,7 +39,7 @@ func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z39
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(params adapter.LookupParams, conn *zoom.Connection, query string) ([]adapter.Holding, error) {
 	set, err := conn.Search(query)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query st
 		if xmlBuffer == nil {
 			continue
 		}
-		holdings, err := a.holdingsParser.Parse(xmlBuffer)
+		holdings, err := a.holdingsParser.Parse(xmlBuffer, params)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
 		}
@@ -86,7 +86,7 @@ func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter
 		return nil, "", fmt.Errorf("no valid query parameters provided")
 	}
 	for _, pqf := range pqfList {
-		avail, err := a.searchRetrieve(conn, pqf)
+		avail, err := a.searchRetrieve(params, conn, pqf)
 		if err != nil {
 			return nil, pqf, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
 		}

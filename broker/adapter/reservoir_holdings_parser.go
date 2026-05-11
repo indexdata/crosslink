@@ -47,7 +47,7 @@ func parseHoldings(rec *marcxml.Record) []Holding {
 	return holdings
 }
 
-func (p *ReservoirHoldingsParser) Parse(recordData []byte) ([]Holding, error) {
+func (p *ReservoirHoldingsParser) Parse(recordData []byte, params LookupParams) ([]Holding, error) {
 	var rec marcxml.Record
 	err := xml.Unmarshal(recordData, &rec)
 	if err != nil {

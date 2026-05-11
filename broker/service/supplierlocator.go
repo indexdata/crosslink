@@ -68,6 +68,9 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.
 			holdingsParams.Issn = id.BibliographicItemIdentifier
 		}
 	}
+	if illTransactionData.ServiceInfo != nil {
+		holdingsParams.ServiceType = string(illTransactionData.ServiceInfo.ServiceType)
+	}
 	return holdingsParams
 }
 

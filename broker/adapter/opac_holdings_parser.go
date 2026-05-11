@@ -14,7 +14,7 @@ func NewOpacHoldingsParser(config directory.OpacParserConfig) HoldingsParser {
 	return &OpacHoldingsParser{}
 }
 
-func (p *OpacHoldingsParser) Parse(record []byte) ([]Holding, error) {
+func (p *OpacHoldingsParser) Parse(record []byte, params LookupParams) ([]Holding, error) {
 	var opacRecord marcxml.OpacRecord
 	err := xml.Unmarshal(record, &opacRecord)
 	if err != nil {

@@ -5,10 +5,11 @@ type LookupAdapter interface {
 }
 
 type LookupParams struct {
-	Identifier string
-	Isbn       string
-	Issn       string
-	Title      string
+	Identifier  string
+	Isbn        string
+	Issn        string
+	Title       string
+	ServiceType string
 }
 
 type Holding struct {
@@ -21,7 +22,7 @@ type Holding struct {
 }
 
 type HoldingsParser interface {
-	Parse(record []byte) ([]Holding, error)
+	Parse(record []byte, params LookupParams) ([]Holding, error)
 }
 
 type LookupQueryBuilder interface {

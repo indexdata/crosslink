@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/crosslink/marcxml"
 )
 
@@ -42,18 +43,23 @@ func NewMarc21Plus1HoldingsParser() HoldingsParser {
 	return &Marc21Plus1HoldingsParser{}
 }
 
-func (p *Marc21Plus1HoldingsParser) Parse(record []byte) ([]Holding, error) {
+func (p *Marc21Plus1HoldingsParser) Parse(record []byte, params LookupParams) ([]Holding, error) {
 	var marcRecord marcxml.Record
 	err := xml.Unmarshal(record, &marcRecord)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
 	}
+	loanOk := params.ServiceType == string(iso18626.TypeServiceTypeLoan) ||
+		params.ServiceType == string(iso18626.TypeServiceTypeCopyOrLoan) || params.ServiceType == ""
+	copyOk := params.ServiceType == string(iso18626.TypeServiceTypeCopy) ||
+		params.ServiceType == string(iso18626.TypeServiceTypeCopyOrLoan) || params.ServiceType == ""
+
 	var holdings []Holding
 	for _, field := range marcRecord.Datafield {
 		if field.Tag == "924" {
 			var localIdentifier string
 			var symbol string
-			// TODO: serviceType subfield d
+			ok := false
 			for _, subfield := range field.Subfield {
 				if subfield.Code == "a" {
 					localIdentifier = strings.TrimSpace(string(subfield.Text))
@@ -61,8 +67,23 @@ func (p *Marc21Plus1HoldingsParser) Parse(record []byte) ([]Holding, error) {
 				if subfield.Code == "b" {
 					symbol = strings.TrimSpace(string(subfield.Text))
 				}
+				if subfield.Code == "d" { // loan indicator
+					indicator := strings.TrimSpace(string(subfield.Text))
+					if indicator == "a" {
+						ok = loanOk
+					}
+					if indicator == "b" {
+						ok = copyOk
+					}
+					if indicator == "c" { // unrestricted interlibrary loan, so we can treat it as available
+						ok = true
+					}
+					if indicator == "e" {
+						ok = copyOk
+					}
+				}
 			}
-			if localIdentifier != "" && symbol != "" {
+			if ok && localIdentifier != "" && symbol != "" {
 				holdings = append(holdings, Holding{
 					LocalIdentifier: localIdentifier,
 					Symbol:          symbol,

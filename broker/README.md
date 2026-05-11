@@ -103,6 +103,7 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock` or `sru`                                               | `mock`                                    |
 | `HOLDINGS_SRU_URL`        | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                         | `http://localhost:8081/sru`               |
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
+| `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir` or `MARC-21plus-1`                               | `reservoir`                               |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
 | `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`                                    | `zoom`                                    |
