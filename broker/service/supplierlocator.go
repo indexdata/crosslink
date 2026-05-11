@@ -58,6 +58,7 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.
 	var holdingsParams adapter.HoldingLookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
+	holdingsParams.Title = bibliographicInfo.Title
 	for _, id := range bibliographicInfo.BibliographicItemId {
 		code := id.BibliographicItemIdentifierCode.Text
 		switch code {
