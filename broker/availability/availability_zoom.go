@@ -24,6 +24,7 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder adapte
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
 			"count":                 "10",
+			"presentChunks":         "10",
 			"preferredRecordSyntax": "usmarc",
 		},
 		zurl:           config.Address,
@@ -38,14 +39,15 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder adapte
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(params adapter.LookupParams, conn *zoom.Connection, query string) ([]adapter.Holding, error) {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(params adapter.LookupParams, conn *zoom.Connection, query *zoom.Query) ([]adapter.Holding, error) {
 	set, err := conn.Search(query)
 	if err != nil {
 		return nil, err
 	}
 	defer set.Close()
 	var avail []adapter.Holding
-	for i := 0; i < set.Count(); i++ {
+	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
+	for i := 0; i < limit; i++ {
 		rec, err := set.GetRecord(i)
 		if err != nil {
 			return nil, err
@@ -78,19 +80,35 @@ func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build query: %w", err)
 	}
-	if len(cqlList) > 0 {
-		return nil, "", fmt.Errorf("Z39.50 server does not support CQL queries: %v", cqlList)
-	}
-	if len(pqfList) == 0 {
+	if len(pqfList) == 0 && len(cqlList) == 0 {
 		return nil, "", fmt.Errorf("no valid query parameters provided")
 	}
 	for _, pqf := range pqfList {
-		avail, err := a.searchRetrieve(params, conn, pqf)
+		query, err := zoom.NewPqfQuery(pqf)
+		if err != nil {
+			return nil, pqf, fmt.Errorf("failed to create PQF query: %w", err)
+		}
+		avail, err := a.searchRetrieve(params, conn, query)
+		query.Close()
 		if err != nil {
 			return nil, pqf, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
 		}
 		if len(avail) > 0 {
 			return avail, pqf, nil
+		}
+	}
+	for _, cql := range cqlList {
+		query, err := zoom.NewCqlQuery(cql)
+		if err != nil {
+			return nil, cql, fmt.Errorf("failed to create CQL query: %w", err)
+		}
+		avail, err := a.searchRetrieve(params, conn, query)
+		query.Close()
+		if err != nil {
+			return nil, cql, fmt.Errorf("failed to search SRU server query: %s err %w", cql, err)
+		}
+		if len(avail) > 0 {
+			return avail, cql, nil
 		}
 	}
 	return nil, pqfList[0], nil

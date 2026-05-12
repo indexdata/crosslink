@@ -1,11 +1,9 @@
 package availability
 
 import (
-	"context"
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
@@ -13,18 +11,16 @@ import (
 
 func TestGetAdapterEmpty(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
 
 func TestGetAdapterOtherNoConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
@@ -62,7 +58,6 @@ func TestParserOpac(t *testing.T) {
 
 func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
@@ -73,14 +68,13 @@ func TestGetAdapterBadParser(t *testing.T) {
 			},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
@@ -90,20 +84,19 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 			},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported availability adapter type: other")
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
 	creator := NewAvailabilityCreator("zoom", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must specify either sru or zoom properties")
 }
@@ -119,8 +112,7 @@ func TestGetAdapterMock(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMock, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
 }
@@ -136,8 +128,7 @@ func TestGetAdapterZoom(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "requires cgo")
@@ -159,8 +150,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
 }
@@ -176,8 +166,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
 }
@@ -193,8 +182,7 @@ func TestGetAdapterSRU(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &SruAvailabilityAdapter{}, aa)
 }

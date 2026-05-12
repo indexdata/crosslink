@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 )
 
@@ -12,7 +11,7 @@ type SruAvailabilityAdapter struct {
 	holdingsLookupAdapter adapter.LookupAdapter
 }
 
-func NewSruAvailabilityAdapter(ctx common.ExtendedContext, config directory.SruConfig, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
+func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	var recordSchema string
 	if config.RecordSchema != nil {
 		recordSchema = *config.RecordSchema

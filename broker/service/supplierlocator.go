@@ -92,7 +92,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	lookupAdapter := s.holdingsAdapter
 	if lookupAdapter == nil { // null if consortia adapter is configured, in which case we need to determine adapter by directory
 		// TODO: use CONSORTIA_SYMBOL or determine parent from peer (if not already consirtia symbol) instead of requester symbol
-		lookupAdapter, err = s.availabilityCreator.GetAdapter(ctx, requester)
+		lookupAdapter, err = s.availabilityCreator.GetAdapter(requester)
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter for requester", err)
 		}
@@ -258,7 +258,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	aa, err := s.availabilityCreator.GetAdapter(ctx, peer)
+	aa, err := s.availabilityCreator.GetAdapter(peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}

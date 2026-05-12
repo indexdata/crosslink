@@ -57,9 +57,25 @@ func TestConnect(t *testing.T) {
 	assert.Equal(t, 10000, err.(*ZoomError).Code)
 }
 
+func TestPqfQuery(t *testing.T) {
+	query, err := NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+	query.Close()
+
+	_, err = NewPqfQuery("@attr 1=4")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create PQF query")
+}
+
 func TestSearch(t *testing.T) {
 	conn := &Connection{}
-	_, err := conn.Search("@attr 1=4 utah")
+
+	query, err := NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+
+	_, err = conn.Search(query)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "connection is not established")
 
@@ -73,7 +89,16 @@ func TestSearch(t *testing.T) {
 	err = conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
-	rs, err := conn.Search("@attr 1=4 computer")
+	query.Close()
+	_, err = conn.Search(query)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "query is not initialized")
+
+	query, err = NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+
+	rs, err := conn.Search(query)
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
 	assert.Equal(t, 42, rs.Count())
@@ -122,8 +147,13 @@ func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
+	query, err := NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+
 	// getting non-surrogate diagnostic for unsupported record syntax
-	rs, err := conn.Search("@attr 1=4 computer")
+
+	rs, err := conn.Search(query)
 	assert.Error(t, err)
 	assert.Nil(t, rs)
 	assert.Contains(t, err.Error(), "Record syntax not supported")
@@ -141,7 +171,11 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
-	rs, err := conn.Search("@attr 1=4 computer")
+	query, err := NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+
+	rs, err := conn.Search(query)
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
 
@@ -163,7 +197,11 @@ func TestSearchSurrogateDiagnostic(t *testing.T) {
 	err := conn.Connect(containerHost + ":" + mappedPort)
 	assert.NoError(t, err)
 
-	rs, err := conn.Search("@attr 1=4 computer")
+	query, err := NewPqfQuery("@attr 1=4 computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+
+	rs, err := conn.Search(query)
 	assert.NoError(t, err)
 	assert.NotNil(t, rs)
 

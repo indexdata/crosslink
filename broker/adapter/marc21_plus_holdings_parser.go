@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"encoding/xml"
-	"fmt"
 	"strings"
 
 	"github.com/indexdata/crosslink/iso18626"
@@ -47,7 +46,13 @@ func (p *Marc21Plus1HoldingsParser) Parse(record []byte, params LookupParams) ([
 	var marcRecord marcxml.Record
 	err := xml.Unmarshal(record, &marcRecord)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
+		// GVI marc does not have the MARC21 slim namespace, so we try again without it
+		var noNamespaceRecord marcxml.RecordType
+		err := xml.Unmarshal(record, &noNamespaceRecord)
+		if err != nil {
+			return nil, err
+		}
+		marcRecord.RecordType = noNamespaceRecord
 	}
 	loanOk := params.ServiceType == string(iso18626.TypeServiceTypeLoan) ||
 		params.ServiceType == string(iso18626.TypeServiceTypeCopyOrLoan) || params.ServiceType == ""

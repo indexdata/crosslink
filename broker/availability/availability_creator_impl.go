@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 )
@@ -46,7 +45,7 @@ func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
 	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
-func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error) {
+func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (adapter.LookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.AvailabilityConfig
 	if config == nil {
@@ -59,12 +58,14 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	if err != nil {
 		return nil, err
 	}
+	queryBuilder, err := adapter.NewQueryBuilder(config.QueryConfig)
+	if err != nil {
+		return nil, err
+	}
 	if config.Sru != nil {
-		queryBuilder := adapter.NewQueryBuilderCql(config.QueryConfig)
-		return NewSruAvailabilityAdapter(ctx, *config.Sru, queryBuilder, holdingsParser)
+		return NewSruAvailabilityAdapter(*config.Sru, queryBuilder, holdingsParser)
 	}
 	if config.Zoom != nil {
-		queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
 		switch c.mode {
 		case AvailabilityAdapterMetaproxy:
 			if c.metaproxyUrl == "" {

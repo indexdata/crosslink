@@ -40,9 +40,10 @@ func TestLookupFoundMarc(t *testing.T) {
 		MainField:        adapter.NewString("010"),
 		LocationSubField: adapter.NewString("a"),
 	}
-	queryBuilder := adapter.NewQueryBuilderPqf(&directory.QueryConfig{
+	queryBuilder, err := adapter.NewQueryBuilder(&directory.QueryConfig{
 		Title: adapter.NewString("@attr 1=1016 {term}"),
 	})
+	assert.NoError(t, err)
 	holdingsParser := adapter.NewMarcHoldingsParser(config)
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
@@ -70,7 +71,8 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	queryBuilder := adapter.NewQueryBuilderPqf(nil)
+	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	assert.NoError(t, err)
 	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
@@ -98,7 +100,8 @@ func TestLookupFoundOpac(t *testing.T) {
 }
 
 func TestLookupDiagnostics(t *testing.T) {
-	queryBuilder := adapter.NewQueryBuilderPqf(nil)
+	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	assert.NoError(t, err)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
@@ -122,7 +125,8 @@ func TestLookupDiagnostics(t *testing.T) {
 }
 
 func TestConnectFailure(t *testing.T) {
-	queryBuilder := adapter.NewQueryBuilderPqf(nil)
+	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	assert.NoError(t, err)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{

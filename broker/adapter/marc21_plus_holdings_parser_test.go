@@ -29,6 +29,32 @@ func TestMarc21Plus1HoldingsParser_ParseError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestMarc21Plus1HoldingsParser_no_namespace(t *testing.T) {
+	parser := NewMarc21Plus1HoldingsParser()
+
+	marcXML := []byte(`
+	<record>
+		<datafield tag="924" ind1="0" ind2=" ">
+			<subfield code="a">LocalID123</subfield>
+			<subfield code="b">ISIL123</subfield>
+			<subfield code="c">Region1</subfield>
+			<subfield code="d">a</subfield>
+			<subfield code="k">http://example.com/holding1</subfield>
+			<subfield code="1">ProduktSigel123</subfield>
+		</datafield>
+	</record>`)
+
+	params := LookupParams{
+		ServiceType: string(iso18626.TypeServiceTypeLoan),
+	}
+	holdings, err := parser.Parse(marcXML, params)
+	assert.NoError(t, err)
+	assert.Len(t, holdings, 1)
+	holding := holdings[0]
+	assert.Equal(t, "LocalID123", holding.LocalIdentifier)
+	assert.Equal(t, "ISIL123", holding.Symbol)
+}
+
 func TestMarc21Plus1HoldingsParser_Parse_da(t *testing.T) {
 	parser := NewMarc21Plus1HoldingsParser()
 

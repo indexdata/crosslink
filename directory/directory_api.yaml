@@ -301,6 +301,12 @@ components:
     QueryConfig:
       type: object
       properties:
+        type:
+          type: string
+          enum: 
+            - cql
+            - pqf
+          description: whether mapping is CQL or PQF. Default is PQF.
         title:
           type: string
           description: PQF/CQL format string for title search. Default is "@attr 1=4 {term}"

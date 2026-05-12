@@ -2,14 +2,14 @@ package adapter
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/indexdata/crosslink/directory"
 )
 
 type QueryBuilderPqf struct {
-	mappings   directory.QueryConfig
-	defaultMap directory.QueryConfig
+	config directory.QueryConfig
 }
 
 func NewString(s string) *string {
@@ -19,28 +19,32 @@ func NewString(s string) *string {
 	return nil
 }
 
-func NewQueryBuilderPqf(queryConfig *directory.QueryConfig) *QueryBuilderPqf {
-	if queryConfig == nil {
-		queryConfig = &directory.QueryConfig{}
+func NewQueryBuilder(queryConfig *directory.QueryConfig) (*QueryBuilderPqf, error) {
+	var config directory.QueryConfig
+	if queryConfig != nil {
+		config = *queryConfig
 	}
-	return &QueryBuilderPqf{mappings: *queryConfig, defaultMap: directory.QueryConfig{
-		Identifier: NewString("@attr 1=12 {term}"),
-		Isbn:       NewString("@attr 1=7 {term}"),
-		Issn:       NewString("@attr 1=8 {term}"),
-		Title:      NewString("@attr 1=4 {term}"),
-	}}
-}
-
-func NewQueryBuilderCql(queryConfig *directory.QueryConfig) *QueryBuilderPqf {
-	if queryConfig == nil {
-		queryConfig = &directory.QueryConfig{}
+	if config.Type == nil || *config.Type == directory.Pqf {
+		if config.Identifier == nil && config.Isbn == nil && config.Issn == nil && config.Title == nil {
+			// if no specific mappings are provided, we set default PQF mappings
+			config.Identifier = NewString("@attr 1=12 {term}")
+			config.Isbn = NewString("@attr 1=7 {term}")
+			config.Issn = NewString("@attr 1=8 {term}")
+			config.Title = NewString("@attr 1=4 {term}")
+		}
+		return &QueryBuilderPqf{config: config}, nil
 	}
-	return &QueryBuilderPqf{mappings: *queryConfig, defaultMap: directory.QueryConfig{
-		Identifier: NewString("rec.id = {term}"),
-		Isbn:       NewString("isbn = {term}"),
-		Issn:       NewString("issn = {term}"),
-		Title:      NewString("title = {term}"),
-	}}
+	if *config.Type == directory.Cql {
+		if config.Identifier == nil && config.Isbn == nil && config.Issn == nil && config.Title == nil {
+			// if no specific mappings are provided, we set default CQL mappings
+			config.Identifier = NewString("rec.id = {term}")
+			config.Isbn = NewString("isbn = {term}")
+			config.Issn = NewString("issn = {term}")
+			config.Title = NewString("title = {term}")
+		}
+		return &QueryBuilderPqf{config: config}, nil
+	}
+	return nil, fmt.Errorf("unsupported query builder type: %s", *config.Type)
 }
 
 func pqfEncode(value string) string {
@@ -73,29 +77,24 @@ func (s *QueryBuilderPqf) Build(params LookupParams) (cql []string, pqf []string
 	type paramMapping struct {
 		value   string
 		mapping *string
-		dir     string
 	}
 
 	paramMappings := []paramMapping{
-		{params.Identifier, s.mappings.Identifier, *s.defaultMap.Identifier},
-		{params.Isbn, s.mappings.Isbn, *s.defaultMap.Isbn},
-		{params.Issn, s.mappings.Issn, *s.defaultMap.Issn},
-		{params.Title, s.mappings.Title, *s.defaultMap.Title},
+		{params.Identifier, s.config.Identifier},
+		{params.Isbn, s.config.Isbn},
+		{params.Issn, s.config.Issn},
+		{params.Title, s.config.Title},
 	}
 	var pqfList []string
 	var cqlList []string
 	for _, pm := range paramMappings {
 		if pm.value != "" {
-			mapping := pm.dir
-			if pm.mapping != nil {
-				mapping = *pm.mapping
-			}
-			if strings.HasPrefix(mapping, "@") {
-				pqf := strings.ReplaceAll(mapping, "{term}", pqfEncode(pm.value))
-				pqfList = append(pqfList, pqf)
-			} else {
-				cql := strings.ReplaceAll(mapping, "{term}", cqlEncode(pm.value))
+			if s.config.Type != nil && *s.config.Type == directory.Cql {
+				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
 				cqlList = append(cqlList, cql)
+			} else {
+				pqf := strings.ReplaceAll(*pm.mapping, "{term}", pqfEncode(pm.value))
+				pqfList = append(pqfList, pqf)
 			}
 		}
 	}
