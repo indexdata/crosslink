@@ -22,8 +22,6 @@ type SruHoldingsLookupAdapter struct {
 	recordSchema   string
 }
 
-const isilPrefix = "ISIL:"
-
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, recordSchema string) LookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, xTarget: xTarget, recordSchema: recordSchema}
 }

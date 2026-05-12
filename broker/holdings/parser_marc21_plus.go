@@ -71,6 +71,10 @@ func (p *Marc21Plus1HoldingsParser) Parse(record []byte, params LookupParams) ([
 				}
 				if subfield.Code == "b" {
 					symbol = strings.TrimSpace(string(subfield.Text))
+					scheme, _, found := strings.Cut(symbol, ":")
+					if !found || strings.TrimSpace(scheme) == "" {
+						symbol = isilPrefix + symbol
+					}
 				}
 				if subfield.Code == "d" { // loan indicator
 					indicator := strings.TrimSpace(string(subfield.Text))

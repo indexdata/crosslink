@@ -8,6 +8,8 @@ import (
 	"github.com/indexdata/crosslink/marcxml"
 )
 
+const isilPrefix = "ISIL:"
+
 type ReservoirHoldingsParser struct{}
 
 func NewReservoirHoldingsParser() HoldingsParser {
