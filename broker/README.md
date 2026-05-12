@@ -3,8 +3,9 @@
 CrossLink broker is a system to manage inter-library loans (ILL), specifically it:
 
 * accepts and handles ILL requests from external requesters (e.g Alma or ReShare) via the ISO18626 protocol
-* locates suppliers with available holdings using the _Search/Retrieval via URL_ (SRU) protocol
+* locates suppliers and their holdings from a Union Catalog using the _Search/Retrieval via URL_ (SRU) protocol
 * resolves supplier information via the [Directory API](./../directory/directory_api.yaml)
+* checks item availability using the Z3.50 or the SRU protocol
 * negotiates loans with external suppliers (e.g Alma or ReShare) via ISO18626
 * allows internal requesters and suppliers to manage ILL requests using a convenient JSON API
 * provides ILS integration for internal requesters and suppliers via NCIP
@@ -106,10 +107,8 @@ Configuration is provided via environment variables:
 | `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir` or `MARC-21plus-1`                               | `reservoir`                               |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
-| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`                                    | `zoom`                                    |
-|                           | `zoom` is the default availability adapter, but it depends on CGO being enabled and   |                                           |
-|                           | on `libyaz` being available for build/runtime. If CGO is disabled, builds using       |                                           |
-|                           | `zoom` will fail; use `metaproxy` instead in such deployments                         |                                           |
+| `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`.                                   | `zoom`                                    |
+|                           | see [Building with native extensions (CGO)](#building-with-native-extensions-cgo)     |                                           |
 | `METAPROXY_URL`           | Metaproxy URL when `AVAILABILITY_ADAPTER` = `metaproxy`                               | (empty value)                             |
 | `PEER_REFRESH_INTERVAL`   | Peer refresh interval (via Directory lookup)                                          | `5m`                                      |
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
@@ -143,6 +142,25 @@ or run test for selected `_test` package
 ```
 go test -v -coverpkg=./... -cover ./cmd/broker
 ```
+
+## Building with native extensions (CGO)
+
+The `zoom` availability adapter requires the native `libyaz` library and CGO to be enabled during the build (the default).
+
+Install `libyaz` using your OS package manager:
+
+- **Debian/Ubuntu:** `sudo apt-get install libyaz-dev`
+- **RHEL/CentOS** (requires EPEL)**:** `sudo yum install libyaz-devel`
+- **Fedora:** `sudo dnf install libyaz-devel`
+- **macOS:** `brew install yaz`
+
+To build without native extensions, disable CGO:
+
+```
+CGO_ENABLED=0 make
+```
+
+This will make `zoom` adapter unavailable and the `metaproxy` adapter should be used instead.
 
 # Run locally
 
