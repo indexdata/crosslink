@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/illmock/testutil"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
 )
 

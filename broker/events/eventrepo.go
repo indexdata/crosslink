@@ -14,6 +14,7 @@ type EventRepo interface {
 	UpdateEventLifecycle(ctx common.ExtendedContext, params UpdateEventLifecycleParams) (Event, error)
 	GetEvent(ctx common.ExtendedContext, id string) (Event, error)
 	GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error)
+	GetOlderIncompleteEvent(ctx common.ExtendedContext, event Event) (Event, error)
 	ClaimEventForSignal(ctx common.ExtendedContext, id string, signal Signal) (Event, error)
 	Notify(ctx common.ExtendedContext, eventId string, signal Signal, target SignalTarget) error
 	GetIllTransactionEvents(ctx common.ExtendedContext, id string) ([]Event, int64, error)
@@ -51,6 +52,18 @@ func (r *PgEventRepo) GetEvent(ctx common.ExtendedContext, id string) (Event, er
 
 func (r *PgEventRepo) GetEventForUpdate(ctx common.ExtendedContext, id string) (Event, error) {
 	row, err := r.queries.GetEventForUpdate(ctx, r.GetConnOrTx(), id)
+	return row.Event, err
+}
+
+func (r *PgEventRepo) GetOlderIncompleteEvent(ctx common.ExtendedContext, event Event) (Event, error) {
+	row, err := r.queries.GetOlderIncompleteEvent(ctx, r.GetConnOrTx(), GetOlderIncompleteEventParams{
+		ID:               event.ID,
+		EventType:        event.EventType,
+		EventName:        event.EventName,
+		Timestamp:        event.Timestamp,
+		PatronRequestID:  event.PatronRequestID,
+		IllTransactionID: event.IllTransactionID,
+	})
 	return row.Event, err
 }
 

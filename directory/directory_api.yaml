@@ -243,6 +243,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
+        availabilityConfig:
+          description: Configuration for availability lookup
+          $ref: '#/components/schemas/AvailabilityConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -252,6 +255,105 @@ components:
             - CrossLink
             - ILLiad
             - Unknown
+
+    AvailabilityConfig:
+      type: object
+      properties:
+        sru:
+          $ref: '#/components/schemas/SruConfig'
+        z3950:
+          $ref: '#/components/schemas/Z3950Config'
+        queryConfig:
+          $ref: '#/components/schemas/QueryConfig'
+        parserConfig:
+          $ref: '#/components/schemas/ParserConfig'
+      additionalProperties: false
+
+    SruConfig:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          description: SRU server address (for example, "http://sru.indexdata.com:8080/marc")
+        recordSchema:
+          type: string
+          description: Record schema to use for parsing holdings records (for example, "marcxml")
+      additionalProperties: false
+
+    Z3950Config:
+      type: object
+      required:
+        - address
+      properties:
+        address:
+          type: string
+          description: Z39.50 server address and database (for example, "z3950.indexdata.com:210/marc")
+        options:
+          type: object
+          additionalProperties:
+            type: string
+          description: ZOOM options for the Z39.50 connection where key is the option name and value is the option value.
+            Some of the options are "preferredRecordSyntax" (for example, "usmarc") and "count" (for example, "10").
+      additionalProperties: false
+
+    QueryConfig:
+      type: object
+      properties:
+        title:
+          type: string
+          description: PQF/CQL format string for title search. Default is "@attr 1=4 {term}"
+        isbn:
+          type: string
+          description: PQF/CQL format string for ISBN search. Default is "@attr 1=7 {term}"
+        issn:
+          type: string
+          description: PQF/CQL format string for ISSN search. Default is "@attr 1=8 {term}"
+        identifier:
+          type: string
+          description: PQF/CQL format string for identifier search. Default is "@attr 1=12 {term}"
+      additionalProperties: false
+
+    ParserConfig:
+      type: object
+      properties:
+        marc:
+          $ref: '#/components/schemas/MarcParserConfig'
+        opac:
+          $ref: '#/components/schemas/OpacParserConfig'
+      additionalProperties: false
+
+    MarcParserConfig:
+      type: object
+      properties:
+        mainField:
+          type: string
+          description: MARC field to use as the main field for holdings parsing (for example, "852")
+        locationSubField:
+          type: string
+          description: Subfield code to use for location (for example, "b")
+        shelvingLocationSubField:
+          type: string
+          description: Subfield code to use for shelving location (for example, "c")
+        itemIdSubField:
+          type: string
+          description: Subfield code to use for item id (for example, "p")
+        restrictedSubField:
+          type: string
+          description: Subfield code to use for restricted status (for example, "k")
+        callNumberSubField:
+          type: string
+          description: Subfield code to use for call number (for example, "h")
+      additionalProperties: false
+
+    OpacParserConfig:
+      type: object
+      description: |
+        Configuration for OPAC parser. Currently must be empty; no properties allowed.
+      properties: {}
+      additionalProperties: false
+
     LmsConfig:
       required:
         - address

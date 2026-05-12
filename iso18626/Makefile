@@ -6,7 +6,8 @@ XSLT ?= xsltproc
 GEN_SCHEMA_IN=xsd/ISO-18626-v1_2.xsd
 GEN_SCHEMA_OUT=ill_gen.go
 
-.PHONY: all generate generate-schema lint vulncheck check clean deps-update
+.PHONY: all generate generate-schema lint vulncheck check clean deps-update tools-update
+XSD2GO = $(GO) tool xsd2goxsl
 
 all: generate
 
@@ -15,7 +16,7 @@ generate: generate-schema
 generate-schema: $(GEN_SCHEMA_OUT)
 
 $(GEN_SCHEMA_OUT): $(GEN_SCHEMA_IN)
-	$(GO) run github.com/indexdata/xsd2goxsl@v1.6.0 $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
+	$(XSD2GO) $(GEN_SCHEMA_IN) $(GEN_SCHEMA_OUT) \
 	'qAttrImport=utils "github.com/indexdata/go-utils/utils"' \
 	dateTimeType=utils.XSDDateTime \
 	decimalType=utils.XSDDecimal \
@@ -39,4 +40,8 @@ vulncheck: generate
 
 deps-update:
 	$(GO) get -u ./...
+	$(GO) mod tidy
+
+tools-update:
+	$(GO) get -tool github.com/indexdata/xsd2goxsl@latest
 	$(GO) mod tidy

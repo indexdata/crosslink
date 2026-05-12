@@ -437,6 +437,62 @@ func TestBeginAndCompleteTask(t *testing.T) {
 	}
 }
 
+func TestProcessExclusiveTaskFailsWhenOlderIncompleteTaskExists(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	prID := uuid.NewString()
+	createPatronRequestForEventTest(t, prID)
+	_, err := eventBus.CreateTask(prID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	assert.NoError(t, err)
+	currentID, err := eventBus.CreateTask(prID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	handlerCalled := false
+	completed, err := eventBus.ProcessExclusiveTask(appCtx, events.Event{ID: currentID}, events.SignalConsumers, func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult) {
+		handlerCalled = true
+		return events.EventStatusSuccess, &events.EventResult{}
+	})
+
+	assert.NoError(t, err)
+	assert.False(t, handlerCalled)
+	assert.Equal(t, events.EventStatusError, completed.EventStatus)
+	if assert.NotNil(t, completed.ResultData.EventError) {
+		assert.Equal(t, "another invoke-action task in progress", completed.ResultData.EventError.Message)
+	}
+}
+
+func TestProcessExclusiveTaskAllowsOlderAncestorTask(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	prID := uuid.NewString()
+	createPatronRequestForEventTest(t, prID)
+	parentID, err := eventBus.CreateTask(prID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	assert.NoError(t, err)
+	_, err = eventBus.BeginTask(parentID, events.SignalConsumers)
+	assert.NoError(t, err)
+	childID, err := eventBus.CreateTask(prID, events.EventNameInvokeAction, events.EventData{}, events.EventDomainPatronRequest, &parentID, events.SignalConsumers)
+	assert.NoError(t, err)
+
+	handlerCalled := false
+	completed, err := eventBus.ProcessExclusiveTask(appCtx, events.Event{ID: childID}, events.SignalConsumers, func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult) {
+		handlerCalled = true
+		return events.EventStatusSuccess, &events.EventResult{}
+	})
+	assert.NoError(t, err)
+	assert.True(t, handlerCalled)
+	assert.Equal(t, events.EventStatusSuccess, completed.EventStatus)
+
+	_, err = eventBus.CompleteTask(parentID, &events.EventResult{}, events.EventStatusSuccess, events.SignalConsumers)
+	assert.NoError(t, err)
+}
+
+func createPatronRequestForEventTest(t *testing.T, prID string) {
+	t.Helper()
+	conn, err := pgx.Connect(context.Background(), app.ConnectionString)
+	assert.NoError(t, err)
+	defer conn.Close(context.Background())
+	_, err = conn.Exec(context.Background(), "INSERT INTO patron_request (id, state, side) VALUES ($1, 'NEW', 'borrowing')", prID)
+	assert.NoError(t, err)
+}
+
 func TestBeginTaskNegative(t *testing.T) {
 	illId := apptest.GetIllTransId(t, illRepo)
 	eventId := uuid.New().String()

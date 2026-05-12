@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
@@ -21,18 +22,20 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
-	eventBus        events.EventBus
-	illRepo         ill_db.IllRepo
-	dirAdapter      adapter.DirectoryLookupAdapter
-	holdingsAdapter adapter.HoldingsLookupAdapter
+	eventBus            events.EventBus
+	illRepo             ill_db.IllRepo
+	dirAdapter          adapter.DirectoryLookupAdapter
+	holdingsAdapter     adapter.LookupAdapter
+	availabilityCreator availability.AvailabilityCreator
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.HoldingsLookupAdapter) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.LookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
 	return SupplierLocator{
-		eventBus:        eventBus,
-		illRepo:         illRepo,
-		dirAdapter:      dirAdapter,
-		holdingsAdapter: holdingsAdapter,
+		eventBus:            eventBus,
+		illRepo:             illRepo,
+		dirAdapter:          dirAdapter,
+		holdingsAdapter:     holdingsAdapter,
+		availabilityCreator: availabilityCreator,
 	}
 }
 
@@ -46,15 +49,16 @@ func (s *SupplierLocator) SelectSupplier(ctx common.ExtendedContext, event event
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.selectSupplier)
 }
 
-func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
-	}
-	var holdingsParams adapter.HoldingLookupParams
+func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
+	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
+}
 
-	bibliographicInfo := illTrans.IllTransactionData.BibliographicInfo
+func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.LookupParams {
+	var holdingsParams adapter.LookupParams
+	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
+	holdingsParams.Title = bibliographicInfo.Title
 	for _, id := range bibliographicInfo.BibliographicItemId {
 		code := id.BibliographicItemIdentifierCode.Text
 		switch code {
@@ -64,6 +68,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			holdingsParams.Issn = id.BibliographicItemIdentifier
 		}
 	}
+	return holdingsParams
+}
+
+func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
+	}
+	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
 	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
 			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
@@ -209,6 +222,61 @@ func (s *SupplierLocator) addLocatedSupplier(ctx common.ExtendedContext, transId
 	return &sup, err
 }
 
+func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
+		IllTransactionID: event.IllTransactionID,
+		SupplierStatus:   ill_db.SupplierStateSelectedPg,
+	})
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not find selected suppliers", err)
+	}
+	if len(suppliers) == 0 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no selected suppliers", nil)
+	}
+	if len(suppliers) > 1 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "multiple selected suppliers", map[string]any{"supplierCount": len(suppliers)})
+	}
+	sup := suppliers[0]
+	eventData := map[string]any{}
+	eventData["skipped"] = false
+	eventData["localSupplier"] = sup.LocalSupplier
+	peer, err := s.illRepo.GetPeerById(ctx, sup.SupplierID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
+	}
+	aa, err := s.availabilityCreator.GetAdapter(ctx, peer)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
+	}
+	if aa == nil {
+		ctx.Logger().Debug("skipping availability check for supplier without availability config", "supplierSymbol", sup.SupplierSymbol)
+		return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+	}
+
+	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
+	}
+	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams.Identifier = sup.LocalID.String
+	results, _, err := aa.Lookup(holdingsParams)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
+	}
+	if len(results) == 0 {
+		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
+		eventData["skipped"] = true
+		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
+		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(sup))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not save located supplier", err)
+		}
+	} else {
+		ctx.Logger().Debug("availability lookup returned results for supplier, not skipping", "supplierSymbol", sup.SupplierSymbol)
+	}
+	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
+}
+
 func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	suppliers, err := s.illRepo.GetLocatedSuppliersByIllTransactionAndStatus(ctx, ill_db.GetLocatedSuppliersByIllTransactionAndStatusParams{
 		IllTransactionID: event.IllTransactionID,
@@ -259,7 +327,6 @@ func (s *SupplierLocator) selectSupplier(ctx common.ExtendedContext, event event
 	}
 	eventData["supplierId"] = locSup.SupplierID
 	eventData["supplierSymbol"] = locSup.SupplierSymbol
-	eventData["localSupplier"] = locSup.LocalSupplier
 	return events.EventStatusSuccess, &events.EventResult{CustomData: eventData}
 }
 

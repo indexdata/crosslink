@@ -12,7 +12,7 @@ const (
 	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
 )
 
-func CreateHoldingsLookupAdapter(cfg map[string]any) (HoldingsLookupAdapter, error) {
+func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
@@ -31,7 +31,9 @@ func CreateHoldingsLookupAdapter(cfg map[string]any) (HoldingsLookupAdapter, err
 		if !ok {
 			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, isxnLookup)
 		}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), isxnLookup), nil
+		queryBuilder := QueryBuilderIsxn{isxn: isxnLookup}
+		parser := &ReservoirHoldingsParser{}
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil

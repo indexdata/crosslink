@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -53,26 +54,41 @@ func (w *WorkflowManager) OnLocateSupplierComplete(ctx common.ExtendedContext, e
 	}, "")
 }
 
+func (w *WorkflowManager) OnCheckAvailabilityComplete(ctx common.ExtendedContext, event events.Event) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
+	common.Must(ctx, func() (string, error) {
+		if event.EventStatus != events.EventStatusSuccess {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		skipped, ok := event.ResultData.CustomData["skipped"].(bool)
+		if !ok {
+			return "", fmt.Errorf("failed to detect if supplier is skipped by availability check")
+		}
+		if skipped {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
+		id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		if err != nil {
+			return id, err
+		}
+		local, ok := event.ResultData.CustomData["localSupplier"].(bool)
+		if !ok {
+			return "", fmt.Errorf("failed to detect local supplier from event result data")
+		}
+		if local {
+			return "", nil
+		}
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+	}, "")
+}
+
 func (w *WorkflowManager) OnSelectSupplierComplete(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		if event.EventStatus == events.EventStatusSuccess {
-			id, err := w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
-			if err != nil {
-				return id, err
-			}
-			if local, ok := event.ResultData.CustomData["localSupplier"].(bool); ok {
-				if !local {
-					return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
-				} else {
-					return "", nil
-				}
-			} else {
-				return "", fmt.Errorf("failed to detect local supplier from event result data")
-			}
-		} else {
+		if event.EventStatus != events.EventStatusSuccess {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageRequester, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 		}
+		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameCheckAvailability, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 	}, "")
 }
 
@@ -190,6 +206,20 @@ func supplierUnsolicitedCancel(sam iso18626.SupplyingAgencyMessage) bool {
 		sam.StatusInfo.Status == iso18626.TypeStatusCancelled
 }
 
+func supplierUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
+	if sam.StatusInfo.Status != iso18626.TypeStatusUnfilled {
+		return false
+	}
+	return sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageRequestResponse ||
+		sam.MessageInfo.ReasonForMessage == iso18626.TypeReasonForMessageStatusChange
+}
+
+func supplierTerminalUnfilled(sam iso18626.SupplyingAgencyMessage) bool {
+	return supplierUnfilled(sam) &&
+		sam.MessageInfo.ReasonUnfilled != nil &&
+		strings.EqualFold(sam.MessageInfo.ReasonUnfilled.Text, string(iso18626.ReasonUnfilledDuplicate))
+}
+
 func (w *WorkflowManager) supplierAcceptedTerminalCancel(ctx common.ExtendedContext, sam iso18626.SupplyingAgencyMessage, illTransId string) bool {
 	if !supplierAcceptedCancel(sam) {
 		return false
@@ -206,7 +236,7 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext,
 		common.Must(ctx, func() (string, error) {
 			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameConfirmSupplierMsg, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalObservers)
 		}, "")
-		if sam.StatusInfo.Status == iso18626.TypeStatusUnfilled {
+		if supplierUnfilled(sam) && !supplierTerminalUnfilled(sam) {
 			common.Must(ctx, func() (string, error) {
 				return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameSelectSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
 			}, "")
@@ -215,7 +245,7 @@ func (w *WorkflowManager) OnMessageRequesterComplete(ctx common.ExtendedContext,
 			// If requester sent terminal cancel we already skipped new suppliers but we also need to skip currently selected supplier
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 		}
-		if supplierUnsolicitedCancel(sam) {
+		if supplierUnsolicitedCancel(sam) || supplierTerminalUnfilled(sam) {
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateSelectedPg)
 			w.skipAllSuppliersByStatus(ctx, event.IllTransactionID, ill_db.SupplierStateNewPg)
 		}

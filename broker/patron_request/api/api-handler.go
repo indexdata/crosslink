@@ -501,13 +501,18 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 	if completedEvent.ResultData.EventError != nil {
 		message = &completedEvent.ResultData.EventError.Message
 	}
-	outcome := completedEvent.ResultData.ActionResult.Outcome
+	outcome := prservice.ActionOutcomeFailure
+	var toState *string
+	if completedEvent.ResultData.ActionResult != nil {
+		outcome = completedEvent.ResultData.ActionResult.Outcome
+		toState = completedEvent.ResultData.ActionResult.ToState
+	}
 	result := proapi.ActionResult{
 		Result:    string(completedEvent.EventStatus),
 		Message:   message,
 		Outcome:   outcome,
 		FromState: fromState,
-		ToState:   completedEvent.ResultData.ActionResult.ToState,
+		ToState:   toState,
 	}
 	if completedEvent.ResultData.Note != "" {
 		result.Message = &completedEvent.ResultData.Note

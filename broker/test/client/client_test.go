@@ -598,10 +598,11 @@ func TestRequestLocallyAvailableRequesterMessage(t *testing.T) {
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+			"TASK, check-availability = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, requester-msg-received = SUCCESS\n"+
 			"TASK, message-supplier = SUCCESS, doNotSend=true\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 6, false, func(e events.Event) string {
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 7, false, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}
@@ -631,11 +632,12 @@ func TestRequestLocallyAvailableSupplierMessage(t *testing.T) {
 		"NOTICE, request-received = SUCCESS\n"+
 			"TASK, locate-suppliers = SUCCESS\n"+
 			"TASK, select-supplier = SUCCESS ISIL:REQ\n"+
+			"TASK, check-availability = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS\n"+
 			"NOTICE, supplier-msg-received = SUCCESS\n"+
 			"TASK, message-requester = SUCCESS, doNotSend=true\n"+
 			"TASK, confirm-supplier-msg = NEW\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 7, true, func(e events.Event) string {
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 8, true, func(e events.Event) string {
 			if e.EventName == "select-supplier" {
 				return fmt.Sprintf(apptest.EventRecordFormat+" %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.CustomData["supplierSymbol"])
 			}

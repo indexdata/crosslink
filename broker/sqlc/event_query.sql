@@ -28,6 +28,30 @@ WHERE id = $1
     FOR UPDATE
 LIMIT 1;
 
+-- name: GetOlderIncompleteEvent :one
+WITH RECURSIVE ancestors AS (
+    SELECT parent_id
+    FROM event
+    WHERE id = sqlc.arg(id)
+    UNION ALL
+    SELECT parent.parent_id
+    FROM event parent
+        JOIN ancestors ancestor ON parent.id = ancestor.parent_id
+    WHERE ancestor.parent_id IS NOT NULL
+)
+SELECT sqlc.embed(event)
+FROM event
+WHERE event.id <> sqlc.arg(id)
+  AND event.event_type = sqlc.arg(event_type)
+  AND event.event_name = sqlc.arg(event_name)
+  AND event.event_status IN ('NEW', 'PROCESSING')
+  AND (event.timestamp, event.id) < (sqlc.arg(timestamp), sqlc.arg(id))
+  AND event.id NOT IN (SELECT parent_id FROM ancestors WHERE parent_id IS NOT NULL)
+  AND event.patron_request_id = sqlc.arg(patron_request_id)
+  AND event.ill_transaction_id = sqlc.arg(ill_transaction_id)
+ORDER BY event.timestamp, event.id
+LIMIT 1;
+
 -- name: ClaimEventForSignal :one
 UPDATE event
 SET last_signal = ''

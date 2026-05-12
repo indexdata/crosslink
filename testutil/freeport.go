@@ -1,12 +1,11 @@
-//go:build !testutil
-
 package testutil
 
 import (
-	"github.com/stretchr/testify/assert"
 	"net"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func GetFreeListener(t *testing.T) *net.TCPListener {

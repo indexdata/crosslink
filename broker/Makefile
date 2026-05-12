@@ -8,8 +8,7 @@ export HOST_DOCKER_INTERNAL=172.17.0.1
 endif
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
-BUILD_GOFILES := $(shell find . -path "./test" -prune -o -name "*.go" ! -name "*_test.go" ! -name "tools.go" -print)
-GOTOOLS=tools.go
+BUILD_GOFILES := $(shell find . -path "./test" -prune -o -name "*.go" ! -name "*_test.go" -print)
 BINARY=broker
 MAIN_PACKAGE=cmd/broker
 MODULE=broker
@@ -25,7 +24,7 @@ RETURNABLES_YAML=../misc/returnables.yaml
 PULLSLIP_TEMPLATE=pullslip/service/pull_slip_template.html
 
 # SQLC
-SQLC ?= sqlc
+SQLC ?= $(GO) tool sqlc
 SQLC_CONFIG = sqlc/sqlc.yaml
 SQL_GEN_OUT_ILL_DB = ill_db/ill_db_gen.go ill_db/ill_models_gen.go ill_db/ill_query.sql_gen.go
 SQL_GEN_OUT_EVENT = events/event_db_gen.go events/event_models_gen.go events/event_query.sql_gen.go
@@ -35,6 +34,7 @@ SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
+OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 OAPI_DIR=oapi
 OAPI_CFG = $(OAPI_DIR)/cfg.yaml
 OAPI_SPEC = $(OAPI_DIR)/open-api.yaml
@@ -54,7 +54,7 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
@@ -74,13 +74,13 @@ $(RETURNABLES_JSON): $(RETURNABLES_YAML)
 	mv -f $@.tmp $@
 
 $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC) $(OAPI_OVERLAY)
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
 
 $(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY)
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(PR_OAPI_CFG) ./$(PR_OAPI_SPEC)
 
 $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
 
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
@@ -125,8 +125,9 @@ deps-update:
 	$(GO) get -u ./...
 	$(GO) mod tidy
 
-deps-update-tools:
-	$(GO) get github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+tools-update:
+	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+	$(GO) get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 	$(GO) mod tidy
 
 clean:

@@ -16,6 +16,20 @@ See the diagram below for an illustration of the platform's architecture:
 ![CrossLink Architecture](misc/crosslink-arch.png)
 *Figure 1: High-level architecture of the CrossLink platform showing component interactions*
 
+## Building the software
+
+Crosslink is managed by Makefile(s).
+
+The following software packages are required to build: `go`, `git`, `make`, `xsltproc` and, if CGO is enabled, `libyaz` dev package and `pkg-config`.
+
+To build run
+
+    make
+
+The following make targets are available: `clean`, `all`, `check`, `generate`.
+
+In order to be able to execute tests (the `check` target), Docker is also required.
+
 ## Hosted development environment
 
 The `broker` is available at: https://broker.crosslink-dev.indexdata.com.

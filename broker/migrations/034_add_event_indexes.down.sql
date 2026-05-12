@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_event_incomplete_by_domain_name_timestamp;
+DROP INDEX IF EXISTS idx_event_patron_request_timestamp;
+DROP INDEX IF EXISTS idx_event_ill_transaction_timestamp;

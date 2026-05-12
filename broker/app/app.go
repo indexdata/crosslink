@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/availability"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -46,6 +47,7 @@ import (
 var HTTP_PORT = utils.Must(utils.GetEnvInt("HTTP_PORT", 8081))
 var DB_TYPE = utils.GetEnv("DB_TYPE", "postgres")
 var DB_USER = utils.GetEnv("DB_USER", "crosslink")
+var METAPROXY_URL = utils.GetEnv("METAPROXY_URL", "")
 var DB_PASSWORD = utils.GetEnv("DB_PASSWORD", "crosslink")
 var DB_HOST = utils.GetEnv("DB_HOST", "localhost")
 var DB_PORT = utils.GetEnv("DB_PORT", "25432")
@@ -63,6 +65,7 @@ var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var HOLDINGS_SRU_URL = common.GetEnvWithDeprecated("HOLDINGS_SRU_URL", "SRU_URL", "http://localhost:8081/sru")
 var HOLDINGS_ISXN_LOOKUP, _ = utils.GetEnvBool("HOLDINGS_ISXN_LOOKUP", false)
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
+var AVAILABILITY_ADAPTER = utils.GetEnv("AVAILABILITY_ADAPTER", "zoom")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
 var MAX_MESSAGE_SIZE, _ = utils.GetEnvAny("MAX_MESSAGE_SIZE", int(100*1024), func(val string) (int, error) {
 	v, err := humanize.ParseBytes(val)
@@ -171,10 +174,11 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
+	availabilityCreator := availability.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, *tenantResolver, API_PAGE_SIZE)
@@ -326,12 +330,14 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 
 	eventBus.HandleEventCreated(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, supplierLocator.LocateSuppliers)
 	eventBus.HandleEventCreated(events.EventNameSelectSupplier, events.HandlerRoleConsumer, supplierLocator.SelectSupplier)
+	eventBus.HandleEventCreated(events.EventNameCheckAvailability, events.HandlerRoleConsumer, supplierLocator.CheckAvailability)
 
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, workflowManager.RequestReceived)
 	eventBus.HandleEventCreated(events.EventNameSupplierMsgReceived, events.HandlerRoleConsumer, workflowManager.SupplierMessageReceived)
 	eventBus.HandleEventCreated(events.EventNameRequesterMsgReceived, events.HandlerRoleConsumer, workflowManager.RequesterMessageReceived)
 	eventBus.HandleTaskCompleted(events.EventNameLocateSuppliers, events.HandlerRoleConsumer, workflowManager.OnLocateSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameSelectSupplier, events.HandlerRoleConsumer, workflowManager.OnSelectSupplierComplete)
+	eventBus.HandleTaskCompleted(events.EventNameCheckAvailability, events.HandlerRoleConsumer, workflowManager.OnCheckAvailabilityComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleConsumer, workflowManager.OnMessageSupplierComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, workflowManager.OnMessageRequesterComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
