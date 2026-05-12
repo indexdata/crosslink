@@ -11,7 +11,7 @@ type MetaproxyAvailabilityAdapter struct {
 	holdingsLookupAdapter adapter.LookupAdapter
 }
 
-func NewMetaproxyAvailabilityAdapter(config directory.Z3950Config, metaproxyUrl string, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
+func NewMetaproxyAvailabilityAdapter(config directory.ZoomConfig, metaproxyUrl string, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	a := &MetaproxyAvailabilityAdapter{
 		holdingsLookupAdapter: adapter.CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser, "marcxml"),
 	}

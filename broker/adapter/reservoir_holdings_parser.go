@@ -10,6 +10,10 @@ import (
 
 type ReservoirHoldingsParser struct{}
 
+func NewReservoirHoldingsParser() HoldingsParser {
+	return &ReservoirHoldingsParser{}
+}
+
 func parseHoldingsForIndicator(rec *marcxml.Record, ind2 string) []Holding {
 	var holdings []Holding
 	for _, df := range rec.Datafield {

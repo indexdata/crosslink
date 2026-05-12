@@ -45,7 +45,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	})
 	holdingsParser := adapter.NewMarcHoldingsParser(config)
 	aa, err := NewZoomAvailabilityAdapter(
-		directory.Z3950Config{
+		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"count":                 "20",
@@ -73,7 +73,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
-		directory.Z3950Config{
+		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "opac",
@@ -101,7 +101,7 @@ func TestLookupDiagnostics(t *testing.T) {
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
-		directory.Z3950Config{
+		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
 				"preferredRecordSyntax": "danmarc",
@@ -125,7 +125,7 @@ func TestConnectFailure(t *testing.T) {
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
-		directory.Z3950Config{
+		directory.ZoomConfig{
 			Address: "",
 		},
 		queryBuilder,

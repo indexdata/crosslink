@@ -19,7 +19,7 @@ type ZoomAvailabilityAdapter struct {
 	queryBuilder   adapter.LookupQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(config directory.Z3950Config, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
+func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{

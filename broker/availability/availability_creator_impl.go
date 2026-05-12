@@ -37,7 +37,13 @@ func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
 	if config.Opac != nil {
 		return adapter.NewOpacHoldingsParser(*config.Opac), nil
 	}
-	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc or opac properties")
+	if config.Reservoir != nil {
+		return adapter.NewReservoirHoldingsParser(), nil
+	}
+	if config.Marc21plus1 != nil {
+		return adapter.NewMarc21Plus1HoldingsParser(), nil
+	}
+	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
 func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error) {
@@ -57,19 +63,19 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 		queryBuilder := adapter.NewQueryBuilderCql(config.QueryConfig)
 		return NewSruAvailabilityAdapter(ctx, *config.Sru, queryBuilder, holdingsParser)
 	}
-	if config.Z3950 != nil {
+	if config.Zoom != nil {
 		queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
 		switch c.mode {
 		case AvailabilityAdapterMetaproxy:
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(*config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
+			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser)
 		case AvailabilityAdapterZoom:
-			return NewZoomAvailabilityAdapter(*config.Z3950, queryBuilder, holdingsParser)
+			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser)
 		default:
 			return nil, fmt.Errorf("unsupported availability adapter type: %s", c.mode)
 		}
 	}
-	return nil, fmt.Errorf("must specify either sru or z3950 properties for availability adapter type")
+	return nil, fmt.Errorf("must specify either sru or zoom properties for availability adapter type")
 }

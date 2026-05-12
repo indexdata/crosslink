@@ -14,8 +14,8 @@ type MockAvailabilityAdapter struct {
 }
 
 func NewMockAvailabilityAdapter(config directory.AvailabilityConfig) (adapter.LookupAdapter, error) {
-	if config.Z3950 != nil && config.Z3950.Options != nil {
-		options := *config.Z3950.Options
+	if config.Zoom != nil && config.Zoom.Options != nil {
+		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response
 		if val, ok := options["adapter-error"]; ok && strings.ToLower(val) == "true" {
 			return nil, fmt.Errorf("mock error triggered by config")

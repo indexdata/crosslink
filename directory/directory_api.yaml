@@ -261,8 +261,8 @@ components:
       properties:
         sru:
           $ref: '#/components/schemas/SruConfig'
-        z3950:
-          $ref: '#/components/schemas/Z3950Config'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfig'
         queryConfig:
           $ref: '#/components/schemas/QueryConfig'
         parserConfig:
@@ -282,7 +282,7 @@ components:
           description: Record schema to use for parsing holdings records (for example, "marcxml")
       additionalProperties: false
 
-    Z3950Config:
+    ZoomConfig:
       type: object
       required:
         - address
@@ -322,6 +322,16 @@ components:
           $ref: '#/components/schemas/MarcParserConfig'
         opac:
           $ref: '#/components/schemas/OpacParserConfig'
+        reservoir:
+          type: object
+          description: Configuration for Reservoir parser. Currently must be empty; no properties allowed.
+          properties: {}
+          additionalProperties: false
+        marc21plus1:
+          type: object
+          description: Configuration for MARC-21plus-1 parser. Currently must be empty; no properties allowed.
+          properties: {}
+          additionalProperties: false
       additionalProperties: false
 
     MarcParserConfig:

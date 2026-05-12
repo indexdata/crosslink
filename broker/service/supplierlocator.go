@@ -89,8 +89,19 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
-
-	holdings, query, err := s.holdingsAdapter.Lookup(holdingsParams)
+	lookupAdapter := s.holdingsAdapter
+	if lookupAdapter == nil { // null if consortia adapter is configured, in which case we need to determine adapter by directory
+		// TODO: use CONSORTIA_SYMBOL or determine parent from peer (if not already consirtia symbol) instead of requester symbol
+		lookupAdapter, err = s.availabilityCreator.GetAdapter(ctx, requester)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter for requester", err)
+		}
+		if lookupAdapter == nil {
+			err := fmt.Errorf("GetAdapter for requester returned nil")
+			return events.LogErrorAndReturnResult(ctx, "no availability adapter for requester", err)
+		}
+	}
+	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}

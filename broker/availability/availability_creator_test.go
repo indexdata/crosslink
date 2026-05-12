@@ -39,7 +39,7 @@ func TestParserMissing(t *testing.T) {
 	parserConfig := &directory.ParserConfig{}
 	_, err := getParser(parserConfig)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must set marc or opac properties")
+	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestParserMarc(t *testing.T) {
@@ -66,7 +66,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 				ParserConfig: &directory.ParserConfig{},
@@ -75,7 +75,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(ctx, peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must set marc or opac properties")
+	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
@@ -84,7 +84,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -105,14 +105,14 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(ctx, peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must specify either sru or z3950 properties")
+	assert.Contains(t, err.Error(), "must specify either sru or zoom properties")
 }
 
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -129,7 +129,7 @@ func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -152,7 +152,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
@@ -169,7 +169,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
