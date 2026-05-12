@@ -110,5 +110,8 @@ func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string
 			return avail, cql, nil
 		}
 	}
-	return nil, pqfList[0], nil
+	if len(pqfList) > 0 {
+		return nil, pqfList[0], nil
+	}
+	return nil, cqlList[0], nil
 }
