@@ -10,8 +10,8 @@ GEN_FILES = sru_gen.go \
 	xcql/xcql_gen.go \
 	scan/scan_gen.go
 
-.PHONY: all generate generate-schema lint vulncheck check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
+.PHONY: all generate generate-schema lint vulncheck check clean deps-update tools-update
+XSD2GO = $(GO) tool xsd2goxsl
 
 define nsImports
 namespaced=yes \
@@ -70,4 +70,8 @@ vulncheck: generate
 
 deps-update:
 	$(GO) get -u ./...
+	$(GO) mod tidy
+
+tools-update:
+	$(GO) get -tool github.com/indexdata/xsd2goxsl@latest
 	$(GO) mod tidy
