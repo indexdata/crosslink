@@ -394,6 +394,7 @@ func TestGviHoldings(t *testing.T) {
 
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 
+	qtype := directory.Cql
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			AvailabilityConfig: &directory.AvailabilityConfig{
@@ -405,7 +406,7 @@ func TestGviHoldings(t *testing.T) {
 					},
 				},
 				QueryConfig: &directory.QueryConfig{
-					Type:       new(directory.Cql),
+					Type:       &qtype,
 					Identifier: NewString("rec.id = {term}"),
 				},
 				ParserConfig: &directory.ParserConfig{

@@ -47,7 +47,7 @@ func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
 		// ideally this should be per-SRU server and not for all
 		isxnLookup, ok := cfg[HoldingsIsxnLookup].(bool)
 		if !ok {
-			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, isxnLookup)
+			return nil, fmt.Errorf("invalid value for %s: %v", HoldingsIsxnLookup, cfg[HoldingsIsxnLookup])
 		}
 		queryBuilder := QueryBuilderIsxn{isxn: isxnLookup}
 		format, ok := cfg[HoldingsFormat].(string)
