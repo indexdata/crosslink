@@ -183,5 +183,5 @@ func TestGetAdapterSRU(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &SruAvailabilityAdapter{}, aa)
+	assert.IsType(t, &SruHoldingsLookupAdapter{}, aa)
 }

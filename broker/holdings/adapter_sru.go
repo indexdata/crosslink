@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/indexdata/cql-go/cqlbuilder"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/sru"
 	"github.com/indexdata/crosslink/sru/diag"
@@ -24,6 +25,17 @@ type SruHoldingsLookupAdapter struct {
 
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, recordSchema string) LookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, xTarget: xTarget, recordSchema: recordSchema}
+}
+
+func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
+	var recordSchema string
+	if config.RecordSchema != nil {
+		recordSchema = *config.RecordSchema
+	}
+	if recordSchema == "" {
+		recordSchema = "marcxml" // default to marcxml if not specified
+	}
+	return CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, recordSchema), nil
 }
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, params LookupParams, holdings *[]Holding) error {
