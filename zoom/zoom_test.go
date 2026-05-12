@@ -102,6 +102,7 @@ func TestSearch(t *testing.T) {
 	query, err = NewPqfQuery("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, query)
+	defer query.Close()
 
 	rs, err := conn.Search(query)
 	assert.NoError(t, err)
@@ -155,6 +156,7 @@ func TestSearchUnsupportedSyntaxOnSearch(t *testing.T) {
 	query, err := NewPqfQuery("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, query)
+	defer query.Close()
 
 	// getting non-surrogate diagnostic for unsupported record syntax
 
@@ -179,6 +181,7 @@ func TestSearchUnsupportedSyntaxOnPresent(t *testing.T) {
 	query, err := NewPqfQuery("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, query)
+	defer query.Close()
 
 	rs, err := conn.Search(query)
 	assert.NoError(t, err)
@@ -205,6 +208,7 @@ func TestSearchSurrogateDiagnostic(t *testing.T) {
 	query, err := NewPqfQuery("@attr 1=4 computer")
 	assert.NoError(t, err)
 	assert.NotNil(t, query)
+	defer query.Close()
 
 	rs, err := conn.Search(query)
 	assert.NoError(t, err)
