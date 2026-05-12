@@ -88,7 +88,7 @@ func (s *QueryBuilderPqf) Build(params LookupParams) (cql []string, pqf []string
 	var pqfList []string
 	var cqlList []string
 	for _, pm := range paramMappings {
-		if pm.value != "" {
+		if pm.value != "" && pm.mapping != nil {
 			if s.config.Type != nil && *s.config.Type == directory.Cql {
 				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
 				cqlList = append(cqlList, cql)
