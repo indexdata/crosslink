@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 import (
 	"encoding/xml"

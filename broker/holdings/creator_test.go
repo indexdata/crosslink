@@ -1,9 +1,8 @@
-package availability
+package holdings
 
 import (
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +27,7 @@ func TestGetAdapterOtherNoConfig(t *testing.T) {
 func TestParserNil(t *testing.T) {
 	parser, err := getParser(nil)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
 
 func TestParserMissing(t *testing.T) {
@@ -44,7 +43,7 @@ func TestParserMarc(t *testing.T) {
 	}
 	parser, err := getParser(parserConfig)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
 
 func TestParserOpac(t *testing.T) {
@@ -53,7 +52,7 @@ func TestParserOpac(t *testing.T) {
 	}
 	parser, err := getParser(parserConfig)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.OpacHoldingsParser{}, parser)
+	assert.IsType(t, &OpacHoldingsParser{}, parser)
 }
 
 func TestGetAdapterBadParser(t *testing.T) {

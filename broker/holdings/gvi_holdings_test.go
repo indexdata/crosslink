@@ -1,12 +1,10 @@
-package adapter
+package holdings
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
@@ -394,7 +392,7 @@ func TestGviHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	creator := availability.NewAvailabilityCreator(availability.AvailabilityAdapterZoom, "")
+	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
@@ -408,7 +406,7 @@ func TestGviHoldings(t *testing.T) {
 				},
 				QueryConfig: &directory.QueryConfig{
 					Type:       new(directory.Cql),
-					Identifier: adapter.NewString("rec.id = {term}"),
+					Identifier: NewString("rec.id = {term}"),
 				},
 				ParserConfig: &directory.ParserConfig{
 					Marc21plus1: &map[string]interface{}{},
@@ -418,15 +416,20 @@ func TestGviHoldings(t *testing.T) {
 	}
 
 	aa, err := creator.GetAdapter(peer)
-	assert.NoError(t, err)
-	assert.NotNil(t, aa)
+	if cgoEnabled() {
+		assert.NoError(t, err)
+		assert.NotNil(t, aa)
 
-	params := adapter.LookupParams{
-		ServiceType: "Loan",
-		Identifier:  "(DE-627)1795329181",
+		params := LookupParams{
+			ServiceType: "Loan",
+			Identifier:  "(DE-627)1795329181",
+		}
+		holdingsList, _, err := aa.Lookup(params)
+		assert.NoError(t, err)
+		assert.NotNil(t, holdingsList)
+		assert.Len(t, holdingsList, 1)
+	} else {
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cgo is not enabled")
 	}
-	holdings, _, err := aa.Lookup(params)
-	assert.NoError(t, err)
-	assert.NotNil(t, holdings)
-	assert.Len(t, holdings, 1)
 }

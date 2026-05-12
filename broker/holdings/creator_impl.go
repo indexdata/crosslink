@@ -1,9 +1,8 @@
-package availability
+package holdings
 
 import (
 	"fmt"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 )
@@ -26,26 +25,26 @@ func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreato
 	}
 }
 
-func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
+func getParser(config *directory.ParserConfig) (HoldingsParser, error) {
 	if config == nil {
-		return adapter.NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
+		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
 	}
 	if config.Marc != nil {
-		return adapter.NewMarcHoldingsParser(*config.Marc), nil
+		return NewMarcHoldingsParser(*config.Marc), nil
 	}
 	if config.Opac != nil {
-		return adapter.NewOpacHoldingsParser(*config.Opac), nil
+		return NewOpacHoldingsParser(*config.Opac), nil
 	}
 	if config.Reservoir != nil {
-		return adapter.NewReservoirHoldingsParser(), nil
+		return NewReservoirHoldingsParser(), nil
 	}
 	if config.Marc21plus1 != nil {
-		return adapter.NewMarc21Plus1HoldingsParser(), nil
+		return NewMarc21Plus1HoldingsParser(), nil
 	}
 	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
-func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (adapter.LookupAdapter, error) {
+func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.AvailabilityConfig
 	if config == nil {
@@ -58,7 +57,7 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (adapter.LookupAd
 	if err != nil {
 		return nil, err
 	}
-	queryBuilder, err := adapter.NewQueryBuilder(config.QueryConfig)
+	queryBuilder, err := NewQueryBuilder(config.QueryConfig)
 	if err != nil {
 		return nil, err
 	}

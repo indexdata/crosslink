@@ -1,13 +1,12 @@
 //go:build cgo
 
-package availability
+package holdings
 
 import (
 	"context"
 	"os"
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/directory"
 	zoomtestutil "github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
@@ -37,14 +36,14 @@ func TestMain(m *testing.M) {
 func TestLookupFoundMarc(t *testing.T) {
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	config := directory.MarcParserConfig{
-		MainField:        adapter.NewString("010"),
-		LocationSubField: adapter.NewString("a"),
+		MainField:        NewString("010"),
+		LocationSubField: NewString("a"),
 	}
-	queryBuilder, err := adapter.NewQueryBuilder(&directory.QueryConfig{
-		Title: adapter.NewString("@attr 1=1016 {term}"),
+	queryBuilder, err := NewQueryBuilder(&directory.QueryConfig{
+		Title: NewString("@attr 1=1016 {term}"),
 	})
 	assert.NoError(t, err)
-	holdingsParser := adapter.NewMarcHoldingsParser(config)
+	holdingsParser := NewMarcHoldingsParser(config)
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -60,7 +59,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "20", aa.(*ZoomAvailabilityAdapter).options["count"])
 
-	params := adapter.LookupParams{
+	params := LookupParams{
 		Title: "Computer",
 	}
 	results, pqf, err := aa.Lookup(params)
@@ -71,9 +70,9 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilder(nil)
 	assert.NoError(t, err)
-	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
+	holdingsParser := NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -88,7 +87,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "10", aa.(*ZoomAvailabilityAdapter).options["count"])
 
-	params := adapter.LookupParams{
+	params := LookupParams{
 		Title: "Computer",
 	}
 	results, pqf, err := aa.Lookup(params)
@@ -100,9 +99,9 @@ func TestLookupFoundOpac(t *testing.T) {
 }
 
 func TestLookupDiagnostics(t *testing.T) {
-	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilder(nil)
 	assert.NoError(t, err)
-	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -117,7 +116,7 @@ func TestLookupDiagnostics(t *testing.T) {
 	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
 	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
 
-	params := adapter.LookupParams{Identifier: "1234"}
+	params := LookupParams{Identifier: "1234"}
 	_, pqf, err := aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Record syntax not supported")
@@ -125,9 +124,9 @@ func TestLookupDiagnostics(t *testing.T) {
 }
 
 func TestConnectFailure(t *testing.T) {
-	queryBuilder, err := adapter.NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilder(nil)
 	assert.NoError(t, err)
-	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
+	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: "",
@@ -136,7 +135,7 @@ func TestConnectFailure(t *testing.T) {
 		holdingsParser,
 	)
 	assert.NoError(t, err)
-	params := adapter.LookupParams{}
+	params := LookupParams{}
 	_, _, err = aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")

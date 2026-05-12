@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ const (
 	HoldingsFormatMarc21Plus1 string = "MARC-21plus-1"
 )
 
-func getParser(format string) (HoldingsParser, error) {
+func getParserFormat(format string) (HoldingsParser, error) {
 	switch format {
 	case HoldingsFormatReservoir:
 		return &ReservoirHoldingsParser{}, nil
@@ -26,7 +26,7 @@ func getParser(format string) (HoldingsParser, error) {
 	}
 }
 
-func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
+func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
 	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
@@ -54,7 +54,7 @@ func CreateHoldingsLookupAdapter(cfg map[string]any) (LookupAdapter, error) {
 		if !ok {
 			return nil, fmt.Errorf("missing value for %s", HoldingsFormat)
 		}
-		parser, err := getParser(format)
+		parser, err := getParserFormat(format)
 		if err != nil {
 			return nil, err
 		}

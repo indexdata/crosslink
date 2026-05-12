@@ -3,54 +3,54 @@ package adapter
 import (
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/adapter"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateHoldings(t *testing.T) {
 	m := make(map[string]any)
 
-	_, err := adapter.CreateHoldingsLookupAdapter(m)
+	_, err := holdings.CreateHoldingsLookupShared(m)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_ADAPTER")
 
-	m[adapter.HoldingsAdapter] = "sru"
+	m[holdings.HoldingsAdapter] = "sru"
 
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_SRU_URL")
 
-	m[adapter.HoldingsSruURL] = "http://example.com"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsSruURL] = "http://example.com"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_ISXN_LOOKUP")
 
-	m[adapter.HoldingsIsxnLookup] = "fake"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsIsxnLookup] = "fake"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "invalid value for HOLDINGS_ISXN_LOOKUP")
 
-	m[adapter.HoldingsIsxnLookup] = true
-	m[adapter.HoldingsFormat] = "reservoir"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsIsxnLookup] = true
+	m[holdings.HoldingsFormat] = "reservoir"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.NoError(t, err)
 
-	m[adapter.HoldingsFormat] = "MARC-21plus-1"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsFormat] = "MARC-21plus-1"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.NoError(t, err)
 
-	m[adapter.HoldingsFormat] = "other"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsFormat] = "other"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.ErrorContains(t, err, "bad value for HOLDINGS_FORMAT: other")
 
-	m[adapter.HoldingsFormat] = true
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsFormat] = true
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.ErrorContains(t, err, "missing value for HOLDINGS_FORMAT")
 
-	m["HOLDINGS_ADAPTER"] = "mock"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsAdapter] = "mock"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.NoError(t, err)
 
-	m["HOLDINGS_ADAPTER"] = "other"
-	_, err = adapter.CreateHoldingsLookupAdapter(m)
+	m[holdings.HoldingsAdapter] = "other"
+	_, err = holdings.CreateHoldingsLookupShared(m)
 	assert.ErrorContains(t, err, "bad value for HOLDINGS_ADAPTER")
 }

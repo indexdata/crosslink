@@ -1,11 +1,10 @@
 //go:build cgo
 
-package availability
+package holdings
 
 import (
 	"fmt"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/zoom"
 )
@@ -15,11 +14,11 @@ func cgoEnabled() bool { return true }
 type ZoomAvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
-	holdingsParser adapter.HoldingsParser
-	queryBuilder   adapter.LookupQueryBuilder
+	holdingsParser HoldingsParser
+	queryBuilder   LookupQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
+func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
@@ -39,13 +38,13 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder adapte
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(params adapter.LookupParams, conn *zoom.Connection, query *zoom.Query) ([]adapter.Holding, error) {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(params LookupParams, conn *zoom.Connection, query *zoom.Query) ([]Holding, error) {
 	set, err := conn.Search(query)
 	if err != nil {
 		return nil, err
 	}
 	defer set.Close()
-	var avail []adapter.Holding
+	var avail []Holding
 	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
 	for i := 0; i < limit; i++ {
 		rec, err := set.GetRecord(i)
@@ -69,7 +68,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(params adapter.LookupParams, co
 	return avail, nil
 }
 
-func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter.Holding, string, error) {
+func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)

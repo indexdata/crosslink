@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -25,11 +25,11 @@ type SupplierLocator struct {
 	eventBus            events.EventBus
 	illRepo             ill_db.IllRepo
 	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     adapter.LookupAdapter
-	availabilityCreator availability.AvailabilityCreator
+	holdingsAdapter     holdings.LookupAdapter
+	availabilityCreator holdings.AvailabilityCreator
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.LookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator) SupplierLocator {
 	return SupplierLocator{
 		eventBus:            eventBus,
 		illRepo:             illRepo,
@@ -54,8 +54,8 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.LookupParams {
-	var holdingsParams adapter.LookupParams
+func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
+	var holdingsParams holdings.LookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
 	holdingsParams.Title = bibliographicInfo.Title

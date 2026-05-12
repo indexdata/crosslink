@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 type LookupAdapter interface {
 	Lookup(params LookupParams) ([]Holding, string, error)

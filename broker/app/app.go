@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/availability"
+	"github.com/indexdata/crosslink/broker/holdings"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -133,11 +133,11 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]any{
-		adapter.HoldingsAdapter:    HOLDINGS_ADAPTER,
-		adapter.HoldingsSruURL:     HOLDINGS_SRU_URL,
-		adapter.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
-		adapter.HoldingsFormat:     HOLDINGS_FORMAT,
+	holdingsAdapter, err := holdings.CreateHoldingsLookupShared(map[string]any{
+		holdings.HoldingsAdapter:    HOLDINGS_ADAPTER,
+		holdings.HoldingsSruURL:     HOLDINGS_SRU_URL,
+		holdings.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+		holdings.HoldingsFormat:     HOLDINGS_FORMAT,
 	})
 	if err != nil {
 		return Context{}, err
@@ -176,7 +176,7 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := availability.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	availabilityCreator := holdings.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
