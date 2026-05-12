@@ -306,6 +306,7 @@ components:
           enum: 
             - cql
             - pqf
+          default: pqf
           description: whether mapping is CQL or PQF. Default is PQF.
         title:
           type: string
