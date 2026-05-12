@@ -4,8 +4,8 @@ GOFMT ?= gofmt "-s"
 OS ?= $(shell uname)
 XSLT ?= xsltproc
 GEN_FILES = MARC21slim_gen.go opacxml_gen.go
-.PHONY: all generate generate-schema lint vulncheck check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@912e22d86f2c44d700dbabf3411442f81553f39b
+.PHONY: all generate generate-schema lint vulncheck check clean deps-update tools-update
+XSD2GO = $(GO) tool xsd2goxsl
 
 all: generate
 
@@ -40,4 +40,8 @@ vulncheck: generate
 
 deps-update:
 	$(GO) get -u ./...
+	$(GO) mod tidy
+
+tools-update:
+	$(GO) get -tool github.com/indexdata/xsd2goxsl@latest
 	$(GO) mod tidy
