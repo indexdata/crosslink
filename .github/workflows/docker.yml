@@ -90,11 +90,6 @@ jobs:
           packages: xsltproc
           version: 1.0
 
-      - name: Install sqlc
-        uses: sqlc-dev/setup-sqlc@v5
-        with:
-          sqlc-version: ${{ env.SQLC_VERSION }}
-
       - name: Generate sources
         run: make generate
 
