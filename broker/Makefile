@@ -54,7 +54,7 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
-.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update deps-update-tools lint vulncheck check-coverage
+.PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
 
@@ -125,7 +125,7 @@ deps-update:
 	$(GO) get -u ./...
 	$(GO) mod tidy
 
-deps-update-tools:
+tools-update:
 	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	$(GO) get -tool github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 	$(GO) mod tidy

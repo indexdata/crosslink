@@ -9,7 +9,7 @@ OAPI_GEN = directory_gen.go
 OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 COVERAGE=coverage.out
 
-.PHONY: all generate lint vulncheck check clean deps-update deps-update-tools
+.PHONY: all generate lint vulncheck check clean deps-update tools-update
 
 all: generate
 
@@ -34,6 +34,6 @@ deps-update:
 	$(GO) get -u ./...
 	$(GO) mod tidy
 
-deps-update-tools:
+tools-update:
 	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	$(GO) mod tidy
