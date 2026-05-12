@@ -6,16 +6,17 @@ OS ?= $(shell uname)
 OAPI_CFG = directory_config.yaml
 OAPI_SPEC = directory_api.yaml
 OAPI_GEN = directory_gen.go
+OAPI_CODEGEN ?= $(GO) tool oapi-codegen
 COVERAGE=coverage.out
 
-.PHONY: all generate lint vulncheck check clean deps-update
+.PHONY: all generate lint vulncheck check clean deps-update tools-update
 
 all: generate
 
 generate: $(OAPI_GEN)
 
 $(OAPI_GEN): $(OAPI_CFG) $(OAPI_SPEC)
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(OAPI_CFG) ./$(OAPI_SPEC)
 
 clean:
 	rm -f $(OAPI_GEN) $(COVERAGE)
@@ -31,4 +32,8 @@ vulncheck: generate
 
 deps-update:
 	$(GO) get -u ./...
+	$(GO) mod tidy
+
+tools-update:
+	$(GO) get -tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	$(GO) mod tidy

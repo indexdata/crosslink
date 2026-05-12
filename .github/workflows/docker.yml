@@ -90,11 +90,6 @@ jobs:
           packages: xsltproc
           version: 1.0
 
-      - name: Install sqlc
-        uses: sqlc-dev/setup-sqlc@v5
-        with:
-          sqlc-version: ${{ env.SQLC_VERSION }}
-
       - name: Generate sources
         run: make generate
 
@@ -155,7 +150,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ matrix.module }}-${{ matrix.os }}-${{ matrix.arch }}
           path: /tmp/digests/*
@@ -186,7 +181,7 @@ jobs:
 
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digests-${{ matrix.module }}-*

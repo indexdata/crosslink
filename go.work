@@ -9,6 +9,6 @@ use (
 	./marcxml
 	./ncip
 	./sru
-	./zoom
 	./testutil
+	./zoom
 )

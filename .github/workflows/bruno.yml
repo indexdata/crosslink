@@ -34,11 +34,6 @@ jobs:
           broker/go.sum
           illmock/go.sum
 
-    - name: Ensure sqlc is installed
-      uses: sqlc-dev/setup-sqlc@v5
-      with:
-        sqlc-version: ${{ env.SQLC_VERSION }}
-
     - name: Generate sources
       run: make generate
 
