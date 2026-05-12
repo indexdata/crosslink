@@ -20,7 +20,7 @@ See the diagram below for an illustration of the platform's architecture:
 
 Crosslink is managed by Makefile(s).
 
-The following software packages are required to build: go, git, make, sqlc, xsltproc, yaz (development package), pkg-config.
+The following software packages are required to build: `go`, `git`, `make`, `xsltproc` and, if CGO is enabled, `libyaz` dev package and `pkg-config`.
 
 To build run
 
@@ -28,7 +28,7 @@ To build run
 
 The following make targets are available: `clean`, `all`, `check`, `generate`.
 
-In order to be able to execute tests (check target), Docker is also required.
+In order to be able to execute tests (the `check` target), Docker is also required.
 
 ## Hosted development environment
 
