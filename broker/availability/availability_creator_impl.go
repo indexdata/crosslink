@@ -64,9 +64,9 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(ctx, *config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
+			return NewMetaproxyAvailabilityAdapter(*config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
 		case AvailabilityAdapterZoom:
-			return NewZoomAvailabilityAdapter(ctx, *config.Z3950, queryBuilder, holdingsParser)
+			return NewZoomAvailabilityAdapter(*config.Z3950, queryBuilder, holdingsParser)
 		default:
 			return nil, fmt.Errorf("unsupported availability adapter type: %s", c.mode)
 		}

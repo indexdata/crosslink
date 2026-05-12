@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	zoomtestutil "github.com/indexdata/crosslink/testutil"
 	"github.com/stretchr/testify/assert"
@@ -36,7 +35,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestLookupFoundMarc(t *testing.T) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	// target does not return holdings, we just use 010$a as fake location to verify that the record was parsed correctly
 	config := directory.MarcParserConfig{
 		MainField:        adapter.NewString("010"),
@@ -46,7 +44,7 @@ func TestLookupFoundMarc(t *testing.T) {
 		Title: adapter.NewString("@attr 1=1016 {term}"),
 	})
 	holdingsParser := adapter.NewMarcHoldingsParser(config)
-	aa, err := NewZoomAvailabilityAdapter(ctx,
+	aa, err := NewZoomAvailabilityAdapter(
 		directory.Z3950Config{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -72,10 +70,9 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewOpacHoldingsParser(directory.OpacParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(ctx,
+	aa, err := NewZoomAvailabilityAdapter(
 		directory.Z3950Config{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -101,10 +98,9 @@ func TestLookupFoundOpac(t *testing.T) {
 }
 
 func TestLookupDiagnostics(t *testing.T) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(ctx,
+	aa, err := NewZoomAvailabilityAdapter(
 		directory.Z3950Config{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -126,10 +122,9 @@ func TestLookupDiagnostics(t *testing.T) {
 }
 
 func TestConnectFailure(t *testing.T) {
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	queryBuilder := adapter.NewQueryBuilderPqf(nil)
 	holdingsParser := adapter.NewMarcHoldingsParser(directory.MarcParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(ctx,
+	aa, err := NewZoomAvailabilityAdapter(
 		directory.Z3950Config{
 			Address: "",
 		},
