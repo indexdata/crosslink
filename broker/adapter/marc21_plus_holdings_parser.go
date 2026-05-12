@@ -23,7 +23,7 @@ import (
 // $c (NR) Interlibrary loan region
 // $d (NR) Interlibrary loan indicator
 //            "a" - Loan of volumes possible, no copies
-//            "b" - No loan of volumes, only paper copies aresent
+//            "b" - No loan of volumes, only paper copies are sent
 //            "c" - Unrestricted interlibrary loan, copying and loan
 //            "d" - No interlibrary loan
 //            "e" - No loan of volumes, the end user receives an

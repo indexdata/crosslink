@@ -7,17 +7,19 @@ import (
 )
 
 const (
-	HoldingsAdapter    string = "HOLDINGS_ADAPTER"
-	HoldingsSruURL     string = "HOLDINGS_SRU_URL"
-	HoldingsIsxnLookup string = "HOLDINGS_ISXN_LOOKUP"
-	HoldingsFormat     string = "HOLDINGS_FORMAT"
+	HoldingsAdapter           string = "HOLDINGS_ADAPTER"
+	HoldingsSruURL            string = "HOLDINGS_SRU_URL"
+	HoldingsIsxnLookup        string = "HOLDINGS_ISXN_LOOKUP"
+	HoldingsFormat            string = "HOLDINGS_FORMAT"
+	HoldingsFormatReservoir   string = "reservoir"
+	HoldingsFormatMarc21Plus1 string = "MARC-21plus-1"
 )
 
 func getParser(format string) (HoldingsParser, error) {
 	switch format {
-	case "reservoir":
+	case HoldingsFormatReservoir:
 		return &ReservoirHoldingsParser{}, nil
-	case "MARC-21plus-1":
+	case HoldingsFormatMarc21Plus1:
 		return &Marc21Plus1HoldingsParser{}, nil
 	default:
 		return nil, fmt.Errorf("bad value for %s: %s", HoldingsFormat, format)
