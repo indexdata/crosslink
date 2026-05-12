@@ -27,15 +27,17 @@ type SupplierLocator struct {
 	dirAdapter          adapter.DirectoryLookupAdapter
 	holdingsAdapter     holdings.LookupAdapter
 	availabilityCreator holdings.AvailabilityCreator
+	consortiaSymbol     string
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator, consortiaSymbol string) SupplierLocator {
 	return SupplierLocator{
 		eventBus:            eventBus,
 		illRepo:             illRepo,
 		dirAdapter:          dirAdapter,
 		holdingsAdapter:     holdingsAdapter,
 		availabilityCreator: availabilityCreator,
+		consortiaSymbol:     consortiaSymbol,
 	}
 }
 
@@ -74,6 +76,25 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings
 	return holdingsParams
 }
 
+// 3 cases to consider for getting the adapter:
+// 1. If holdingsAdapter is set from the start (for example for testing), use it directly
+// 2. If consortiaSymbol is set, lookup the peer for the consortia and use its availability adapter
+// 3. Otherwise, use the availability adapter for the requesting peer (if any)
+func (s *SupplierLocator) getAdapterForConsortia(ctx common.ExtendedContext, requestPeer ill_db.Peer) (holdings.LookupAdapter, error) {
+	lookupAdapter := s.holdingsAdapter
+	if lookupAdapter != nil {
+		return lookupAdapter, nil
+	}
+	if s.consortiaSymbol == "" {
+		return s.availabilityCreator.GetAdapter(requestPeer)
+	}
+	peer, err := s.illRepo.GetPeerBySymbol(ctx, s.consortiaSymbol)
+	if err != nil {
+		return nil, err
+	}
+	return s.availabilityCreator.GetAdapter(peer)
+}
+
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
@@ -89,17 +110,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
-	lookupAdapter := s.holdingsAdapter
-	if lookupAdapter == nil { // null if consortia adapter is configured, in which case we need to determine adapter by directory
-		// TODO: use CONSORTIA_SYMBOL or determine parent from peer (if not already consirtia symbol) instead of requester symbol
-		lookupAdapter, err = s.availabilityCreator.GetAdapter(requester)
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "could not create availability adapter for requester", err)
-		}
-		if lookupAdapter == nil {
-			err := fmt.Errorf("GetAdapter for requester returned nil")
-			return events.LogErrorAndReturnResult(ctx, "no availability adapter for requester", err)
-		}
+	lookupAdapter, err := s.getAdapterForConsortia(ctx, requester)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to get adapter for consortia", err)
+	}
+	if lookupAdapter == nil {
+		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for consortia", fmt.Errorf("no adapter found"))
 	}
 	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
 	if err != nil {
