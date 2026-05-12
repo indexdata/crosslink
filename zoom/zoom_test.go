@@ -90,6 +90,11 @@ func TestSearch(t *testing.T) {
 	assert.NoError(t, err)
 
 	query.Close()
+
+	_, err = conn.Search(nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "query is nil")
+
 	_, err = conn.Search(query)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "query is not initialized")

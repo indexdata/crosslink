@@ -136,6 +136,9 @@ func (c *Connection) Search(query *Query) (*ResultSet, error) {
 	if c.conn == nil {
 		return nil, &ZoomError{Code: 0, Message: "connection is not established"}
 	}
+	if query == nil {
+		return nil, &ZoomError{Code: 0, Message: "query is nil"}
+	}
 	if query.zquery == nil {
 		return nil, &ZoomError{Code: 0, Message: "query is not initialized"}
 	}
