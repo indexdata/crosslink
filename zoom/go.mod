@@ -1,6 +1,6 @@
 module github.com/indexdata/crosslink/zoom
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/indexdata/crosslink/testutil v0.0.0

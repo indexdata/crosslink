@@ -1,3 +1,3 @@
 module github.com/indexdata/crosslink/sru
 
-go 1.26
+go 1.26.0
