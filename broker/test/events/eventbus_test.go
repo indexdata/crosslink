@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -549,9 +548,8 @@ func TestFailedToConnect(t *testing.T) {
 	freeport := testutil.GetFreePort(t)
 	eventBus := events.NewPostgresEventBus(nil, fmt.Sprintf("postgres://crosslink:crosslink@localhost:%d/crosslink?sslmode=disable", freeport))
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
-	if err == nil || !strings.Contains(err.Error(), "failed to connect to") {
-		t.Errorf("Should fail with: failed to connect to ... but had %v", err)
-	}
+	assert.Error(t, err, "Expected error when failing to connect to database")
+	assert.Contains(t, err.Error(), "failed to connect to")
 }
 
 func TestReconnectListener(t *testing.T) {
