@@ -9,7 +9,7 @@ type QueryBuilderIsxn struct {
 	isxn bool
 }
 
-func NewQueryBuilderIsxn(isxn bool) *QueryBuilderIsxn {
+func NewQueryBuilderIsxn(isxn bool) LookupQueryBuilder {
 	return &QueryBuilderIsxn{isxn: isxn}
 }
 
