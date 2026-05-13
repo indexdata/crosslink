@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/indexdata/crosslink/directory"
 )
 
 const (
@@ -13,14 +15,20 @@ const (
 	HoldingsFormat            string = "HOLDINGS_FORMAT"
 	HoldingsFormatReservoir   string = "reservoir"
 	HoldingsFormatMarc21Plus1 string = "MARC-21plus-1"
+	HoldingsFormatMarc        string = "marc"
+	HoldingsFormatOpac        string = "opac"
 )
 
 func getParserFormat(format string) (HoldingsParser, error) {
 	switch format {
 	case HoldingsFormatReservoir:
-		return &ReservoirHoldingsParser{}, nil
+		return NewReservoirHoldingsParser(), nil
 	case HoldingsFormatMarc21Plus1:
-		return &Marc21Plus1HoldingsParser{}, nil
+		return NewMarc21Plus1HoldingsParser(), nil
+	case HoldingsFormatMarc:
+		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil
+	case HoldingsFormatOpac:
+		return NewOpacHoldingsParser(directory.OpacParserConfig{}), nil
 	default:
 		return nil, fmt.Errorf("bad value for %s: %s", HoldingsFormat, format)
 	}

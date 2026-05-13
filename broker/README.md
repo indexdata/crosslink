@@ -104,7 +104,7 @@ Configuration is provided via environment variables:
 | `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock`, `sru` or `consortia`                                  | `mock`                                    |
 | `HOLDINGS_SRU_URL`        | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                         | `http://localhost:8081/sru`               |
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
-| `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir` or `MARC-21plus-1`                               | `reservoir`                               |
+| `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir`, `marc`, `opac` or `MARC-21plus-1`               | `reservoir`                               |
 | `CONSORTIA_SYMBOL`        | Designates peer for which configuration is used for consortia. At this time, it is    |  (empty value)                            |
 |                           | used when `HOLDINGS_ADAPTER` = `consortia`.                                           |                                           |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
