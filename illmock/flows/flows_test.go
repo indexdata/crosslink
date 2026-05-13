@@ -180,7 +180,7 @@ func TestGetFlows(t *testing.T) {
 
 func TestCleanerExpire(t *testing.T) {
 	api := CreateFlowsApi()
-	api.cleanTimeout = 10 * time.Microsecond
+	api.cleanTimeout = 10 * time.Millisecond
 	api.cleanInterval = 1 * time.Millisecond
 	api.Run()
 	server := httptest.NewServer(api.HttpHandler())
