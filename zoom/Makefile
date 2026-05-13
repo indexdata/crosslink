@@ -5,7 +5,6 @@ OS ?= $(shell uname)
 COVERAGE=coverage.out
 
 .PHONY: all generate generate-schema lint vulncheck check clean deps-update
-XSD2GO = $(GO) run github.com/indexdata/xsd2goxsl@v1.4.0
 
 all:
 
