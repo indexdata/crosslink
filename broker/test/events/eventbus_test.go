@@ -545,8 +545,8 @@ func TestCompleteTaskNegative(t *testing.T) {
 func TestFailedToConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	freeport := testutil.GetFreePort(t)
-	eventBus := events.NewPostgresEventBus(nil, fmt.Sprintf("postgres://crosslink:crosslink@localhost:%d/crosslink?sslmode=disable", freeport))
+	freePort := testutil.GetFreePort(t)
+	eventBus := events.NewPostgresEventBus(nil, fmt.Sprintf("postgres://crosslink:crosslink@localhost:%d/crosslink?sslmode=disable", freePort))
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
 	assert.Error(t, err, "Expected error when failing to connect to database")
 	assert.Contains(t, err.Error(), "failed to connect to")
