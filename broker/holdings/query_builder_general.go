@@ -26,21 +26,31 @@ func NewQueryBuilderGen(queryConfig *directory.QueryConfig) (LookupQueryBuilder,
 		config = *queryConfig
 	}
 	if config.Type == nil || *config.Type == directory.Pqf {
-		if config.Identifier == nil && config.Isbn == nil && config.Issn == nil && config.Title == nil {
-			// if no specific mappings are provided, we set default PQF mappings
+		if config.Identifier == nil {
 			config.Identifier = NewString("@attr 1=12 {term}")
+		}
+		if config.Isbn == nil {
 			config.Isbn = NewString("@attr 1=7 {term}")
+		}
+		if config.Issn == nil {
 			config.Issn = NewString("@attr 1=8 {term}")
+		}
+		if config.Title == nil {
 			config.Title = NewString("@attr 1=4 {term}")
 		}
 		return &QueryBuilderGen{config: config}, nil
 	}
 	if *config.Type == directory.Cql {
-		if config.Identifier == nil && config.Isbn == nil && config.Issn == nil && config.Title == nil {
-			// if no specific mappings are provided, we set default CQL mappings
+		if config.Identifier == nil {
 			config.Identifier = NewString("rec.id = {term}")
+		}
+		if config.Isbn == nil {
 			config.Isbn = NewString("isbn = {term}")
+		}
+		if config.Issn == nil {
 			config.Issn = NewString("issn = {term}")
+		}
+		if config.Title == nil {
 			config.Title = NewString("title = {term}")
 		}
 		return &QueryBuilderGen{config: config}, nil
@@ -80,7 +90,7 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 	var pqfList []string
 	var cqlList []string
 	for _, pm := range paramMappings {
-		if pm.value != "" && pm.mapping != nil {
+		if pm.value != "" && pm.mapping != nil && *pm.mapping != "" {
 			if s.config.Type != nil && *s.config.Type == directory.Cql {
 				cql := strings.ReplaceAll(*pm.mapping, "{term}", cqlEncode(pm.value))
 				cqlList = append(cqlList, cql)

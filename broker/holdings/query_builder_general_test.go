@@ -45,18 +45,20 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.Len(t, pqf, 0)
 	assert.Equal(t, []string{"rec.id = \"12345\"", "title = \"Test Title\""}, cql)
 
+	empty := ""
 	// Test with CQL type and one mapping
 	qb, err = NewQueryBuilderGen(&directory.QueryConfig{
 		Type:       &cqlType,
 		Identifier: NewString("id == {term}"),
+		Title:      &empty,
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, qb)
 	gg = (qb).(*QueryBuilderGen)
 	assert.Equal(t, "id == {term}", *gg.config.Identifier)
-	assert.Nil(t, gg.config.Isbn)
-	assert.Nil(t, gg.config.Issn)
-	assert.Nil(t, gg.config.Title)
+	assert.Equal(t, "isbn = {term}", *gg.config.Isbn)
+	assert.Equal(t, "issn = {term}", *gg.config.Issn)
+	assert.Equal(t, "", *gg.config.Title)
 	cql, pqf, err = qb.Build(LookupParams{Identifier: "12345", Title: "Test Title"})
 	assert.NoError(t, err)
 	assert.Len(t, pqf, 0)
