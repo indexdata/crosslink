@@ -65,7 +65,7 @@ func TestPqfQuery(t *testing.T) {
 
 	_, err = NewPqfQuery("@attr 1=4")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create PQF query")
+	assert.Contains(t, err.Error(), "failed to create query")
 }
 
 func TestSearch(t *testing.T) {
@@ -135,6 +135,11 @@ func TestSearch(t *testing.T) {
 	_, err = rs.GetRecord(0)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "result set is not available")
+
+	query, err = NewCqlQuery("computer")
+	assert.NoError(t, err)
+	assert.NotNil(t, query)
+	defer query.Close()
 }
 
 func TestRecordData(t *testing.T) {

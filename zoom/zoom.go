@@ -66,14 +66,7 @@ func NewPqfQuery(pqf string) (*Query, error) {
 	defer C.free(unsafe.Pointer(cPqf))
 
 	query := &Query{zquery: C.ZOOM_query_create()}
-	runtime.SetFinalizer(query, (*Query).finalize)
-
-	ret := C.ZOOM_query_prefix(query.zquery, cPqf)
-	if ret != 0 {
-		query.finalize()
-		return nil, &ZoomError{Code: int(ret), Message: "failed to create PQF query"}
-	}
-	return query, nil
+	return checkQuery(C.ZOOM_query_prefix(query.zquery, cPqf), query)
 }
 
 func NewCqlQuery(cql string) (*Query, error) {
@@ -81,13 +74,15 @@ func NewCqlQuery(cql string) (*Query, error) {
 	defer C.free(unsafe.Pointer(cCql))
 
 	query := &Query{zquery: C.ZOOM_query_create()}
-	runtime.SetFinalizer(query, (*Query).finalize)
+	return checkQuery(C.ZOOM_query_cql(query.zquery, cCql), query)
+}
 
-	ret := C.ZOOM_query_cql(query.zquery, cCql)
+func checkQuery(ret C.int, query *Query) (*Query, error) {
 	if ret != 0 {
 		query.finalize()
-		return nil, &ZoomError{Code: int(ret), Message: "failed to create CQL query"}
+		return nil, &ZoomError{Code: 0, Message: "failed to create query"}
 	}
+	runtime.SetFinalizer(query, (*Query).finalize)
 	return query, nil
 }
 
