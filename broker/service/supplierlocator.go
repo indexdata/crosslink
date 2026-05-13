@@ -79,7 +79,7 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings
 // 3 cases to consider for getting the adapter:
 // 1. If holdingsAdapter is set from the start (for example for testing), use it directly
 // 2. If consortiaSymbol is set, lookup the peer for the consortia and use its availability adapter
-// 3. Otherwise, use the availability adapter for the requesting peer (if any)
+// 3. Otherwise, use the availability adapter for the requesting peer
 func (s *SupplierLocator) getAdapterForConsortia(ctx common.ExtendedContext, requestPeer ill_db.Peer) (holdings.LookupAdapter, error) {
 	lookupAdapter := s.holdingsAdapter
 	if lookupAdapter != nil {
@@ -112,10 +112,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	lookupAdapter, err := s.getAdapterForConsortia(ctx, requester)
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, "failed to get adapter for consortia", err)
+		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
-		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for consortia", fmt.Errorf("no adapter found"))
+		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
 	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
 	if err != nil {
