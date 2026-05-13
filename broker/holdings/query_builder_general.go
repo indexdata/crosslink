@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/directory"
 )
 
@@ -61,16 +62,7 @@ func pqfEncode(value string) string {
 }
 
 func cqlEncode(value string) string {
-	// escape backslashes and double quotes
-	escaped := "\""
-	for _, r := range value {
-		if r == '\\' || r == '"' {
-			escaped += "\\"
-		}
-		escaped += string(r)
-	}
-	escaped += "\""
-	return escaped
+	return "\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(value)) + "\""
 }
 
 func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string, err error) {
