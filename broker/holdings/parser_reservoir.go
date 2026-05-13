@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 import (
 	"encoding/xml"
@@ -8,7 +8,13 @@ import (
 	"github.com/indexdata/crosslink/marcxml"
 )
 
+const isilPrefix = "ISIL:"
+
 type ReservoirHoldingsParser struct{}
+
+func NewReservoirHoldingsParser() HoldingsParser {
+	return &ReservoirHoldingsParser{}
+}
 
 func parseHoldingsForIndicator(rec *marcxml.Record, ind2 string) []Holding {
 	var holdings []Holding
@@ -47,7 +53,7 @@ func parseHoldings(rec *marcxml.Record) []Holding {
 	return holdings
 }
 
-func (p *ReservoirHoldingsParser) Parse(recordData []byte) ([]Holding, error) {
+func (p *ReservoirHoldingsParser) Parse(recordData []byte, params LookupParams) ([]Holding, error) {
 	var rec marcxml.Record
 	err := xml.Unmarshal(recordData, &rec)
 	if err != nil {

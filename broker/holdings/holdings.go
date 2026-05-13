@@ -1,14 +1,15 @@
-package adapter
+package holdings
 
 type LookupAdapter interface {
 	Lookup(params LookupParams) ([]Holding, string, error)
 }
 
 type LookupParams struct {
-	Identifier string
-	Isbn       string
-	Issn       string
-	Title      string
+	Identifier  string
+	Isbn        string
+	Issn        string
+	Title       string
+	ServiceType string
 }
 
 type Holding struct {
@@ -21,7 +22,7 @@ type Holding struct {
 }
 
 type HoldingsParser interface {
-	Parse(record []byte) ([]Holding, error)
+	Parse(record []byte, params LookupParams) ([]Holding, error)
 }
 
 type LookupQueryBuilder interface {

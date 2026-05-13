@@ -1,10 +1,8 @@
-package availability
+package holdings
 
 import (
 	"fmt"
 
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 )
@@ -27,20 +25,26 @@ func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreato
 	}
 }
 
-func getParser(config *directory.ParserConfig) (adapter.HoldingsParser, error) {
+func getParser(config *directory.ParserConfig) (HoldingsParser, error) {
 	if config == nil {
-		return adapter.NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
+		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
 	}
 	if config.Marc != nil {
-		return adapter.NewMarcHoldingsParser(*config.Marc), nil
+		return NewMarcHoldingsParser(*config.Marc), nil
 	}
 	if config.Opac != nil {
-		return adapter.NewOpacHoldingsParser(*config.Opac), nil
+		return NewOpacHoldingsParser(*config.Opac), nil
 	}
-	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc or opac properties")
+	if config.Reservoir != nil {
+		return NewReservoirHoldingsParser(), nil
+	}
+	if config.Marc21plus1 != nil {
+		return NewMarc21Plus1HoldingsParser(), nil
+	}
+	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
-func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer ill_db.Peer) (adapter.LookupAdapter, error) {
+func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
 	config := entry.AvailabilityConfig
 	if config == nil {
@@ -53,23 +57,25 @@ func (c *AvailabilityCreatorImpl) GetAdapter(ctx common.ExtendedContext, peer il
 	if err != nil {
 		return nil, err
 	}
-	if config.Sru != nil {
-		queryBuilder := adapter.NewQueryBuilderCql(config.QueryConfig)
-		return NewSruAvailabilityAdapter(ctx, *config.Sru, queryBuilder, holdingsParser)
+	queryBuilder, err := NewQueryBuilderGen(config.QueryConfig)
+	if err != nil {
+		return nil, err
 	}
-	if config.Z3950 != nil {
-		queryBuilder := adapter.NewQueryBuilderPqf(config.QueryConfig)
+	if config.Sru != nil {
+		return NewSruAvailabilityAdapter(*config.Sru, queryBuilder, holdingsParser)
+	}
+	if config.Zoom != nil {
 		switch c.mode {
 		case AvailabilityAdapterMetaproxy:
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(ctx, *config.Z3950, c.metaproxyUrl, queryBuilder, holdingsParser)
+			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser)
 		case AvailabilityAdapterZoom:
-			return NewZoomAvailabilityAdapter(ctx, *config.Z3950, queryBuilder, holdingsParser)
+			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser)
 		default:
 			return nil, fmt.Errorf("unsupported availability adapter type: %s", c.mode)
 		}
 	}
-	return nil, fmt.Errorf("must specify either sru or z3950 properties for availability adapter type")
+	return nil, fmt.Errorf("must specify either sru or zoom properties for availability adapter type")
 }

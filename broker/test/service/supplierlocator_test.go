@@ -944,7 +944,7 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{
-		Z3950: &directory.Z3950Config{
+		Zoom: &directory.ZoomConfig{
 			Address: "a",
 			Options: &map[string]string{
 				"location": "1234", // ensures that availability lookup returns a result and supplier is not skipped
@@ -997,7 +997,7 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
 		AvailabilityConfig: &directory.AvailabilityConfig{
-			Z3950: &directory.Z3950Config{
+			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"adapter-error": "true",
@@ -1046,7 +1046,7 @@ func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
 		AvailabilityConfig: &directory.AvailabilityConfig{
-			Z3950: &directory.Z3950Config{
+			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"lookup-error": "true",

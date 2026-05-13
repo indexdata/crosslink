@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 import (
 	"encoding/xml"
@@ -28,7 +28,7 @@ func NewMarcHoldingsParser(config directory.MarcParserConfig) HoldingsParser {
 	}
 }
 
-func (p *MarcHoldingsParser) Parse(record []byte) ([]Holding, error) {
+func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holding, error) {
 	var marcRecord marcxml.Record
 	err := xml.Unmarshal(record, &marcRecord)
 	// TODO : consider OPAC record as well
