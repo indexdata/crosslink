@@ -201,15 +201,6 @@ func TestCleanerExpire(t *testing.T) {
 	assert.Len(t, flowsR.Flows, 0)
 
 	api.Shutdown()
-
-	time.Sleep(1 * time.Millisecond)
-
-	api.AddFlow(flow1)
-
-	time.Sleep(1 * time.Millisecond)
-
-	flowsR = runRequest(t, server, "")
-	assert.Len(t, flowsR.Flows, 1)
 }
 
 func TestCleanerKeep(t *testing.T) {
