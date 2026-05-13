@@ -95,12 +95,12 @@ func TestLookupFoundOpac(t *testing.T) {
 	params := LookupParams{
 		Title: "Computer",
 	}
-	results, pqf, err := aa.Lookup(params)
+	results, cql, err := aa.Lookup(params)
 	assert.NoError(t, err)
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].ItemId, "test__000000001_")
 	assert.Contains(t, results[1].ItemId, "test__000000002_")
-	assert.Equal(t, "title = \"Computer\"", pqf)
+	assert.Equal(t, "title = \"Computer\"", cql)
 }
 
 func TestLookupDiagnosticPQF(t *testing.T) {
