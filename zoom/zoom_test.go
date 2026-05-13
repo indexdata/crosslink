@@ -65,7 +65,7 @@ func TestPqfQuery(t *testing.T) {
 
 	_, err = NewPqfQuery("@attr 1=4")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create query")
+	assert.Contains(t, err.Error(), "failed to create PQF query")
 }
 
 func TestSearch(t *testing.T) {
