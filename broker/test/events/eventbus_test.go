@@ -549,8 +549,8 @@ func TestFailedToConnect(t *testing.T) {
 	freeport := testutil.GetFreePort(t)
 	eventBus := events.NewPostgresEventBus(nil, fmt.Sprintf("postgres://crosslink:crosslink@localhost:%d/crosslink?sslmode=disable", freeport))
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
-	if err == nil || strings.Index(err.Error(), "failed to connect to") > 0 {
-		t.Errorf("Should fail with: ailed to connect to ... but had %s", err.Error())
+	if err == nil || !strings.Contains(err.Error(), "failed to connect to") {
+		t.Errorf("Should fail with: failed to connect to ... but had %v", err)
 	}
 }
 
