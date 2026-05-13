@@ -90,7 +90,7 @@ func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string
 		avail, err := a.searchRetrieve(params, conn, query)
 		query.Close()
 		if err != nil {
-			return nil, pqf, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
+			return nil, pqf, fmt.Errorf("failed to search server with PQF: %s err %w", pqf, err)
 		}
 		if len(avail) > 0 {
 			return avail, pqf, nil
@@ -104,7 +104,7 @@ func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string
 		avail, err := a.searchRetrieve(params, conn, query)
 		query.Close()
 		if err != nil {
-			return nil, cql, fmt.Errorf("failed to search SRU server query: %s err %w", cql, err)
+			return nil, cql, fmt.Errorf("failed to search server with CQL: %s err %w", cql, err)
 		}
 		if len(avail) > 0 {
 			return avail, cql, nil

@@ -98,7 +98,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	assert.Equal(t, "@attr 1=4 \"Computer\"", pqf)
 }
 
-func TestLookupDiagnostics(t *testing.T) {
+func TestLookupDiagnosticPQF(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
@@ -119,8 +119,38 @@ func TestLookupDiagnostics(t *testing.T) {
 	params := LookupParams{Identifier: "1234"}
 	_, pqf, err := aa.Lookup(params)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to search server with PQF")
 	assert.Contains(t, err.Error(), "Record syntax not supported")
 	assert.Equal(t, "@attr 1=12 \"1234\"", pqf)
+}
+
+func TestLookupDiagnosticCql(t *testing.T) {
+	cqlType := directory.Cql
+	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
+		Type: &cqlType,
+	})
+	assert.NoError(t, err)
+	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	aa, err := NewZoomAvailabilityAdapter(
+		directory.ZoomConfig{
+			Address: containerHost + ":" + mappedPort + "/marc",
+			Options: &map[string]string{
+				"preferredRecordSyntax": "danmarc",
+			},
+		},
+		queryBuilder,
+		holdingsParser,
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
+	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
+
+	params := LookupParams{Identifier: "1234"}
+	_, cql, err := aa.Lookup(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to search server with CQL")
+	assert.Contains(t, err.Error(), "Record syntax not supported")
+	assert.Equal(t, "rec.id = \"1234\"", cql)
 }
 
 func TestConnectFailure(t *testing.T) {
