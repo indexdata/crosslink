@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/indexdata/crosslink/broker/dbutil"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/testutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -545,11 +545,11 @@ func TestCompleteTaskNegative(t *testing.T) {
 func TestFailedToConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eventBus := events.NewPostgresEventBus(nil, "postgres://crosslink:crosslink@localhost:111/crosslink?sslmode=disable")
+	freePort := testutil.GetFreePort(t)
+	eventBus := events.NewPostgresEventBus(nil, fmt.Sprintf("postgres://crosslink:crosslink@localhost:%d/crosslink?sslmode=disable", freePort))
 	err := eventBus.Start(common.CreateExtCtxWithArgs(ctx, nil))
-	if err == nil || strings.Index(err.Error(), "failed to connect to") > 0 {
-		t.Errorf("Should fail with: ailed to connect to ... but had %s", err.Error())
-	}
+	assert.Error(t, err, "Expected error when failing to connect to database")
+	assert.Contains(t, err.Error(), "failed to connect to")
 }
 
 func TestReconnectListener(t *testing.T) {
