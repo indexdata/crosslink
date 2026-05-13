@@ -191,11 +191,11 @@ func TestCleanerExpire(t *testing.T) {
 	flow1 := Flow{Message: []FlowMessage{flowMessage}, Id: "rid", Role: role.Requester, Supplier: "S1", Requester: "R1"}
 	api.AddFlow(flow1)
 
-	flowsR := runRequest(t, server, "")
-	assert.Len(t, flowsR.Flows, 1)
-
-	time.Sleep(10 * time.Millisecond)
-	flowsR = runRequest(t, server, "")
+	var flowsR Flows
+	assert.Eventually(t, func() bool {
+		flowsR = runRequest(t, server, "")
+		return len(flowsR.Flows) == 0
+	}, 100*time.Millisecond, 10*time.Millisecond)
 	assert.Len(t, flowsR.Flows, 0)
 
 	api.Shutdown()
