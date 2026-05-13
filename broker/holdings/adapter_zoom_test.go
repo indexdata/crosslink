@@ -39,8 +39,10 @@ func TestLookupFoundMarc(t *testing.T) {
 		MainField:        NewString("010"),
 		LocationSubField: NewString("a"),
 	}
+	pqfType := directory.Pqf
 	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
 		Title: NewString("@attr 1=1016 {term}"),
+		Type:  &pqfType,
 	})
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(config)
@@ -70,7 +72,10 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	queryBuilder, err := NewQueryBuilderGen(nil)
+	cqlType := directory.Cql
+	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
+		Type: &cqlType,
+	})
 	assert.NoError(t, err)
 	holdingsParser := NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
@@ -95,7 +100,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].ItemId, "test__000000001_")
 	assert.Contains(t, results[1].ItemId, "test__000000002_")
-	assert.Equal(t, "@attr 1=4 \"Computer\"", pqf)
+	assert.Equal(t, "title = \"Computer\"", pqf)
 }
 
 func TestLookupDiagnosticPQF(t *testing.T) {
