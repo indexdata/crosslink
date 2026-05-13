@@ -8,7 +8,7 @@ import (
 	"github.com/indexdata/crosslink/directory"
 )
 
-type QueryBuilderPqf struct {
+type QueryBuilderGen struct {
 	config directory.QueryConfig
 }
 
@@ -19,7 +19,7 @@ func NewString(s string) *string {
 	return nil
 }
 
-func NewQueryBuilder(queryConfig *directory.QueryConfig) (*QueryBuilderPqf, error) {
+func NewQueryBuilderGen(queryConfig *directory.QueryConfig) (LookupQueryBuilder, error) {
 	var config directory.QueryConfig
 	if queryConfig != nil {
 		config = *queryConfig
@@ -32,7 +32,7 @@ func NewQueryBuilder(queryConfig *directory.QueryConfig) (*QueryBuilderPqf, erro
 			config.Issn = NewString("@attr 1=8 {term}")
 			config.Title = NewString("@attr 1=4 {term}")
 		}
-		return &QueryBuilderPqf{config: config}, nil
+		return &QueryBuilderGen{config: config}, nil
 	}
 	if *config.Type == directory.Cql {
 		if config.Identifier == nil && config.Isbn == nil && config.Issn == nil && config.Title == nil {
@@ -42,7 +42,7 @@ func NewQueryBuilder(queryConfig *directory.QueryConfig) (*QueryBuilderPqf, erro
 			config.Issn = NewString("issn = {term}")
 			config.Title = NewString("title = {term}")
 		}
-		return &QueryBuilderPqf{config: config}, nil
+		return &QueryBuilderGen{config: config}, nil
 	}
 	return nil, fmt.Errorf("unsupported query builder type: %s", *config.Type)
 }
@@ -73,7 +73,7 @@ func cqlEncode(value string) string {
 	return escaped
 }
 
-func (s *QueryBuilderPqf) Build(params LookupParams) (cql []string, pqf []string, err error) {
+func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string, err error) {
 	type paramMapping struct {
 		value   string
 		mapping *string

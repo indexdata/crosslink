@@ -57,7 +57,7 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 	if err != nil {
 		return nil, err
 	}
-	queryBuilder, err := NewQueryBuilder(config.QueryConfig)
+	queryBuilder, err := NewQueryBuilderGen(config.QueryConfig)
 	if err != nil {
 		return nil, err
 	}

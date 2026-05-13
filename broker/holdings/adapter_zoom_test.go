@@ -39,7 +39,7 @@ func TestLookupFoundMarc(t *testing.T) {
 		MainField:        NewString("010"),
 		LocationSubField: NewString("a"),
 	}
-	queryBuilder, err := NewQueryBuilder(&directory.QueryConfig{
+	queryBuilder, err := NewQueryBuilderGen(&directory.QueryConfig{
 		Title: NewString("@attr 1=1016 {term}"),
 	})
 	assert.NoError(t, err)
@@ -70,7 +70,7 @@ func TestLookupFoundMarc(t *testing.T) {
 }
 
 func TestLookupFoundOpac(t *testing.T) {
-	queryBuilder, err := NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewOpacHoldingsParser(directory.OpacParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
@@ -99,7 +99,7 @@ func TestLookupFoundOpac(t *testing.T) {
 }
 
 func TestLookupDiagnostics(t *testing.T) {
-	queryBuilder, err := NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
@@ -124,7 +124,7 @@ func TestLookupDiagnostics(t *testing.T) {
 }
 
 func TestConnectFailure(t *testing.T) {
-	queryBuilder, err := NewQueryBuilder(nil)
+	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
