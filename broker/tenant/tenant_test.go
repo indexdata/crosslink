@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/url"
 	"testing"
@@ -37,6 +38,10 @@ func mustResolve(t *testing.T, tenantResolver *TenantResolver, ctx common.Extend
 	tenant, err := tenantResolver.Resolve(ctx, r, symbol)
 	assert.NoError(t, err)
 	return tenant
+}
+
+func okapiToken(payload string) string {
+	return "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".signature"
 }
 
 func TestTenantNoSymbol(t *testing.T) {
@@ -153,6 +158,69 @@ func TestTenantGetUserFromOkapiHeader(t *testing.T) {
 
 	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
 	assert.Equal(t, "okapi-user", tenant.GetUser())
+}
+
+func TestTenantGetUserPrefersOkapiTokenSubject(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Okapi-User-Id", "okapi-user-uuid")
+	header.Set("X-Okapi-Token", okapiToken(`{"sub":"okapi-subject","user_id":"okapi-user-uuid"}`))
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "okapi-subject", tenant.GetUser())
+}
+
+func TestTenantGetUserFallsBackWhenOkapiTokenInvalid(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Okapi-User-Id", "okapi-user")
+	header.Set("X-Okapi-Token", "invalid-token")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "okapi-user", tenant.GetUser())
+}
+
+func TestTenantGetUserFallsBackWhenOkapiTokenHasNoSubject(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Okapi-User-Id", "okapi-user")
+	header.Set("X-Okapi-Token", okapiToken(`{"user_id":"okapi-user"}`))
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "okapi-user", tenant.GetUser())
+}
+
+func TestTenantGetUserFallsBackWhenOkapiTokenAndHeaderHaveNoUser(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	header.Set("X-Okapi-Token", okapiToken(`{"user_id":"okapi-user"}`))
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	assert.Equal(t, "unknown", tenant.GetUser())
 }
 
 func TestTenantGetRemoteHostFromXForwardedFor(t *testing.T) {

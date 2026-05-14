@@ -440,11 +440,12 @@ func TestPostPatronRequestsIdActionStoresTenantUserInInvokeTask(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/action", strings.NewReader(reqBody))
 	req.Header.Set("X-Okapi-Tenant", "tenant1")
 	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
+	req.Header.Set("X-Okapi-Token", "header.eyJzdWIiOiJva2FwaS1zdWJqZWN0IiwidXNlcl9pZCI6Im9rYXBpLXVzZXItMSJ9.signature")
 	rr := httptest.NewRecorder()
 
 	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
 	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "okapi-user-1", eventBus.lastData.User)
+	assert.Equal(t, "okapi-subject", eventBus.lastData.User)
 }
 
 func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
