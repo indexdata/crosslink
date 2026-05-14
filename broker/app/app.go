@@ -22,6 +22,8 @@ import (
 	psapi "github.com/indexdata/crosslink/broker/pullslip/api"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
+	skd_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	skd_service "github.com/indexdata/crosslink/broker/scheduler/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 
 	"github.com/dustin/go-humanize"
@@ -198,6 +200,12 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
+
+	skdRepo := skd_db.CreateSkdRepo(pool)
+	if err = StartScheduler(ctx, skdRepo, eventBus); err != nil {
+		return Context{}, err
+	}
+
 	return Context{
 		EventBus:       eventBus,
 		IllRepo:        illRepo,
@@ -390,6 +398,18 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	if err != nil {
 		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
+	return nil
+}
+
+// StartScheduler creates the scheduler service, begins listening on
+// scheduler_channel, and launches the scheduling loop in a background goroutine.
+func StartScheduler(ctx context.Context, skdRepo skd_db.SkdRepo, eventBus events.EventBus) error {
+	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
+	svc := skd_service.NewSchedulerService(skdRepo, eventBus, ConnectionString)
+	if err := svc.Listen(extCtx); err != nil {
+		return fmt.Errorf("starting scheduler listener failed: %w", err)
+	}
+	go svc.Run(extCtx)
 	return nil
 }
 

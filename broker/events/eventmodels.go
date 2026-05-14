@@ -28,6 +28,7 @@ type EventDomain string
 const (
 	EventDomainPatronRequest  EventDomain = "PATRON_REQUEST"
 	EventDomainIllTransaction EventDomain = "ILL_TRANSACTION"
+	EventDomainScheduler      EventDomain = "SCHEDULER"
 )
 
 type EventName string

@@ -120,6 +120,7 @@ Configuration is provided via environment variables:
 |                           | If pattern is exactly `directory` the symbol will be obtained by directory lookup.    |                                           |
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
 | `LANGUAGE`                | Language parameter used for ts_vector search in DB                                    | `english`                                 |
+| `SCHEDULER_RETRY_DELAY`   | Delay for rescheduling failed scheduled task                                          | `5m`                                      |
 
 # Build
 
