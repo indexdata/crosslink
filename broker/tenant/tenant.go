@@ -1,6 +1,8 @@
 package tenant
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -14,6 +16,9 @@ import (
 
 const OKAPI_PATH_PREFIX = "/broker"
 const OkapiTenantHeader = "X-Okapi-Tenant"
+
+//nolint:gosec // Header name, not a hardcoded credential.
+const OkapiTokenHeader = "X-Okapi-Token"
 const OkapiUserHeader = "X-Okapi-User-Id"
 const XForwardedForHeader = "X-Forwarded-For"
 const XForwardedUserHeader = "X-Forwarded-User"
@@ -98,7 +103,7 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 			mappedSymbol:   s.mapTenantToSymbol(tenantHeader),
 			ctx:            ctx,
 			requestSymbol:  requestSymbol,
-			user:           strings.TrimSpace(r.Header.Get(OkapiUserHeader)),
+			user:           getOkapiUser(r.Header),
 			remoteHost:     getRemoteHost(r),
 		}
 		return t, nil
@@ -250,4 +255,35 @@ func getRemoteHost(r *http.Request) string {
 		return host
 	}
 	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func getOkapiUser(header http.Header) string {
+	// Okapi/auth validates the token before forwarding; this decode is only for attribution.
+	if user := getOkapiTokenSubject(header.Get(OkapiTokenHeader)); user != "" {
+		return user
+	}
+	return strings.TrimSpace(header.Get(OkapiUserHeader))
+}
+
+func getOkapiTokenSubject(token string) string {
+	_, payload, ok := strings.Cut(strings.TrimSpace(token), ".")
+	if !ok {
+		return ""
+	}
+	payload, _, ok = strings.Cut(payload, ".")
+	if !ok {
+		return ""
+	}
+
+	decoded, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		Subject string `json:"sub"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(claims.Subject)
 }
