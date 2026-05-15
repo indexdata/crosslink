@@ -1388,8 +1388,8 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 63)
-		assert.Equal(t, 63, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 64)
+		assert.Equal(t, 64, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Albury City Libraries", response.Items[0].Name)
 	})
 
