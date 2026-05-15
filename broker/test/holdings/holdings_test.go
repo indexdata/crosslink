@@ -3,7 +3,9 @@ package holdings
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +31,8 @@ import (
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
+
+var shouldFailSruRequest bool
 
 func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
@@ -46,8 +51,38 @@ func TestMain(m *testing.M) {
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	test.Expect(err, "failed to get conn string")
 
+	gviSruResponse, err := os.ReadFile("gvi_sru_response.xml")
+	test.Expect(err, "failed to read gvi response file")
+
+	sruHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if shouldFailSruRequest {
+			http.Error(w, "simulated SRU failure", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/xml")
+		w.WriteHeader(http.StatusOK)
+		output := []byte(gviSruResponse)
+		w.Write(output)
+	})
+	sruServer := httptest.NewServer(sruHandler)
+	defer sruServer.Close()
+
+	bytes, err := os.ReadFile("gvi_directory.json")
+	test.Expect(err, "failed to read directory file")
+
+	var directoryEntries []directory.Entry
+	err = json.Unmarshal(bytes, &directoryEntries)
+	test.Expect(err, "failed to unmarshal directories")
+	entry := &directoryEntries[0]
+	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
+	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+
+	bytes, err = json.Marshal(directoryEntries)
+	test.Expect(err, "failed to marshal directory entries")
+
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
+	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(bytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
@@ -92,7 +127,8 @@ func TestRequestRequesterNotFound(t *testing.T) {
 	assert.Error(t, err, "does not expect to find transaction")
 }
 
-func TestRequestRequestNoHoldingsConfig(t *testing.T) {
+func TestRequestRequestSruServerFail(t *testing.T) {
+	shouldFailSruRequest = true
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "479931e1-3e94-467c-a04e-272ac8fcc154"
 	data, _ := os.ReadFile("request-2.xml")
@@ -102,7 +138,6 @@ func TestRequestRequestNoHoldingsConfig(t *testing.T) {
 	res, err := client.Do(req)
 	assert.NoError(t, err, "failed to send request to mock")
 	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
-
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
@@ -115,12 +150,13 @@ func TestRequestRequestNoHoldingsConfig(t *testing.T) {
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = ERROR, error=no holdings adapter available for locating suppliers\n" +
+		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"LOANED\"'\n" +
 		"TASK, message-requester = ERROR, error=failed to send ISO18626 message\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
-func TestRequestRequestWithHoldingsConfig(t *testing.T) {
+func TestRequestRequestSruServerOK(t *testing.T) {
+	shouldFailSruRequest = false
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
 	data, _ := os.ReadFile("request-3.xml")
@@ -142,7 +178,7 @@ func TestRequestRequestWithHoldingsConfig(t *testing.T) {
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"LOANED\"'\n" +
+		"TASK, locate-suppliers = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = ERROR, error=failed to send ISO18626 message\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }

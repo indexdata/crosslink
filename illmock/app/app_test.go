@@ -1388,8 +1388,8 @@ func TestService(t *testing.T) {
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
 		assert.Nil(t, err)
-		assert.Len(t, response.Items, 64)
-		assert.Equal(t, 64, *response.ResultInfo.TotalRecords)
+		assert.Len(t, response.Items, 63)
+		assert.Equal(t, 63, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Albury City Libraries", response.Items[0].Name)
 	})
 
@@ -1432,30 +1432,6 @@ func TestService(t *testing.T) {
 		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
 		assert.Equal(t, "http://localhost:1234", (*response.Items[0].Endpoints)[0].Address)
 		assert.Equal(t, "Woollahra Library and Information Service / Double Bay Central Library", response.Items[1].Name)
-	})
-
-	t.Run("directory entries cql=ISIL:GVI1 ok peerUrl", func(t *testing.T) {
-		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AGVI1&peer_url=http%3A%2F%2Flocalhost%3A1234")
-		assert.Nil(t, err)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
-		defer func() {
-			dErr := resp.Body.Close()
-			assert.NoError(t, dErr)
-		}()
-		var response directory.EntriesResponse
-		err = json.Unmarshal(buf, &response)
-		assert.Nil(t, err)
-		assert.Len(t, response.Items, 1)
-		assert.Equal(t, 1, *response.ResultInfo.TotalRecords)
-		assert.Equal(t, "GVI test library 1", response.Items[0].Name)
-		assert.Equal(t, "http://localhost:1234", (*response.Items[0].Endpoints)[0].Address)
-		assert.NotNil(t, response.Items[0].HoldingsConfig)
-		assert.NotNil(t, response.Items[0].HoldingsConfig.Zoom)
-		assert.NotNil(t, response.Items[0].HoldingsConfig.ParserConfig)
-		assert.NotNil(t, response.Items[0].HoldingsConfig.QueryConfig)
 	})
 
 	t.Run("directory entries cql=ISIL:AU-NWOOL bad peerUrl", func(t *testing.T) {
