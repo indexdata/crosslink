@@ -18,12 +18,10 @@ import (
 var SCHEDULER_RETRY_DELAY, _ = utils.GetEnvAny("SCHEDULER_RETRY_DELAY", time.Duration(5*float64(time.Minute)), func(val string) (time.Duration, error) {
 	d, err := time.ParseDuration(val)
 	if err != nil {
-		return 0, fmt.Errorf("invalid SHUTDOWN_DELAY value: %s", val)
+		return 0, fmt.Errorf("invalid SCHEDULER_RETRY_DELAY value: %s", val)
 	}
 	return d, nil
 })
-
-const schedulerChannel = "scheduler_channel"
 
 type SchedulerService struct {
 	skdRepo    skd_db.SkdRepo
@@ -60,13 +58,13 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 			ctx.Logger().Error("scheduler: unable to connect to database", "error", err)
 			return err
 		}
-		_, err = conn.Exec(ctx, "LISTEN "+schedulerChannel)
+		_, err = conn.Exec(ctx, "LISTEN "+skd_db.SchedulerChannel)
 		if err != nil {
-			ctx.Logger().Error("scheduler: unable to listen to channel", "channel", schedulerChannel, "error", err)
+			ctx.Logger().Error("scheduler: unable to listen to channel", "channel", skd_db.SchedulerChannel, "error", err)
 			_ = conn.Close(ctx)
 			return err
 		}
-		ctx.Logger().Info("scheduler: listening on channel", "channel", schedulerChannel)
+		ctx.Logger().Info("scheduler: listening on channel", "channel", skd_db.SchedulerChannel)
 		return nil
 	}
 
@@ -188,6 +186,7 @@ func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task 
 func (s *SchedulerService) getNextRunAt(ctx common.ExtendedContext) pgtype.Timestamptz {
 	next, err := s.skdRepo.GetNextRunAt(ctx)
 	if err != nil {
+		ctx.Logger().Error("failed to get next run", "error", err)
 		// No pending tasks or query error — return invalid (zero) value.
 		return pgtype.Timestamptz{}
 	}

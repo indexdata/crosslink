@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const schedulerChannel = "scheduler_channel"
+const SchedulerChannel = "scheduler_channel"
 
 type SkdRepo interface {
 	repo.Transactional[SkdRepo]
@@ -58,8 +58,8 @@ func (r *PgSkdRepo) GetNextRunAt(ctx common.ExtendedContext) (pgtype.Timestamptz
 }
 
 func (r *PgSkdRepo) notify(ctx common.ExtendedContext) {
-	_, err := r.GetConnOrTx().Exec(ctx, "NOTIFY "+schedulerChannel)
+	_, err := r.GetConnOrTx().Exec(ctx, "NOTIFY "+SchedulerChannel)
 	if err != nil {
-		ctx.Logger().Error("failed to notify scheduler channel", "channel", schedulerChannel, "error", err)
+		ctx.Logger().Error("failed to notify scheduler channel", "channel", SchedulerChannel, "error", err)
 	}
 }
