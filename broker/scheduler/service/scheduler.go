@@ -1,4 +1,4 @@
-package skd_service
+package sched_service
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	skd_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,7 +24,7 @@ var SCHEDULER_RETRY_DELAY, _ = utils.GetEnvAny("SCHEDULER_RETRY_DELAY", time.Dur
 })
 
 type SchedulerService struct {
-	skdRepo    skd_db.SkdRepo
+	skdRepo    sched_db.SchedRepo
 	eventBus   events.EventBus
 	connString string
 	// notifyCh is written by Listen and read by schedulerLoop via waitUntil.
@@ -34,7 +34,7 @@ type SchedulerService struct {
 
 // NewSchedulerService creates a SchedulerService wired to the given repo,
 // event bus, and Postgres connection string (used for the LISTEN connection).
-func NewSchedulerService(skdRepo skd_db.SkdRepo, eventBus events.EventBus, connString string) *SchedulerService {
+func NewSchedulerService(skdRepo sched_db.SchedRepo, eventBus events.EventBus, connString string) *SchedulerService {
 	ch := make(chan struct{}, 1)
 	return &SchedulerService{
 		skdRepo:    skdRepo,
@@ -49,31 +49,33 @@ func NewSchedulerService(skdRepo skd_db.SkdRepo, eventBus events.EventBus, connS
 // Each notification wakes the scheduler loop. Reconnects with exponential
 // backoff on connection loss. Blocks until ctx is cancelled.
 func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
-	var conn *pgx.Conn
-	var err error
-
-	connectAndListen := func() error {
-		conn, err = pgx.Connect(ctx, s.connString)
+	// openConn establishes a fresh connection and registers the LISTEN.
+	// The caller is responsible for closing the returned connection.
+	openConn := func() (*pgx.Conn, error) {
+		c, err := pgx.Connect(ctx, s.connString)
 		if err != nil {
 			ctx.Logger().Error("scheduler: unable to connect to database", "error", err)
-			return err
+			return nil, err
 		}
-		_, err = conn.Exec(ctx, "LISTEN "+skd_db.SchedulerChannel)
-		if err != nil {
-			ctx.Logger().Error("scheduler: unable to listen to channel", "channel", skd_db.SchedulerChannel, "error", err)
-			_ = conn.Close(ctx)
-			return err
+		if _, err = c.Exec(ctx, "LISTEN "+sched_db.SchedulerChannel); err != nil {
+			ctx.Logger().Error("scheduler: unable to listen to channel", "channel", sched_db.SchedulerChannel, "error", err)
+			_ = c.Close(ctx)
+			return nil, err
 		}
-		ctx.Logger().Info("scheduler: listening on channel", "channel", skd_db.SchedulerChannel)
-		return nil
+		ctx.Logger().Info("scheduler: listening on channel", "channel", sched_db.SchedulerChannel)
+		return c, nil
 	}
 
-	if err = connectAndListen(); err != nil {
+	// Verify we can connect before spawning the goroutine.
+	conn, err := openConn()
+	if err != nil {
 		return err
 	}
 
 	go func() {
+		// conn is fully local to this goroutine; always close before returning.
 		defer func() { _ = conn.Close(ctx) }()
+
 		for {
 			_, er := conn.WaitForNotification(ctx)
 			if er != nil {
@@ -83,6 +85,11 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 				}
 
 				ctx.Logger().Warn("scheduler: notification error, reconnecting", "error", er)
+
+				// Close the broken connection before attempting to reconnect
+				// so we don't leak the old socket or its LISTEN registration.
+				_ = conn.Close(ctx)
+				conn = nil
 
 				baseDelay := 1 * time.Second
 				maxDelay := 30 * time.Second
@@ -94,10 +101,12 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 						return
 					case <-time.After(delay):
 					}
-					if err = connectAndListen(); err == nil {
+					newConn, connErr := openConn()
+					if connErr == nil {
+						conn = newConn
 						break
 					}
-					ctx.Logger().Error("scheduler: reconnect failed", "error", err, "next_try_in", delay)
+					ctx.Logger().Error("scheduler: reconnect failed", "error", connErr, "next_try_in", delay)
 					delay = time.Duration(float64(delay) * 1.5)
 					if delay > maxDelay {
 						delay = maxDelay
@@ -123,6 +132,7 @@ func (s *SchedulerService) Run(ctx common.ExtendedContext) {
 
 func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 	for {
+		s.rescheduleLongRunningTasks(ctx)
 		s.runDueTasks(ctx)
 
 		nextRunAt := s.getNextRunAt(ctx)
@@ -165,17 +175,18 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) {
 	}
 }
 
-func (s *SchedulerService) disableTask(ctx common.ExtendedContext, task skd_db.ScheduledTask) {
-	task.Status = skd_db.ScheduledTaskStatusStopped
-	_, err := s.skdRepo.SaveScheduledTask(ctx, skd_db.SaveScheduledTaskParams(task))
+func (s *SchedulerService) disableTask(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
+	task.Status = sched_db.ScheduledTaskStatusStopped
+	task.RunAt = pgtype.Timestamptz{Valid: false}
+	_, err := s.skdRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 	if err != nil {
 		ctx.Logger().Error("failed to update scheduled task", "error", err, "taskId", task.ID)
 	}
 }
 
-func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task skd_db.ScheduledTask) {
-	task.Status = skd_db.ScheduledTaskStatusPending
-	_, err := s.skdRepo.SaveScheduledTask(ctx, skd_db.SaveScheduledTaskParams(task))
+func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
+	task.Status = sched_db.ScheduledTaskStatusPending
+	_, err := s.skdRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 	if err != nil {
 		ctx.Logger().Error("failed to reschedule scheduled task", "error", err, "taskId", task.ID)
 	}
@@ -186,7 +197,9 @@ func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task 
 func (s *SchedulerService) getNextRunAt(ctx common.ExtendedContext) pgtype.Timestamptz {
 	next, err := s.skdRepo.GetNextRunAt(ctx)
 	if err != nil {
-		ctx.Logger().Error("failed to get next run", "error", err)
+		if !errors.Is(err, pgx.ErrNoRows) {
+			ctx.Logger().Error("failed to get next run", "error", err)
+		}
 		// No pending tasks or query error — return invalid (zero) value.
 		return pgtype.Timestamptz{}
 	}
@@ -237,4 +250,30 @@ func nextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
 		Time:  next,
 		Valid: true,
 	}, nil
+}
+
+// rescheduleLongRunningTasks finds tasks that have been in 'running' state for
+// longer than SCHEDULER_RETRY_DELAY (indicating a crashed or lost worker) and
+// resets them to 'pending' so they are picked up again on the next loop tick.
+func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext) {
+	tasks, err := s.skdRepo.GetStuckRunningTasks(ctx, time.Hour)
+	if err != nil {
+		ctx.Logger().Error("failed to query stuck running tasks", "error", err)
+		return
+	}
+	for _, task := range tasks {
+		ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
+		if task.CronExpr != "" {
+			next, err := nextCronTime(task.CronExpr)
+			if err != nil {
+				ctx.Logger().Error("invalid cron expression, disabling task", "error", err, "taskId", task.ID)
+				s.disableTask(ctx, task)
+				continue
+			}
+			task.RunAt = next
+		} else {
+			task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(SCHEDULER_RETRY_DELAY), Valid: true}
+		}
+		s.unlockAndReschedule(ctx, task)
+	}
 }

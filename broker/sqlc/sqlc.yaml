@@ -133,14 +133,14 @@ sql:
             go_type:
               type: "PullSlipType"
   - engine: "postgresql"
-    queries: "skd_query.sql"
-    schema: "skd_schema.sql"
+    queries: "sched_query.sql"
+    schema: "sched_schema.sql"
     gen:
       go:
-        package: "skd_db"
+        package: "sched_db"
         out: "../scheduler/db"
-        output_db_file_name: "skd_db_gen.go"
-        output_models_file_name: "skd_models_gen.go"
+        output_db_file_name: "sched_db_gen.go"
+        output_models_file_name: "sched_models_gen.go"
         output_files_suffix: "_gen"
         sql_package: "pgx/v5"
         emit_methods_with_db_argument: true

@@ -18,6 +18,12 @@ WHERE status = 'pending'
 ORDER BY run_at
 LIMIT 1;
 
+-- name: GetStuckRunningTasks :many
+SELECT sqlc.embed(scheduled_task)
+FROM scheduled_task
+WHERE status = 'running'
+  AND updated_at <= now() - $1::interval;
+
 -- name: ClaimNextScheduledTask :one
 UPDATE scheduled_task
 SET status     = 'running',
@@ -25,7 +31,7 @@ SET status     = 'running',
 WHERE id = (SELECT id
             FROM scheduled_task
             WHERE status = 'pending'
-              AND run_at <= now()
+              AND run_at <= now() AND run_at IS NOT NULL
             ORDER BY run_at
     LIMIT 1
     FOR

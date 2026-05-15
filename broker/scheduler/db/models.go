@@ -1,4 +1,4 @@
-package skd_db
+package sched_db
 
 type ScheduledTaskStatus string
 
