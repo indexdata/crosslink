@@ -243,9 +243,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        availabilityConfig:
-          description: Configuration for availability lookup
-          $ref: '#/components/schemas/AvailabilityConfig'
+        holdingsConfig:
+          description: Configuration for holdings lookup (institutional or consortial).
+          $ref: '#/components/schemas/HoldingsConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -256,7 +256,7 @@ components:
             - ILLiad
             - Unknown
 
-    AvailabilityConfig:
+    HoldingsConfig:
       type: object
       properties:
         sru:

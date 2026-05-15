@@ -2273,5 +2273,47 @@
     "type": "branch",
     "lmsLocationCode": "",
     "parent": "7a877fa7-9055-5a34-a224-237e5a9d185f"
+  },
+  {
+    "id": "5dca993d-b32d-4bca-8273-61d1547a4645",
+    "name": "GVI test library 1",
+    "description": "gvi_1",
+    "type": "institution",
+    "symbols": [
+      {
+        "id": "aaa09db9-a001-43cd-a871-1e03afb77b48",
+        "symbol": "GVI1",
+        "authority": "ISIL"
+      }
+    ],
+    "holdingsConfig": {
+      "zoom": {
+        "address": "http://localhost:8083/holdings/zoom",
+        "options": {
+          "sru": "get",
+          "sru_version": "1.2"
+        }
+      },
+      "queryConfig": {
+        "type": "cql",
+        "identifier": "rec.id = {term}",
+        "title": "",
+        "isbn": "",
+        "issn": ""
+      },
+      "parserConfig": {
+        "marc21plus1": {}
+      }
+    },
+    "endpoints": [
+      {
+        "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
+        "entry": "5dca993d-b32d-4bca-8273-61d1547a4645",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      }
+    ],
+    "networks": []
   }
 ]

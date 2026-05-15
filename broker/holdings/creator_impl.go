@@ -46,9 +46,9 @@ func getParser(config *directory.ParserConfig) (HoldingsParser, error) {
 
 func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.AvailabilityConfig
+	config := entry.HoldingsConfig
 	if config == nil {
-		return nil, nil // No availability adapter for this peer
+		return nil, nil // No holdings adapter for this peer
 	}
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)

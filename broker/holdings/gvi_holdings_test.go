@@ -397,7 +397,7 @@ func TestGviHoldings(t *testing.T) {
 	qtype := directory.Cql
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: server.URL,
 					Options: &map[string]string{
