@@ -123,7 +123,7 @@ func TestWaitUntil_ContextCancelled(t *testing.T) {
 	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
 	cancel()
 
-	result := waitUntil(extCtx, invalidTstz(), make(chan struct{}), 10*time.Second)
+	result := waitUntil(extCtx, invalidTstz(), make(chan struct{}), 10*time.Second, false)
 	assert.False(t, result, "should return false when context is cancelled")
 }
 
@@ -132,14 +132,14 @@ func TestWaitUntil_NotifyWakes(t *testing.T) {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{} // pre-signal
 
-	result := waitUntil(extCtx, invalidTstz(), ch, 10*time.Second)
+	result := waitUntil(extCtx, invalidTstz(), ch, 10*time.Second, false)
 	assert.True(t, result)
 }
 
 func TestWaitUntil_FallbackElapsed(t *testing.T) {
 	extCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	start := time.Now()
-	result := waitUntil(extCtx, invalidTstz(), make(chan struct{}), 20*time.Millisecond)
+	result := waitUntil(extCtx, invalidTstz(), make(chan struct{}), 20*time.Millisecond, false)
 	assert.True(t, result)
 	assert.WithinDuration(t, start.Add(20*time.Millisecond), time.Now(), 50*time.Millisecond)
 }
@@ -148,23 +148,38 @@ func TestWaitUntil_NextRunAtSooner(t *testing.T) {
 	extCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	nextRunAt := tstz(time.Now().Add(20 * time.Millisecond))
 	start := time.Now()
-	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 10*time.Second)
+	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 10*time.Second, false)
 	assert.True(t, result)
 	assert.WithinDuration(t, start.Add(20*time.Millisecond), time.Now(), 50*time.Millisecond)
 }
 
-func TestWaitUntil_NextRunAtAlreadyOverdue(t *testing.T) {
+// TestWaitUntil_NextRunAtAlreadyOverdue_MadeProgress verifies that an overdue
+// timestamp returns immediately when the caller made progress (claimed a task).
+func TestWaitUntil_NextRunAtAlreadyOverdue_MadeProgress(t *testing.T) {
 	extCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	nextRunAt := tstz(time.Now().Add(-1 * time.Second))
-	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 10*time.Second)
+	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 10*time.Second, true)
 	assert.True(t, result) // returns immediately
+}
+
+// TestWaitUntil_NextRunAtAlreadyOverdue_NoProgress verifies that an overdue
+// timestamp does NOT return immediately when no progress was made, to prevent
+// a tight spin loop on persistent claim errors.
+func TestWaitUntil_NextRunAtAlreadyOverdue_NoProgress(t *testing.T) {
+	extCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	nextRunAt := tstz(time.Now().Add(-1 * time.Second))
+	start := time.Now()
+	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 20*time.Millisecond, false)
+	assert.True(t, result)
+	// Must have slept the fallback, not returned immediately.
+	assert.WithinDuration(t, start.Add(20*time.Millisecond), time.Now(), 50*time.Millisecond)
 }
 
 func TestWaitUntil_NextRunAtLongerThanFallback(t *testing.T) {
 	extCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	nextRunAt := tstz(time.Now().Add(10 * time.Second))
 	start := time.Now()
-	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 20*time.Millisecond)
+	result := waitUntil(extCtx, nextRunAt, make(chan struct{}), 20*time.Millisecond, false)
 	assert.True(t, result)
 	assert.WithinDuration(t, start.Add(20*time.Millisecond), time.Now(), 50*time.Millisecond)
 }
@@ -197,7 +212,8 @@ func TestRunDueTasks_NoTasks(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
+	assert.False(t, progress)
 	assert.Empty(t, bus.createdTaskNames)
 	assert.Empty(t, repo.savedTasks)
 }
@@ -209,7 +225,8 @@ func TestRunDueTasks_ClaimError_NonNoRows(t *testing.T) {
 	}
 	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
 
-	svc.runDueTasks(testCtx) // should log and return, not panic
+	progress := svc.runDueTasks(testCtx)
+	assert.False(t, progress)
 	assert.Empty(t, repo.savedTasks)
 }
 
@@ -219,8 +236,9 @@ func TestRunDueTasks_OneShot_DisablesAfterFiring(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Equal(t, []events.EventName{"my-event"}, bus.createdTaskNames)
 	assert.Len(t, repo.savedTasks, 1)
 	assert.False(t, repo.savedTasks[0].RunAt.Valid, "one-shot task should be disabled")
@@ -232,8 +250,9 @@ func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Equal(t, []events.EventName{"cron-ev"}, bus.createdTaskNames)
 	assert.Len(t, repo.savedTasks, 1)
 	saved := repo.savedTasks[0]
@@ -248,8 +267,9 @@ func TestRunDueTasks_Recurring_InvalidCronExpr_DisablesTask(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Len(t, repo.savedTasks, 1)
 	assert.False(t, repo.savedTasks[0].RunAt.Valid)
 }
@@ -260,8 +280,9 @@ func TestRunDueTasks_CreateTaskError_ReschedulesWithRetryDelay(t *testing.T) {
 	bus := &mockEventBus{createTaskErr: errors.New("bus down")}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Len(t, repo.savedTasks, 1)
 	saved := repo.savedTasks[0]
 	assert.True(t, saved.RunAt.Valid)
@@ -278,8 +299,9 @@ func TestRunDueTasks_MultipleTasks_ProcessedInOrder(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Equal(t, []events.EventName{"event-a", "event-b"}, bus.createdTaskNames)
 	assert.Len(t, repo.savedTasks, 2)
 }
@@ -294,8 +316,9 @@ func TestRunDueTasks_ValidJsonPayload_Dispatched(t *testing.T) {
 	bus := &mockEventBus{}
 	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
 
-	svc.runDueTasks(testCtx)
+	progress := svc.runDueTasks(testCtx)
 
+	assert.True(t, progress)
 	assert.Equal(t, []events.EventName{"payload-ev"}, bus.createdTaskNames)
 }
 

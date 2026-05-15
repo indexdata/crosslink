@@ -206,12 +206,15 @@ func TestClaimNextScheduledTask_SetsStatusToRunning(t *testing.T) {
 }
 
 func TestClaimNextScheduledTask_FutureTask_NotClaimed(t *testing.T) {
+	i := 0
 	for {
+		i++
 		_, err := skdRepo.ClaimNextScheduledTask(appCtx)
-		if err != nil {
+		if err != nil || i > 100 {
 			break
 		}
 	}
+	assert.True(t, i < 100, "too many claimed tasks")
 
 	params := newTask("", tstz(time.Now().Add(24*time.Hour)))
 	saved, err := skdRepo.SaveScheduledTask(appCtx, params)

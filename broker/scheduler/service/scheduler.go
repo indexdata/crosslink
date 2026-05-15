@@ -45,7 +45,7 @@ func NewSchedulerService(skdRepo sched_db.SchedRepo, eventBus events.EventBus, c
 	}
 }
 
-// Listen opens a dedicated Postgres connection and listens on scheduler_channel.
+// Listen opens a dedicated Postgres connection and listens on sched_db.SchedulerChannel.
 // Each notification wakes the scheduler loop. Reconnects with exponential
 // backoff on connection loss. Blocks until ctx is cancelled.
 func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
@@ -133,24 +133,28 @@ func (s *SchedulerService) Run(ctx common.ExtendedContext) {
 func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 	for {
 		s.rescheduleLongRunningTasks(ctx)
-		s.runDueTasks(ctx)
+		madeProgress := s.runDueTasks(ctx)
 
 		nextRunAt := s.getNextRunAt(ctx)
-		if !waitUntil(ctx, nextRunAt, s.notify, SCHEDULER_RETRY_DELAY) {
+		if !waitUntil(ctx, nextRunAt, s.notify, SCHEDULER_RETRY_DELAY, madeProgress) {
 			return // context cancelled
 		}
 	}
 }
 
-func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) {
+// runDueTasks processes all currently claimable tasks.
+// Returns true if at least one task was successfully claimed and dispatched.
+func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
+	madeProgress := false
 	for {
 		task, err := s.skdRepo.ClaimNextScheduledTask(ctx)
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
 				ctx.Logger().Error("failed to claim next scheduled task", "error", err)
 			}
-			return
+			return madeProgress
 		}
+		madeProgress = true
 
 		_, err = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.Payload, events.EventDomainScheduler, nil, events.SignalConsumers)
 
@@ -207,20 +211,27 @@ func (s *SchedulerService) getNextRunAt(ctx common.ExtendedContext) pgtype.Times
 }
 
 // waitUntil blocks until one of three conditions is met:
-//  1. nextRunAt is reached (next scheduled task is due)
+//  1. nextRunAt is reached (next scheduled task is due). An overdue nextRunAt
+//     only causes an immediate return when madeProgress is true — i.e. the
+//     previous runDueTasks call actually claimed a task. This prevents a tight
+//     spin loop when ClaimNextScheduledTask keeps returning a persistent error
+//     while GetNextRunAt still reports an overdue timestamp.
 //  2. a signal arrives on notifyChanged (schedule table was modified)
 //  3. the fallback duration elapses (safety poll)
 //
 // Returns false if the context was cancelled (caller should stop the loop).
-func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyChanged <-chan struct{}, fallback time.Duration) bool {
+func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyChanged <-chan struct{}, fallback time.Duration, madeProgress bool) bool {
 	sleepDuration := fallback
 	if nextRunAt.Valid {
 		until := time.Until(nextRunAt.Time)
-		if until > 0 && until < fallback {
-			sleepDuration = until
-		} else if until <= 0 {
+		if until <= 0 && madeProgress {
+			// Overdue and we just successfully processed tasks — more may be ready.
 			return true
+		} else if until > 0 && until < fallback {
+			sleepDuration = until
 		}
+		// If overdue but no progress was made (persistent claim errors), fall
+		// through to sleep the full fallback to avoid a CPU-spinning tight loop.
 	}
 
 	timer := time.NewTimer(sleepDuration)
@@ -253,7 +264,7 @@ func nextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
 }
 
 // rescheduleLongRunningTasks finds tasks that have been in 'running' state for
-// longer than SCHEDULER_RETRY_DELAY (indicating a crashed or lost worker) and
+// longer than hour (indicating a crashed or lost worker) and
 // resets them to 'pending' so they are picked up again on the next loop tick.
 func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext) {
 	tasks, err := s.skdRepo.GetStuckRunningTasks(ctx, time.Hour)

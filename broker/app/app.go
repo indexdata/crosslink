@@ -402,7 +402,7 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 }
 
 // StartScheduler creates the scheduler service, begins listening on
-// scheduler_channel, and launches the scheduling loop in a background goroutine.
+// sched_db.SchedulerChannel, and launches the scheduling loop in a background goroutine.
 func StartScheduler(ctx context.Context, skdRepo sched_db.SchedRepo, eventBus events.EventBus) error {
 	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
 	svc := sched_service.NewSchedulerService(skdRepo, eventBus, ConnectionString)
