@@ -67,22 +67,22 @@ func TestMain(m *testing.M) {
 	sruServer := httptest.NewServer(sruHandler)
 	defer sruServer.Close()
 
-	bytes, err := os.ReadFile("gvi_directory.json")
+	directoryBytes, err := os.ReadFile("gvi_directory.json")
 	test.Expect(err, "failed to read directory file")
 
 	var directoryEntries []directory.Entry
-	err = json.Unmarshal(bytes, &directoryEntries)
+	err = json.Unmarshal(directoryBytes, &directoryEntries)
 	test.Expect(err, "failed to unmarshal directories")
 	entry := &directoryEntries[0]
 	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 	entry.HoldingsConfig.Zoom.Address = sruServer.URL
 
-	bytes, err = json.Marshal(directoryEntries)
+	directoryBytes, err = json.Marshal(directoryEntries)
 	test.Expect(err, "failed to marshal directory entries")
 
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
-	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(bytes)), "failed to set mock directory entries")
+	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
