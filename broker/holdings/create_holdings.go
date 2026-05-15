@@ -39,7 +39,7 @@ func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
 	}
-	if holdingsAdapterVal == "consortia" {
+	if holdingsAdapterVal == "consortium" {
 		// consortia must be determined per-peer, so we can't create a single adapter for all peers
 		return nil, nil
 	}

@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
-	app.HOLDINGS_ADAPTER = "consortia"
+	app.HOLDINGS_ADAPTER = "consortium"
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
