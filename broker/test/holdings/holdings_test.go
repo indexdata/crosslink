@@ -62,8 +62,9 @@ func TestMain(m *testing.M) {
 		}
 		w.Header().Set("Content-Type", "text/xml")
 		w.WriteHeader(http.StatusOK)
-		output := []byte(gviSruResponse)
-		w.Write(output)
+		if _, err := w.Write(gviSruResponse); err != nil {
+			panic(err)
+		}
 	})
 	sruServer := httptest.NewServer(sruHandler)
 	defer sruServer.Close()
@@ -116,8 +117,10 @@ func getPgText(value string) pgtype.Text {
 func TestRequestRequesterNotFound(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "eacf8b17-e89a-4d70-8576-e49077f8c4e1"
-	data, _ := os.ReadFile("request-1.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	data, err := os.ReadFile("request-1.xml")
+	assert.NoError(t, err, "failed to read request file")
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -132,8 +135,10 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	shouldFailSruRequest.Store(true)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "479931e1-3e94-467c-a04e-272ac8fcc154"
-	data, _ := os.ReadFile("request-2.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	data, err := os.ReadFile("request-2.xml")
+	assert.NoError(t, err, "failed to read request file")
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
@@ -160,8 +165,10 @@ func TestRequestRequestSruServerOK(t *testing.T) {
 	shouldFailSruRequest.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
-	data, _ := os.ReadFile("request-3.xml")
-	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	data, err := os.ReadFile("request-3.xml")
+	assert.NoError(t, err, "failed to read request file")
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
