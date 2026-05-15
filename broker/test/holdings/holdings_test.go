@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
 
-var shouldFailSruRequest bool
+var shouldFailSruRequest atomic.Bool
 
 func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
@@ -55,7 +56,7 @@ func TestMain(m *testing.M) {
 	test.Expect(err, "failed to read gvi response file")
 
 	sruHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if shouldFailSruRequest {
+		if shouldFailSruRequest.Load() {
 			http.Error(w, "simulated SRU failure", http.StatusInternalServerError)
 			return
 		}
@@ -128,7 +129,7 @@ func TestRequestRequesterNotFound(t *testing.T) {
 }
 
 func TestRequestRequestSruServerFail(t *testing.T) {
-	shouldFailSruRequest = true
+	shouldFailSruRequest.Store(true)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "479931e1-3e94-467c-a04e-272ac8fcc154"
 	data, _ := os.ReadFile("request-2.xml")
@@ -156,7 +157,7 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 }
 
 func TestRequestRequestSruServerOK(t *testing.T) {
-	shouldFailSruRequest = false
+	shouldFailSruRequest.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
 	data, _ := os.ReadFile("request-3.xml")
