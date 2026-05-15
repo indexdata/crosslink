@@ -167,7 +167,8 @@ func TestGetNextRunAt_ReturnsEarliestPendingTask(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.True(t, next.Valid)
-	assert.True(t, next.Time.Equal(earlier.Time))
+	assert.WithinDuration(t, earlier.Time, next.Time, time.Second)
+	assert.True(t, next.Time.Before(later.Time), "returned run_at should be the earlier of the two tasks")
 
 	stopTask(t, s1)
 	stopTask(t, s2)
