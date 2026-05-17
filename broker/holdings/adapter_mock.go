@@ -12,7 +12,7 @@ type MockAvailabilityAdapter struct {
 	Holdings []Holding
 }
 
-func NewMockAvailabilityAdapter(config directory.AvailabilityConfig) (LookupAdapter, error) {
+func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response

@@ -46,9 +46,9 @@ func getParser(config *directory.ParserConfig) (HoldingsParser, error) {
 
 func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.AvailabilityConfig
+	config := entry.HoldingsConfig
 	if config == nil {
-		return nil, nil // No availability adapter for this peer
+		return nil, nil // No holdings adapter for this peer
 	}
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)
@@ -68,14 +68,14 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 		switch c.mode {
 		case AvailabilityAdapterMetaproxy:
 			if c.metaproxyUrl == "" {
-				return nil, fmt.Errorf("when using %s availability adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
+				return nil, fmt.Errorf("when using %s holdings adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
 			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser)
 		case AvailabilityAdapterZoom:
 			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser)
 		default:
-			return nil, fmt.Errorf("unsupported availability adapter type: %s", c.mode)
+			return nil, fmt.Errorf("unsupported holdings adapter type: %s", c.mode)
 		}
 	}
-	return nil, fmt.Errorf("must specify either sru or zoom properties for availability adapter type")
+	return nil, fmt.Errorf("must specify either sru or zoom properties for holdings adapter type")
 }

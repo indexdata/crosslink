@@ -59,7 +59,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -76,7 +76,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -85,14 +85,14 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported availability adapter type: other")
+	assert.Contains(t, err.Error(), "unsupported holdings adapter type: other")
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
 	creator := NewAvailabilityCreator("zoom", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{},
+			HoldingsConfig: &directory.HoldingsConfig{},
 		},
 	}
 	_, err := creator.GetAdapter(peer)
@@ -103,7 +103,7 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -119,7 +119,7 @@ func TestGetAdapterMock(t *testing.T) {
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -141,7 +141,7 @@ func TestGetAdapterZoom(t *testing.T) {
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -157,7 +157,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -173,7 +173,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Sru: &directory.SruConfig{
 					Address: "a",
 				},

@@ -1,16 +1,4 @@
-package holdings
-
-import (
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
-	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/directory"
-	"github.com/stretchr/testify/assert"
-)
-
-const GviResponse = `<?xml version="1.0" ?>
+<?xml version="1.0" ?>
   <zs:searchRetrieveResponse xmlns:zs="http://www.loc.gov/zing/srw/">
     <zs:version>1.1</zs:version>
     <zs:numberOfRecords>1</zs:numberOfRecords>
@@ -379,58 +367,4 @@ rec_id:   (DE-627)1795329181
 year:     None
 edition:  None
   -->
-</zs:searchRetrieveResponse>`
-
-func TestGviHoldings(t *testing.T) {
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/xml")
-		w.WriteHeader(http.StatusOK)
-		output := []byte(GviResponse)
-		_, err := w.Write(output)
-		assert.NoError(t, err)
-	})
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-
-	qtype := directory.Cql
-	peer := ill_db.Peer{
-		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
-				Zoom: &directory.ZoomConfig{
-					Address: server.URL,
-					Options: &map[string]string{
-						"sru":         "get",
-						"sru_version": "1.1",
-					},
-				},
-				QueryConfig: &directory.QueryConfig{
-					Type:       &qtype,
-					Identifier: NewString("rec.id = {term}"),
-				},
-				ParserConfig: &directory.ParserConfig{
-					Marc21plus1: &map[string]interface{}{},
-				},
-			},
-		},
-	}
-
-	aa, err := creator.GetAdapter(peer)
-	if cgoEnabled() {
-		assert.NoError(t, err)
-		assert.NotNil(t, aa)
-
-		params := LookupParams{
-			ServiceType: "Loan",
-			Identifier:  "(DE-627)1795329181",
-		}
-		holdingsList, _, err := aa.Lookup(params)
-		assert.NoError(t, err)
-		assert.NotNil(t, holdingsList)
-		assert.Len(t, holdingsList, 1)
-	} else {
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cgo is not enabled")
-	}
-}
+</zs:searchRetrieveResponse>
