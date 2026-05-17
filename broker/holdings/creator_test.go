@@ -85,7 +85,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	}
 	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported availability adapter type: other")
+	assert.Contains(t, err.Error(), "unsupported holdings adapter type: other")
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
