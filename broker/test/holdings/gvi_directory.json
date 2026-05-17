@@ -39,7 +39,24 @@
         "address": "http://localhost:8083/iso18626"
       }
     ],
-    "networks": []
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
   },
   {
     "id": "d3e02ac8-af87-44f9-b892-8bf4564c6607",
@@ -62,6 +79,23 @@
         "address": "http://localhost:8083/iso18626"
       }
     ],
-    "networks": []
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
   }
 ]

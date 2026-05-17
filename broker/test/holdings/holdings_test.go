@@ -35,6 +35,7 @@ var eventRepo events.EventRepo
 
 var shouldFailSruRequest atomic.Bool
 
+// like e2e test but using consortium lookup with zoom and a mock SRU server instead of the real GVI one, so we can simulate different responses/scenarios
 func TestMain(m *testing.M) {
 	ill_db.PeerRefreshInterval = 0 //force refresh for every test
 	ctx := context.Background()
@@ -72,18 +73,24 @@ func TestMain(m *testing.M) {
 	directoryBytes, err := os.ReadFile("gvi_directory.json")
 	test.Expect(err, "failed to read directory file")
 
+	mockPort := utils.Must(test.GetFreePort())
+	app.HTTP_PORT = utils.Must(test.GetFreePort())
+
 	var directoryEntries []directory.Entry
 	err = json.Unmarshal(directoryBytes, &directoryEntries)
 	test.Expect(err, "failed to unmarshal directories")
 	entry := &directoryEntries[0]
 	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
-	entry.HoldingsConfig.Zoom.Address = sruServer.URL
 
+	// patch the requester peer
+	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+	entry = &directoryEntries[1]
+	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+
+	// patch the supplier peer
 	directoryBytes, err = json.Marshal(directoryEntries)
 	test.Expect(err, "failed to marshal directory entries")
 
-	mockPort := utils.Must(test.GetFreePort())
-	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
@@ -157,11 +164,14 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"LOANED\"'\n" +
-		"TASK, message-requester = ERROR, error=failed to send ISO18626 message\n"
+		"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
+		"NOTICE, supplier-msg-received = PROBLEM\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
-func TestRequestRequestSruServerOK(t *testing.T) {
+// should locate the supplier via SRU, but since the ILL mock does not know the scenario in
+// BibliographicInfo.SupplierUniqueRecordId it will return unfilled
+func TestRequestRequestSruServerUnfilled(t *testing.T) {
 	shouldFailSruRequest.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
@@ -185,8 +195,20 @@ func TestRequestRequestSruServerOK(t *testing.T) {
 	})
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = PROBLEM, problem=no-suppliers\n" +
-		"TASK, message-requester = ERROR, error=failed to send ISO18626 message\n"
+	exp :=
+		"NOTICE, request-received = SUCCESS\n" +
+			"TASK, locate-suppliers = SUCCESS\n" +
+			"TASK, select-supplier = SUCCESS\n" +
+			"TASK, check-availability = SUCCESS\n" +
+			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
+			"TASK, message-supplier = SUCCESS\n" +
+			"NOTICE, supplier-msg-received = PROBLEM\n" +
+			"NOTICE, supplier-msg-received = SUCCESS\n" +
+			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
+			"NOTICE, supplier-msg-received = PROBLEM\n" +
+			"TASK, confirm-supplier-msg = SUCCESS\n" +
+			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
+			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
+			"NOTICE, supplier-msg-received = PROBLEM\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
