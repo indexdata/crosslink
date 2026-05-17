@@ -19,9 +19,9 @@
             <requestingAgencyRequestId>d2ce73de-2545-4ef3-be16-bff17932579a</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>(DE-602)almafu_BV010733623</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
-            <author>JRR Tolkien</author>
+            <author>LOANED</author>
             <bibliographicItemId>
                 <bibliographicItemIdentifier>1983</bibliographicItemIdentifier>
                 <bibliographicItemIdentifierCode>ISBN</bibliographicItemIdentifierCode>

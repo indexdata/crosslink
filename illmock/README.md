@@ -191,6 +191,8 @@ returned with `Unknown Item`. All services include at least one of these element
 | `HTTP_HEADERS`               | `;` separated extra HTTP client headers, e.g. `X-Okapi-Tenant:T1`    | none                                         |
 | `MOCK_DIRECTORY_ENTRIES`     | JSON format list of directory entries                                | [directories.json](dirmock/directories.json) |
 | `MOCK_DIRECTORY_ENTRIES_PATH`| Path (filename) with JSON entries, can be gzipped (.gz/.gzip/.zip)   |                                              |
+| `SCENARIO_FIELD`             | where the scenario should be read from ILL request. Must be one of:  | `SupplierUniqueRecordId`                     |
+|                              | SupplierUniqueRecordId`, `Title`, `Author`                           |                                              |
 
 # Deploying on Kubernetes
 

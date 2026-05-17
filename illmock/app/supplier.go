@@ -26,7 +26,8 @@ type supplierInfo struct {
 }
 
 type Supplier struct {
-	requests sync.Map
+	scenarioField string
+	requests      sync.Map
 }
 
 func (s *Supplier) getKey(header *iso18626.Header) string {
@@ -49,8 +50,21 @@ func (s *Supplier) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
-func getScenarioForRequest(illRequest *iso18626.Request) string {
-	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+func getScenarioForRequest(illRequest *iso18626.Request, scenarioField string) string {
+	var scenario string
+	switch scenarioField {
+	case "SupplierUniqueRecordId":
+		scenario = illRequest.BibliographicInfo.SupplierUniqueRecordId
+	case "Title":
+		scenario = illRequest.BibliographicInfo.Title
+	case "Author":
+		scenario = illRequest.BibliographicInfo.Author
+	default:
+		scenario = illRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	if scenario == "" {
+		return "UNFILLED" // to distinguish from retry which may return ""
+	}
 	if !strings.HasPrefix(scenario, "RETRY") {
 		return scenario
 	}
@@ -85,7 +99,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	var status []iso18626.TypeStatus
 	// should be able to parse the value and put any types into status...
 
-	scenario := getScenarioForRequest(illRequest)
+	scenario := getScenarioForRequest(illRequest, supplier.scenarioField)
 	var reasonRetry *iso18626.ReasonRetry
 
 	switch scenario {

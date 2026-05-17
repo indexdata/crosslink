@@ -278,6 +278,9 @@ func (app *MockApp) parseEnv() error {
 	if app.peerUrl == "" {
 		app.peerUrl = utils.GetEnv("PEER_URL", "http://localhost:8081/iso18626")
 	}
+	if app.supplier.scenarioField == "" {
+		app.supplier.scenarioField = utils.GetEnv("SCENARIO_FIELD", "SupplierUniqueRecordId")
+	}
 	if app.messageDelay == 0 {
 		d, err := getMessageDelay(utils.GetEnv("MESSAGE_DELAY", "100ms"))
 		if err != nil {

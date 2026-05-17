@@ -93,6 +93,7 @@ func TestMain(m *testing.M) {
 
 	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
+	test.Expect(os.Setenv("SCENARIO_FIELD", "Author"), "failed to set scenario field")
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
@@ -163,7 +164,7 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"LOANED\"'\n" +
+		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"(DE-602)almafu_BV010733623\"'\n" +
 		"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
 		"NOTICE, supplier-msg-received = PROBLEM\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
@@ -206,9 +207,6 @@ func TestRequestRequestSruServerUnfilled(t *testing.T) {
 			"NOTICE, supplier-msg-received = SUCCESS\n" +
 			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
 			"NOTICE, supplier-msg-received = PROBLEM\n" +
-			"TASK, confirm-supplier-msg = SUCCESS\n" +
-			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n"
+			"TASK, confirm-supplier-msg = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
