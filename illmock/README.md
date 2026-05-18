@@ -54,9 +54,9 @@ The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fi
 invoke a particular scenario when acting as the supplier.
 
 If `<serviceInfo>/<note>` is present and has a value of the form `MOCK:symbol:scenario`, the scenario is chosen
-if `<header>/<supplyingAcencyId>/<agencyIdValue>` matches that of the symbol.
+if `<header>/<supplyingAgencyId>/<agencyIdValue>` matches that of the symbol.
 
-If the notes do not make a match, the value is scenario is value of `<bibliographicInfo>/<supplierUniqueRecordId>`.
+If no note match is found, the scenario value is taken from `<bibliographicInfo>/<supplierUniqueRecordId>`.
 
 The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
 
