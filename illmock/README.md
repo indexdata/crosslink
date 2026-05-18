@@ -50,7 +50,7 @@ The mock comes with a simple submit form at the `/form` path that can be used as
 
 ## Supplier behavior
 
-The directory entries is matched against the supplier symbol specified in the incoming request.
+The directory entries are matched against the supplier symbol specified in the incoming request.
 If the matching entry has a description with the string `"MOCK:"`, the scenario is taken as the string that follows.
 
 If no directory entry is matched, the `<bibliographicInfo>/<supplierUniqueRecordId>` value of
