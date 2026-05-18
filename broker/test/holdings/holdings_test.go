@@ -174,7 +174,7 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
-// should locate the supplier via SR with scenario UNFILLED in note
+// should locate the supplier via SRU with scenario UNFILLED in note
 func TestRequestRequestSruServerUnfilled(t *testing.T) {
 	shouldFailSruRequest.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
