@@ -790,7 +790,7 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
 		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
-			illTrans.LastRequesterAction.String == "Request"
+			illTrans.LastRequesterAction.String == "ShippedReturn"
 	})
 	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
