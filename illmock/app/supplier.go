@@ -58,7 +58,11 @@ func getScenarioForNote(illRequest *iso18626.Request) string {
 	if idx < 0 {
 		return ""
 	}
-	value := strings.TrimRight(note[idx+5:], " \f\t\r\n,;#")
+	value := note[idx+5:]
+	idx = strings.IndexAny(value, "#,; \t\n\r")
+	if idx >= 0 {
+		value = value[:idx]
+	}
 	idx = strings.Index(value, ":")
 	if idx < 0 {
 		return ""
