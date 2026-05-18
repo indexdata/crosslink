@@ -53,11 +53,11 @@ The mock comes with a simple submit form at the `/form` path that can be used as
 The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fields of incoming request are used to
 invoke a particular scenario when acting as the supplier.
 
-If `<serviceInfo>/<note>` is present, `illmock` looks for a `MOCK:symbol:scenario` tokens in the note text.
+If `<serviceInfo>/<note>` is present, `illmock` looks for `MOCK:symbol:scenario` tokens in the note text.
 These tokens can be mixed with other material.
-The scenario is chosen if `<header>/<supplyingAgencyId>/<agencyIdValue>` matches the symbol.
+The scenario is chosen when `<header>/<supplyingAgencyId>/<agencyIdValue>` matches the symbol and the token contains a non-empty scenario value.
 
-If no matching `MOCK:` tokens are found in the note, the scenario value is taken from
+If no such matching token is found, or a matching `MOCK:` token has an empty or otherwise invalid scenario value, the token is ignored and the scenario value is taken from
 `<bibliographicInfo>/<supplierUniqueRecordId>`.
 
 The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
