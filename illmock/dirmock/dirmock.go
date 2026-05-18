@@ -167,6 +167,36 @@ func fixUpPeerUrl(entry *directory.Entry, peerUrl *string) {
 	}
 }
 
+func (d *DirectoryMock) GetEntriesByCql(query *cql.Query, peerUrl *string) ([]directory.Entry, error) {
+	var filtered []directory.Entry
+	parentmap := make(map[string][]directory.Entry)
+	for _, entry := range d.entries {
+		if entry.Parent == nil {
+			continue
+		}
+		id := *entry.Parent
+		fixUpPeerUrl(&entry, peerUrl)
+		parentmap[id] = append(parentmap[id], entry)
+	}
+	for _, entry := range d.entries {
+		match, err := matchQuery(query, entry.Symbols)
+		if err != nil {
+			return nil, err
+		}
+		if !match {
+			continue
+		}
+		fixUpPeerUrl(&entry, peerUrl)
+		filtered = append(filtered, entry)
+		if entry.Id == nil {
+			continue
+		}
+		id := entry.Id.String()
+		filtered = append(filtered, parentmap[id]...)
+	}
+	return filtered, nil
+}
+
 func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEntriesRequestObject) (directory.GetEntriesResponseObject, error) {
 	var query *cql.Query
 	if request.Params.Cql != nil {
@@ -183,31 +213,9 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 			return directory.GetEntries400TextResponse("peerUrl must start with http:// or https://"), nil
 		}
 	}
-	var filtered []directory.Entry
-	parentmap := make(map[string][]directory.Entry)
-	for _, entry := range d.entries {
-		if entry.Parent == nil {
-			continue
-		}
-		id := *entry.Parent
-		fixUpPeerUrl(&entry, peerUrl)
-		parentmap[id] = append(parentmap[id], entry)
-	}
-	for _, entry := range d.entries {
-		match, err := matchQuery(query, entry.Symbols)
-		if err != nil {
-			return directory.GetEntries400TextResponse(err.Error()), nil
-		}
-		if !match {
-			continue
-		}
-		fixUpPeerUrl(&entry, peerUrl)
-		filtered = append(filtered, entry)
-		if entry.Id == nil {
-			continue
-		}
-		id := entry.Id.String()
-		filtered = append(filtered, parentmap[id]...)
+	filtered, err := d.GetEntriesByCql(query, peerUrl)
+	if err != nil {
+		return directory.GetEntries400TextResponse(err.Error()), nil
 	}
 	var response directory.GetEntries200JSONResponse
 	response.Items = filtered

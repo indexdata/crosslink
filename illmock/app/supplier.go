@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/illmock/role"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -26,7 +27,8 @@ type supplierInfo struct {
 }
 
 type Supplier struct {
-	requests sync.Map
+	requests         sync.Map
+	directoryEntries []directory.Entry
 }
 
 func (s *Supplier) getKey(header *iso18626.Header) string {
@@ -49,8 +51,36 @@ func (s *Supplier) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
-func getScenarioForRequest(illRequest *iso18626.Request) string {
-	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+func getScenarioForRequest(illRequest *iso18626.Request, entries []directory.Entry) string {
+	supplyingSymbolType := illRequest.Header.SupplyingAgencyId.AgencyIdType.Text
+	supplyingSymbolValue := illRequest.Header.SupplyingAgencyId.AgencyIdValue
+
+	// if the request has a supplier unique record id, use that as scenario
+	var description *string
+	for _, entry := range entries {
+		if entry.Symbols == nil {
+			continue
+		}
+		for _, symbol := range *entry.Symbols {
+			if symbol.Authority == supplyingSymbolType && symbol.Symbol == supplyingSymbolValue {
+				description = entry.Description
+				break
+			}
+		}
+	}
+	var scenario string
+	if description != nil {
+		idx := strings.Index(*description, "MOCK:")
+		if idx >= 0 {
+			scenario = strings.TrimSpace((*description)[idx+len("MOCK:"):])
+		}
+	}
+	if scenario == "" {
+		scenario = illRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	if scenario == "" {
+		return "UNFILLED"
+	}
 	if !strings.HasPrefix(scenario, "RETRY") {
 		return scenario
 	}
@@ -85,7 +115,7 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 	var status []iso18626.TypeStatus
 	// should be able to parse the value and put any types into status...
 
-	scenario := getScenarioForRequest(illRequest)
+	scenario := getScenarioForRequest(illRequest, app.supplier.directoryEntries)
 	var reasonRetry *iso18626.ReasonRetry
 
 	switch scenario {

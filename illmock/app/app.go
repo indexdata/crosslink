@@ -368,7 +368,10 @@ func (app *MockApp) Run() error {
 		return err
 	}
 	dir.HandlerFromMux(mux)
-
+	app.supplier.directoryEntries, err = dir.GetEntriesByCql(nil, nil)
+	if err != nil {
+		return err
+	}
 	app.server = &http.Server{Addr: addr, Handler: mux}
 	app.flowsApi.Run()
 	return app.server.ListenAndServe()
