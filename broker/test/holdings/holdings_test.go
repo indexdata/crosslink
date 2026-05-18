@@ -269,7 +269,7 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
-// should locate the three suppliers via SRU with scenario LOANED in note
+// should locate three candidate suppliers via SRU; the second selected supplier fulfills the loan with scenario LOANED in note
 func TestRequestRequestSruServerLoanedMultiple(t *testing.T) {
 	shouldFailSruRequest.Store(false)
 	loadResponse3.Store(true)
