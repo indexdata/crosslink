@@ -54,24 +54,24 @@ func getScenarioForNote(illRequest *iso18626.Request) string {
 		return ""
 	}
 	note := illRequest.ServiceInfo.Note
-	idx := strings.Index(note, "MOCK:")
-	if idx < 0 {
-		return ""
+	for {
+		idx := strings.Index(note, "MOCK:")
+		if idx < 0 {
+			break
+		}
+		value := note[idx+5:]
+		if suf := strings.IndexAny(value, "#,; \t\n\r"); suf >= 0 {
+			value = value[:suf]
+		}
+		note = note[idx+5+len(value):]
+		if idx = strings.Index(value, ":"); idx >= 0 {
+			symbol := value[0:idx]
+			if illRequest.Header.SupplyingAgencyId.AgencyIdValue == symbol {
+				return value[idx+1:]
+			}
+		}
 	}
-	value := note[idx+5:]
-	idx = strings.IndexAny(value, "#,; \t\n\r")
-	if idx >= 0 {
-		value = value[:idx]
-	}
-	idx = strings.Index(value, ":")
-	if idx < 0 {
-		return ""
-	}
-	symbol := value[0:idx]
-	if illRequest.Header.SupplyingAgencyId.AgencyIdValue != symbol {
-		return ""
-	}
-	return value[idx+1:]
+	return ""
 }
 
 func getScenarioForRequest(illRequest *iso18626.Request) string {

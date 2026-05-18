@@ -123,3 +123,29 @@ func TestGetScenarioNoteMatchSpace(t *testing.T) {
 	}
 	assert.Equal(t, "B", getScenarioForRequest(request))
 }
+
+func TestGetScenarioNoteEmptySym(t *testing.T) {
+	request := &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{
+			Note: "xMOCK::B",
+		},
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{AgencyIdValue: ""},
+		},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "A"},
+	}
+	assert.Equal(t, "B", getScenarioForRequest(request))
+}
+
+func TestGetScenarioNoteMatchMultiple(t *testing.T) {
+	request := &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{
+			Note: "MOCK:SYM1:C MOCK:SYM2\nMOCK:SYM2:B",
+		},
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{AgencyIdValue: "SYM2"},
+		},
+		BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "A"},
+	}
+	assert.Equal(t, "B", getScenarioForRequest(request))
+}
