@@ -9,6 +9,8 @@ import (
 
 func TestGetScenarioForRequest(t *testing.T) {
 	request := &iso18626.Request{}
+	assert.Equal(t, "UNFILLED", getScenarioForRequest(request))
+
 	request.BibliographicInfo.SupplierUniqueRecordId = "A"
 	assert.Equal(t, "A", getScenarioForRequest(request))
 
