@@ -1,6 +1,6 @@
 [
  {
-    "id": "40ccf02-223a-4994-9206-88f9ce24c299",
+    "id": "4dcbb4e6-6029-4c5b-8fe8-af75a73760bd",
     "name": "GVI test consortium",
     "description": "gvi_c",
     "type": "institution",
@@ -33,7 +33,7 @@
     "endpoints": [
       {
         "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
-        "entry": "40ccf02-223a-4994-9206-88f9ce24c299",
+        "entry": "4dcbb4e6-6029-4c5b-8fe8-af75a73760bd",
         "name": "VCGR ISO18626 Service",
         "type": "ISO18626",
         "address": "http://localhost:8083/iso18626"

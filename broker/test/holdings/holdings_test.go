@@ -80,15 +80,19 @@ func TestMain(m *testing.M) {
 	err = json.Unmarshal(directoryBytes, &directoryEntries)
 	test.Expect(err, "failed to unmarshal directories")
 
-	entry := &directoryEntries[1]
+	// patch consortium peer with SRU server URL for zoom
+	entry := &directoryEntries[0]
+	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+
+	// patch the broker (requester) peer
+	entry = &directoryEntries[1]
 	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
 
-	// patch the requester peer
-	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+	// patch the supplier peer
 	entry = &directoryEntries[2]
 	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
-	// patch the supplier peer
+	// marshal again to set env var
 	directoryBytes, err = json.Marshal(directoryEntries)
 	test.Expect(err, "failed to marshal directory entries")
 
@@ -98,6 +102,7 @@ func TestMain(m *testing.M) {
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
 	app.HOLDINGS_ADAPTER = "consortium"
+	app.CONSORTIUM_SYMBOL = "ISIL:GVIC"
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
