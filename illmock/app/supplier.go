@@ -64,11 +64,14 @@ func getScenarioForNote(illRequest *iso18626.Request) string {
 			value = value[:suf]
 		}
 		note = note[idx+5+len(value):]
-		if idx = strings.Index(value, ":"); idx >= 0 {
-			symbol := value[0:idx]
-			if illRequest.Header.SupplyingAgencyId.AgencyIdValue == symbol {
-				return value[idx+1:]
-			}
+		idx = strings.Index(value, ":")
+		if idx < 0 {
+			continue
+		}
+		symbol := value[0:idx]
+		scenario := value[idx+1:]
+		if illRequest.Header.SupplyingAgencyId.AgencyIdValue == symbol && scenario != "" {
+			return scenario
 		}
 	}
 	return ""

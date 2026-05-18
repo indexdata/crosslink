@@ -74,6 +74,18 @@ func TestGetScenarioNoteSymMismatch(t *testing.T) {
 	assert.Equal(t, "A", getScenarioForRequest(request))
 }
 
+func TestGetScenarioNoteMatchEmptySkipped(t *testing.T) {
+	request := &iso18626.Request{
+		ServiceInfo: &iso18626.ServiceInfo{
+			Note: "xMOCK:SYM1:  XMOCK:SYM1:LOANED",
+		},
+		Header: iso18626.Header{
+			SupplyingAgencyId: iso18626.TypeAgencyId{AgencyIdValue: "SYM1"},
+		},
+	}
+	assert.Equal(t, "LOANED", getScenarioForRequest(request))
+}
+
 func TestGetScenarioNoteMatchNoSuffix(t *testing.T) {
 	request := &iso18626.Request{
 		ServiceInfo: &iso18626.ServiceInfo{
