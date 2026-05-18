@@ -13,3 +13,14 @@ CREATE TABLE scheduled_task
 
 CREATE INDEX idx_scheduled_task_run_at ON scheduled_task (run_at) WHERE status = 'pending' AND run_at IS NOT NULL;
 
+CREATE TABLE batch_action
+(
+    id                TEXT PRIMARY KEY,
+    action_name       TEXT        NOT NULL,
+    schedule          TEXT        NOT NULL,
+    batch_query       TEXT        NOT NULL,
+    owner             TEXT        NOT NULL,
+    scheduled_task_id TEXT        NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ
+);

@@ -1,0 +1,8 @@
+package: schedoapi
+output: scheduler/oapi/sched_openapi_gen.go
+output-options:
+  include-tags:
+    - scheduler-api
+generate:
+  models: true
+  std-http-server: true

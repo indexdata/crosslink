@@ -177,7 +177,7 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 
 			// Compute and persist the task's next state.
 			if task.CronExpr != "" {
-				next, cronErr := nextCronTime(task.CronExpr)
+				next, cronErr := NextCronTime(task.CronExpr)
 				if cronErr != nil {
 					ctx.Logger().Error("invalid cron expression, disabling task", "error", cronErr, "taskId", task.ID)
 					task.Status = sched_db.ScheduledTaskStatusStopped
@@ -275,7 +275,7 @@ func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyC
 // nextCronTime parses a standard 5-field cron expression and returns the next
 // scheduled execution time after now as a pgtype.Timestamptz.
 // Returns an error if the expression is invalid.
-func nextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
+func NextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
 	schedule, err := parser.Parse(cronExpr)
 	if err != nil {
@@ -300,7 +300,7 @@ func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext
 	for _, task := range tasks {
 		ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
 		if task.CronExpr != "" {
-			next, err := nextCronTime(task.CronExpr)
+			next, err := NextCronTime(task.CronExpr)
 			if err != nil {
 				ctx.Logger().Error("invalid cron expression, disabling task", "error", err, "taskId", task.ID)
 				s.disableTask(ctx, task)

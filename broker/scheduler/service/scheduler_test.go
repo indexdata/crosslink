@@ -33,6 +33,7 @@ func invalidTstz() pgtype.Timestamptz {
 // ---------------------------------------------------------------------------
 
 type mockSchedRepo struct {
+	sched_db.PgSchedRepo
 	claimResults  []sched_db.ScheduledTask
 	claimErrors   []error
 	claimIndex    int
@@ -94,21 +95,21 @@ func (m *mockEventBus) CreateTask(_ string, name events.EventName, _ events.Even
 // ---------------------------------------------------------------------------
 
 func TestNextCronTime_ValidExpr(t *testing.T) {
-	ts, err := nextCronTime("* * * * *") // every minute
+	ts, err := NextCronTime("* * * * *") // every minute
 	assert.NoError(t, err)
 	assert.True(t, ts.Valid)
 	assert.True(t, ts.Time.After(time.Now()))
 }
 
 func TestNextCronTime_InvalidExpr(t *testing.T) {
-	_, err := nextCronTime("not-a-cron")
+	_, err := NextCronTime("not-a-cron")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid cron expression")
 }
 
 func TestNextCronTime_SpecificSchedule(t *testing.T) {
 	// "0 9 * * 1" = every Monday at 09:00 — just verify it's in the future
-	ts, err := nextCronTime("0 9 * * 1")
+	ts, err := NextCronTime("0 9 * * 1")
 	assert.NoError(t, err)
 	assert.True(t, ts.Valid)
 	assert.True(t, ts.Time.After(time.Now()))
