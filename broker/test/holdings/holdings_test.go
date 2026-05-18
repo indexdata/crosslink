@@ -163,7 +163,7 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == "" &&
+		return illTrans.LastSupplierStatus.String == "Unfilled" &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
 	assert.Equal(t, "Unfilled", illTrans.LastSupplierStatus.String)
@@ -194,10 +194,10 @@ func TestRequestRequestSruServerUnfilled(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == "" &&
+		return illTrans.LastSupplierStatus.String == "Unfilled" &&
 			illTrans.LastRequesterAction.String == "Request"
 	})
-	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Unfilled", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
