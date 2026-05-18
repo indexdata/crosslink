@@ -276,6 +276,9 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 func TestRequestRequestSruServerLoanedMultiple(t *testing.T) {
 	shouldFailSruRequest.Store(false)
 	loadResponse3.Store(true)
+	t.Cleanup(func() {
+		loadResponse3.Store(false)
+	})
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "11deaad0-e492-4cc7-9527-6713466cc434"
 	data, err := os.ReadFile("request-5.xml")
