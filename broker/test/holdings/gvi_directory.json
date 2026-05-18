@@ -6,7 +6,7 @@
     "type": "institution",
     "symbols": [
       {
-        "id": "aaa09db9-a001-43cd-a871-1e03afb77b48",
+        "id": "29cd7861-389a-4c46-ad22-c47988e5be15",
         "symbol": "GVIC",
         "authority": "ISIL"
       }
@@ -145,7 +145,7 @@
     "type": "institution",
     "symbols": [
       {
-        "id": "1fd24a28-9383-495f-a7df-3dee279627b0",
+        "id": "5fd15452-45b3-470d-86fc-4079991ef790",
         "symbol": "DE-24",
         "authority": "ISIL"
       }
@@ -154,6 +154,126 @@
       {
         "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
         "entry": "d3e02ac8-af87-44f9-b892-8bf4564c6607",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://crosslink-illmock:80/iso18626"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
+  },
+  {
+    "id": "c04ccfc7-70b2-45fb-a078-51c9cb50a778",
+    "name": "DE library 89",
+    "description": "de_89 - has holdings for rec.id = (DE-605)HT016336368",
+    "type": "institution",
+    "symbols": [
+      {
+        "id": "42322b96-8652-4d6d-a3c9-d93b7db2c7fb",
+        "symbol": "DE-89",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
+        "entry": "c04ccfc7-70b2-45fb-a078-51c9cb50a778",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://crosslink-illmock:80/iso18626"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
+  },
+  {
+    "id": "c5aa64d8-8485-49f1-a40a-dc70c9f9e49d",
+    "name": "DE library 468",
+    "description": "de_468 - has holdings for rec.id = (DE-605)HT016336368",
+    "type": "institution",
+    "symbols": [
+      {
+        "id": "b4f26bc9-d9de-4a07-8f82-7c07d9ef47f2",
+        "symbol": "DE-468",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
+        "entry": "c5aa64d8-8485-49f1-a40a-dc70c9f9e49d",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://crosslink-illmock:80/iso18626"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
+  },
+  {
+    "id": "1269cfb1-369d-4975-8fa9-637cc04388d2",
+    "name": "DE library Kob7",
+    "description": "de_Kob7 - has holdings for rec.id = (DE-605)HT016336368",
+    "type": "institution",
+    "symbols": [
+      {
+        "id": "f615dfc1-ff98-458f-a115-e7b7f37d20e1",
+        "symbol": "DE-Kob7",
+        "authority": "ISIL"
+      }
+    ],
+    "endpoints": [
+      {
+        "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
+        "entry": "1269cfb1-369d-4975-8fa9-637cc04388d2",
         "name": "VCGR ISO18626 Service",
         "type": "ISO18626",
         "address": "http://crosslink-illmock:80/iso18626"
