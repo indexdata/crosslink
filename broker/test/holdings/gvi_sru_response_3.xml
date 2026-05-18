@@ -1,0 +1,153 @@
+<?xml version="1.0" ?>
+  <zs:searchRetrieveResponse xmlns:zs="http://www.loc.gov/zing/srw/">
+    <zs:version>1.1</zs:version>
+    <zs:numberOfRecords>1</zs:numberOfRecords>
+    <zs:records>
+      <zs:record>
+        <zs:recordSchema>marcxml</zs:recordSchema>
+        <zs:recordPacking>xml</zs:recordPacking>
+        <zs:recordData>
+<record>
+  <leader>01489nam#a2200421#c#4500</leader>
+  <controlfield tag="001">990180297100206441</controlfield>
+  <controlfield tag="003">DE-605</controlfield>
+  <controlfield tag="005">20250111171123.0</controlfield>
+  <controlfield tag="007">tu</controlfield>
+  <controlfield tag="008">100428|2010####xxu####|######|||#u#eng#c</controlfield>
+  <datafield ind1="7" ind2=" " tag="016">
+    <subfield code="a">837385275</subfield>
+    <subfield code="2">OCoLC</subfield>
+  </datafield>
+  <datafield ind1="7" ind2=" " tag="016">
+    <subfield code="a">015461742</subfield>
+    <subfield code="2">Uk</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="020">
+    <subfield code="a">9780071628600</subfield>
+    <subfield code="c">(pbk.) £44.99</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="020">
+    <subfield code="a">0071628606</subfield>
+    <subfield code="c">(pbk.) £44.99</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="035">
+    <subfield code="a">(DE-605)HT016336368</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="035">
+    <subfield code="a">(OCoLC)837385275</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="035">
+    <subfield code="a">(DE-599)HBZHT016336368</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="040">
+    <subfield code="a">468</subfield>
+    <subfield code="b">ger</subfield>
+    <subfield code="c">DE-605</subfield>
+    <subfield code="d">Kob 7</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="041">
+    <subfield code="a">eng</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="044">
+    <subfield code="c">XD-US</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="049">
+    <subfield code="a">DE-468</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="049">
+    <subfield code="a">DE-Kob7</subfield>
+  </datafield>
+  <datafield ind1="0" ind2=" " tag="082">
+    <subfield code="a">005.86</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="090">
+    <subfield code="h">h</subfield>
+  </datafield>
+  <datafield ind1="1" ind2=" " tag="100">
+    <subfield code="a">Freeman, Robert G.</subfield>
+    <subfield code="4">aut</subfield>
+    <subfield code="e">Verfasser</subfield>
+  </datafield>
+  <datafield ind1="1" ind2="0" tag="245">
+    <subfield code="a">Oracle RMAN 11g backup and recovery</subfield>
+    <subfield code="b">[maximize the capabilities of Oracle recovery manager ; covers release 2]</subfield>
+    <subfield code="c">Robert G. Freeman ; Matthew Hart</subfield>
+  </datafield>
+  <datafield ind1="3" ind2=" " tag="246">
+    <subfield code="a">Oracle database 11g</subfield>
+  </datafield>
+  <datafield ind1=" " ind2="1" tag="264">
+    <subfield code="a">New York [u.a.]</subfield>
+    <subfield code="b">McGraw-Hill</subfield>
+    <subfield code="c">2010</subfield>
+  </datafield>
+  <datafield ind1=" " ind2=" " tag="300">
+    <subfield code="a">XXVII, 656 S. : Ill., graph. Darst.</subfield>
+  </datafield>
+  <datafield ind1="0" ind2=" " tag="490">
+    <subfield code="a">Oracle Press</subfield>
+  </datafield>
+  <datafield ind1=" " ind2="0" tag="650">
+    <subfield code="a">Oracle (Computer file)</subfield>
+  </datafield>
+  <datafield ind1=" " ind2="0" tag="650">
+    <subfield code="a">Relational databases.</subfield>
+  </datafield>
+  <datafield ind1=" " ind2="0" tag="650">
+    <subfield code="a">Data recovery (Computer science)</subfield>
+  </datafield>
+  <datafield ind1=" " ind2="0" tag="650">
+    <subfield code="a">Electronic data processing--Backup processing alternatives.</subfield>
+  </datafield>
+  <datafield ind1="1" ind2=" " tag="700">
+    <subfield code="a">Hart, Matthew</subfield>
+    <subfield code="4">aut</subfield>
+    <subfield code="e">Verfasser</subfield>
+  </datafield>
+  <datafield ind1="4" ind2="2" tag="856">
+    <subfield code="m">V:DE-601;B:DE-89</subfield>
+    <subfield code="q">application/pdf</subfield>
+    <subfield code="u">https://digitale-objekte.hbz-nrw.de/storage2/2018/07/06/file_194/8065383.pdf</subfield>
+    <subfield code="3">Inhaltsverzeichnis</subfield>
+    <subfield code="9">O:PKN</subfield>
+  </datafield>
+  <datafield ind1="0" ind2=" " tag="924">
+    <subfield code="a">1174682396</subfield>
+    <subfield code="b">DE-89</subfield>
+    <subfield code="9">89</subfield>
+    <subfield code="c">GBV</subfield>
+    <subfield code="d">c</subfield>
+    <subfield code="g">T 10 B 6278</subfield>
+  </datafield>
+  <datafield ind1="0" ind2=" " tag="924">
+    <subfield code="a">990180297100206441</subfield>
+    <subfield code="b">DE-468</subfield>
+    <subfield code="c">NRW</subfield>
+    <subfield code="d">c</subfield>
+  </datafield>
+  <datafield ind1="0" ind2=" " tag="924">
+    <subfield code="a">990180297100206441</subfield>
+    <subfield code="b">DE-Kob7</subfield>
+    <subfield code="c">NRW</subfield>
+    <subfield code="d">c</subfield>
+  </datafield>
+</record>
+
+        </zs:recordData>
+      <zs:recordPosition>1</zs:recordPosition>
+    </zs:record>
+  </zs:records>
+  <zs:echoedSearchRetrieveRequest>
+    <zs:version>1.1</zs:version>
+    <zs:query>rec.id=(DE-605)HT016336368</zs:query>
+    <zs:startRecord>1</zs:startRecord>
+    <zs:maximumRecords>1</zs:maximumRecords>
+    <zs:recordPacking>xml</zs:recordPacking>
+    <zs:recordSchema>marcxml</zs:recordSchema>
+  </zs:echoedSearchRetrieveRequest>
+  <!-- Debug Info
+rec_id:   (DE-605)HT016336368
+year:     None
+edition:  None
+  -->
+</zs:searchRetrieveResponse>

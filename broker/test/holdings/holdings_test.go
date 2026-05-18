@@ -34,6 +34,7 @@ var eventRepo events.EventRepo
 var mockPeerUrl string
 
 var shouldFailSruRequest atomic.Bool
+var useMultiSupplierSruResponse atomic.Bool
 
 // like e2e test but using consortium lookup with zoom and a mock SRU server instead of the real GVI one, so we can simulate different responses/scenarios
 func TestMain(m *testing.M) {
@@ -56,6 +57,9 @@ func TestMain(m *testing.M) {
 	gviSruResponse, err := os.ReadFile("gvi_sru_response.xml")
 	test.Expect(err, "failed to read gvi response file")
 
+	gviSruResponse3, err := os.ReadFile("gvi_sru_response_3.xml")
+	test.Expect(err, "failed to read gvi response file")
+
 	sruHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if shouldFailSruRequest.Load() {
 			http.Error(w, "simulated SRU failure", http.StatusInternalServerError)
@@ -63,8 +67,14 @@ func TestMain(m *testing.M) {
 		}
 		w.Header().Set("Content-Type", "text/xml")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write(gviSruResponse); err != nil {
-			panic(err)
+		if useMultiSupplierSruResponse.Load() {
+			if _, err := w.Write(gviSruResponse3); err != nil {
+				panic(err)
+			}
+		} else {
+			if _, err := w.Write(gviSruResponse); err != nil {
+				panic(err)
+			}
 		}
 	})
 	sruServer := httptest.NewServer(sruHandler)
@@ -233,13 +243,70 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
-		return illTrans.LastSupplierStatus.String == "" &&
-			illTrans.LastRequesterAction.String == "Request"
+		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
+			illTrans.LastRequesterAction.String == "ShippedReturn"
 	})
-	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
-	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
 		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+}
+
+// should locate three candidate suppliers via SRU; the second selected supplier fulfills the loan with scenario LOANED in note
+func TestRequestRequestSruServerLoanedMultiple(t *testing.T) {
+	shouldFailSruRequest.Store(false)
+	useMultiSupplierSruResponse.Store(true)
+	t.Cleanup(func() {
+		useMultiSupplierSruResponse.Store(false)
+	})
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "11deaad0-e492-4cc7-9527-6713466cc434"
+	data, err := os.ReadFile("request-5.xml")
+	assert.NoError(t, err, "failed to read request file")
+	req, err := http.NewRequest("POST", mockPeerUrl, bytes.NewReader(data))
+	assert.NoError(t, err, "failed to create request")
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
+			illTrans.LastRequesterAction.String == "ShippedReturn"
+	})
+	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = SUCCESS\n" +
 		"TASK, check-availability = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
