@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -32,6 +31,7 @@ import (
 var eventBus events.EventBus
 var illRepo ill_db.IllRepo
 var eventRepo events.EventRepo
+var mockPeerUrl string
 
 var shouldFailSruRequest atomic.Bool
 
@@ -76,6 +76,9 @@ func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 
+	mockPeerUrl = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	brokerUrl := "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
+
 	var directoryEntries []directory.Entry
 	err = json.Unmarshal(directoryBytes, &directoryEntries)
 	test.Expect(err, "failed to unmarshal directories")
@@ -84,20 +87,16 @@ func TestMain(m *testing.M) {
 	entry := &directoryEntries[0]
 	entry.HoldingsConfig.Zoom.Address = sruServer.URL
 
-	// patch the broker (requester) peer
-	entry = &directoryEntries[1]
-	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(app.HTTP_PORT) + "/iso18626"
-
-	// patch the supplier peer
-	entry = &directoryEntries[2]
-	(*entry.Endpoints)[0].Address = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
+	for _, entry := range directoryEntries {
+		(*entry.Endpoints)[0].Address = mockPeerUrl
+	}
 
 	// marshal again to set env var
 	directoryBytes, err = json.Marshal(directoryEntries)
 	test.Expect(err, "failed to marshal directory entries")
 
 	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
-	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
+	test.Expect(os.Setenv("PEER_URL", brokerUrl), "failed to set peer URL")
 	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
@@ -106,8 +105,8 @@ func TestMain(m *testing.M) {
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
+
 	app.MigrationsFolder = "file://../../migrations"
-	adapter.MOCK_PEER_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/iso18626"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -132,7 +131,7 @@ func TestRequestRequesterNotFound(t *testing.T) {
 	reqId := "eacf8b17-e89a-4d70-8576-e49077f8c4e1"
 	data, err := os.ReadFile("request-1.xml")
 	assert.NoError(t, err, "failed to read request file")
-	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", mockPeerUrl, bytes.NewReader(data))
 	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
@@ -150,7 +149,38 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	reqId := "479931e1-3e94-467c-a04e-272ac8fcc154"
 	data, err := os.ReadFile("request-2.xml")
 	assert.NoError(t, err, "failed to read request file")
-	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", mockPeerUrl, bytes.NewReader(data))
+	assert.NoError(t, err, "failed to create request")
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == "" &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	assert.Equal(t, "Unfilled", illTrans.LastSupplierStatus.String)
+	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"(DE-627)1795329181\"'\n" +
+		"TASK, message-requester = SUCCESS\n"
+	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
+}
+
+// should locate the supplier via SR with scenario UNFILLED in note
+func TestRequestRequestSruServerUnfilled(t *testing.T) {
+	shouldFailSruRequest.Store(false)
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
+	data, err := os.ReadFile("request-3.xml")
+	assert.NoError(t, err, "failed to read request file")
+	req, err := http.NewRequest("POST", mockPeerUrl, bytes.NewReader(data))
 	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
@@ -169,52 +199,16 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"LOANED\"'\n" +
-		"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-		"NOTICE, supplier-msg-received = PROBLEM\n"
-	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
-}
-
-// should locate the supplier via SR with scenario UNFILLED in note
-func TestRequestRequestSruServerUnfilled(t *testing.T) {
-	shouldFailSruRequest.Store(false)
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
-	data, err := os.ReadFile("request-3.xml")
-	assert.NoError(t, err, "failed to read request file")
-	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
-	assert.NoError(t, err, "failed to create request")
-	req.Header.Add("Content-Type", "application/xml")
-	client := &http.Client{}
-	res, err := client.Do(req)
-	assert.NoError(t, err, "failed to send request to mock")
-	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
-	var illTrans ill_db.IllTransaction
-	test.WaitForPredicateToBeTrue(func() bool {
-		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
-		if err != nil {
-			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
-		}
-		return illTrans.LastSupplierStatus.String == "" &&
-			illTrans.LastRequesterAction.String == "Request"
-	})
-	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
-	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	exp :=
-		"NOTICE, request-received = SUCCESS\n" +
-			"TASK, locate-suppliers = SUCCESS\n" +
-			"TASK, select-supplier = SUCCESS\n" +
-			"TASK, check-availability = SUCCESS\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"TASK, message-supplier = SUCCESS\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n" +
-			"NOTICE, supplier-msg-received = SUCCESS\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n" +
-			"TASK, confirm-supplier-msg = SUCCESS\n" +
-			"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n"
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
+		"TASK, message-requester = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
@@ -225,7 +219,7 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 	reqId := "1ff51921-4e59-4b31-aec9-c2bc3eaae2d4"
 	data, err := os.ReadFile("request-4.xml")
 	assert.NoError(t, err, "failed to read request file")
-	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
+	req, err := http.NewRequest("POST", mockPeerUrl, bytes.NewReader(data))
 	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
@@ -243,17 +237,23 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 	})
 	assert.Equal(t, "", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
-	exp :=
-		"NOTICE, request-received = SUCCESS\n" +
-			"TASK, locate-suppliers = SUCCESS\n" +
-			"TASK, select-supplier = SUCCESS\n" +
-			"TASK, check-availability = SUCCESS\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"TASK, message-supplier = SUCCESS\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n" +
-			"NOTICE, supplier-msg-received = SUCCESS\n" +
-			"TASK, message-requester = PROBLEM, problem=confirmation-error\n" +
-			"NOTICE, supplier-msg-received = PROBLEM\n" +
-			"TASK, confirm-supplier-msg = SUCCESS\n"
+	exp := "NOTICE, request-received = SUCCESS\n" +
+		"TASK, locate-suppliers = SUCCESS\n" +
+		"TASK, select-supplier = SUCCESS\n" +
+		"TASK, check-availability = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, requester-msg-received = SUCCESS\n" +
+		"TASK, message-supplier = SUCCESS\n" +
+		"TASK, confirm-requester-msg = SUCCESS\n" +
+		"NOTICE, supplier-msg-received = SUCCESS\n" +
+		"TASK, message-requester = SUCCESS\n" +
+		"TASK, confirm-supplier-msg = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
