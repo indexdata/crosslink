@@ -34,7 +34,11 @@
             <requestType>New</requestType>
             <requestSubType>PatronRequest</requestSubType>
             <serviceType>Loan</serviceType>
-            <note>MOCK:DE-89:LOANED</note>
+            <note>
+               MOCK:DE-24:UNFILLED
+               MOCK:DE-89:LOANED
+               MOCK:DE-Kob7:UNFILLED
+            </note>
         </serviceInfo>
         <supplierInfo></supplierInfo>
         <requestedDeliveryInfo>

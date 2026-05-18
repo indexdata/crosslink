@@ -34,7 +34,7 @@ var eventRepo events.EventRepo
 var mockPeerUrl string
 
 var shouldFailSruRequest atomic.Bool
-var loadResponse3 atomic.Bool
+var useMultiSupplierSruResponse atomic.Bool
 
 // like e2e test but using consortium lookup with zoom and a mock SRU server instead of the real GVI one, so we can simulate different responses/scenarios
 func TestMain(m *testing.M) {
@@ -67,7 +67,7 @@ func TestMain(m *testing.M) {
 		}
 		w.Header().Set("Content-Type", "text/xml")
 		w.WriteHeader(http.StatusOK)
-		if loadResponse3.Load() {
+		if useMultiSupplierSruResponse.Load() {
 			if _, err := w.Write(gviSruResponse3); err != nil {
 				panic(err)
 			}
@@ -272,9 +272,9 @@ func TestRequestRequestSruServerLoaned(t *testing.T) {
 // should locate three candidate suppliers via SRU; the second selected supplier fulfills the loan with scenario LOANED in note
 func TestRequestRequestSruServerLoanedMultiple(t *testing.T) {
 	shouldFailSruRequest.Store(false)
-	loadResponse3.Store(true)
+	useMultiSupplierSruResponse.Store(true)
 	t.Cleanup(func() {
-		loadResponse3.Store(false)
+		useMultiSupplierSruResponse.Store(false)
 	})
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "11deaad0-e492-4cc7-9527-6713466cc434"
