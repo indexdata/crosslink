@@ -49,8 +49,41 @@ func (s *Supplier) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
+func getScenarioForNote(illRequest *iso18626.Request) string {
+	if illRequest.ServiceInfo == nil {
+		return ""
+	}
+	note := illRequest.ServiceInfo.Note
+	idx := strings.Index(note, "MOCK:")
+	if idx < 0 {
+		return ""
+	}
+	start := idx + 5
+	end := start
+
+	for end < len(note) && !strings.ContainsAny(" \f\t\r\n,;#", string(note[end])) {
+		end++
+	}
+	value := note[start:end]
+	idx = strings.Index(value, ":")
+	if idx < 0 {
+		return ""
+	}
+	symbol := value[0:idx]
+	if illRequest.Header.SupplyingAgencyId.AgencyIdValue != symbol {
+		return ""
+	}
+	return value[idx+1:]
+}
+
 func getScenarioForRequest(illRequest *iso18626.Request) string {
-	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	scenario := getScenarioForNote(illRequest)
+	if scenario == "" {
+		scenario = illRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	if scenario == "" { // empty string has special meaning for retry so do not return that
+		return "UNFILLED"
+	}
 	if !strings.HasPrefix(scenario, "RETRY") {
 		return scenario
 	}

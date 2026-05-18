@@ -50,11 +50,15 @@ The mock comes with a simple submit form at the `/form` path that can be used as
 
 ## Supplier behavior
 
-The `<bibliographicInfo>/<supplierUniqueRecordId>` value of incoming request is used to
+The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fields of incoming request are used to
 invoke a particular scenario when acting as the supplier.
 
-The scenario is used by the supplier to perform a particular workflow. The
-following values are recognized:
+If `<serviceInfo>/<note>` is present and has a value of the form `MOCK:symbol:scenario`, the scenario is chosen
+if `<header>/<supplyingAcencyId>/<agencyIdValue>` matches that of the symbol.
+
+If the notes do not make a match, the value is scenario is value of `<bibliographicInfo>/<supplierUniqueRecordId>`.
+
+The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
 
 | Scenario                    | Workflow                                                                            |
 |-----------------------------|-------------------------------------------------------------------------------------|
