@@ -50,20 +50,22 @@ func (s *Supplier) delete(header *iso18626.Header) {
 }
 
 func getScenarioForNote(illRequest *iso18626.Request) string {
+	const mockPrefix = "MOCK:"
+
 	if illRequest.ServiceInfo == nil {
 		return ""
 	}
 	note := illRequest.ServiceInfo.Note
 	for {
-		idx := strings.Index(note, "MOCK:")
+		idx := strings.Index(note, mockPrefix)
 		if idx < 0 {
 			break
 		}
-		value := note[idx+5:]
+		value := note[idx+len(mockPrefix):]
 		if suf := strings.IndexAny(value, "#,; \t\n\r"); suf >= 0 {
 			value = value[:suf]
 		}
-		note = note[idx+5+len(value):]
+		note = note[idx+len(mockPrefix)+len(value):]
 		idx = strings.Index(value, ":")
 		if idx < 0 {
 			continue
