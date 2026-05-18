@@ -50,7 +50,7 @@ The mock comes with a simple submit form at the `/form` path that can be used as
 
 ## Supplier behavior
 
-The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fields of incoming request are used to
+The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fields of an incoming `Request` are used to
 invoke a particular scenario when acting as the supplier.
 
 If `<serviceInfo>/<note>` is present, `illmock` looks for `MOCK:symbol:scenario` tokens in the note text.
