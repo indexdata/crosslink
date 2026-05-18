@@ -1,13 +1,13 @@
 [
  {
-    "id": "5dca993d-b32d-4bca-8273-61d1547a4645",
-    "name": "GVI test library 1",
-    "description": "gvi_1",
+    "id": "40ccf02-223a-4994-9206-88f9ce24c299",
+    "name": "GVI test consortium",
+    "description": "gvi_c",
     "type": "institution",
     "symbols": [
       {
         "id": "aaa09db9-a001-43cd-a871-1e03afb77b48",
-        "symbol": "GVI1",
+        "symbol": "GVIC",
         "authority": "ISIL"
       }
     ],
@@ -30,6 +30,46 @@
         "marc21plus1": {}
       }
     },
+    "endpoints": [
+      {
+        "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
+        "entry": "40ccf02-223a-4994-9206-88f9ce24c299",
+        "name": "VCGR ISO18626 Service",
+        "type": "ISO18626",
+        "address": "http://localhost:8083/iso18626"
+      }
+    ],
+    "networks": [
+      {
+        "id": "a9491882-b224-5bbe-a950-fe1b956130fc",
+        "name": "DE",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "priority": 1
+      }
+    ],
+    "tiers": [
+      {
+        "id": "6bb0026f-8127-528f-bb39-30d8d90e47bd",
+        "name": "Reciprocal Peer to Peer - Core Loan",
+        "consortium": "d5ab4617-d503-588e-802c-df8d25bb411f",
+        "type": "Loan",
+        "level": "Core",
+        "cost": 0.0
+      }
+    ]
+  },
+  {
+    "id": "5dca993d-b32d-4bca-8273-61d1547a4645",
+    "name": "GVI test library 1",
+    "description": "gvi_1",
+    "type": "institution",
+    "symbols": [
+      {
+        "id": "aaa09db9-a001-43cd-a871-1e03afb77b48",
+        "symbol": "GVI1",
+        "authority": "ISIL"
+      }
+    ],
     "endpoints": [
       {
         "id": "59bb2aab-d7e2-4766-9bec-b3ee8877df88",
