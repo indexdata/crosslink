@@ -156,7 +156,6 @@ func TestRequestRequesterNotFound(t *testing.T) {
 
 func TestRequestRequestSruServerFail(t *testing.T) {
 	shouldFailSruRequest.Store(true)
-	loadResponse3.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "479931e1-3e94-467c-a04e-272ac8fcc154"
 	data, err := os.ReadFile("request-2.xml")
@@ -188,7 +187,6 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 // should locate the supplier via SRU with scenario UNFILLED in note
 func TestRequestRequestSruServerUnfilled(t *testing.T) {
 	shouldFailSruRequest.Store(false)
-	loadResponse3.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "d2ce73de-2545-4ef3-be16-bff17932579a"
 	data, err := os.ReadFile("request-3.xml")
@@ -228,7 +226,6 @@ func TestRequestRequestSruServerUnfilled(t *testing.T) {
 // should locate the supplier via SRU with scenario LOANED in note
 func TestRequestRequestSruServerLoaned(t *testing.T) {
 	shouldFailSruRequest.Store(false)
-	loadResponse3.Store(false)
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqId := "1ff51921-4e59-4b31-aec9-c2bc3eaae2d4"
 	data, err := os.ReadFile("request-4.xml")
