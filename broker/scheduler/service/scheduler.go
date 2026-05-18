@@ -74,7 +74,11 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 
 	go func() {
 		// conn is fully local to this goroutine; always close before returning.
-		defer func() { _ = conn.Close(ctx) }()
+		defer func() {
+			if conn != nil {
+				_ = conn.Close(ctx)
+			}
+		}()
 
 		for {
 			_, er := conn.WaitForNotification(ctx)
