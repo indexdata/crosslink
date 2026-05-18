@@ -49,8 +49,44 @@ func (s *Supplier) delete(header *iso18626.Header) {
 	s.requests.Delete(s.getKey(header))
 }
 
+func getScenarioForNote(illRequest *iso18626.Request) string {
+	const mockPrefix = "MOCK:"
+
+	if illRequest.ServiceInfo == nil {
+		return ""
+	}
+	note := illRequest.ServiceInfo.Note
+	for {
+		idx := strings.Index(note, mockPrefix)
+		if idx < 0 {
+			break
+		}
+		value := note[idx+len(mockPrefix):]
+		if suf := strings.IndexAny(value, "#,; \t\n\r"); suf >= 0 {
+			value = value[:suf]
+		}
+		note = note[idx+len(mockPrefix)+len(value):]
+		idx = strings.Index(value, ":")
+		if idx < 0 {
+			continue
+		}
+		symbol := value[0:idx]
+		scenario := value[idx+1:]
+		if illRequest.Header.SupplyingAgencyId.AgencyIdValue == symbol && scenario != "" {
+			return scenario
+		}
+	}
+	return ""
+}
+
 func getScenarioForRequest(illRequest *iso18626.Request) string {
-	scenario := illRequest.BibliographicInfo.SupplierUniqueRecordId
+	scenario := getScenarioForNote(illRequest)
+	if scenario == "" {
+		scenario = illRequest.BibliographicInfo.SupplierUniqueRecordId
+	}
+	if scenario == "" { // empty string has special meaning for retry so do not return that
+		return "UNFILLED"
+	}
 	if !strings.HasPrefix(scenario, "RETRY") {
 		return scenario
 	}
