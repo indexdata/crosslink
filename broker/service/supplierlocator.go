@@ -88,11 +88,14 @@ func (s *SupplierLocator) getConsortialAdapter(ctx common.ExtendedContext, reque
 	if s.consortiumSymbol == "" {
 		return s.availabilityCreator.GetAdapter(requestPeer)
 	}
-	peer, err := s.illRepo.GetPeerBySymbol(ctx, s.consortiumSymbol)
+	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to lookup consortium peer: %w", err)
 	}
-	return s.availabilityCreator.GetAdapter(peer)
+	if len(peers) == 0 {
+		return nil, fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol)
+	}
+	return s.availabilityCreator.GetAdapter(peers[0])
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

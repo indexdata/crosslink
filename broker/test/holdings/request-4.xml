@@ -12,11 +12,11 @@
             </supplyingAgencyId>
             <requestingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>REQ</agencyIdValue>
+                <agencyIdValue>DE-6</agencyIdValue>
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-11-28T10:25:11.136Z</timestamp>
-            <requestingAgencyRequestId>eacf8b17-e89a-4d70-8576-e49077f8c4e1</requestingAgencyRequestId>
+            <requestingAgencyRequestId>1ff51921-4e59-4b31-aec9-c2bc3eaae2d4</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
             <supplierUniqueRecordId>(DE-627)1795329181</supplierUniqueRecordId>
@@ -34,6 +34,7 @@
             <requestType>New</requestType>
             <requestSubType>PatronRequest</requestSubType>
             <serviceType>Loan</serviceType>
+            <note>MOCK:DE-24:LOANED</note>
         </serviceInfo>
         <supplierInfo></supplierInfo>
         <requestedDeliveryInfo>

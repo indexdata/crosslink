@@ -12,14 +12,14 @@
             </supplyingAgencyId>
             <requestingAgencyId>
                 <agencyIdType>ISIL</agencyIdType>
-                <agencyIdValue>GVI1</agencyIdValue>
+                <agencyIdValue>DE-6</agencyIdValue>
             </requestingAgencyId>
             <multipleItemRequestId></multipleItemRequestId>
             <timestamp>2024-11-28T10:25:11.136Z</timestamp>
             <requestingAgencyRequestId>479931e1-3e94-467c-a04e-272ac8fcc154</requestingAgencyRequestId>
         </header>
         <bibliographicInfo>
-            <supplierUniqueRecordId>LOANED</supplierUniqueRecordId>
+            <supplierUniqueRecordId>(DE-627)1795329181</supplierUniqueRecordId>
             <title>Lord of the Rings</title>
             <author>JRR Tolkien</author>
             <bibliographicItemId>
