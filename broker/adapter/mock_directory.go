@@ -17,6 +17,20 @@ type MockDirectoryLookupAdapter struct {
 }
 
 func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+	if params.Tenant != "" {
+		if params.Tenant == "tenanterror" {
+			return []DirectoryEntry{}, "", errors.New("there is an error")
+		}
+		if params.Tenant == "tenantnotfound" {
+			return []DirectoryEntry{}, "", nil
+		}
+		return []DirectoryEntry{{
+			Symbols:    []string{"ISIL:" + strings.ToUpper(params.Tenant)},
+			URL:        MOCK_PEER_URL,
+			Vendor:     directory.Unknown,
+			BrokerMode: DEFAULT_BROKER_MODE,
+		}}, "tenant lookup", nil
+	}
 	if strings.Contains(params.Symbols[0], "error") {
 		return []DirectoryEntry{}, "", errors.New("there is an error")
 	}

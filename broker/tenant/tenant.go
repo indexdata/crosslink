@@ -24,6 +24,8 @@ const OkapiUserHeader = "X-Okapi-User-Id"
 const XForwardedForHeader = "X-Forwarded-For"
 const XForwardedUserHeader = "X-Forwarded-User"
 
+const MapToSymbolDirectory = "directory"
+
 func IsOkapiRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
 }
@@ -59,7 +61,7 @@ func (s *TenantResolver) HasTenantMapping() bool {
 }
 
 func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
-	if s.tenantToSymbol != "" {
+	if s.tenantToSymbol != MapToSymbolDirectory {
 		return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant)), nil
 	}
 	if s.tempMap == nil {
@@ -68,6 +70,9 @@ func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
 	// TODO: cache values in DB or in-memory with expiration
 	if symbol, ok := s.tempMap[tenant]; ok {
 		return symbol, nil
+	}
+	if s.directoryLookupAdapter == nil {
+		return "", errors.New("directoryLookupAdapter must not be nil for tenant to symbol lookup")
 	}
 	entries, _, err := s.directoryLookupAdapter.Lookup(adapter.DirectoryLookupParams{Tenant: tenant})
 	if err != nil {
