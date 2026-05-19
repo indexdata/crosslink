@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -161,13 +162,17 @@ func TestTenantMapDirectoryNoAdapter(t *testing.T) {
 }
 
 func TestTenantMapDirectoryOK(t *testing.T) {
-	tenantResolver := NewResolver().WithTenantToSymbol(MapToSymbolDirectory).WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{})
+	tenantResolver := NewResolver().
+		WithTenantToSymbol(MapToSymbolDirectory).
+		WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{}).
+		WithMaxAge(10 * time.Millisecond)
+
 	assert.True(t, tenantResolver.HasTenantMapping())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	turl := &url.URL{Path: "/broker/"}
 	header := http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant1")
-	turl := &url.URL{Path: "/broker/"}
 	httpRequest := &http.Request{Header: header, URL: turl}
 
 	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
@@ -183,11 +188,24 @@ func TestTenantMapDirectoryOK(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, isOwner)
 
-	httpRequest = &http.Request{Header: header, URL: turl}
 	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, nil)
 	outputSymbol, err = tenant.GetRequestSymbol()
 	assert.NoError(t, err)
 	assert.Equal(t, "ISIL:TENANT1", outputSymbol)
+
+	_, ok := tenantResolver.tempMap.Load("tenant1")
+	assert.True(t, ok)
+
+	time.Sleep(10 * time.Millisecond)
+	header = http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant2")
+	httpRequest = &http.Request{Header: header, URL: turl}
+	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+
+	_, ok = tenantResolver.tempMap.Load("tenant1")
+	assert.False(t, ok)
+	_, ok = tenantResolver.tempMap.Load("tenant2")
+	assert.True(t, ok)
 }
 
 func TestTenantMapDirectoryError(t *testing.T) {

@@ -27,15 +27,15 @@ const XForwardedForHeader = "X-Forwarded-For"
 const XForwardedUserHeader = "X-Forwarded-User"
 
 const MapToSymbolDirectory = "directory"
-const maxAgeSecondsDefault = 300
+const maxAgeDefault = time.Duration(5 * time.Minute)
 
 func IsOkapiRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
 }
 
-type CacheEntry struct {
+type cacheEntry struct {
 	symbol     string
-	expiration int64
+	expiration time.Time
 }
 
 type TenantResolver struct {
@@ -43,12 +43,12 @@ type TenantResolver struct {
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantToSymbol         string
 	tempMap                sync.Map
-	maxAgeSeconds          int64
+	maxAge                 time.Duration
 }
 
 func NewResolver() *TenantResolver {
 	return &TenantResolver{
-		maxAgeSeconds: maxAgeSecondsDefault,
+		maxAge: maxAgeDefault,
 	}
 }
 
@@ -62,6 +62,11 @@ func (s *TenantResolver) WithIllRepo(illRepo ill_db.IllRepo) *TenantResolver {
 	return s
 }
 
+func (s *TenantResolver) WithMaxAge(maxAge time.Duration) *TenantResolver {
+	s.maxAge = maxAge
+	return s
+}
+
 func (s *TenantResolver) WithLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) *TenantResolver {
 	s.directoryLookupAdapter = directoryLookupAdapter
 	return s
@@ -71,16 +76,27 @@ func (s *TenantResolver) HasTenantMapping() bool {
 	return s.tenantToSymbol != ""
 }
 
+func (s *TenantResolver) clearStale() {
+	now := time.Now()
+	s.tempMap.Range(func(key, value any) bool {
+		entry := value.(*cacheEntry)
+		if now.After(entry.expiration) {
+			s.tempMap.Delete(key)
+		}
+		return true
+	})
+}
+
 func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
 	if s.tenantToSymbol != MapToSymbolDirectory {
 		return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant)), nil
 	}
-	// TODO: cache values in DB or in-memory with expiration
+	// could use DB for caching instead of in-memory map if we want to share cache across
+	// instances or persist it, but in-memory should be sufficient for now and is simpler.
+	s.clearStale()
 	if v, ok := s.tempMap.Load(tenant); ok {
-		entry := v.(*CacheEntry)
-		if time.Now().Unix() < entry.expiration {
-			return entry.symbol, nil
-		}
+		entry := v.(*cacheEntry)
+		return entry.symbol, nil
 	}
 	if s.directoryLookupAdapter == nil {
 		return "", errors.New("directoryLookupAdapter must not be nil for tenant to symbol lookup")
@@ -95,7 +111,7 @@ func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
 	if len(entries[0].Symbols) == 0 {
 		return "", fmt.Errorf("no symbol found in directory entry for tenant %s", tenant)
 	}
-	s.tempMap.Store(tenant, &CacheEntry{symbol: entries[0].Symbols[0], expiration: time.Now().Unix() + s.maxAgeSeconds})
+	s.tempMap.Store(tenant, &cacheEntry{symbol: entries[0].Symbols[0], expiration: time.Now().Add(s.maxAge)})
 	return entries[0].Symbols[0], nil
 }
 

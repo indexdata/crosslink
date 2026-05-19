@@ -31,6 +31,9 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 			BrokerMode: DEFAULT_BROKER_MODE,
 		}}, "tenant lookup", nil
 	}
+	if len(params.Symbols) == 0 {
+		return []DirectoryEntry{}, "", errors.New("no symbols provided")
+	}
 	if strings.Contains(params.Symbols[0], "error") {
 		return []DirectoryEntry{}, "", errors.New("there is an error")
 	}
