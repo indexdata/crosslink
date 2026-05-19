@@ -24,6 +24,19 @@ func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]Dir
 		if params.Tenant == "tenantnotfound" {
 			return []DirectoryEntry{}, "", nil
 		}
+		if params.Tenant == "tenantmultiple" {
+			return []DirectoryEntry{{
+				Symbols:    []string{"ISIL:D1", "ISIL:D2"},
+				URL:        MOCK_PEER_URL,
+				Vendor:     directory.Unknown,
+				BrokerMode: DEFAULT_BROKER_MODE,
+			}, {
+				Symbols:    []string{"ISIL:D3", "ISIL:D4"},
+				URL:        MOCK_PEER_URL,
+				Vendor:     directory.Unknown,
+				BrokerMode: DEFAULT_BROKER_MODE,
+			}}, "tenant lookup", nil
+		}
 		return []DirectoryEntry{{
 			Symbols:    []string{"ISIL:" + strings.ToUpper(params.Tenant)},
 			URL:        MOCK_PEER_URL,
