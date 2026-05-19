@@ -196,7 +196,7 @@ func TestTenantMapDirectoryOK(t *testing.T) {
 	_, ok := tenantResolver.tempMap.Load("tenant1")
 	assert.True(t, ok)
 
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(12 * time.Millisecond)
 	header = http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant2")
 	httpRequest = &http.Request{Header: header, URL: turl}
