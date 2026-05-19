@@ -34,7 +34,6 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
 	var cql string
 	if len(symbols) > 0 {
-		// cql = "symbol any +\"" + strings.Join(symbols, " ") + "\""
 		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
 	}
 	if tenant != "" {
