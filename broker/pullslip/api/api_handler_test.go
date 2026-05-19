@@ -56,7 +56,7 @@ func (m *MockPrRepo) GetNotificationsByPrId(ctx common.ExtendedContext, params p
 var sym = "ISIL:TEST"
 
 func newHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo) PullSlipApiHandler {
-	return NewPsApiHandler(psRepo, prRepo, *tenant.NewResolver())
+	return NewPsApiHandler(psRepo, prRepo, tenant.NewResolver())
 }
 
 func newRequest(method, body string) *http.Request {

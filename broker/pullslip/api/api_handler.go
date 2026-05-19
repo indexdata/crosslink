@@ -27,10 +27,10 @@ type PullSlipApiHandler struct {
 	psRepo         ps_db.PsRepo
 	prRepo         pr_db.PrRepo
 	pdfService     psservice.PdfService
-	tenantResolver tenant.TenantResolver
+	tenantResolver *tenant.TenantResolver
 }
 
-func NewPsApiHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo, tenantResolver tenant.TenantResolver) PullSlipApiHandler {
+func NewPsApiHandler(psRepo ps_db.PsRepo, prRepo pr_db.PrRepo, tenantResolver *tenant.TenantResolver) PullSlipApiHandler {
 	return PullSlipApiHandler{
 		psRepo:         psRepo,
 		prRepo:         prRepo,

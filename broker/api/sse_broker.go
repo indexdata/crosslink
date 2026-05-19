@@ -19,10 +19,10 @@ type SseBroker struct {
 	clients        map[string]map[chan string]bool
 	mu             sync.Mutex
 	ctx            common.ExtendedContext
-	tenantResolver tenant.TenantResolver
+	tenantResolver *tenant.TenantResolver
 }
 
-func NewSseBroker(ctx common.ExtendedContext, tenantResolver tenant.TenantResolver) (broker *SseBroker) {
+func NewSseBroker(ctx common.ExtendedContext, tenantResolver *tenant.TenantResolver) (broker *SseBroker) {
 	broker = &SseBroker{
 		input:          make(chan SseMessage),
 		clients:        make(map[string]map[chan string]bool),

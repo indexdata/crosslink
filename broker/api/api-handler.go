@@ -38,10 +38,10 @@ type ApiHandler struct {
 	limitDefault   int32
 	eventRepo      events.EventRepo
 	illRepo        ill_db.IllRepo
-	tenantResolver tenant.TenantResolver
+	tenantResolver *tenant.TenantResolver
 }
 
-func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantResolver tenant.TenantResolver, limitDefault int32) ApiHandler {
+func NewApiHandler(eventRepo events.EventRepo, illRepo ill_db.IllRepo, tenantResolver *tenant.TenantResolver, limitDefault int32) ApiHandler {
 	return ApiHandler{
 		eventRepo:      eventRepo,
 		illRepo:        illRepo,
