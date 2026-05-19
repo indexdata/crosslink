@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
@@ -33,13 +34,14 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
 	var cql string
 	if len(symbols) > 0 {
-		cql = "symbol any \"" + strings.Join(symbols, " ") + "\""
+		// cql = "symbol any +\"" + strings.Join(symbols, " ") + "\""
+		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
 	}
 	if tenant != "" {
 		if cql != "" {
 			cql += " and "
 		}
-		cql += "tenant=" + tenant
+		cql += "tenant=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(tenant)) + "\""
 	}
 	if cql == "" {
 		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")

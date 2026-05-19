@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -25,20 +27,29 @@ const XForwardedForHeader = "X-Forwarded-For"
 const XForwardedUserHeader = "X-Forwarded-User"
 
 const MapToSymbolDirectory = "directory"
+const maxAgeSecondsDefault = 300
 
 func IsOkapiRequest(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, OKAPI_PATH_PREFIX+"/")
+}
+
+type CacheEntry struct {
+	symbol     string
+	expiration int64
 }
 
 type TenantResolver struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantToSymbol         string
-	tempMap                map[string]string // cache for tenant to symbol mapping, key is tenant, value is symbol
+	tempMap                sync.Map
+	maxAgeSeconds          int64
 }
 
 func NewResolver() *TenantResolver {
-	return &TenantResolver{}
+	return &TenantResolver{
+		maxAgeSeconds: maxAgeSecondsDefault,
+	}
 }
 
 func (s *TenantResolver) WithTenantToSymbol(tenantToSymbol string) *TenantResolver {
@@ -64,12 +75,12 @@ func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
 	if s.tenantToSymbol != MapToSymbolDirectory {
 		return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant)), nil
 	}
-	if s.tempMap == nil {
-		s.tempMap = make(map[string]string)
-	}
 	// TODO: cache values in DB or in-memory with expiration
-	if symbol, ok := s.tempMap[tenant]; ok {
-		return symbol, nil
+	if v, ok := s.tempMap.Load(tenant); ok {
+		entry := v.(*CacheEntry)
+		if time.Now().Unix() < entry.expiration {
+			return entry.symbol, nil
+		}
 	}
 	if s.directoryLookupAdapter == nil {
 		return "", errors.New("directoryLookupAdapter must not be nil for tenant to symbol lookup")
@@ -84,8 +95,8 @@ func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
 	if len(entries[0].Symbols) == 0 {
 		return "", fmt.Errorf("no symbol found in directory entry for tenant %s", tenant)
 	}
-	s.tempMap[tenant] = entries[0].Symbols[0]
-	return s.tempMap[tenant], nil
+	s.tempMap.Store(tenant, &CacheEntry{symbol: entries[0].Symbols[0], expiration: time.Now().Unix() + s.maxAgeSeconds})
+	return entries[0].Symbols[0], nil
 }
 
 func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol string) ([]string, error) {

@@ -182,6 +182,12 @@ func TestTenantMapDirectoryOK(t *testing.T) {
 	isOwner, err := tenant.IsOwnerOf("ISIL:TENANT1")
 	assert.NoError(t, err)
 	assert.True(t, isOwner)
+
+	httpRequest = &http.Request{Header: header, URL: turl}
+	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	outputSymbol, err = tenant.GetRequestSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:TENANT1", outputSymbol)
 }
 
 func TestTenantMapDirectoryError(t *testing.T) {
