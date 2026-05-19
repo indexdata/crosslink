@@ -77,59 +77,28 @@ func NewJson(entries string) (*DirectoryMock, error) {
 	return mock, nil
 }
 
-func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) {
-	if symbols == nil {
+func matchClause(clause *cql.Clause, entry directory.Entry) (bool, error) {
+	if clause == nil {
 		return false, nil
 	}
 	if clause.SearchClause != nil {
 		sc := clause.SearchClause
-		if sc.Index != "symbol" {
+		switch sc.Index {
+		case "symbol":
+			return matchSymbol(sc, entry.Symbols)
+		case "tenant":
+			return matchTenant(sc, entry.Tenant)
+		default:
 			return false, fmt.Errorf("unsupported index %s", sc.Index)
-		}
-		tSymbols := strings.Split(sc.Term, " ")
-		switch sc.Relation {
-		case cql.ANY:
-			for _, t := range tSymbols {
-				for _, s := range *symbols {
-					if fullSymbol(s) == t {
-						return true, nil
-					}
-				}
-			}
-			return false, nil
-		case cql.ALL:
-			for _, t := range tSymbols {
-				found := false
-				for _, s := range *symbols {
-					if fullSymbol(s) == t {
-						found = true
-					}
-				}
-				if !found {
-					return false, nil
-				}
-			}
-			return true, nil
-		case "=":
-			// all match match in order
-			if len(tSymbols) != len(*symbols) {
-				return false, nil
-			}
-			for i, t := range tSymbols {
-				if t != fullSymbol((*symbols)[i]) {
-					return false, nil
-				}
-			}
-			return true, nil
 		}
 	}
 	if clause.BoolClause != nil {
 		bc := clause.BoolClause
-		left, err := matchClause(&bc.Left, symbols)
+		left, err := matchClause(&bc.Left, entry)
 		if err != nil {
 			return false, err
 		}
-		right, err := matchClause(&bc.Right, symbols)
+		right, err := matchClause(&bc.Right, entry)
 		if err != nil {
 			return false, err
 		}
@@ -147,11 +116,67 @@ func matchClause(clause *cql.Clause, symbols *[]directory.Symbol) (bool, error) 
 	return false, nil
 }
 
-func matchQuery(query *cql.Query, symbols *[]directory.Symbol) (bool, error) {
+func matchTenant(sc *cql.SearchClause, tenant *string) (bool, error) {
+	switch sc.Relation {
+	case "=":
+		if tenant == nil {
+			return false, nil
+		}
+		return sc.Term == *tenant, nil
+	default:
+		return false, fmt.Errorf("unsupported relation %s", sc.Relation)
+	}
+}
+
+func matchSymbol(sc *cql.SearchClause, symbols *[]directory.Symbol) (bool, error) {
+	if symbols == nil {
+		return false, nil
+	}
+	tSymbols := strings.Split(sc.Term, " ")
+	switch sc.Relation {
+	case cql.ANY:
+		for _, t := range tSymbols {
+			for _, s := range *symbols {
+				if fullSymbol(s) == t {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	case cql.ALL:
+		for _, t := range tSymbols {
+			found := false
+			for _, s := range *symbols {
+				if fullSymbol(s) == t {
+					found = true
+				}
+			}
+			if !found {
+				return false, nil
+			}
+		}
+		return true, nil
+	case "=":
+		// all match match in order
+		if len(tSymbols) != len(*symbols) {
+			return false, nil
+		}
+		for i, t := range tSymbols {
+			if t != fullSymbol((*symbols)[i]) {
+				return false, nil
+			}
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("unsupported relation %s", sc.Relation)
+	}
+}
+
+func matchQuery(query *cql.Query, entry directory.Entry) (bool, error) {
 	if query == nil {
 		return true, nil
 	}
-	return matchClause(&query.Clause, symbols)
+	return matchClause(&query.Clause, entry)
 }
 
 func fullSymbol(symbol directory.Symbol) string {
@@ -194,7 +219,7 @@ func (d *DirectoryMock) GetEntries(ctx context.Context, request directory.GetEnt
 		parentmap[id] = append(parentmap[id], entry)
 	}
 	for _, entry := range d.entries {
-		match, err := matchQuery(query, entry.Symbols)
+		match, err := matchQuery(query, entry)
 		if err != nil {
 			return directory.GetEntries400TextResponse(err.Error()), nil
 		}

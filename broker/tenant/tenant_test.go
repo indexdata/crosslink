@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/common"
@@ -143,6 +144,136 @@ func TestTenantMapOK(t *testing.T) {
 	assert.True(t, isOwner)
 
 	assert.Equal(t, "unknown", tenant.GetUser())
+}
+
+func TestTenantMapDirectoryNoAdapter(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol(MapToSymbolDirectory)
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	_, err := tenantResolver.Resolve(ctx, httpRequest, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "directoryLookupAdapter must not be nil for tenant to symbol lookup")
+}
+
+func TestTenantMapDirectoryOK(t *testing.T) {
+	tenantResolver := NewResolver().
+		WithTenantToSymbol(MapToSymbolDirectory).
+		WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{}).
+		WithMaxAge(10 * time.Millisecond)
+
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	turl := &url.URL{Path: "/broker/"}
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant1")
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	outputSymbol, err := tenant.GetRequestSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:TENANT1", outputSymbol)
+
+	ownedSymbols, err := tenant.GetOwnedSymbols()
+	assert.Error(t, err)
+	assert.Nil(t, ownedSymbols)
+
+	isOwner, err := tenant.IsOwnerOf("ISIL:TENANT1")
+	assert.NoError(t, err)
+	assert.True(t, isOwner)
+
+	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	outputSymbol, err = tenant.GetRequestSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:TENANT1", outputSymbol)
+
+	_, ok := tenantResolver.tenantSymbolsMap.Load("tenant1")
+	assert.True(t, ok)
+
+	time.Sleep(12 * time.Millisecond)
+	header = http.Header{}
+	header.Set("X-Okapi-Tenant", "tenant2")
+	httpRequest = &http.Request{Header: header, URL: turl}
+	mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+
+	_, ok = tenantResolver.tenantSymbolsMap.Load("tenant1")
+	assert.False(t, ok)
+	_, ok = tenantResolver.tenantSymbolsMap.Load("tenant2")
+	assert.True(t, ok)
+}
+
+func TestTenantMapDirectoryError(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol(MapToSymbolDirectory).WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{})
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenanterror")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	_, err := tenantResolver.Resolve(ctx, httpRequest, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "there is an error")
+}
+
+func TestTenantMapDirectoryMultiple(t *testing.T) {
+	mockIllRepo := new(MockIllRepo)
+	mockIllRepo.On("GetCachedPeersBySymbols", mock.Anything, mock.Anything, mock.Anything).Return([]ill_db.Peer{}, "", nil)
+
+	tenantResolver := NewResolver().
+		WithIllRepo(mockIllRepo).
+		WithTenantToSymbol(MapToSymbolDirectory).
+		WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{}).
+		WithMaxAge(10 * time.Millisecond)
+
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	turl := &url.URL{Path: "/broker/"}
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenantmultiple")
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	tenant := mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	outputSymbol, err := tenant.GetRequestSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, "ISIL:D1", outputSymbol)
+
+	ownedSymbols, err := tenant.GetOwnedSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:D1", "ISIL:D2", "ISIL:D3", "ISIL:D4"}, ownedSymbols)
+
+	requestSymbol := "ISIL:D3"
+	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, &requestSymbol)
+	outputSymbol, err = tenant.GetRequestSymbol()
+	assert.NoError(t, err)
+	assert.Equal(t, requestSymbol, outputSymbol)
+
+	ownedSymbols, err = tenant.GetOwnedSymbols()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"ISIL:D1", "ISIL:D2", "ISIL:D3", "ISIL:D4"}, ownedSymbols)
+}
+
+func TestTenantMapDirectoryNotFound(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol(MapToSymbolDirectory).WithLookupAdapter(&adapter.MockDirectoryLookupAdapter{})
+	assert.True(t, tenantResolver.HasTenantMapping())
+
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	header := http.Header{}
+	header.Set("X-Okapi-Tenant", "tenantnotfound")
+	turl := &url.URL{Path: "/broker/"}
+	httpRequest := &http.Request{Header: header, URL: turl}
+
+	_, err := tenantResolver.Resolve(ctx, httpRequest, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no symbols found in directory")
 }
 
 func TestTenantGetUserFromOkapiHeader(t *testing.T) {

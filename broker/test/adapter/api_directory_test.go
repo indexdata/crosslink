@@ -201,11 +201,12 @@ func TestLookupMissingSymbols(t *testing.T) {
 	ad := createDirectoryAdapter(server.URL)
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
+		Tenant:  "tenant1",
 	}
 	entries, cql, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
-	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+ISIL%3APEER", cql)
+	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
 }
 
 func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {

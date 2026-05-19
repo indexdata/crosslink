@@ -116,7 +116,8 @@ Configuration is provided via environment variables:
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
 | `API_PAGE_SIZE`           | Default value for the `limit` query parameter when paging the API                     | `10`                                      |
 | `TENANT_TO_SYMBOL`        | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,          | (empty value)                             |
-|                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value                 |                                           |
+|                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                |                                           |
+|                           | If pattern is exactly `directory` the symbol will be obtained by directory lookup.    |                                           |
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
 | `LANGUAGE`                | Language parameter used for ts_vector search in DB                                    | `english`                                 |
 
