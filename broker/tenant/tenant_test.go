@@ -145,8 +145,8 @@ func TestTenantMapOK(t *testing.T) {
 	assert.Equal(t, "unknown", tenant.GetUser())
 }
 
-func TestTenantMapLookupNoDirectoryAdapter(t *testing.T) {
-	tenantResolver := NewResolver().WithTenantToSymbol("lookup")
+func TestTenantMapDirectoryNoAdapter(t *testing.T) {
+	tenantResolver := NewResolver().WithTenantToSymbol(MapToSymbolDirectory)
 	assert.True(t, tenantResolver.HasTenantMapping())
 
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
