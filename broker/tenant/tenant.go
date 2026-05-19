@@ -158,7 +158,7 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 		}
 		t := &okapiTenant{
 			tenantResolver: s,
-			mappedSymbols:  symbols,
+			mappedSymbols:  append([]string(nil), symbols...),
 			ctx:            ctx,
 			requestSymbol:  requestSymbol,
 			user:           getOkapiUser(r.Header),
@@ -219,7 +219,8 @@ func (t *okapiTenant) GetOwnedSymbols() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	combined := t.mappedSymbols
+	var combined []string
+	combined = append(combined, t.mappedSymbols...)
 	if branchSymbols != nil {
 		combined = append(combined, branchSymbols...)
 	}
