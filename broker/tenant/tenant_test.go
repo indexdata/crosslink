@@ -200,7 +200,7 @@ func TestTenantMapDirectoryOK(t *testing.T) {
 	header = http.Header{}
 	header.Set("X-Okapi-Tenant", "tenant2")
 	httpRequest = &http.Request{Header: header, URL: turl}
-	tenant = mustResolve(t, tenantResolver, ctx, httpRequest, nil)
+	mustResolve(t, tenantResolver, ctx, httpRequest, nil)
 
 	_, ok = tenantResolver.tempMap.Load("tenant1")
 	assert.False(t, ok)
