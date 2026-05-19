@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"slices"
@@ -31,6 +32,7 @@ type TenantResolver struct {
 	illRepo                ill_db.IllRepo
 	directoryLookupAdapter adapter.DirectoryLookupAdapter
 	tenantToSymbol         string
+	tempMap                map[string]string // cache for tenant to symbol mapping, key is tenant, value is symbol
 }
 
 func NewResolver() *TenantResolver {
@@ -56,8 +58,29 @@ func (s *TenantResolver) HasTenantMapping() bool {
 	return s.tenantToSymbol != ""
 }
 
-func (s *TenantResolver) mapTenantToSymbol(tenant string) string {
-	return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant))
+func (s *TenantResolver) mapTenantToSymbol(tenant string) (string, error) {
+	if s.tenantToSymbol != "" {
+		return strings.ReplaceAll(s.tenantToSymbol, "{tenant}", strings.ToUpper(tenant)), nil
+	}
+	if s.tempMap == nil {
+		s.tempMap = make(map[string]string)
+	}
+	// TODO: cache values in DB or in-memory with expiration
+	if symbol, ok := s.tempMap[tenant]; ok {
+		return symbol, nil
+	}
+	entries, _, err := s.directoryLookupAdapter.Lookup(adapter.DirectoryLookupParams{Tenant: tenant})
+	if err != nil {
+		return "", err
+	}
+	if len(entries) == 0 {
+		return "", fmt.Errorf("no directory entry found for tenant %s", tenant)
+	}
+	if len(entries[0].Symbols) == 0 {
+		return "", fmt.Errorf("no symbol found in directory entry for tenant %s", tenant)
+	}
+	s.tempMap[tenant] = entries[0].Symbols[0]
+	return s.tempMap[tenant], nil
 }
 
 func (s *TenantResolver) getBranchSymbols(ctx common.ExtendedContext, mainSymbol string) ([]string, error) {
@@ -98,9 +121,13 @@ func (s *TenantResolver) Resolve(ctx common.ExtendedContext, r *http.Request, sy
 			return nil, errors.New("header " + OkapiTenantHeader + " must be specified")
 		}
 
+		symbol, err := s.mapTenantToSymbol(tenantHeader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to map tenant to symbol: %w", err)
+		}
 		t := &okapiTenant{
 			tenantResolver: s,
-			mappedSymbol:   s.mapTenantToSymbol(tenantHeader),
+			mappedSymbol:   symbol,
 			ctx:            ctx,
 			requestSymbol:  requestSymbol,
 			user:           getOkapiUser(r.Header),

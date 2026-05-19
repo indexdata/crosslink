@@ -205,7 +205,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 	entries, cql, err := ad.Lookup(p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
-	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+ISIL%3APEER", cql)
+	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+%22ISIL%3APEER%22", cql)
 }
 
 func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
