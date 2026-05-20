@@ -201,8 +201,8 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	skdRepo := sched_db.CreateSkdRepo(pool)
-	if err = StartScheduler(ctx, skdRepo, eventBus); err != nil {
+	schedRepoRepo := sched_db.CreateSchedRepo(pool)
+	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
 		return Context{}, err
 	}
 
@@ -403,9 +403,9 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 
 // StartScheduler creates the scheduler service, begins listening on
 // sched_db.SchedulerChannel, and launches the scheduling loop in a background goroutine.
-func StartScheduler(ctx context.Context, skdRepo sched_db.SchedRepo, eventBus events.EventBus) error {
+func StartScheduler(ctx context.Context, schedRepo sched_db.SchedRepo, eventBus events.EventBus) error {
 	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
-	svc := sched_service.NewSchedulerService(skdRepo, eventBus, ConnectionString)
+	svc := sched_service.NewSchedulerService(schedRepo, eventBus, ConnectionString)
 	if err := svc.Listen(extCtx); err != nil {
 		return fmt.Errorf("starting scheduler listener failed: %w", err)
 	}

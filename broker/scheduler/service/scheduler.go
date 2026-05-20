@@ -1,9 +1,9 @@
 package sched_service
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -24,7 +24,7 @@ var SCHEDULER_RETRY_DELAY, _ = utils.GetEnvAny("SCHEDULER_RETRY_DELAY", time.Dur
 })
 
 type SchedulerService struct {
-	skdRepo    sched_db.SchedRepo
+	schedRepo  sched_db.SchedRepo
 	eventBus   events.EventBus
 	connString string
 	// notifyCh is written by Listen and read by schedulerLoop via waitUntil.
@@ -34,10 +34,10 @@ type SchedulerService struct {
 
 // NewSchedulerService creates a SchedulerService wired to the given repo,
 // event bus, and Postgres connection string (used for the LISTEN connection).
-func NewSchedulerService(skdRepo sched_db.SchedRepo, eventBus events.EventBus, connString string) *SchedulerService {
+func NewSchedulerService(schedRepo sched_db.SchedRepo, eventBus events.EventBus, connString string) *SchedulerService {
 	ch := make(chan struct{}, 1)
 	return &SchedulerService{
-		skdRepo:    skdRepo,
+		schedRepo:  schedRepo,
 		eventBus:   eventBus,
 		connString: connString,
 		notifyCh:   ch,
@@ -83,7 +83,7 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 		for {
 			_, er := conn.WaitForNotification(ctx)
 			if er != nil {
-				if strings.Contains(er.Error(), "context canceled") {
+				if errors.Is(er, context.Canceled) || errors.Is(er, context.DeadlineExceeded) {
 					ctx.Logger().Info("scheduler: context cancelled, stopping listener")
 					return
 				}
@@ -151,42 +151,52 @@ func (s *SchedulerService) schedulerLoop(ctx common.ExtendedContext) {
 func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 	madeProgress := false
 	for {
-		task, err := s.skdRepo.ClaimNextScheduledTask(ctx)
+		err := s.schedRepo.WithTxFunc(ctx, func(txRepo sched_db.SchedRepo) error {
+			task, txErr := txRepo.ClaimNextScheduledTask(ctx)
+			if txErr != nil {
+				return txErr
+			}
+
+			// Publish the event. If this fails the transaction rolls back,
+			// the claim is undone, and the task stays 'pending' for the next cycle.
+			_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.Payload, events.EventDomainScheduler, nil, events.SignalConsumers)
+			if txErr != nil {
+				return txErr
+			}
+
+			// Compute and persist the task's next state.
+			if task.CronExpr != "" {
+				next, cronErr := nextCronTime(task.CronExpr)
+				if cronErr != nil {
+					ctx.Logger().Error("invalid cron expression, disabling task", "error", cronErr, "taskId", task.ID)
+					task.Status = sched_db.ScheduledTaskStatusStopped
+					task.RunAt = pgtype.Timestamptz{Valid: false}
+				} else {
+					task.RunAt = next
+					task.Status = sched_db.ScheduledTaskStatusPending
+				}
+			} else {
+				task.Status = sched_db.ScheduledTaskStatusStopped
+				task.RunAt = pgtype.Timestamptz{Valid: false}
+			}
+			_, txErr = txRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+			return txErr
+		})
+
 		if err != nil {
 			if !errors.Is(err, pgx.ErrNoRows) {
-				ctx.Logger().Error("failed to claim next scheduled task", "error", err)
+				ctx.Logger().Error("failed to process scheduled task", "error", err)
 			}
 			return madeProgress
 		}
 		madeProgress = true
-
-		_, err = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.Payload, events.EventDomainScheduler, nil, events.SignalConsumers)
-
-		if err != nil {
-			task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(SCHEDULER_RETRY_DELAY), Valid: true}
-			s.unlockAndReschedule(ctx, task)
-			continue
-		}
-
-		if task.CronExpr != "" {
-			next, err := nextCronTime(task.CronExpr)
-			if err != nil {
-				ctx.Logger().Error("invalid cron expression, disabling task", "error", err, "taskId", task.ID)
-				s.disableTask(ctx, task)
-				continue
-			}
-			task.RunAt = next
-			s.unlockAndReschedule(ctx, task)
-		} else {
-			s.disableTask(ctx, task)
-		}
 	}
 }
 
 func (s *SchedulerService) disableTask(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
 	task.Status = sched_db.ScheduledTaskStatusStopped
 	task.RunAt = pgtype.Timestamptz{Valid: false}
-	_, err := s.skdRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	_, err := s.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 	if err != nil {
 		ctx.Logger().Error("failed to update scheduled task", "error", err, "taskId", task.ID)
 	}
@@ -194,7 +204,7 @@ func (s *SchedulerService) disableTask(ctx common.ExtendedContext, task sched_db
 
 func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task sched_db.ScheduledTask) {
 	task.Status = sched_db.ScheduledTaskStatusPending
-	_, err := s.skdRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	_, err := s.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 	if err != nil {
 		ctx.Logger().Error("failed to reschedule scheduled task", "error", err, "taskId", task.ID)
 	}
@@ -203,7 +213,7 @@ func (s *SchedulerService) unlockAndReschedule(ctx common.ExtendedContext, task 
 // getNextRunAt returns the run_at timestamp of the earliest pending scheduled
 // task, or a zero Timestamptz if no pending tasks exist.
 func (s *SchedulerService) getNextRunAt(ctx common.ExtendedContext) pgtype.Timestamptz {
-	next, err := s.skdRepo.GetNextRunAt(ctx)
+	next, err := s.schedRepo.GetNextRunAt(ctx)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			ctx.Logger().Error("failed to get next run", "error", err)
@@ -271,7 +281,7 @@ func nextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
 // longer than hour (indicating a crashed or lost worker) and
 // resets them to 'pending' so they are picked up again on the next loop tick.
 func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext) {
-	tasks, err := s.skdRepo.GetStuckRunningTasks(ctx, time.Hour)
+	tasks, err := s.schedRepo.GetStuckRunningTasks(ctx, time.Hour)
 	if err != nil {
 		ctx.Logger().Error("failed to query stuck running tasks", "error", err)
 		return

@@ -36,8 +36,8 @@ func (r *PgSchedRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[SchedRepo]) Sch
 	return derived
 }
 
-// CreateSkdRepo creates a new SchedRepo backed by the given connection pool.
-func CreateSkdRepo(dbPool *pgxpool.Pool) SchedRepo {
+// CreateSchedRepo creates a new SchedRepo backed by the given connection pool.
+func CreateSchedRepo(dbPool *pgxpool.Pool) SchedRepo {
 	r := new(PgSchedRepo)
 	r.Pool = dbPool
 	return r

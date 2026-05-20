@@ -29,10 +29,10 @@ func invalidTstz() pgtype.Timestamptz {
 }
 
 // ---------------------------------------------------------------------------
-// Mock SkdRepo
+// Mock SchedRepo
 // ---------------------------------------------------------------------------
 
-type mockSkdRepo struct {
+type mockSchedRepo struct {
 	claimResults  []sched_db.ScheduledTask
 	claimErrors   []error
 	claimIndex    int
@@ -44,11 +44,11 @@ type mockSkdRepo struct {
 	stuckTasksErr error
 }
 
-func (m *mockSkdRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
+func (m *mockSchedRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
 	return fn(m)
 }
 
-func (m *mockSkdRepo) ClaimNextScheduledTask(_ common.ExtendedContext) (sched_db.ScheduledTask, error) {
+func (m *mockSchedRepo) ClaimNextScheduledTask(_ common.ExtendedContext) (sched_db.ScheduledTask, error) {
 	if m.claimIndex >= len(m.claimResults) {
 		return sched_db.ScheduledTask{}, pgx.ErrNoRows
 	}
@@ -61,16 +61,16 @@ func (m *mockSkdRepo) ClaimNextScheduledTask(_ common.ExtendedContext) (sched_db
 	return task, err
 }
 
-func (m *mockSkdRepo) SaveScheduledTask(_ common.ExtendedContext, p sched_db.SaveScheduledTaskParams) (sched_db.ScheduledTask, error) {
+func (m *mockSchedRepo) SaveScheduledTask(_ common.ExtendedContext, p sched_db.SaveScheduledTaskParams) (sched_db.ScheduledTask, error) {
 	m.savedTasks = append(m.savedTasks, p)
 	return sched_db.ScheduledTask(p), m.saveError
 }
 
-func (m *mockSkdRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamptz, error) {
+func (m *mockSchedRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamptz, error) {
 	return m.nextRunAt, m.nextRunAtErr
 }
 
-func (m *mockSkdRepo) GetStuckRunningTasks(_ common.ExtendedContext, _ time.Duration) ([]sched_db.ScheduledTask, error) {
+func (m *mockSchedRepo) GetStuckRunningTasks(_ common.ExtendedContext, _ time.Duration) ([]sched_db.ScheduledTask, error) {
 	return m.stuckTasks, m.stuckTasksErr
 }
 
@@ -190,14 +190,14 @@ func TestWaitUntil_NextRunAtLongerThanFallback(t *testing.T) {
 
 func TestGetNextRunAt_ReturnsValue(t *testing.T) {
 	expected := tstz(time.Now().Add(5 * time.Minute))
-	svc := &SchedulerService{skdRepo: &mockSkdRepo{nextRunAt: expected}}
+	svc := &SchedulerService{schedRepo: &mockSchedRepo{nextRunAt: expected}}
 
 	got := svc.getNextRunAt(testCtx)
 	assert.Equal(t, expected, got)
 }
 
 func TestGetNextRunAt_ErrorReturnsInvalid(t *testing.T) {
-	svc := &SchedulerService{skdRepo: &mockSkdRepo{nextRunAtErr: errors.New("no rows")}}
+	svc := &SchedulerService{schedRepo: &mockSchedRepo{nextRunAtErr: errors.New("no rows")}}
 
 	got := svc.getNextRunAt(testCtx)
 	assert.False(t, got.Valid)
@@ -208,9 +208,9 @@ func TestGetNextRunAt_ErrorReturnsInvalid(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRunDueTasks_NoTasks(t *testing.T) {
-	repo := &mockSkdRepo{}
+	repo := &mockSchedRepo{}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 	assert.False(t, progress)
@@ -219,11 +219,11 @@ func TestRunDueTasks_NoTasks(t *testing.T) {
 }
 
 func TestRunDueTasks_ClaimError_NonNoRows(t *testing.T) {
-	repo := &mockSkdRepo{
+	repo := &mockSchedRepo{
 		claimResults: []sched_db.ScheduledTask{{}},
 		claimErrors:  []error{errors.New("db error")},
 	}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	progress := svc.runDueTasks(testCtx)
 	assert.False(t, progress)
@@ -232,9 +232,9 @@ func TestRunDueTasks_ClaimError_NonNoRows(t *testing.T) {
 
 func TestRunDueTasks_OneShot_DisablesAfterFiring(t *testing.T) {
 	task := sched_db.ScheduledTask{ID: "t1", EventName: "my-event", CronExpr: "", RunAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
-	repo := &mockSkdRepo{claimResults: []sched_db.ScheduledTask{task}}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
@@ -246,9 +246,9 @@ func TestRunDueTasks_OneShot_DisablesAfterFiring(t *testing.T) {
 
 func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
 	task := sched_db.ScheduledTask{ID: "t2", EventName: "cron-ev", CronExpr: "* * * * *"}
-	repo := &mockSkdRepo{claimResults: []sched_db.ScheduledTask{task}}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
@@ -263,9 +263,9 @@ func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
 
 func TestRunDueTasks_Recurring_InvalidCronExpr_DisablesTask(t *testing.T) {
 	task := sched_db.ScheduledTask{ID: "t3", EventName: "bad", CronExpr: "not-valid"}
-	repo := &mockSkdRepo{claimResults: []sched_db.ScheduledTask{task}}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
@@ -274,20 +274,17 @@ func TestRunDueTasks_Recurring_InvalidCronExpr_DisablesTask(t *testing.T) {
 	assert.False(t, repo.savedTasks[0].RunAt.Valid)
 }
 
-func TestRunDueTasks_CreateTaskError_ReschedulesWithRetryDelay(t *testing.T) {
+func TestRunDueTasks_CreateTaskError_RollsBack(t *testing.T) {
 	task := sched_db.ScheduledTask{ID: "t4", EventName: "fail-ev"}
-	repo := &mockSkdRepo{claimResults: []sched_db.ScheduledTask{task}}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{createTaskErr: errors.New("bus down")}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
-	assert.True(t, progress)
-	assert.Len(t, repo.savedTasks, 1)
-	saved := repo.savedTasks[0]
-	assert.True(t, saved.RunAt.Valid)
-	assert.True(t, saved.RunAt.Time.After(time.Now()))
-	assert.Equal(t, sched_db.ScheduledTaskStatusPending, saved.Status)
+	// Transaction rolled back → no explicit reschedule, task stays pending via rollback.
+	assert.False(t, progress)
+	assert.Empty(t, repo.savedTasks)
 }
 
 func TestRunDueTasks_MultipleTasks_ProcessedInOrder(t *testing.T) {
@@ -295,9 +292,9 @@ func TestRunDueTasks_MultipleTasks_ProcessedInOrder(t *testing.T) {
 		{ID: "t1", EventName: "event-a"},
 		{ID: "t2", EventName: "event-b"},
 	}
-	repo := &mockSkdRepo{claimResults: tasks}
+	repo := &mockSchedRepo{claimResults: tasks}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
@@ -312,9 +309,9 @@ func TestRunDueTasks_ValidJsonPayload_Dispatched(t *testing.T) {
 		EventName: "payload-ev",
 		Payload:   events.EventData{},
 	}
-	repo := &mockSkdRepo{claimResults: []sched_db.ScheduledTask{task}}
+	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
-	svc := &SchedulerService{skdRepo: repo, eventBus: bus}
+	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
 
 	progress := svc.runDueTasks(testCtx)
 
@@ -329,8 +326,8 @@ func TestRunDueTasks_ValidJsonPayload_Dispatched(t *testing.T) {
 // TestRescheduleLongRunning_NoStuckTasks verifies that nothing is saved when
 // there are no stuck tasks.
 func TestRescheduleLongRunning_NoStuckTasks(t *testing.T) {
-	repo := &mockSkdRepo{stuckTasks: nil}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasks: nil}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	svc.rescheduleLongRunningTasks(testCtx)
 
@@ -340,8 +337,8 @@ func TestRescheduleLongRunning_NoStuckTasks(t *testing.T) {
 // TestRescheduleLongRunning_RepoError_DoesNotSave verifies that a repo error
 // is handled gracefully without saving anything.
 func TestRescheduleLongRunning_RepoError_DoesNotSave(t *testing.T) {
-	repo := &mockSkdRepo{stuckTasksErr: errors.New("db error")}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasksErr: errors.New("db error")}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	svc.rescheduleLongRunningTasks(testCtx)
 
@@ -357,8 +354,8 @@ func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 		CronExpr:  "",
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
-	repo := &mockSkdRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	before := time.Now()
 	svc.rescheduleLongRunningTasks(testCtx)
@@ -381,8 +378,8 @@ func TestRescheduleLongRunning_Recurring_ReschedulesWithNextCronTime(t *testing.
 		CronExpr:  "* * * * *", // every minute
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
-	repo := &mockSkdRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	svc.rescheduleLongRunningTasks(testCtx)
 
@@ -402,8 +399,8 @@ func TestRescheduleLongRunning_InvalidCron_DisablesTask(t *testing.T) {
 		CronExpr:  "not-a-cron",
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
-	repo := &mockSkdRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	svc.rescheduleLongRunningTasks(testCtx)
 
@@ -420,8 +417,8 @@ func TestRescheduleLongRunning_MultipleStuck_AllRescheduled(t *testing.T) {
 		{ID: "s1", EventName: "ev-a", CronExpr: "", Status: sched_db.ScheduledTaskStatusRunning},
 		{ID: "s2", EventName: "ev-b", CronExpr: "* * * * *", Status: sched_db.ScheduledTaskStatusRunning},
 	}
-	repo := &mockSkdRepo{stuckTasks: stuckTasks}
-	svc := &SchedulerService{skdRepo: repo, eventBus: &mockEventBus{}}
+	repo := &mockSchedRepo{stuckTasks: stuckTasks}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
 
 	svc.rescheduleLongRunningTasks(testCtx)
 
@@ -437,7 +434,7 @@ func TestRescheduleLongRunning_MultipleStuck_AllRescheduled(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewSchedulerService_ChannelWired(t *testing.T) {
-	svc := NewSchedulerService(&mockSkdRepo{}, &mockEventBus{}, "")
+	svc := NewSchedulerService(&mockSchedRepo{}, &mockEventBus{}, "")
 
 	assert.NotNil(t, svc.notifyCh)
 	assert.NotNil(t, svc.notify)

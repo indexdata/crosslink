@@ -21,7 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var skdRepo sched_db.SchedRepo
+var schedRepo sched_db.SchedRepo
 var appCtx = common.CreateExtCtxWithArgs(context.Background(), nil)
 
 func TestMain(m *testing.M) {
@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	pool, err := app.InitDbPool()
 	test.Expect(err, "failed to init db pool")
 
-	skdRepo = sched_db.CreateSkdRepo(pool)
+	schedRepo = sched_db.CreateSchedRepo(pool)
 
 	code := m.Run()
 
@@ -79,7 +79,7 @@ func tstz(t time.Time) pgtype.Timestamptz {
 
 func stopTask(t *testing.T, task sched_db.ScheduledTask) {
 	task.Status = sched_db.ScheduledTaskStatusStopped
-	_, err := skdRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(task))
+	_, err := schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(task))
 	assert.NoError(t, err)
 }
 
@@ -90,7 +90,7 @@ func stopTask(t *testing.T, task sched_db.ScheduledTask) {
 func TestSaveScheduledTask_Insert(t *testing.T) {
 	params := newTask("* * * * *", tstz(time.Now().Add(1*time.Minute)))
 
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, saved.ID)
@@ -104,13 +104,13 @@ func TestSaveScheduledTask_Insert(t *testing.T) {
 
 func TestSaveScheduledTask_Upsert_UpdatesFields(t *testing.T) {
 	params := newTask("0 * * * *", tstz(time.Now().Add(1*time.Hour)))
-	_, err := skdRepo.SaveScheduledTask(appCtx, params)
+	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
 	params.CronExpr = "0 9 * * 1"
 	params.RunAt = tstz(time.Now().Add(2 * time.Hour))
 
-	updated, err := skdRepo.SaveScheduledTask(appCtx, params)
+	updated, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, updated.ID)
@@ -125,7 +125,7 @@ func TestSaveScheduledTask_WithPayload(t *testing.T) {
 		CommonEventData: events.CommonEventData{Note: "hello from scheduler"},
 	}
 
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, "hello from scheduler", saved.Payload.Note)
@@ -139,10 +139,10 @@ func TestSaveScheduledTask_WithPayload(t *testing.T) {
 
 func TestGetNextRunAt_ReturnsPendingTask(t *testing.T) {
 	params := newTask("* * * * *", tstz(time.Now().Add(5*time.Minute)))
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	next, err := skdRepo.GetNextRunAt(appCtx)
+	next, err := schedRepo.GetNextRunAt(appCtx)
 
 	assert.NoError(t, err)
 	assert.True(t, next.Valid)
@@ -158,12 +158,12 @@ func TestGetNextRunAt_ReturnsEarliestPendingTask(t *testing.T) {
 	p1 := newTask("", earlier)
 	p2 := newTask("", later)
 
-	s1, err := skdRepo.SaveScheduledTask(appCtx, p1)
+	s1, err := schedRepo.SaveScheduledTask(appCtx, p1)
 	assert.NoError(t, err)
-	s2, err := skdRepo.SaveScheduledTask(appCtx, p2)
+	s2, err := schedRepo.SaveScheduledTask(appCtx, p2)
 	assert.NoError(t, err)
 
-	next, err := skdRepo.GetNextRunAt(appCtx)
+	next, err := schedRepo.GetNextRunAt(appCtx)
 
 	assert.NoError(t, err)
 	assert.True(t, next.Valid)
@@ -180,10 +180,10 @@ func TestGetNextRunAt_ReturnsEarliestPendingTask(t *testing.T) {
 
 func TestClaimNextScheduledTask_OverdueTask_ClaimedAndSetToRunning(t *testing.T) {
 	overdue := newTask("", tstz(time.Now().Add(-1*time.Second)))
-	_, err := skdRepo.SaveScheduledTask(appCtx, overdue)
+	_, err := schedRepo.SaveScheduledTask(appCtx, overdue)
 	assert.NoError(t, err)
 
-	claimed, err := skdRepo.ClaimNextScheduledTask(appCtx)
+	claimed, err := schedRepo.ClaimNextScheduledTask(appCtx)
 
 	assert.NoError(t, err)
 	assert.Equal(t, sched_db.ScheduledTaskStatusRunning, claimed.Status)
@@ -194,10 +194,10 @@ func TestClaimNextScheduledTask_OverdueTask_ClaimedAndSetToRunning(t *testing.T)
 
 func TestClaimNextScheduledTask_SetsStatusToRunning(t *testing.T) {
 	params := newTask("* * * * *", tstz(time.Now().Add(-30*time.Second)))
-	_, err := skdRepo.SaveScheduledTask(appCtx, params)
+	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	claimed, err := skdRepo.ClaimNextScheduledTask(appCtx)
+	claimed, err := schedRepo.ClaimNextScheduledTask(appCtx)
 
 	assert.NoError(t, err)
 	assert.Equal(t, sched_db.ScheduledTaskStatusRunning, claimed.Status)
@@ -207,20 +207,21 @@ func TestClaimNextScheduledTask_SetsStatusToRunning(t *testing.T) {
 
 func TestClaimNextScheduledTask_FutureTask_NotClaimed(t *testing.T) {
 	i := 0
-	for {
-		i++
-		_, err := skdRepo.ClaimNextScheduledTask(appCtx)
-		if err != nil || i > 100 {
+	for ; i < 100; i++ {
+		claimed, err := schedRepo.ClaimNextScheduledTask(appCtx)
+		if err != nil {
+			assert.ErrorIs(t, err, pgx.ErrNoRows)
 			break
 		}
+		stopTask(t, claimed)
 	}
 	assert.True(t, i < 100, "too many claimed tasks")
 
 	params := newTask("", tstz(time.Now().Add(24*time.Hour)))
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	_, err = skdRepo.ClaimNextScheduledTask(appCtx)
+	_, err = schedRepo.ClaimNextScheduledTask(appCtx)
 	assert.ErrorIs(t, err, pgx.ErrNoRows)
 
 	stopTask(t, saved)
@@ -232,16 +233,16 @@ func TestClaimNextScheduledTask_FutureTask_NotClaimed(t *testing.T) {
 
 func TestRescheduleAfterClaim(t *testing.T) {
 	params := newTask("* * * * *", tstz(time.Now().Add(-1*time.Second)))
-	_, err := skdRepo.SaveScheduledTask(appCtx, params)
+	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	claimed, err := skdRepo.ClaimNextScheduledTask(appCtx)
+	claimed, err := schedRepo.ClaimNextScheduledTask(appCtx)
 	assert.NoError(t, err)
 	assert.Equal(t, sched_db.ScheduledTaskStatusRunning, claimed.Status)
 
 	claimed.Status = sched_db.ScheduledTaskStatusPending
 	claimed.RunAt = tstz(time.Now().Add(5 * time.Minute))
-	rescheduled, err := skdRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(claimed))
+	rescheduled, err := schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(claimed))
 
 	assert.NoError(t, err)
 	assert.Equal(t, sched_db.ScheduledTaskStatusPending, rescheduled.Status)
@@ -261,7 +262,7 @@ func insertRunning(t *testing.T, updatedAt time.Time) sched_db.ScheduledTask {
 	params := newTask("", tstz(time.Now().Add(-10*time.Second)))
 	params.Status = sched_db.ScheduledTaskStatusRunning
 	params.UpdatedAt = pgtype.Timestamptz{Time: updatedAt, Valid: true}
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 	return saved
 }
@@ -270,7 +271,7 @@ func TestGetStuckRunningTasks_ReturnsTaskStuckLongerThanThreshold(t *testing.T) 
 	// Insert a task that has been running for 2 hours.
 	stuck := insertRunning(t, time.Now().Add(-2*time.Hour))
 
-	tasks, err := skdRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
+	tasks, err := schedRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
 
 	assert.NoError(t, err)
 	ids := make([]string, len(tasks))
@@ -286,7 +287,7 @@ func TestGetStuckRunningTasks_DoesNotReturnRecentTask(t *testing.T) {
 	// Insert a task that has been running for only 10 seconds — well within threshold.
 	recent := insertRunning(t, time.Now().Add(-10*time.Second))
 
-	tasks, err := skdRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
+	tasks, err := schedRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
 
 	assert.NoError(t, err)
 	for _, tk := range tasks {
@@ -299,10 +300,10 @@ func TestGetStuckRunningTasks_DoesNotReturnRecentTask(t *testing.T) {
 func TestGetStuckRunningTasks_DoesNotReturnPendingTask(t *testing.T) {
 	// A pending task (not running) should never appear.
 	params := newTask("", tstz(time.Now().Add(-2*time.Hour)))
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	tasks, err := skdRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
+	tasks, err := schedRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
 
 	assert.NoError(t, err)
 	for _, tk := range tasks {
@@ -316,7 +317,7 @@ func TestGetStuckRunningTasks_MultipleStuckTasks_AllReturned(t *testing.T) {
 	stuck1 := insertRunning(t, time.Now().Add(-3*time.Hour))
 	stuck2 := insertRunning(t, time.Now().Add(-2*time.Hour))
 
-	tasks, err := skdRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
+	tasks, err := schedRepo.GetStuckRunningTasks(appCtx, 1*time.Hour)
 
 	assert.NoError(t, err)
 	ids := make(map[string]bool, len(tasks))
@@ -336,11 +337,11 @@ func TestGetStuckRunningTasks_MultipleStuckTasks_AllReturned(t *testing.T) {
 
 func TestDisableTask_InvalidRunAt(t *testing.T) {
 	params := newTask("", tstz(time.Now().Add(1*time.Minute)))
-	saved, err := skdRepo.SaveScheduledTask(appCtx, params)
+	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
 	saved.RunAt = pgtype.Timestamptz{Valid: false}
-	disabled, err := skdRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(saved))
+	disabled, err := schedRepo.SaveScheduledTask(appCtx, sched_db.SaveScheduledTaskParams(saved))
 
 	assert.NoError(t, err)
 	assert.False(t, disabled.RunAt.Valid)
