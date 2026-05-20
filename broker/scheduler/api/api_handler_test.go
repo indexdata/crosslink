@@ -185,7 +185,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 	repo.On("SaveBatchAction", mock.Anything).Return(ba, nil)
 
 	h := newHandler(repo)
-	body := `{"actionName":"email","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email","batchQuery":"title=test","schedule":"` + validCron + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -250,7 +250,7 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email","batchQuery":"title=test","schedule":"` + validCron + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -265,7 +265,7 @@ func TestPostBatchActions_SaveBatchActionError(t *testing.T) {
 	repo.On("SaveBatchAction", mock.Anything).Return(sched_db.BatchAction{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email","batchQuery":"title=test","schedule":"` + validCron + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})

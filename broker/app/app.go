@@ -204,9 +204,9 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	schedRepo := sched_db.CreateSchedRepo(pool)
-	skdApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, tenantResolver)
-	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
+	schedRepoRepo := sched_db.CreateSchedRepo(pool)
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, tenantResolver)
+	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
 		return Context{}, err
 	}
 
@@ -221,7 +221,7 @@ func Init(ctx context.Context) (Context, error) {
 		PrApiHandler:    prApiHandler,
 		SseBroker:       sseBroker,
 		PsApiHandler:    psApiHandler,
-		SchedApiHandler: skdApiHandler,
+		SchedApiHandler: schedApiHandler,
 	}, nil
 }
 

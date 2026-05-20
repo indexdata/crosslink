@@ -125,7 +125,6 @@ func (r *PgSchedRepo) GetBatchActions(ctx common.ExtendedContext, params GetBatc
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
-				fullCount = r.FullCount
 				actions = append(actions, r.BatchAction)
 			}
 		} else {

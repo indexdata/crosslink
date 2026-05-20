@@ -25,3 +25,4 @@ CREATE TABLE batch_action
     updated_at        TIMESTAMPTZ,
     FOREIGN KEY (scheduled_task_id) REFERENCES scheduled_task (id)
 );
+CREATE INDEX idx_batch_action_owner ON batch_action (owner);
