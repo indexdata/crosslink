@@ -131,7 +131,7 @@ func (r *PgSchedRepo) GetBatchActions(ctx common.ExtendedContext, params GetBatc
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err := r.queries.GetBatchActions(ctx, r.GetConnOrTx(), params)
+			rows, err = r.queries.GetBatchActions(ctx, r.GetConnOrTx(), params)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}

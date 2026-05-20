@@ -272,7 +272,7 @@ func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyC
 	}
 }
 
-// nextCronTime parses a standard 5-field cron expression and returns the next
+// NextCronTime parses a standard 5-field cron expression and returns the next
 // scheduled execution time after now as a pgtype.Timestamptz.
 // Returns an error if the expression is invalid.
 func NextCronTime(cronExpr string) (pgtype.Timestamptz, error) {

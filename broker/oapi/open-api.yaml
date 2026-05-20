@@ -1950,6 +1950,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchActions'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
@@ -2010,6 +2016,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchAction'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Batch action not found
           content:
@@ -2038,6 +2050,12 @@ paths:
       responses:
         '204':
           description: Batch action deleted successfully (No Content)
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Batch action not found
           content:

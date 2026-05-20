@@ -55,7 +55,7 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
-# Pull slip OpenAPI
+# Scheduled task OpenAPI
 SCHED_OAPI_DIR=oapi
 SCHED_OAPI_CFG = $(SCHED_OAPI_DIR)/sched-cfg.yaml
 SCHED_OAPI_SPEC = $(SCHED_OAPI_DIR)/open-api.yaml

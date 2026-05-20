@@ -7,7 +7,8 @@ CREATE TABLE batch_action
     owner             TEXT        NOT NULL,
     scheduled_task_id TEXT        NOT NULL,
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at        TIMESTAMPTZ
+    updated_at        TIMESTAMPTZ,
+    FOREIGN KEY (scheduled_task_id) REFERENCES scheduled_task (id)
 );
 
 CREATE INDEX idx_batch_action_owner ON batch_action (owner);

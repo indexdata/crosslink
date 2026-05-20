@@ -92,6 +92,10 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		brokerapi.AddBadRequestError(ctx, w, errors.New("schedule must not be empty"))
 		return
 	}
+	if create.BatchQuery == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
+		return
+	}
 
 	owner, ok := h.resolveOwner(ctx, w, r, params.Symbol)
 	if !ok {
