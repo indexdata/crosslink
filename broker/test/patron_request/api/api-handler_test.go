@@ -115,6 +115,10 @@ func TestCrud(t *testing.T) {
 				Time: time.Now().Add(24 * time.Hour),
 			},
 		},
+		PatronInfo: &iso18626.PatronInfo{
+			GivenName: "John",
+			Surname:   "Wick",
+		},
 	}
 	id := "REQ-" + strings.ToUpper(uuid.NewString())
 	newPr := proapi.CreatePatronRequest{
@@ -228,7 +232,8 @@ func TestCrud(t *testing.T) {
 		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
 		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
 		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
-		"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
+		"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
+		"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
@@ -746,14 +751,14 @@ func TestServerChoice(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	respBytes := httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20Dream%20Ray%20Bradbury%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
 	var foundPrs proapi.PatronRequests
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Equal(t, prId, foundPrs.Items[0].Id)
 
-	respBytes = httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20ddream%20Ray%20Bradbury%20John%20Doe%20PP-789%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?symbol=ISIL:REQ&side=borrowing&cql=cql.serverChoice%20all%20%22REQ-123%20P456%20ddream%20Ray%20Bradbury%20BAR-321%20CAL-321%20ITEM-321%22", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), foundPrs.About.Count)
