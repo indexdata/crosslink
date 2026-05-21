@@ -178,78 +178,89 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 // buildEntrySQL builds the base SQL query for entries with nested subresources
 func buildEntrySQL(whereClause string) string {
 	baseQuery := `
-		SELECT
-			e.id,
-			e.name,
-			e.description,
-			e.organization_id,
-			e.contact_name,
-			e.email,
-			e.phone_number,
-			e.lms_location_code,
-			(SELECT 
-				json_build_object(
-					'acceptItemEnabled', l.accept_item_enabled,
-					'address',l.address, 
-					'checkInItemEnabled', l.checkin_item_enabled,
-					'checkOutItemEnabled', l.checkout_item_enabled,
-					'fromAgency',l.from_agency,
-					'fromAgencyAuthentication', l.from_agency_authentication,
-					'itemLocation', l.item_location,
-					'lookupUserEnabled', l.lookup_user_enabled,
-					'requestItemBibIdCode', l.request_item_bib_code,
-					'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
-					'requestItemRequestScopeType', l.request_item_scope_type,
-					'requestItemRequestType', l.request_item_request_type,
-					'requesterPatronPattern', l.requester_patron_pattern,
-					'requesterPickupLocation', l.requester_pickup_location,
-					'supplierPickupLocation', l.supplier_pickup_location,
-					'toAgency', l.to_agency
-				) from lms_configs l WHERE l.entry = e.id) as lms_config,
-			e.hrid,
-			e.time_zone,
-			e.type,
-			e.parent,
-			ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
-			ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints,
-			ARRAY(
-				SELECT row_to_json(a_with_components)
-				FROM (
-					SELECT
-						a.id,
-						a.type,
-						ARRAY(
-							SELECT row_to_json(ac)
-							FROM address_components ac
-							WHERE ac.address = a.id
-							ORDER BY ac.seq
-						) as "addressComponents"
-					FROM addresses a
-					WHERE a.entry = e.id
-					ORDER BY a.id
-				) a_with_components
-			) as addresses,
-			ARRAY(SELECT row_to_json(t) FROM memberships m
-				JOIN membership_tiers mt on mt.membership = m.id
-				JOIN tiers t on t.id = mt.tier
-				WHERE m.institution = e.id) as tiers,
-            ARRAY(SELECT row_to_json(n) FROM memberships m
-				JOIN membership_networks mn on mn.membership = m.id
-				JOIN networks n on n.id = mn.network
-				WHERE m.institution = e.id) as networks,
-			ARRAY(
-				SELECT json_build_object(
-					'id', c.id,
-					'entry', c.entry,
-					'startDate', c.start_date::date,
-					'endDate', c.end_date::date,
-					'reason', c.reason
-				)
-				FROM closures c
-				WHERE c.entry = e.id
-				ORDER BY c.id
-			) as closures,
-			COUNT(*) OVER() as total_count
+	
+	SELECT
+		e.id,
+		e.name,
+		e.description,
+		e.organization_id,
+		e.contact_name,
+		e.email,
+		e.phone_number,
+		e.lms_location_code,
+		(
+		SELECT 
+			json_build_object(
+				'acceptItemEnabled', l.accept_item_enabled,
+				'address',l.address, 
+				'checkInItemEnabled', l.checkin_item_enabled,
+				'checkOutItemEnabled', l.checkout_item_enabled,
+				'fromAgency',l.from_agency,
+				'fromAgencyAuthentication', l.from_agency_authentication,
+				'itemLocation', l.item_location,
+				'lookupUserEnabled', l.lookup_user_enabled,
+				'requestItemBibIdCode', l.request_item_bib_code,
+				'requestItemPickupLocationEnabled', l.request_item_pickup_location_enabled,
+				'requestItemRequestScopeType', l.request_item_scope_type,
+				'requestItemRequestType', l.request_item_request_type,
+				'requesterPatronPattern', l.requester_patron_pattern,
+				'requesterPickupLocation', l.requester_pickup_location,
+				'supplierPickupLocation', l.supplier_pickup_location,
+				'toAgency', l.to_agency
+			) 
+		from lms_configs l WHERE l.entry = e.id) as lms_config,
+		e.hrid,
+		e.time_zone,
+		e.type,
+		e.parent,
+		ARRAY(SELECT row_to_json(s) FROM symbols s WHERE s.owner = e.id ORDER BY s.id) as symbols,
+		ARRAY(SELECT row_to_json(ep) FROM service_endpoints ep WHERE ep.entry = e.id ORDER BY ep.id) as endpoints,
+		ARRAY(
+			SELECT row_to_json(a_with_components)
+			FROM (
+				SELECT
+				a.id,
+				a.type,
+				ARRAY(
+					SELECT row_to_json(ac)
+					FROM address_components ac
+						WHERE ac.address = a.id
+						ORDER BY ac.seq
+				) as "addressComponents"
+			FROM addresses a
+			WHERE a.entry = e.id
+			ORDER BY a.id
+			) a_with_components
+		) as addresses,
+		ARRAY(
+			SELECT json_build_object(
+				'id', tiers.id,
+				'name', tiers.name
+			) from entry_tiers INNER JOIN tiers ON tiers.id = entry_tiers.tier
+			WHERE entry_tiers.entry = e.id
+			ORDER BY tiers.id
+		) as tiers,
+		ARRAY(
+			SELECT json_build_object(
+				'id', networks.id,
+				'name', networks.name
+			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
+			WHERE entry_networks.entry = e.id
+			ORDER BY networks.id
+		) as networks,
+		ARRAY(
+		SELECT json_build_object(
+		'id', c.id,
+		'entry', c.entry,
+		'startDate', c.start_date::date,
+		'endDate', c.end_date::date,
+		'reason', c.reason
+		)
+		FROM closures c
+		WHERE c.entry = e.id
+		ORDER BY c.id
+		) as closures,
+		COUNT(*) OVER() as total_count
 		FROM entries e
 	`
 	if whereClause != "" {

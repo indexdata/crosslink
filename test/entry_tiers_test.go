@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestMembershipCases(t *testing.T) {
+func TestEntryTiers(t *testing.T) {
 	consortiumPermissionHeaders := map[string]string{
 		"X-Okapi-Tenant":      "ANINST",
 		"X-Okapi-Permissions": `["directory.consortium.all"]`,
@@ -18,39 +18,48 @@ func TestMembershipCases(t *testing.T) {
 
 	cases := []httpTestCase{
 		{
-			name:        "GET all memberships",
+			name:        "GET all entry tiers",
 			method:      http.MethodGet,
-			endpoint:    "/memberships",
+			endpoint:    "/entry-tiers",
 			status:      http.StatusOK,
-			resFile:     "memberships.get.res.json",
+			resFile:     "entry-tiers.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
-			name:        "GET a membership",
+			name:        "GET entry tiers filtered",
 			method:      http.MethodGet,
-			endpoint:    "/memberships/00000000-0000-0000-0000-000000000001",
+			endpoint:    "/entry-tiers?q=tier=123",
 			status:      http.StatusOK,
-			resFile:     "membership.get.res.json",
+			resFile:     "entry-tiers-filtered.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
-			name:            "POST membership",
+			name:        "GET a tier membership",
+			method:      http.MethodGet,
+			endpoint:    "/entry-tiers/50000000-0000-0000-0000-000000000001",
+			status:      http.StatusOK,
+			resFile:     "entry-tier.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:            "POST tier membership",
 			method:          http.MethodPost,
-			endpoint:        "/memberships",
+			endpoint:        "/entry-tiers",
 			status:          http.StatusCreated,
-			bodyFile:        "membership.post.req.json",
-			refetchEndpoint: "/memberships",
-			refetchFile:     "membership.post.refetch.json",
+			bodyFile:        "entry-tier.post.req.json",
+			refetchEndpoint: "/entry-tiers",
+			refetchFile:     "entry-tier.post.refetch.json",
 			addlHeaders:     consortiumPermissionHeaders,
 		},
 		{
-			name:          "DELETE membership",
+			name:          "DELETE tier membership",
 			method:        http.MethodDelete,
-			endpoint:      "/memberships/00000000-0000-0000-0000-000000000001",
+			endpoint:      "/entry-tiers/50000000-0000-0000-0000-000000000001",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 			addlHeaders:   consortiumPermissionHeaders,
 		},
 	}
+
 	testCases(t, cases)
 }

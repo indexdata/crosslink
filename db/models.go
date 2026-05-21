@@ -46,6 +46,18 @@ type Entry struct {
 	TimeZone        *string
 }
 
+type EntryNetwork struct {
+	ID      uuid.UUID
+	Entry   uuid.UUID
+	Network uuid.UUID
+}
+
+type EntryTier struct {
+	ID    uuid.UUID
+	Entry uuid.UUID
+	Tier  uuid.UUID
+}
+
 type LmsConfig struct {
 	ID                               uuid.UUID
 	Entry                            uuid.UUID
@@ -65,23 +77,6 @@ type LmsConfig struct {
 	RequesterPickupLocation          *string
 	SupplierPickupLocation           *string
 	RequesterPatronPattern           *string
-}
-
-type Membership struct {
-	ID          uuid.UUID
-	Institution uuid.UUID
-}
-
-type MembershipNetwork struct {
-	ID         uuid.UUID
-	Membership uuid.UUID
-	Network    uuid.UUID
-}
-
-type MembershipTier struct {
-	ID         uuid.UUID
-	Membership uuid.UUID
-	Tier       uuid.UUID
 }
 
 type Network struct {

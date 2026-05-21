@@ -123,3 +123,23 @@ func TestUnmarshalJSONArray(t *testing.T) {
 		t.Error("Expected error for invalid JSON, got nil")
 	}
 }
+
+func TestSplitQuery(t *testing.T) {
+	qString1 := "dog=woof"
+	field1, val1, err := SplitQuery(&qString1)
+	if err != nil || *field1 != "dog" || *val1 != "woof" {
+		t.Error("Expected 'dog' and 'woof")
+	}
+
+	qString2 := "cat=meow=wow"
+	field2, val2, err := SplitQuery(&qString2)
+	if err != nil || *field2 != "cat" || *val2 != "meow=wow" {
+		t.Error("Expected 'cat' and 'meow=wow")
+	}
+
+	qString3 := "mouse"
+	field3, val3, err := SplitQuery(&qString3)
+	if err == nil || field3 != nil || val3 != nil {
+		t.Error("Expected error")
+	}
+}

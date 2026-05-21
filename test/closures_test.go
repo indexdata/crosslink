@@ -28,7 +28,7 @@ func TestClosureCases(t *testing.T) {
 		{
 			name:        "GET a closure",
 			method:      http.MethodGet,
-			endpoint:    "/closures/00000000-0000-0000-0000-000000000001",
+			endpoint:    "/closures/70000000-0000-0000-0000-000000000001",
 			status:      http.StatusOK,
 			resFile:     "closure.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -54,7 +54,7 @@ func TestClosureCases(t *testing.T) {
 		{
 			name:        "PATCH closure",
 			method:      http.MethodPatch,
-			endpoint:    "/closures/00000000-0000-0000-0000-000000000001",
+			endpoint:    "/closures/70000000-0000-0000-0000-000000000001",
 			status:      http.StatusNoContent,
 			bodyFile:    "closure.patch.req.json",
 			refetchFile: "closure.patch.refetch.json",
@@ -63,7 +63,7 @@ func TestClosureCases(t *testing.T) {
 		{
 			name:          "DELETE closure",
 			method:        http.MethodDelete,
-			endpoint:      "/closures/00000000-0000-0000-0000-000000000001",
+			endpoint:      "/closures/70000000-0000-0000-0000-000000000001",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 			addlHeaders:   consortiumPermissionHeaders,

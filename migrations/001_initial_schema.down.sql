@@ -1,12 +1,12 @@
-DROP TABLE IF EXISTS address_components;
-DROP TABLE IF EXISTS addresses;
-DROP TABLE IF EXISTS entries;
-DROP TABLE IF EXISTS authorities;
-DROP TABLE IF EXISTS symbols;
-DROP VIEW IF EXISTS entrysymbols;
-DROP TABLE IF EXISTS consortia;
+DROP TABLE IF EXISTS lms_configs;
+DROP TABLE IF EXISTS entry_networks;
+DROP TABLE IF EXISTS entry_tiers;
 DROP TABLE IF EXISTS tiers;
 DROP TABLE IF EXISTS networks;
-DROP TABLE IF EXISTS memberships;
-DROP TABLE IF EXISTS membership_tiers;
-DROP TABLE IF EXISTS membership_networks;
+DROP TABLE IF EXISTS closures;
+DROP TABLE IF EXISTS address_components;
+DROP TABLE IF EXISTS addresses;
+DROP TABLE IF EXISTS service_endpoints;
+DROP TABLE IF EXISTS symbols;
+DROP TABLE IF EXISTS entries;
+

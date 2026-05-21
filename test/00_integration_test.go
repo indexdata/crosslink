@@ -127,13 +127,12 @@ var standardHeaders = map[string]string{
 // where the db has no records
 func TestEmptyGet(t *testing.T) {
 	endpoints := map[string]string{
-		"/entries":             `{"about":{"count":0},"items":[]}`,
-		"/tiers":               `{"about":{"count":0},"items":[]}`,
-		"/closures":            `{"about":{"count":0},"items":[]}`,
-		"/networks":            `{"about":{"count":0},"items":[]}`,
-		"/network-memberships": `{"about":{"count":0},"items":[]}`,
-		"/tier-memberships":    `{"about":{"count":0},"items":[]}`,
-		"/memberships":         `{"about":{"count":0},"items":[]}`,
+		"/entries":        `{"about":{"count":0},"items":[]}`,
+		"/tiers":          `{"about":{"count":0},"items":[]}`,
+		"/closures":       `{"about":{"count":0},"items":[]}`,
+		"/networks":       `{"about":{"count":0},"items":[]}`,
+		"/entry-networks": `{"about":{"count":0},"items":[]}`,
+		"/entry-tiers":    `{"about":{"count":0},"items":[]}`,
 	}
 	for endpoint, expected := range endpoints {
 		res, data := jsonReq(t, http.MethodGet, endpoint, "", standardHeaders)

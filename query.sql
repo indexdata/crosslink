@@ -140,28 +140,21 @@ INSERT INTO networks (
 )
 RETURNING *;
 
--- name: CreateMembership :one
-INSERT INTO memberships (
-  institution
-) VALUES (
-  @institution
-)
-RETURNING *;
 
--- name: CreateNetworkMembership :one
-INSERT INTO membership_networks (
-  membership, network
+-- name: CreateEntryNetwork :one
+INSERT INTO entry_networks (
+  entry, network
 ) VALUES (
-  @membership,
+  @entry,
   @network
 )
 RETURNING *;
 
--- name: CreateTierMembership :one
-INSERT INTO membership_tiers (
-  membership, tier
+-- name: CreateEntryTier :one
+INSERT INTO entry_tiers (
+  entry, tier
 ) VALUES (
-  @membership,
+  @entry,
   @tier
 )
 RETURNING *;
@@ -230,14 +223,11 @@ SELECT * FROM networks WHERE id = $1 LIMIT 1;
 -- name: GetTierById :one
 SELECT * FROM tiers WHERE id = $1 LIMIT 1;
 
--- name: GetMembershipById :one
-SELECT * FROM memberships WHERE id = $1 LIMIT 1;
+-- name: GetEntryNetworkById :one
+SELECT * FROM entry_networks WHERE id = $1 LIMIT 1;
 
--- name: GetNetworkMembershipById :one
-SELECT * FROM membership_networks WHERE id = $1 LIMIT 1;
-
--- name: GetTierMembershipById :one
-SELECT * FROM membership_tiers WHERE id = $1 LIMIT 1;
+-- name: GetEntryTierById :one
+SELECT * FROM entry_tiers WHERE id = $1 LIMIT 1;
 
 -- name: GetClosureById :one
 SELECT * FROM closures WHERE id = $1 LIMIT 1;
@@ -251,17 +241,14 @@ DELETE from networks where id = @id;
 -- name: DeleteTierById :exec
 DELETE from tiers where id = @id;
 
--- name: DeleteNetworkMembershipById :exec
-DELETE from membership_networks WHERE id = @id;
+-- name: DeleteEntryNetworkById :exec
+DELETE from entry_networks WHERE id = @id;
 
--- name: DeleteTierMembershipById :exec
-DELETE from membership_tiers WHERE id = @id;
+-- name: DeleteEntryTierById :exec
+DELETE from entry_tiers WHERE id = @id;
 
 -- name: DeleteClosureById :exec
 DELETE from closures where id = @id;
-
--- name: DeleteMembershipById :exec
-DELETE from memberships where id = @id;
 
 -- name: UpdateClosure :exec
 UPDATE closures
@@ -286,21 +273,33 @@ SELECT * FROM closures
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
 
--- name: ListMemberships :many
-SELECT * FROM memberships
+-- name: ListEntryNetworks :many
+SELECT * FROM entry_networks
+  WHERE (
+    sqlc.narg('field')::text IS NULL
+    OR sqlc.narg('value')::text IS NULL
+    OR CASE sqlc.narg('field')::text
+      WHEN 'id' THEN id::text
+      WHEN 'entry' THEN entry::text
+      WHEN 'network' THEN network::text
+    END = sqlc.narg('value')::text
+  )
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
 
--- name: ListNetworkMemberships :many
-SELECT * FROM membership_networks
+-- name: ListEntryTiers :many
+SELECT * FROM entry_tiers
+  WHERE (
+    sqlc.narg('field')::text IS NULL
+    OR sqlc.narg('value')::text IS NULL
+    OR CASE sqlc.narg('field')::text
+      WHEN 'id' THEN id::text
+      WHEN 'entry' THEN entry::text
+      WHEN 'tier' THEN tier::text
+    END = sqlc.narg('value')::text
+  )
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
-
--- name: ListTierMemberships :many
-SELECT * FROM membership_tiers
-  LIMIT sqlc.arg('limit')
-  OFFSET sqlc.arg('offset');
-
 
 -- name: GetLMSConfigByEntry :one
 SELECT * FROM lms_configs 

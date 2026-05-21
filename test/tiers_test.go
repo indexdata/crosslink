@@ -28,7 +28,7 @@ func TestTierCases(t *testing.T) {
 		{
 			name:        "GET a tier",
 			method:      http.MethodGet,
-			endpoint:    "/tiers/00000000-0000-0000-0000-000000000001",
+			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
 			status:      http.StatusOK,
 			resFile:     "tier.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -46,7 +46,7 @@ func TestTierCases(t *testing.T) {
 		{
 			name:          "DELETE tier",
 			method:        http.MethodDelete,
-			endpoint:      "/tiers/00000000-0000-0000-0000-000000000002",
+			endpoint:      "/tiers/30000000-0000-0000-0000-000000000002",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 			addlHeaders:   consortiumPermissionHeaders,

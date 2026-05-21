@@ -261,39 +261,13 @@ func clearProtectedValue(v reflect.Value) error {
 	}
 }
 
-// func NlblToPGTxt(nlbl nullable.Nullable[string]) pgtype.Text {
-// 	if nlbl.IsNull() || !nlbl.IsSpecified() {
-// 		return pgtype.Text{String: "", Valid: false}
-// 	}
-// 	return pgtype.Text{String: nlbl.MustGet(), Valid: true}
-// }
-
-// func NlblToPGUUID(nlbl nullable.Nullable[uuid.UUID]) pgtype.UUID {
-// 	if nlbl.IsNull() || !nlbl.IsSpecified() {
-// 		return pgtype.UUID{Bytes: [16]byte{}, Valid: false}
-// 	}
-// 	return pgtype.UUID{Bytes: nlbl.MustGet(), Valid: true}
-// }
-
-// func PtrToPGUUID(ptr *uuid.UUID) pgtype.UUID {
-// 	if ptr == nil {
-// 		return pgtype.UUID{Bytes: [16]byte{}, Valid: false}
-// 	}
-// 	return pgtype.UUID{Bytes: *ptr, Valid: true}
-// }
-// func PGUUIDToPtr(pguuid pgtype.UUID) *uuid.UUID {
-// 	if !pguuid.Valid {
-// 		return nil
-// 	}
-// 	u, _ := uuid.FromBytes(pguuid.Bytes[:])
-// 	return &u
-// }
-
-// func PGTxtToNlbl(pgtxt pgtype.Text) nullable.Nullable[string] {
-// 	if !pgtxt.Valid {
-// 		nlbl := nullable.NewNullNullable[string]()
-// 		nlbl.SetUnspecified() // We don't store explicitly null strings
-// 		return nlbl
-// 	}
-// 	return nullable.NewNullableWithValue(pgtxt.String)
-// }
+func SplitQuery(queryString *string) (field *string, value *string, err error) {
+	if queryString == nil {
+		return nil, nil, nil
+	}
+	parts := strings.SplitN(*queryString, "=", 2)
+	if len(parts) != 2 {
+		return nil, nil, errors.New("Malformed query string")
+	}
+	return &parts[0], &parts[1], nil
+}

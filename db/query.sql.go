@@ -139,19 +139,47 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 	return i, err
 }
 
-const createMembership = `-- name: CreateMembership :one
-INSERT INTO memberships (
-  institution
+const createEntryNetwork = `-- name: CreateEntryNetwork :one
+INSERT INTO entry_networks (
+  entry, network
 ) VALUES (
-  $1
+  $1,
+  $2
 )
-RETURNING id, institution
+RETURNING id, entry, network
 `
 
-func (q *Queries) CreateMembership(ctx context.Context, institution uuid.UUID) (Membership, error) {
-	row := q.db.QueryRow(ctx, createMembership, institution)
-	var i Membership
-	err := row.Scan(&i.ID, &i.Institution)
+type CreateEntryNetworkParams struct {
+	Entry   uuid.UUID
+	Network uuid.UUID
+}
+
+func (q *Queries) CreateEntryNetwork(ctx context.Context, arg CreateEntryNetworkParams) (EntryNetwork, error) {
+	row := q.db.QueryRow(ctx, createEntryNetwork, arg.Entry, arg.Network)
+	var i EntryNetwork
+	err := row.Scan(&i.ID, &i.Entry, &i.Network)
+	return i, err
+}
+
+const createEntryTier = `-- name: CreateEntryTier :one
+INSERT INTO entry_tiers (
+  entry, tier
+) VALUES (
+  $1,
+  $2
+)
+RETURNING id, entry, tier
+`
+
+type CreateEntryTierParams struct {
+	Entry uuid.UUID
+	Tier  uuid.UUID
+}
+
+func (q *Queries) CreateEntryTier(ctx context.Context, arg CreateEntryTierParams) (EntryTier, error) {
+	row := q.db.QueryRow(ctx, createEntryTier, arg.Entry, arg.Tier)
+	var i EntryTier
+	err := row.Scan(&i.ID, &i.Entry, &i.Tier)
 	return i, err
 }
 
@@ -171,28 +199,6 @@ func (q *Queries) CreateNetwork(ctx context.Context, name *string) (Network, err
 	return i, err
 }
 
-const createNetworkMembership = `-- name: CreateNetworkMembership :one
-INSERT INTO membership_networks (
-  membership, network
-) VALUES (
-  $1,
-  $2
-)
-RETURNING id, membership, network
-`
-
-type CreateNetworkMembershipParams struct {
-	Membership uuid.UUID
-	Network    uuid.UUID
-}
-
-func (q *Queries) CreateNetworkMembership(ctx context.Context, arg CreateNetworkMembershipParams) (MembershipNetwork, error) {
-	row := q.db.QueryRow(ctx, createNetworkMembership, arg.Membership, arg.Network)
-	var i MembershipNetwork
-	err := row.Scan(&i.ID, &i.Membership, &i.Network)
-	return i, err
-}
-
 const createTier = `-- name: CreateTier :one
 INSERT INTO tiers (
   name
@@ -206,28 +212,6 @@ func (q *Queries) CreateTier(ctx context.Context, name *string) (Tier, error) {
 	row := q.db.QueryRow(ctx, createTier, name)
 	var i Tier
 	err := row.Scan(&i.ID, &i.Name)
-	return i, err
-}
-
-const createTierMembership = `-- name: CreateTierMembership :one
-INSERT INTO membership_tiers (
-  membership, tier
-) VALUES (
-  $1,
-  $2
-)
-RETURNING id, membership, tier
-`
-
-type CreateTierMembershipParams struct {
-	Membership uuid.UUID
-	Tier       uuid.UUID
-}
-
-func (q *Queries) CreateTierMembership(ctx context.Context, arg CreateTierMembershipParams) (MembershipTier, error) {
-	row := q.db.QueryRow(ctx, createTierMembership, arg.Membership, arg.Tier)
-	var i MembershipTier
-	err := row.Scan(&i.ID, &i.Membership, &i.Tier)
 	return i, err
 }
 
@@ -302,12 +286,21 @@ func (q *Queries) DeleteEntryBySymbol(ctx context.Context, arg DeleteEntryBySymb
 	return err
 }
 
-const deleteMembershipById = `-- name: DeleteMembershipById :exec
-DELETE from memberships where id = $1
+const deleteEntryNetworkById = `-- name: DeleteEntryNetworkById :exec
+DELETE from entry_networks WHERE id = $1
 `
 
-func (q *Queries) DeleteMembershipById(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteMembershipById, id)
+func (q *Queries) DeleteEntryNetworkById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEntryNetworkById, id)
+	return err
+}
+
+const deleteEntryTierById = `-- name: DeleteEntryTierById :exec
+DELETE from entry_tiers WHERE id = $1
+`
+
+func (q *Queries) DeleteEntryTierById(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEntryTierById, id)
 	return err
 }
 
@@ -317,15 +310,6 @@ DELETE from networks where id = $1
 
 func (q *Queries) DeleteNetworkById(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteNetworkById, id)
-	return err
-}
-
-const deleteNetworkMembershipById = `-- name: DeleteNetworkMembershipById :exec
-DELETE from membership_networks WHERE id = $1
-`
-
-func (q *Queries) DeleteNetworkMembershipById(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteNetworkMembershipById, id)
 	return err
 }
 
@@ -377,15 +361,6 @@ DELETE from tiers where id = $1
 
 func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteTierById, id)
-	return err
-}
-
-const deleteTierMembershipById = `-- name: DeleteTierMembershipById :exec
-DELETE from membership_tiers WHERE id = $1
-`
-
-func (q *Queries) DeleteTierMembershipById(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteTierMembershipById, id)
 	return err
 }
 
@@ -505,6 +480,28 @@ func (q *Queries) GetClosureByIdForUpdate(ctx context.Context, id uuid.UUID) (Cl
 	return i, err
 }
 
+const getEntryNetworkById = `-- name: GetEntryNetworkById :one
+SELECT id, entry, network FROM entry_networks WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetEntryNetworkById(ctx context.Context, id uuid.UUID) (EntryNetwork, error) {
+	row := q.db.QueryRow(ctx, getEntryNetworkById, id)
+	var i EntryNetwork
+	err := row.Scan(&i.ID, &i.Entry, &i.Network)
+	return i, err
+}
+
+const getEntryTierById = `-- name: GetEntryTierById :one
+SELECT id, entry, tier FROM entry_tiers WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetEntryTierById(ctx context.Context, id uuid.UUID) (EntryTier, error) {
+	row := q.db.QueryRow(ctx, getEntryTierById, id)
+	var i EntryTier
+	err := row.Scan(&i.ID, &i.Entry, &i.Tier)
+	return i, err
+}
+
 const getLMSConfigByEntry = `-- name: GetLMSConfigByEntry :one
 SELECT id, entry, address, from_agency, from_agency_authentication, to_agency, lookup_user_enabled, accept_item_enabled, checkin_item_enabled, checkout_item_enabled, item_location, request_item_request_type, request_item_scope_type, request_item_bib_code, request_item_pickup_location_enabled, requester_pickup_location, supplier_pickup_location, requester_patron_pattern FROM lms_configs 
   WHERE entry = $1
@@ -536,17 +533,6 @@ func (q *Queries) GetLMSConfigByEntry(ctx context.Context, entry uuid.UUID) (Lms
 	return i, err
 }
 
-const getMembershipById = `-- name: GetMembershipById :one
-SELECT id, institution FROM memberships WHERE id = $1 LIMIT 1
-`
-
-func (q *Queries) GetMembershipById(ctx context.Context, id uuid.UUID) (Membership, error) {
-	row := q.db.QueryRow(ctx, getMembershipById, id)
-	var i Membership
-	err := row.Scan(&i.ID, &i.Institution)
-	return i, err
-}
-
 const getNetworkById = `-- name: GetNetworkById :one
 SELECT id, name FROM networks WHERE id = $1 LIMIT 1
 `
@@ -558,17 +544,6 @@ func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, er
 	return i, err
 }
 
-const getNetworkMembershipById = `-- name: GetNetworkMembershipById :one
-SELECT id, membership, network FROM membership_networks WHERE id = $1 LIMIT 1
-`
-
-func (q *Queries) GetNetworkMembershipById(ctx context.Context, id uuid.UUID) (MembershipNetwork, error) {
-	row := q.db.QueryRow(ctx, getNetworkMembershipById, id)
-	var i MembershipNetwork
-	err := row.Scan(&i.ID, &i.Membership, &i.Network)
-	return i, err
-}
-
 const getTierById = `-- name: GetTierById :one
 SELECT id, name FROM tiers WHERE id = $1 LIMIT 1
 `
@@ -577,17 +552,6 @@ func (q *Queries) GetTierById(ctx context.Context, id uuid.UUID) (Tier, error) {
 	row := q.db.QueryRow(ctx, getTierById, id)
 	var i Tier
 	err := row.Scan(&i.ID, &i.Name)
-	return i, err
-}
-
-const getTierMembershipById = `-- name: GetTierMembershipById :one
-SELECT id, membership, tier FROM membership_tiers WHERE id = $1 LIMIT 1
-`
-
-func (q *Queries) GetTierMembershipById(ctx context.Context, id uuid.UUID) (MembershipTier, error) {
-	row := q.db.QueryRow(ctx, getTierMembershipById, id)
-	var i MembershipTier
-	err := row.Scan(&i.ID, &i.Membership, &i.Tier)
 	return i, err
 }
 
@@ -628,27 +592,43 @@ func (q *Queries) ListClosures(ctx context.Context, arg ListClosuresParams) ([]C
 	return items, nil
 }
 
-const listMemberships = `-- name: ListMemberships :many
-SELECT id, institution FROM memberships
-  LIMIT $2
-  OFFSET $1
+const listEntryNetworks = `-- name: ListEntryNetworks :many
+SELECT id, entry, network FROM entry_networks
+  WHERE (
+    $1::text IS NULL
+    OR $2::text IS NULL
+    OR CASE $1::text
+      WHEN 'id' THEN id::text
+      WHEN 'entry' THEN entry::text
+      WHEN 'network' THEN network::text
+    END = $2::text
+  )
+  LIMIT $4
+  OFFSET $3
 `
 
-type ListMembershipsParams struct {
+type ListEntryNetworksParams struct {
+	Field  *string
+	Value  *string
 	Offset int32
 	Limit  int32
 }
 
-func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams) ([]Membership, error) {
-	rows, err := q.db.Query(ctx, listMemberships, arg.Offset, arg.Limit)
+func (q *Queries) ListEntryNetworks(ctx context.Context, arg ListEntryNetworksParams) ([]EntryNetwork, error) {
+	rows, err := q.db.Query(ctx, listEntryNetworks,
+		arg.Field,
+		arg.Value,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Membership
+	var items []EntryNetwork
 	for rows.Next() {
-		var i Membership
-		if err := rows.Scan(&i.ID, &i.Institution); err != nil {
+		var i EntryNetwork
+		if err := rows.Scan(&i.ID, &i.Entry, &i.Network); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -659,27 +639,43 @@ func (q *Queries) ListMemberships(ctx context.Context, arg ListMembershipsParams
 	return items, nil
 }
 
-const listNetworkMemberships = `-- name: ListNetworkMemberships :many
-SELECT id, membership, network FROM membership_networks
-  LIMIT $2
-  OFFSET $1
+const listEntryTiers = `-- name: ListEntryTiers :many
+SELECT id, entry, tier FROM entry_tiers
+  WHERE (
+    $1::text IS NULL
+    OR $2::text IS NULL
+    OR CASE $1::text
+      WHEN 'id' THEN id::text
+      WHEN 'entry' THEN entry::text
+      WHEN 'tier' THEN tier::text
+    END = $2::text
+  )
+  LIMIT $4
+  OFFSET $3
 `
 
-type ListNetworkMembershipsParams struct {
+type ListEntryTiersParams struct {
+	Field  *string
+	Value  *string
 	Offset int32
 	Limit  int32
 }
 
-func (q *Queries) ListNetworkMemberships(ctx context.Context, arg ListNetworkMembershipsParams) ([]MembershipNetwork, error) {
-	rows, err := q.db.Query(ctx, listNetworkMemberships, arg.Offset, arg.Limit)
+func (q *Queries) ListEntryTiers(ctx context.Context, arg ListEntryTiersParams) ([]EntryTier, error) {
+	rows, err := q.db.Query(ctx, listEntryTiers,
+		arg.Field,
+		arg.Value,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []MembershipNetwork
+	var items []EntryTier
 	for rows.Next() {
-		var i MembershipNetwork
-		if err := rows.Scan(&i.ID, &i.Membership, &i.Network); err != nil {
+		var i EntryTier
+		if err := rows.Scan(&i.ID, &i.Entry, &i.Tier); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -711,37 +707,6 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 	for rows.Next() {
 		var i Network
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTierMemberships = `-- name: ListTierMemberships :many
-SELECT id, membership, tier FROM membership_tiers
-  LIMIT $2
-  OFFSET $1
-`
-
-type ListTierMembershipsParams struct {
-	Offset int32
-	Limit  int32
-}
-
-func (q *Queries) ListTierMemberships(ctx context.Context, arg ListTierMembershipsParams) ([]MembershipTier, error) {
-	rows, err := q.db.Query(ctx, listTierMemberships, arg.Offset, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []MembershipTier
-	for rows.Next() {
-		var i MembershipTier
-		if err := rows.Scan(&i.ID, &i.Membership, &i.Tier); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

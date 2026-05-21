@@ -28,7 +28,7 @@ func TestNetworkCases(t *testing.T) {
 		{
 			name:        "GET a network",
 			method:      http.MethodGet,
-			endpoint:    "/networks/00000000-0000-0000-0000-000000000001",
+			endpoint:    "/networks/20000000-0000-0000-0000-000000000001",
 			status:      http.StatusOK,
 			resFile:     "network.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
@@ -46,7 +46,7 @@ func TestNetworkCases(t *testing.T) {
 		{
 			name:          "DELETE network",
 			method:        http.MethodDelete,
-			endpoint:      "/networks/00000000-0000-0000-0000-000000000002",
+			endpoint:      "/networks/20000000-0000-0000-0000-000000000002",
 			status:        http.StatusNoContent,
 			refetchStatus: http.StatusNotFound,
 			addlHeaders:   consortiumPermissionHeaders,

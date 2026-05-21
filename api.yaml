@@ -519,11 +519,11 @@ paths:
             text/plain:
               schema:
                 type: string
-  /memberships:
+  /entry-tiers:
     get:
-      summary: Get all Memberships
-      description: Return all Memberships that the user has access to
-      operationId: getMemberships
+      summary: Returns all Entry Tier Mappings
+      description: Returns all Entry Tier mappings from the system that the user has access to
+      operationId: getEntryTiers
       parameters:
         - name: q
           in: query
@@ -536,11 +536,11 @@ paths:
         - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Memberships list response
+          description: Entry Tiers list response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MembershipsResponse'
+                $ref: '#/components/schemas/EntryTiersResponse'
         '400':
           description: Bad request
           content:
@@ -560,190 +560,26 @@ paths:
               schema:
                 type: string
     post:
-      summary: Create a new Membership
-      description: Create a new Membership
-      operationId: addMembership
+      summary: Creates a new Entry Tier
+      description: Creates a new Entry Tier Relationship
+      operationId: addEntryTier
       requestBody:
-        description: Membership to add
+        description: Entry Tier to add
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Membership'
+              $ref: '#/components/schemas/EntryTier'
       responses:
         '201':
-          description: Membership response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Id'
-          links:
-            GetMembershipById:
-              operationId: GetMembershipById
-              parameters:
-                id: '$response.body#/id'
-            UpdateMembership:
-              operationId: updateMembership
-              parameters:
-                id: '$response.body#/id'
-        '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
-        '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
-  /memberships/{id}:
-    get:
-      summary: Returns a Membership by ID
-      operationId: getMembership
-      parameters:
-        - name: id
-          in: path
-          description: ID of Membership to fetch
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Membership response
-          content: 
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Membership'
-        '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Forbidden
-          content:
-            text/plain:
-              schema:
-                type: string
-        '404':
-          description: Not found
-          content:
-            text/plain:
-              schema:
-                type: string
-        '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
-    delete:
-      summary: Delete Membership by ID
-      operationId: deleteMembership
-      parameters:
-        - name: id
-          in: path
-          description: ID of Membership to delete
-          required: true
-          schema: 
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Membership deleted
-        '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
-        '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
-  /tier-memberships:
-    get:
-      summary: Returns all Tier Memberships
-      description: Returns all Tier Memberships from the system that the user has access to.
-      operationId: getTierMemberships
-      parameters:
-        - name: q
-          in: query
-          description: keywords to filter by
-          required: false
-          style: form
-          schema:
-            type: string
-        - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/Offset'
-      responses:
-        '200':
-          description: Tier Membership list response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TierMembershipsResponse'
-        '400':
-          description: Bad request
-          content:
-            text/plain:
-              schema:
-                type: string
-        '401':
-          description: Access denied
-          content:
-            text/plain:
-              schema:
-                type: string
-        '500':
-          description: Internal server error
-          content:
-            text/plain:
-              schema:
-                type: string
-    post:
-      summary: Creates a new Tier Membership
-      description: Creates a new Tier Membership
-      operationId: addTierMembership
-      requestBody:
-        description: Tier Membership to add
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TierMembership'
-      responses:
-        '201':
-          description: Tier Membership response
+          description: Entry Tier response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Id'
           links:
             GetEntryByID:
-              operationId: getTierMembershipByID
-              parameters:
-                id: '$response.body#/id'
-            UpdateEntry:
-              operationId: updateTierMembershipByID
+              operationId: getEntryTierByID
               parameters:
                 id: '$response.body#/id'
         '400':
@@ -764,25 +600,25 @@ paths:
             text/plain:
               schema:
                 type: string
-  /tier-memberships/{id}:
+  /entry-tiers/{id}:
     get:
-      summary: Returns a Tier Membership by ID
-      operationId: getTierMembership
+      summary: Returns an Entry Tier by ID
+      operationId: getEntryTierByID
       parameters:
         - name: id
           in: path
-          description: ID of Tier Membership
+          description: ID of Entry Tier
           required: true
           schema: 
             type: string
             format: uuid
       responses:
         '200':
-          description: Tier Membership response
+          description: Entry Tier response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TierMembership'
+                $ref: '#/components/schemas/EntryTier'
         '400':
           description: Bad request
           content:
@@ -808,19 +644,19 @@ paths:
               schema:
                 type: string
     delete:
-      summary: Delete Tier Membership by ID
-      operationId: deleteTierMembership
+      summary: Delete Entry Tier by ID
+      operationId: deleteEntryTier
       parameters:
       - name: id
         in: path
-        description: ID of Tier Membership
+        description: ID of Entry Tier
         required: true
         schema: 
           type: string
           format: uuid
       responses:
         '204':
-          description: Tier Membership deleted
+          description: Entry Tier deleted
         '400':
           description: Bad request
           content:
@@ -839,11 +675,11 @@ paths:
             text/plain:
               schema:
                 type: string
-  /network-memberships:
+  /entry-networks:
     get:
-      summary: Returns all Network Memberships
-      description: Returns all Network Memberships from the system that the user has access to.
-      operationId: getNetworkMemberships
+      summary: Returns all Entry Network Mappings
+      description: Returns all Entry Network mappings from the system that the user has access to
+      operationId: getEntryNetworks
       parameters:
         - name: q
           in: query
@@ -856,11 +692,11 @@ paths:
         - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Network Membership list response
+          description: Entry Networks list response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworkMembershipsResponse'
+                $ref: '#/components/schemas/EntryNetworksResponse'
         '400':
           description: Bad request
           content:
@@ -880,30 +716,26 @@ paths:
               schema:
                 type: string
     post:
-      summary: Creates a new Network Membership
-      description: Creates a new Network Membership
-      operationId: addNetworkMembership
+      summary: Creates a new Entry Network
+      description: Creates a new Entry Network Relationship
+      operationId: addEntryNetwork
       requestBody:
-        description: Network Membership to add
+        description: Entry Network to add
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NetworkMembership'
+              $ref: '#/components/schemas/EntryNetwork'
       responses:
         '201':
-          description: Network Membership response
+          description: Entry Network response
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Id'
           links:
-            GetEntryByID:
-              operationId: getNetworkMembershipByID
-              parameters:
-                id: '$response.body#/id'
-            UpdateEntry:
-              operationId: updateNetworkMembershipByID
+            GetEntryNetworkByID:
+              operationId: getEntryNetworkByID
               parameters:
                 id: '$response.body#/id'
         '400':
@@ -924,25 +756,25 @@ paths:
             text/plain:
               schema:
                 type: string
-  /network-memberships/{id}:
+  /entry-networks/{id}:
     get:
-      summary: Returns a Network Membership by ID
-      operationId: getNetworkMembership
+      summary: Returns an Entry Network by ID
+      operationId: getEntryNetworkByID
       parameters:
         - name: id
           in: path
-          description: ID of Network Membership
+          description: ID of Entry Network
           required: true
           schema: 
             type: string
             format: uuid
       responses:
         '200':
-          description: Network Membership response
+          description: Entry Network response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NetworkMembership'
+                $ref: '#/components/schemas/EntryNetwork'
         '400':
           description: Bad request
           content:
@@ -969,19 +801,19 @@ paths:
                 type: string
   
     delete:
-      summary: Delete Network Membership by ID
-      operationId: deleteNetworkMembership
+      summary: Delete Entry Network by ID
+      operationId: deleteEntryNetwork
       parameters:
       - name: id
         in: path
-        description: ID of Network Membership
+        description: ID of Entry Network
         required: true
         schema: 
           type: string
           format: uuid
       responses:
         '204':
-          description: Network Membership deleted
+          description: Entry Network deleted
         '400':
           description: Bad request
           content:
@@ -1291,7 +1123,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Closure'
-    MembershipsResponse:
+    EntryNetworksResponse:
       type: object
       required:
         - about
@@ -1302,8 +1134,8 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Membership'
-    NetworkMembershipsResponse:
+            $ref: '#/components/schemas/EntryNetwork'
+    EntryTiersResponse:
       type: object
       required:
         - about
@@ -1314,19 +1146,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/NetworkMembership'
-    TierMembershipsResponse:
-      type: object
-      required:
-        - about
-        - items
-      properties:
-        about:
-          $ref: '#/components/schemas/About'
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/TierMembership'
+            $ref: '#/components/schemas/EntryTier'
     About:
       type: object
       required:
@@ -1786,27 +1606,11 @@ components:
         name:
           type: string
     
-    Membership:
+    EntryNetwork:
       type: object
       required:
         - id
-        - institution
-      properties:
-        id:
-          readOnly: true
-          type: string
-          format: uuid
-          description: Unique identifier
-        institution:
-          type: string
-          format: uuid
-          description: ID of institution
-    
-    NetworkMembership:
-      type: object
-      required:
-        - id
-        - membership
+        - entry
         - network
       properties:
         id:
@@ -1814,20 +1618,20 @@ components:
           type: string
           format: uuid
           description: Unique identifier
-        membership:
+        entry:
           type: string
           format: uuid
-          description: ID of membership
+          description: ID of entry
         network:
           type: string
           format: uuid
-          description: ID of membership
+          description: ID of network
 
-    TierMembership:
+    EntryTier:
       type: object
       required:
         - id
-        - membership
+        - entry
         - tier
       properties:
         id:
@@ -1835,12 +1639,12 @@ components:
           type: string
           format: uuid
           description: Unique identifier
-        membership:
+        entry:
           type: string
           format: uuid
-          description: ID of membership
+          description: ID of entry
         tier:
           type: string
           format: uuid
-          description: ID of membership
+          description: ID of tier
 

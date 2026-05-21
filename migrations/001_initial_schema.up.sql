@@ -63,20 +63,15 @@ CREATE TABLE IF NOT EXISTS networks (
 	name varchar(255)
 );
 
-CREATE TABLE IF NOT EXISTS memberships (
+CREATE TABLE IF NOT EXISTS entry_tiers (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	institution uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS membership_tiers (
-	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	membership uuid NOT NULL REFERENCES memberships (id) ON DELETE CASCADE,
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	tier uuid NOT NULL REFERENCES tiers (id)
 );
 
-CREATE TABLE IF NOT EXISTS membership_networks (
+CREATE TABLE IF NOT EXISTS entry_networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-	membership uuid NOT NULL REFERENCES memberships (id) ON DELETE CASCADE,
+	entry uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	network uuid NOT NULL REFERENCES networks (id)
 );
 
