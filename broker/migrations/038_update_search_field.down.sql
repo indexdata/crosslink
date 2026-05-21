@@ -23,3 +23,28 @@ BEGIN
 RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- One-time backfill of search tsvector for existing patron_request rows
+UPDATE patron_request pr
+SET search = to_tsvector(
+        pr.language,
+        COALESCE(pr.requester_req_id, '') || ' ' ||
+        COALESCE(pr.patron, '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'givenName', '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'surname', '') || ' ' ||
+        COALESCE(pr.ill_request->'patronInfo'->>'patronId', '') || ' ' ||
+        COALESCE(pr.ill_request->'bibliographicInfo'->>'title', '') || ' ' ||
+        COALESCE(pr.ill_request->'bibliographicInfo'->>'author', '') || ' ' ||
+        COALESCE(
+                (
+                    SELECT string_agg(
+                                   COALESCE(item->>'item_id', '') || ' ' ||
+                                   COALESCE(item->>'barcode', '') || ' ' ||
+                                   COALESCE(item->>'call_number', ''),
+                                   ' '
+                           )
+                    FROM jsonb_array_elements(pr.items) AS item
+                ),
+                ''
+        )
+             );
