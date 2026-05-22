@@ -1,8 +1,18 @@
 version: 2
 updates:
-  # broker module
+  # Go workspace modules
   - package-ecosystem: gomod
-    directory: "/broker"
+    directories:
+      - "/broker"
+      - "/directory"
+      - "/httpclient"
+      - "/illmock"
+      - "/iso18626"
+      - "/marcxml"
+      - "/ncip"
+      - "/sru"
+      - "/testutil"
+      - "/zoom"
     schedule:
       interval: daily
     open-pull-requests-limit: 10
@@ -13,25 +23,7 @@ updates:
       - "deps"
     groups:
       go-minor-patch:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-
-    # illmock module
-  - package-ecosystem: gomod
-    directory: "/illmock"
-    schedule:
-      interval: daily
-    open-pull-requests-limit: 10
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    labels:
-      - "deps"
-    groups:
-      go-minor-patch:
+        group-by: dependency-name
         patterns:
           - "*"
         update-types:
