@@ -72,8 +72,11 @@ func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronReques
 	}
 	if hasTransition && transitionState != pr.State {
 		pr.State = transitionState
-		if config, configOk := actionMapping.getStateConfig(pr); configOk && config.terminal {
-			pr.TerminalState = true
+		if config, configOk := actionMapping.getStateConfig(pr); configOk {
+			if config.terminal {
+				pr.TerminalState = true
+			}
+			pr.NeedsAttention = config.needsAttention
 		}
 		return pr, true, true, nil
 	}

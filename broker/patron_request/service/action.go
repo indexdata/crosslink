@@ -129,14 +129,18 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	updatedPr.LastAction = getDbText(string(action))
 	updatedPr.LastActionOutcome = getDbText(outcome)
 	updatedPr.LastActionResult = getDbText(string(execResult.status))
+	updatedPr.NeedsAttention = false
 	if outcome == ActionOutcomeFailure {
 		updatedPr.NeedsAttention = true
 	}
 	stateChanged := false
 	if transitionState, ok := actionMapping.GetActionTransition(currentPr, action, outcome); ok && transitionState != updatedPr.State {
 		updatedPr.State = transitionState
-		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk && config.terminal {
-			updatedPr.TerminalState = true
+		if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
+			if config.terminal {
+				updatedPr.TerminalState = true
+			}
+			updatedPr.NeedsAttention = config.needsAttention
 		}
 		toState := string(transitionState)
 		execResult.result.ActionResult.ToState = &toState

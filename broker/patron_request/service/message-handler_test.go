@@ -545,6 +545,8 @@ func TestHandleSupplyingAgencyMessageWillSupplyCondition(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, resp.SupplyingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Equal(t, BorrowerStateConditionPending, mockPrRepo.savedPr.State)
+	// NeedsAttention flag value taken from state
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 	assert.NoError(t, err)
 }
 
