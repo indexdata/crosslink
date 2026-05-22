@@ -27,7 +27,6 @@ SET search = to_tsvector(
         pr.language,
         COALESCE(pr.requester_req_id, '') || ' ' ||
         COALESCE(pr.patron, '') || ' ' ||
-        COALESCE(pr.ill_request->'patronInfo'->>'patronId', '') || ' ' ||
         COALESCE(pr.ill_request->'bibliographicInfo'->>'title', '') || ' ' ||
         COALESCE(pr.ill_request->'bibliographicInfo'->>'author', '') || ' ' ||
         COALESCE(
@@ -44,8 +43,8 @@ SET search = to_tsvector(
         )
              );
 
-CREATE INDEX IF NOT EXISTS idx_pr_surname
-    ON patron_request (lower((ill_request->'patronInfo'->>'surname')));
+CREATE INDEX IF NOT EXISTS idx_pr_surname_lower
+    ON patron_request (lower((ill_request->'patronInfo'->>'surname')) text_pattern_ops);
 
-CREATE INDEX IF NOT EXISTS idx_pr_given_name
-    ON patron_request (lower((ill_request->'patronInfo'->>'givenName')));
+CREATE INDEX IF NOT EXISTS idx_pr_given_name_lower
+    ON patron_request (lower((ill_request->'patronInfo'->>'givenName')) text_pattern_ops);
