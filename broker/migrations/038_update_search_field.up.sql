@@ -47,5 +47,5 @@ SET search = to_tsvector(
 CREATE INDEX IF NOT EXISTS idx_pr_surname
     ON patron_request (lower((ill_request->'patronInfo'->>'surname')));
 
-CREATE INDEX IF NOT EXISTS idx_pr_surname
+CREATE INDEX IF NOT EXISTS idx_pr_given_name
     ON patron_request (lower((ill_request->'patronInfo'->>'givenName')));
