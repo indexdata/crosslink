@@ -421,12 +421,17 @@ func TestMarkConditionNotificationsReceipt(t *testing.T) {
 func TestListPatronRequests(t *testing.T) {
 	prIds := []string{}
 
-	// Create 2 requests
+	// Create 2 requests; only the first carries an internal note
 	for i := 0; i < 2; i++ {
 		prId := uuid.NewString()
 		prIds = append(prIds, prId)
+		var internalNote pgtype.Text
+		if i == 0 {
+			internalNote = pgtype.Text{String: "staff only", Valid: true}
+		}
 		_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
-			ID: prId,
+			ID:           prId,
+			InternalNote: internalNote,
 			CreatedAt: pgtype.Timestamp{
 				Time:  time.Now(),
 				Valid: true,
@@ -596,6 +601,29 @@ func TestListPatronRequests(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
+
+	// has_internal_note=true selects requests that have a note (and round-trips its value)
+	cql = `requester_req_id_exact = REQ-123 and has_internal_note=true`
+	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	if assert.Len(t, list, 1) {
+		assert.Equal(t, prIds[0], list[0].ID)
+		assert.Equal(t, "staff only", list[0].InternalNote.String)
+	}
+
+	// has_internal_note=false selects requests without one
+	cql = `requester_req_id_exact = REQ-123 and has_internal_note=false`
+	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
+		Limit:  10,
+		Offset: 0,
+	}, &cql)
+	assert.NoError(t, err)
+	if assert.Len(t, list, 1) {
+		assert.Equal(t, prIds[1], list[0].ID)
+	}
 
 	for _, prId := range prIds {
 		err = prRepo.DeletePatronRequest(appCtx, prId)

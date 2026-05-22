@@ -179,6 +179,15 @@
         },
         {
           "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/internal_note",
+          "permissionsRequired": [
+            "broker.patron_requests.item.internal_note.put"
+          ]
+        },
+        {
+          "methods": [
             "GET"
           ],
           "pathPattern": "/broker/pullslips/{id}",
@@ -314,6 +323,11 @@
       "permissionName": "broker.patron_requests.item.notifications.item.receipt.put"
     },
     {
+      "description": "Update the internal note on a patron request",
+      "displayName": "Broker - update patron request internal note",
+      "permissionName": "broker.patron_requests.item.internal_note.put"
+    },
+    {
       "description": "Get pull slip by id",
       "displayName": "Broker - get pull slip by id",
       "permissionName": "broker.pullslips.item.get"
@@ -355,6 +369,7 @@
         "broker.patron_requests.item.action.post",
         "broker.patron_requests.item.notifications.post",
         "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.patron_requests.item.internal_note.put",
         "broker.pullslips.post"
       ]
     },
@@ -399,6 +414,7 @@
         "broker.patron_requests.item.notifications.get",
         "broker.patron_requests.item.notifications.post",
         "broker.patron_requests.item.notifications.item.receipt.put",
+        "broker.patron_requests.item.internal_note.put",
         "broker.pullslips.item.get",
         "broker.pullslips.item.pdf.get",
         "broker.pullslips.post"
