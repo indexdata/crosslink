@@ -46,12 +46,12 @@ type PatronRequestApiHandler struct {
 	actionMappingService prservice.ActionMappingService
 	autoActionRunner     prservice.AutoActionRunner
 	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       tenant.TenantResolver
+	tenantResolver       *tenant.TenantResolver
 	notificationSender   prservice.PatronRequestNotificationService
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
-	eventRepo events.EventRepo, tenantResolver tenant.TenantResolver, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
+	eventRepo events.EventRepo, tenantResolver *tenant.TenantResolver, iso18626Handler handler.Iso18626HandlerInterface, limitDefault int32) PatronRequestApiHandler {
 	return PatronRequestApiHandler{
 		limitDefault:         limitDefault,
 		prRepo:               prRepo,

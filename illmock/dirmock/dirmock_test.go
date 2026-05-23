@@ -12,53 +12,62 @@ import (
 )
 
 func TestMatchQueries(t *testing.T) {
-	match, err := matchQuery(nil, nil)
+	match, err := matchQuery(nil, directory.Entry{})
 	assert.Nil(t, err)
 	assert.True(t, match)
 
-	match, err = matchClause(nil, nil)
+	match, err = matchClause(nil, directory.Entry{})
 	assert.Nil(t, err)
 	assert.False(t, match)
 
 	for _, testcase := range []struct {
 		query   string
 		symbols string
+		tenant  string
 		match   bool
 		error   string
 	}{
-		{"a:a", "a:a a:b a:c", false, "cql.serverChoice"},
-		{"symbol > a:a", "a:a a:b a:c", false, ""},
-		{"symbol = a:a", "a:a", true, ""},
-		{"symbol = a:a", "a:b", false, ""},
-		{"symbol = a:a", "a:a a:b", false, ""},
-		{"symbol = a:a a:b", "a:a a:b", true, ""},
-		{"symbol = a:b a:a", "a:a a:b", false, ""},
-		{"symbol = a:b a:a", "a:a a:b a:c", false, ""},
-		{"symbol any a:a", "a:a", true, ""},
-		{"symbol any a:a", "a:b", false, ""},
-		{"symbol any a:a", "a:a a:b", true, ""},
-		{"symbol any a:a a:b", "a:a a:b", true, ""},
-		{"symbol any a:b a:a", "a:a a:b", true, ""},
-		{"symbol any a:b a:a", "a:a a:b a:c", true, ""},
-		{"symbol all a:a", "a:a", true, ""},
-		{"symbol all a:a", "a:b", false, ""},
-		{"symbol all a:a", "a:a a:b", true, ""},
-		{"symbol all a:a a:b", "a:a a:b", true, ""},
-		{"symbol all a:b a:a", "a:a a:b", true, ""},
-		{"symbol all a:b a:a", "a:a a:b a:c", true, ""},
-		{"symbol all a:b or symbol all d", "a:a a:b a:c", true, ""},
-		{"symbol all e or symbol all d", "a:a a:b a:c", false, ""},
-		{"symbol all e or d", "a:a a:b a:c", false, "cql.serverChoice"},
-		{"e or symbol all d", "a:a a:b a:c", false, "cql.serverChoice"},
-		{"symbol all a:b and symbol all d", "a:a a:b a:c", false, ""},
-		{"symbol all e and symbol all d", "a:a a:b a:c", false, ""},
-		{"symbol all a:a and symbol all a:c", "a:a a:b a:c", true, ""},
+		{"a:a", "a:a a:b a:c", "", false, "cql.serverChoice"},
+		{"symbol > a:a", "a:a a:b a:c", "", false, "unsupported relation >"},
+		{"foo = a:a", "a:a a:b a:c", "", false, "unsupported index foo"},
+		{"symbol = a:a", "", "", false, ""},
+		{"symbol = a:a", "a:b", "", false, ""},
+		{"symbol = a:a", "a:a a:b", "", false, ""},
+		{"symbol = a:a a:b", "a:a a:b", "", true, ""},
+		{"symbol = a:b a:a", "a:a a:b", "", false, ""},
+		{"symbol = a:b a:a", "a:a a:b a:c", "", false, ""},
+		{"symbol any a:a", "a:a", "", true, ""},
+		{"symbol any a:a", "a:b", "", false, ""},
+		{"symbol any a:a", "a:a a:b", "", true, ""},
+		{"symbol any a:a a:b", "a:a a:b", "", true, ""},
+		{"symbol any a:b a:a", "a:a a:b", "", true, ""},
+		{"symbol any a:b a:a", "a:a a:b a:c", "", true, ""},
+		{"symbol all a:a", "a:a", "", true, ""},
+		{"symbol all a:a", "a:b", "", false, ""},
+		{"symbol all a:a", "a:a a:b", "", true, ""},
+		{"symbol all a:a a:b", "a:a a:b", "", true, ""},
+		{"symbol all a:b a:a", "a:a a:b", "", true, ""},
+		{"symbol all a:b a:a", "a:a a:b a:c", "", true, ""},
+		{"symbol all a:b or symbol all d", "a:a a:b a:c", "", true, ""},
+		{"symbol all e or symbol all d", "a:a a:b a:c", "", false, ""},
+		{"symbol all e or d", "a:a a:b a:c", "", false, "cql.serverChoice"},
+		{"e or symbol all d", "a:a a:b a:c", "", false, "cql.serverChoice"},
+		{"symbol all a:b and symbol all d", "a:a a:b a:c", "", false, ""},
+		{"symbol all e and symbol all d", "a:a a:b a:c", "", false, ""},
+		{"symbol all a:a and symbol all a:c", "a:a a:b a:c", "", true, ""},
 
-		{"symbol all a:b not symbol all d", "a:a a:b a:c", true, ""},
-		{"symbol all e not symbol all d", "a:a a:b a:c", false, ""},
-		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", false, ""},
-		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", false, ""},
-		{"symbol all a:a prox symbol all a:c", "a:a a:b a:c", false, "unsupported operator"},
+		{"symbol all a:b not symbol all d", "a:a a:b a:c", "", true, ""},
+		{"symbol all e not symbol all d", "a:a a:b a:c", "", false, ""},
+		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", "", false, ""},
+		{"symbol all a:a not symbol all a:c", "a:a a:b a:c", "", false, ""},
+		{"symbol all a:a prox symbol all a:c", "a:a a:b a:c", "", false, "unsupported operator"},
+		{"tenant = \"\"", "a:a", "", false, ""},
+		{"tenant = t1", "a:a", "t0", false, ""},
+		{"tenant = t1", "a:a", "t1", true, ""},
+		{"tenant > t1", "a:a", "t1", true, "unsupported relation >"},
+		{"tenant = t1 and symbol = a:a", "a:a", "t1", true, ""},
+		{"tenant = t1 and symbol = a:a", "a:a", "t0", false, ""},
+		{"tenant = t1 or symbol = a:a", "a:a", "t0", true, ""},
 	} {
 		t.Run(testcase.query, func(t *testing.T) {
 			var p cql.Parser
@@ -66,12 +75,19 @@ func TestMatchQueries(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to parse query: %v", err)
 			}
-			var symbols []directory.Symbol
-			for _, symbol := range strings.Split(testcase.symbols, " ") {
-				split := strings.Split(symbol, ":")
-				symbols = append(symbols, directory.Symbol{Authority: split[0], Symbol: split[1]})
+			var entry directory.Entry
+			if testcase.symbols != "" {
+				var symbols []directory.Symbol
+				for _, symbol := range strings.Split(testcase.symbols, " ") {
+					split := strings.Split(symbol, ":")
+					symbols = append(symbols, directory.Symbol{Authority: split[0], Symbol: split[1]})
+				}
+				entry.Symbols = &symbols
 			}
-			match, err := matchQuery(&query, &symbols)
+			if testcase.tenant != "" {
+				entry.Tenant = &testcase.tenant
+			}
+			match, err := matchQuery(&query, entry)
 			if err != nil {
 				if testcase.error == "" {
 					t.Fatalf("unexpected error: %v", err)

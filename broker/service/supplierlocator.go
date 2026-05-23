@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -25,17 +25,19 @@ type SupplierLocator struct {
 	eventBus            events.EventBus
 	illRepo             ill_db.IllRepo
 	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     adapter.LookupAdapter
-	availabilityCreator availability.AvailabilityCreator
+	holdingsAdapter     holdings.LookupAdapter
+	availabilityCreator holdings.AvailabilityCreator
+	consortiumSymbol    string
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter adapter.LookupAdapter, availabilityCreator availability.AvailabilityCreator) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator, consortiumSymbol string) SupplierLocator {
 	return SupplierLocator{
 		eventBus:            eventBus,
 		illRepo:             illRepo,
 		dirAdapter:          dirAdapter,
 		holdingsAdapter:     holdingsAdapter,
 		availabilityCreator: availabilityCreator,
+		consortiumSymbol:    consortiumSymbol,
 	}
 }
 
@@ -54,8 +56,8 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.LookupParams {
-	var holdingsParams adapter.LookupParams
+func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
+	var holdingsParams holdings.LookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
 	holdingsParams.Title = bibliographicInfo.Title
@@ -68,7 +70,32 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) adapter.
 			holdingsParams.Issn = id.BibliographicItemIdentifier
 		}
 	}
+	if illTransactionData.ServiceInfo != nil {
+		holdingsParams.ServiceType = string(illTransactionData.ServiceInfo.ServiceType)
+	}
 	return holdingsParams
+}
+
+// 3 cases to consider for getting the adapter:
+// 1. If holdingsAdapter is set from the start (for example for testing), use it directly
+// 2. If consortiumSymbol is set, lookup the peer for the consortium and use its holdings adapter
+// 3. Otherwise, use the holdings adapter for the requesting peer
+func (s *SupplierLocator) getConsortialAdapter(ctx common.ExtendedContext, requestPeer ill_db.Peer) (holdings.LookupAdapter, error) {
+	lookupAdapter := s.holdingsAdapter
+	if lookupAdapter != nil {
+		return lookupAdapter, nil
+	}
+	if s.consortiumSymbol == "" {
+		return s.availabilityCreator.GetAdapter(requestPeer)
+	}
+	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup consortium peer: %w", err)
+	}
+	if len(peers) == 0 {
+		return nil, fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol)
+	}
+	return s.availabilityCreator.GetAdapter(peers[0])
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -86,8 +113,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
-
-	holdings, query, err := s.holdingsAdapter.Lookup(holdingsParams)
+	lookupAdapter, err := s.getConsortialAdapter(ctx, requester)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
+	}
+	if lookupAdapter == nil {
+		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
+	}
+	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}
@@ -244,7 +277,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	aa, err := s.availabilityCreator.GetAdapter(ctx, peer)
+	aa, err := s.availabilityCreator.GetAdapter(peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}

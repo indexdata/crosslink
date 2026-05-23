@@ -218,6 +218,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Symbol'
+        tenant:
+          description: The tenant this entry belongs to, if applicable.
+          type: string
         addresses:
           type: array
           items:
@@ -243,9 +246,9 @@ components:
         lmsConfig:
           description: Configuration for LMS (Library Management System) integration via NCIP protocol
           $ref: '#/components/schemas/LmsConfig'
-        availabilityConfig:
-          description: Configuration for availability lookup
-          $ref: '#/components/schemas/AvailabilityConfig'
+        holdingsConfig:
+          description: Configuration for holdings lookup (institutional or consortial).
+          $ref: '#/components/schemas/HoldingsConfig'
         vendor:
           type: string
           description: ISO18626 vendor type
@@ -256,13 +259,13 @@ components:
             - ILLiad
             - Unknown
 
-    AvailabilityConfig:
+    HoldingsConfig:
       type: object
       properties:
         sru:
           $ref: '#/components/schemas/SruConfig'
-        z3950:
-          $ref: '#/components/schemas/Z3950Config'
+        zoom:
+          $ref: '#/components/schemas/ZoomConfig'
         queryConfig:
           $ref: '#/components/schemas/QueryConfig'
         parserConfig:
@@ -282,7 +285,7 @@ components:
           description: Record schema to use for parsing holdings records (for example, "marcxml")
       additionalProperties: false
 
-    Z3950Config:
+    ZoomConfig:
       type: object
       required:
         - address
@@ -301,6 +304,13 @@ components:
     QueryConfig:
       type: object
       properties:
+        type:
+          type: string
+          enum: 
+            - cql
+            - pqf
+          default: pqf
+          description: whether mapping is CQL or PQF. Default is PQF.
         title:
           type: string
           description: PQF/CQL format string for title search. Default is "@attr 1=4 {term}"
@@ -322,6 +332,16 @@ components:
           $ref: '#/components/schemas/MarcParserConfig'
         opac:
           $ref: '#/components/schemas/OpacParserConfig'
+        reservoir:
+          type: object
+          description: Configuration for Reservoir parser. Currently must be empty; no properties allowed.
+          properties: {}
+          additionalProperties: false
+        marc21plus1:
+          type: object
+          description: Configuration for MARC-21plus-1 parser. Currently must be empty; no properties allowed.
+          properties: {}
+          additionalProperties: false
       additionalProperties: false
 
     MarcParserConfig:

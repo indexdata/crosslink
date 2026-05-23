@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/availability"
+	"github.com/indexdata/crosslink/broker/holdings"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -64,6 +64,8 @@ var LOG_LEVEL = utils.GetEnv("LOG_LEVEL", "INFO")
 var HOLDINGS_ADAPTER = utils.GetEnv("HOLDINGS_ADAPTER", "mock")
 var HOLDINGS_SRU_URL = common.GetEnvWithDeprecated("HOLDINGS_SRU_URL", "SRU_URL", "http://localhost:8081/sru")
 var HOLDINGS_ISXN_LOOKUP, _ = utils.GetEnvBool("HOLDINGS_ISXN_LOOKUP", false)
+var HOLDINGS_FORMAT = utils.GetEnv("HOLDINGS_FORMAT", "reservoir")
+var CONSORTIUM_SYMBOL = utils.GetEnv("CONSORTIUM_SYMBOL", "")
 var DIRECTORY_ADAPTER = utils.GetEnv("DIRECTORY_ADAPTER", "mock")
 var AVAILABILITY_ADAPTER = utils.GetEnv("AVAILABILITY_ADAPTER", "zoom")
 var DIRECTORY_API_URL = utils.GetEnv("DIRECTORY_API_URL", "http://localhost:8081/directory/entries")
@@ -132,10 +134,11 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := adapter.CreateHoldingsLookupAdapter(map[string]any{
-		adapter.HoldingsAdapter:    HOLDINGS_ADAPTER,
-		adapter.HoldingsSruURL:     HOLDINGS_SRU_URL,
-		adapter.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+	holdingsAdapter, err := holdings.CreateHoldingsLookupShared(map[string]any{
+		holdings.HoldingsAdapter:    HOLDINGS_ADAPTER,
+		holdings.HoldingsSruURL:     HOLDINGS_SRU_URL,
+		holdings.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+		holdings.HoldingsFormat:     HOLDINGS_FORMAT,
 	})
 	if err != nil {
 		return Context{}, err
@@ -174,19 +177,19 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := availability.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	availabilityCreator := holdings.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator, CONSORTIUM_SYMBOL)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
-	apiHandler := api.NewApiHandler(eventRepo, illRepo, *tenantResolver, API_PAGE_SIZE)
-	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, *tenantResolver, &iso18626Handler, API_PAGE_SIZE)
+	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)
+	prApiHandler := prapi.NewPrApiHandler(prRepo, eventBus, eventRepo, tenantResolver, &iso18626Handler, API_PAGE_SIZE)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
-	sseBroker := api.NewSseBroker(appCtx, *tenantResolver)
-	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, *tenantResolver)
+	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
+	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
 	err = StartEventBus(ctx, eventBus)

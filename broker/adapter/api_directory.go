@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/indexdata/cql-go/cqlbuilder"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
@@ -30,10 +31,19 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) GetDirectory(symbols []string, durl string) ([]DirectoryEntry, string, error) {
-	cql := "symbol any"
-	for _, s := range symbols {
-		cql += " " + s
+func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
+	var cql string
+	if len(symbols) > 0 {
+		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
+	}
+	if tenant != "" {
+		if cql != "" {
+			cql += " and "
+		}
+		cql += "tenant=\"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(tenant)) + "\""
+	}
+	if cql == "" {
+		return []DirectoryEntry{}, "", fmt.Errorf("no symbols or tenant provided for directory lookup")
 	}
 	var dirEntries []DirectoryEntry
 	query := "?maximumRecords=1000&cql=" + url.QueryEscape(cql)
@@ -114,7 +124,7 @@ func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, s
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, queryVal, err := a.GetDirectory(params.Symbols, durl)
+		d, queryVal, err := a.GetDirectory(params.Symbols, params.Tenant, durl)
 		query = queryVal
 		if err != nil {
 			return []DirectoryEntry{}, query, err

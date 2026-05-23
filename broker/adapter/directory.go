@@ -19,6 +19,7 @@ type DirectoryLookupAdapter interface {
 
 type DirectoryLookupParams struct {
 	Symbols []string
+	Tenant  string
 }
 
 type DirectoryEntry struct {

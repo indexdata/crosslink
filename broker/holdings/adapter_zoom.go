@@ -1,12 +1,10 @@
 //go:build cgo
 
-package availability
+package holdings
 
 import (
 	"fmt"
 
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/zoom"
 )
@@ -16,15 +14,16 @@ func cgoEnabled() bool { return true }
 type ZoomAvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
-	holdingsParser adapter.HoldingsParser
-	queryBuilder   adapter.LookupQueryBuilder
+	holdingsParser HoldingsParser
+	queryBuilder   LookupQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z3950Config, queryBuilder adapter.LookupQueryBuilder, holdingsParser adapter.HoldingsParser) (adapter.LookupAdapter, error) {
+func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
 			"count":                 "10",
+			"presentChunks":         "10",
 			"preferredRecordSyntax": "usmarc",
 		},
 		zurl:           config.Address,
@@ -39,14 +38,15 @@ func NewZoomAvailabilityAdapter(ctx common.ExtendedContext, config directory.Z39
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query string) ([]adapter.Holding, error) {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(params LookupParams, conn *zoom.Connection, query *zoom.Query) ([]Holding, error) {
 	set, err := conn.Search(query)
 	if err != nil {
 		return nil, err
 	}
 	defer set.Close()
-	var avail []adapter.Holding
-	for i := 0; i < set.Count(); i++ {
+	var avail []Holding
+	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
+	for i := 0; i < limit; i++ {
 		rec, err := set.GetRecord(i)
 		if err != nil {
 			return nil, err
@@ -59,7 +59,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query st
 		if xmlBuffer == nil {
 			continue
 		}
-		holdings, err := a.holdingsParser.Parse(xmlBuffer)
+		holdings, err := a.holdingsParser.Parse(xmlBuffer, params)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
 		}
@@ -68,7 +68,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query st
 	return avail, nil
 }
 
-func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter.Holding, string, error) {
+func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)
@@ -79,20 +79,39 @@ func (a *ZoomAvailabilityAdapter) Lookup(params adapter.LookupParams) ([]adapter
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to build query: %w", err)
 	}
-	if len(cqlList) > 0 {
-		return nil, "", fmt.Errorf("Z39.50 server does not support CQL queries: %v", cqlList)
-	}
-	if len(pqfList) == 0 {
+	if len(pqfList) == 0 && len(cqlList) == 0 {
 		return nil, "", fmt.Errorf("no valid query parameters provided")
 	}
 	for _, pqf := range pqfList {
-		avail, err := a.searchRetrieve(conn, pqf)
+		query, err := zoom.NewPqfQuery(pqf)
 		if err != nil {
-			return nil, pqf, fmt.Errorf("failed to search Z39.50 server query: %s err %w", pqf, err)
+			return nil, pqf, fmt.Errorf("failed to create PQF query: %w", err)
+		}
+		avail, err := a.searchRetrieve(params, conn, query)
+		query.Close()
+		if err != nil {
+			return nil, pqf, fmt.Errorf("failed to search server with PQF: %s err %w", pqf, err)
 		}
 		if len(avail) > 0 {
 			return avail, pqf, nil
 		}
 	}
-	return nil, pqfList[0], nil
+	for _, cql := range cqlList {
+		query, err := zoom.NewCqlQuery(cql)
+		if err != nil {
+			return nil, cql, fmt.Errorf("failed to create CQL query: %w", err)
+		}
+		avail, err := a.searchRetrieve(params, conn, query)
+		query.Close()
+		if err != nil {
+			return nil, cql, fmt.Errorf("failed to search server with CQL: %s err %w", cql, err)
+		}
+		if len(avail) > 0 {
+			return avail, cql, nil
+		}
+	}
+	if len(pqfList) > 0 {
+		return nil, pqfList[0], nil
+	}
+	return nil, cqlList[0], nil
 }

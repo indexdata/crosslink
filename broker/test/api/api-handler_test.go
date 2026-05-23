@@ -45,7 +45,7 @@ var eventRepo events.EventRepo
 var sseBroker *api.SseBroker
 var mockIllRepoError = new(mocks.MockIllRepositoryError)
 var mockEventRepoError = new(mocks.MockEventRepositoryError)
-var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, *tenant.NewResolver(), api.LIMIT_DEFAULT)
+var handlerMock = api.NewApiHandler(mockEventRepoError, mockIllRepoError, tenant.NewResolver(), api.LIMIT_DEFAULT)
 
 func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = "ISIL:DK-{tenant}"

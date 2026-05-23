@@ -1,11 +1,8 @@
-package availability
+package holdings
 
 import (
-	"context"
 	"testing"
 
-	"github.com/indexdata/crosslink/broker/adapter"
-	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
@@ -13,18 +10,16 @@ import (
 
 func TestGetAdapterEmpty(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
 
 func TestGetAdapterOtherNoConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{}
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.Nil(t, aa)
 }
@@ -32,14 +27,14 @@ func TestGetAdapterOtherNoConfig(t *testing.T) {
 func TestParserNil(t *testing.T) {
 	parser, err := getParser(nil)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
 
 func TestParserMissing(t *testing.T) {
 	parserConfig := &directory.ParserConfig{}
 	_, err := getParser(parserConfig)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must set marc or opac properties")
+	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestParserMarc(t *testing.T) {
@@ -48,7 +43,7 @@ func TestParserMarc(t *testing.T) {
 	}
 	parser, err := getParser(parserConfig)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.MarcHoldingsParser{}, parser)
+	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
 
 func TestParserOpac(t *testing.T) {
@@ -57,70 +52,66 @@ func TestParserOpac(t *testing.T) {
 	}
 	parser, err := getParser(parserConfig)
 	assert.NoError(t, err)
-	assert.IsType(t, &adapter.OpacHoldingsParser{}, parser)
+	assert.IsType(t, &OpacHoldingsParser{}, parser)
 }
 
 func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 				ParserConfig: &directory.ParserConfig{},
 			},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must set marc or opac properties")
+	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported availability adapter type: other")
+	assert.Contains(t, err.Error(), "unsupported holdings adapter type: other")
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
 	creator := NewAvailabilityCreator("zoom", "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{},
+			HoldingsConfig: &directory.HoldingsConfig{},
 		},
 	}
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "must specify either sru or z3950 properties")
+	assert.Contains(t, err.Error(), "must specify either sru or zoom properties")
 }
 
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMock, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
 }
@@ -128,16 +119,15 @@ func TestGetAdapterMock(t *testing.T) {
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "requires cgo")
@@ -151,16 +141,15 @@ func TestGetAdapterZoom(t *testing.T) {
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
 }
@@ -168,16 +157,15 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
-				Z3950: &directory.Z3950Config{
+			HoldingsConfig: &directory.HoldingsConfig{
+				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
 			},
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	_, err := creator.GetAdapter(ctx, peer)
+	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
 }
@@ -185,7 +173,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			AvailabilityConfig: &directory.AvailabilityConfig{
+			HoldingsConfig: &directory.HoldingsConfig{
 				Sru: &directory.SruConfig{
 					Address: "a",
 				},
@@ -193,8 +181,7 @@ func TestGetAdapterSRU(t *testing.T) {
 		},
 	}
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
-	ctx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	aa, err := creator.GetAdapter(ctx, peer)
+	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &SruAvailabilityAdapter{}, aa)
+	assert.IsType(t, &SruHoldingsLookupAdapter{}, aa)
 }

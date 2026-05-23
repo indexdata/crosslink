@@ -899,8 +899,8 @@ func getSupplierId(i int, result map[string]interface{}) string {
 
 func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	// Create a peer with Availability config in CustomData
-	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{}}
+	// Create a peer with Holdings config in CustomData
+	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{}}
 	peer := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:Z3950-SUP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.CrossLink, customData)
 
 	// Create an ILL transaction and a located supplier for it
@@ -943,11 +943,11 @@ func TestCheckAvailability_Z3950AdapterSkipped(t *testing.T) {
 
 func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	customData := directory.Entry{AvailabilityConfig: &directory.AvailabilityConfig{
-		Z3950: &directory.Z3950Config{
+	customData := directory.Entry{HoldingsConfig: &directory.HoldingsConfig{
+		Zoom: &directory.ZoomConfig{
 			Address: "a",
 			Options: &map[string]string{
-				"location": "1234", // ensures that availability lookup returns a result and supplier is not skipped
+				"location": "1234", // ensures that holdings lookup returns a result and supplier is not skipped
 			},
 		},
 	}}
@@ -996,8 +996,8 @@ func TestCheckAvailability_Z3950AdapterNotSkipped(t *testing.T) {
 func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
-		AvailabilityConfig: &directory.AvailabilityConfig{
-			Z3950: &directory.Z3950Config{
+		HoldingsConfig: &directory.HoldingsConfig{
+			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"adapter-error": "true",
@@ -1045,8 +1045,8 @@ func TestCheckAvailability_Z3950AdapterError(t *testing.T) {
 func TestCheckAvailability_Z3950LookupError(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	customData := directory.Entry{
-		AvailabilityConfig: &directory.AvailabilityConfig{
-			Z3950: &directory.Z3950Config{
+		HoldingsConfig: &directory.HoldingsConfig{
+			Zoom: &directory.ZoomConfig{
 				Address: "a",
 				Options: &map[string]string{
 					"lookup-error": "true",

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/availability"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/holdings"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
-	app.AVAILABILITY_ADAPTER = availability.AvailabilityAdapterMock
+	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterMock
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr
@@ -790,7 +790,7 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
 		}
 		return illTrans.LastSupplierStatus.String == "LoanCompleted" &&
-			illTrans.LastRequesterAction.String == "Request"
+			illTrans.LastRequesterAction.String == "ShippedReturn"
 	})
 	assert.Equal(t, "LoanCompleted", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "ShippedReturn", illTrans.LastRequesterAction.String)

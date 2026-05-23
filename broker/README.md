@@ -101,9 +101,12 @@ Configuration is provided via environment variables:
 | `CLIENT_DELAY`            | Delay duration for outgoing ISO18626 messages                                         | `0ms`                                     |
 | `SHUTDOWN_DELAY`          | Delay duration for graceful shutdown (in-flight connections)                          | `15s`                                     |
 | `MAX_MESSAGE_SIZE`        | Max accepted ISO18626 message size                                                    | `100KB`                                   |
-| `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock` or `sru`                                               | `mock`                                    |
+| `HOLDINGS_ADAPTER`        | Holdings lookup method: `mock`, `sru` or `consortium`                                 | `mock`                                    |
 | `HOLDINGS_SRU_URL`        | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                         | `http://localhost:8081/sru`               |
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                      | `false`                                   |
+| `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir`, `marc`, `opac` or `MARC-21plus-1`               | `reservoir`                               |
+| `CONSORTIUM_SYMBOL`       | Designates peer for which configuration is used for consortium. At this time, it is   |  (empty value)                            |
+|                           | used when `HOLDINGS_ADAPTER` = `consortium`.                                          |                                           |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                              | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                        | `http://localhost:8081/directory/entries` |
 | `AVAILABILITY_ADAPTER`    | Availability adapter: `mock` , `zoom`, `metaproxy`.                                   | `zoom`                                    |
@@ -113,7 +116,8 @@ Configuration is provided via environment variables:
 | `MOCK_PEER_URL`           | Mocked peer URLs value when `DIRECTORY_ADAPTER` is `mock`                             | `http://localhost:19083/iso18626`         |
 | `API_PAGE_SIZE`           | Default value for the `limit` query parameter when paging the API                     | `10`                                      |
 | `TENANT_TO_SYMBOL`        | Pattern to map tenant to `requesterSymbol` when accessing the API via Okapi,          | (empty value)                             |
-|                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value                 |                                           |
+|                           | the `{tenant}` token is replaced by the `X-Okapi-Tenant` header value.                |                                           |
+|                           | If pattern is exactly `directory` the symbol will be obtained by directory lookup.    |                                           |
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side              | `%v_user`                                 |
 | `LANGUAGE`                | Language parameter used for ts_vector search in DB                                    | `english`                                 |
 

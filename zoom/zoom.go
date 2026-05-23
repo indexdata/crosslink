@@ -36,6 +36,10 @@ type Connection struct {
 	conn C.ZOOM_connection
 }
 
+type Query struct {
+	zquery C.ZOOM_query
+}
+
 type ResultSet struct {
 	connection *Connection
 	rs         C.ZOOM_resultset
@@ -55,6 +59,42 @@ func (o *Options) toZoomOptions() C.ZOOM_options {
 		C.free(unsafe.Pointer(cValue))
 	}
 	return zo
+}
+
+func NewPqfQuery(pqf string) (*Query, error) {
+	cPqf := C.CString(pqf)
+	defer C.free(unsafe.Pointer(cPqf))
+
+	query := &Query{zquery: C.ZOOM_query_create()}
+	return checkQuery(C.ZOOM_query_prefix(query.zquery, cPqf), query, "PQF")
+}
+
+func NewCqlQuery(cql string) (*Query, error) {
+	cCql := C.CString(cql)
+	defer C.free(unsafe.Pointer(cCql))
+
+	query := &Query{zquery: C.ZOOM_query_create()}
+	return checkQuery(C.ZOOM_query_cql(query.zquery, cCql), query, "CQL")
+}
+
+func checkQuery(ret C.int, query *Query, kind string) (*Query, error) {
+	if ret != 0 {
+		query.finalize()
+		return nil, &ZoomError{Code: 0, Message: "failed to create " + kind + " query"}
+	}
+	runtime.SetFinalizer(query, (*Query).finalize)
+	return query, nil
+}
+
+func (q *Query) finalize() {
+	if q.zquery != nil {
+		C.ZOOM_query_destroy(q.zquery)
+		q.zquery = nil
+	}
+}
+
+func (q *Query) Close() {
+	q.finalize()
 }
 
 func NewConnection(options Options) *Connection {
@@ -87,13 +127,17 @@ func (c *Connection) Close() {
 	c.finalize()
 }
 
-func (c *Connection) Search(query string) (*ResultSet, error) {
+func (c *Connection) Search(query *Query) (*ResultSet, error) {
 	if c.conn == nil {
 		return nil, &ZoomError{Code: 0, Message: "connection is not established"}
 	}
-	cQuery := C.CString(query)
-	defer C.free(unsafe.Pointer(cQuery))
-	cSet := C.ZOOM_connection_search_pqf(c.conn, cQuery)
+	if query == nil {
+		return nil, &ZoomError{Code: 0, Message: "query is nil"}
+	}
+	if query.zquery == nil {
+		return nil, &ZoomError{Code: 0, Message: "query is not initialized"}
+	}
+	cSet := C.ZOOM_connection_search(c.conn, query.zquery)
 	set := &ResultSet{rs: cSet, connection: c}
 	err := c.checkError()
 	if err != nil {

@@ -50,11 +50,19 @@ The mock comes with a simple submit form at the `/form` path that can be used as
 
 ## Supplier behavior
 
-The `<bibliographicInfo>/<supplierUniqueRecordId>` value of incoming request is used to
+The `<bibliographicInfo>/<supplierUniqueRecordId>` and `<serviceInfo>/<note>` fields of an incoming `Request` are used to
 invoke a particular scenario when acting as the supplier.
 
-The scenario is used by the supplier to perform a particular workflow. The
-following values are recognized:
+If `<serviceInfo>/<note>` is present, `illmock` looks for `MOCK:symbol:scenario` tokens in the note text.
+These tokens can be mixed with other material.
+The scenario is chosen when `<header>/<supplyingAgencyId>/<agencyIdValue>` matches the symbol and the token contains a non-empty scenario value.
+
+If no such matching token is found, or a matching `MOCK:` token has an empty scenario value, the token is ignored and the scenario value is taken from
+`<bibliographicInfo>/<supplierUniqueRecordId>`.
+
+If a matching `MOCK:` token contains a non-empty but unrecognized scenario value, that value is still selected from the note. Since it does not match one of the recognized scenarios below, the supplier falls back to its default behavior (`Unfilled`).
+
+The scenario is used by the supplier to perform a particular workflow. The following values are recognized:
 
 | Scenario                    | Workflow                                                                            |
 |-----------------------------|-------------------------------------------------------------------------------------|
@@ -159,7 +167,9 @@ The directory service is accessible from the `/directory/entries` endpoint. For 
     curl http://localhost:8081/directory/entries
 
 See [the OpenAPI spec](directory/directory_api.yaml) . The `cql` query parameter is a CQL string.
-The only supported index is `symbol`. Supported relations are: `any`, `all`, `=`.
+This supports index `symbol` with supported relations `any`, `all`, `=` for matching against
+directory entry `symbols`. It also supports index `tenant` with supported relation `=` which matches
+against directory entry `tenant`.
 
 # NCIP server
 

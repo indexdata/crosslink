@@ -1,4 +1,4 @@
-package adapter
+package holdings
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 type MockHoldingsLookupAdapter struct {
 }
 
+// the original mock holdings adapter that we used for shared index testing
 func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
 	ids := strings.Split(params.Identifier, ";")
 	i := 1
