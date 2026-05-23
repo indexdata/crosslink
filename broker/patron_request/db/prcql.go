@@ -143,6 +143,11 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	def.AddField("isbn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISBN')").WithFunction("norm_isxn"))
 	def.AddField("issn", NewFieldTextArrayContains("bibliographic_item_identifiers(ill_request, 'ISSN')").WithFunction("norm_isxn"))
 
+	itemCorrelation := "cql_item.pr_id = patron_request_search_view.id"
+	def.AddField("item_id", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.item_id"))
+	def.AddField("barcode", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.barcode"))
+	def.AddField("call_number", NewFieldExistsString("item", "cql_item", itemCorrelation, "cql_item.call_number"))
+
 	f = pgcql.NewFieldString().WithLikeOps()
 	def.AddField("patron", f)
 
