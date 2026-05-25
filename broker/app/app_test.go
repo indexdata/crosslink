@@ -22,6 +22,84 @@ func TestHandleHealthz(t *testing.T) {
 	}
 }
 
+func TestOpenAPIRequestValidatorHandlesPatronRequestBasePaths(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+
+	for _, path := range []string{"/patron_requests", "/broker/patron_requests"} {
+		t.Run(path, func(t *testing.T) {
+			called := false
+			handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				assert.Equal(t, path, r.URL.Path)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(`{"illRequest":{}}`)))
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+
+			handler.ServeHTTP(rr, req)
+
+			assert.True(t, called)
+			assert.Equal(t, http.StatusNoContent, rr.Code)
+		})
+	}
+}
+
+func TestOpenAPIRequestValidatorRejectsMissingPatronRequestBody(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+	handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for invalid request")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests", nil)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.JSONEq(t, `{"error":"request body has an error: value is required but missing"}`, rr.Body.String())
+}
+
+func TestOpenAPIRequestValidatorRejectsMissingIllRequest(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+	handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for invalid request")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests", bytes.NewReader([]byte(`{"requesterSymbol":"ISIL:REQ"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Contains(t, rr.Body.String(), `property \"illRequest\" is missing`)
+}
+
+func TestOpenAPIRequestValidatorRejectsNullNonNullableString(t *testing.T) {
+	validator, err := newOpenAPIRequestValidator()
+	assert.NoError(t, err)
+	handler := validator(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for invalid request")
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/broker/patron_requests", bytes.NewReader([]byte(`{"illRequest":{},"requesterSymbol":null}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+	assert.Contains(t, rr.Body.String(), `Error at \"/requesterSymbol\": Value is not nullable`)
+}
+
 func TestConfigLogger(t *testing.T) {
 	ENABLE_JSON_LOG = "true"
 	handler := configLog()

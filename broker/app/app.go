@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/indexdata/crosslink/broker/holdings"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -40,6 +42,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
+	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
 	"github.com/indexdata/crosslink/broker/lms"
 )
@@ -220,6 +223,10 @@ func Run(ctx context.Context) error {
 
 func StartServer(ctx Context) error {
 	ServeMux = http.NewServeMux()
+	oapiValidator, err := newOpenAPIRequestValidator()
+	if err != nil {
+		return err
+	}
 	ServeMux.HandleFunc("GET /healthz", HandleHealthz)
 	//all methods must be mapped explicitly to avoid conflicts with the index handler
 	ServeMux.HandleFunc("GET /iso18626", handler.Iso18626PostHandler(ctx.IllRepo, ctx.EventBus, ctx.DirAdapter, MAX_MESSAGE_SIZE))
@@ -231,13 +238,20 @@ func StartServer(ctx Context) error {
 		_, _ = w.Write(oapi.OpenAPISpecYAML)
 	})
 	oapi.HandlerFromMux(&ctx.ApiHandler, ServeMux)
-	proapi.HandlerFromMux(&ctx.PrApiHandler, ServeMux)
+	proapi.HandlerWithOptions(&ctx.PrApiHandler, proapi.StdHTTPServerOptions{
+		BaseRouter:  ServeMux,
+		Middlewares: []proapi.MiddlewareFunc{oapiValidator},
+	})
 	psoapi.HandlerFromMux(&ctx.PsApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
 	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
 		oapi.HandlerFromMuxWithBaseURL(&ctx.ApiHandler, ServeMux, basePath)
-		proapi.HandlerFromMuxWithBaseURL(&ctx.PrApiHandler, ServeMux, basePath)
+		proapi.HandlerWithOptions(&ctx.PrApiHandler, proapi.StdHTTPServerOptions{
+			BaseURL:     basePath,
+			BaseRouter:  ServeMux,
+			Middlewares: []proapi.MiddlewareFunc{oapiValidator},
+		})
 		psoapi.HandlerFromMuxWithBaseURL(&ctx.PsApiHandler, ServeMux, basePath)
 		ServeMux.HandleFunc("GET "+basePath+"/sse/events", ctx.SseBroker.ServeHTTP)
 	}
@@ -278,6 +292,33 @@ func StartServer(ctx Context) error {
 		appCtx.Logger().Info("HTTP server shutdown complete")
 		return nil
 	}
+}
+
+func newOpenAPIRequestValidator() (func(http.Handler) http.Handler, error) {
+	spec, err := openapi3.NewLoader().LoadFromData(oapi.OpenAPISpecYAML)
+	if err != nil {
+		return nil, err
+	}
+	spec.Servers = openapi3.Servers{
+		{URL: "/"},
+		{URL: tenant.OKAPI_PATH_PREFIX},
+	}
+	return nethttpmiddleware.OapiRequestValidatorWithOptions(spec, &nethttpmiddleware.Options{
+		ErrorHandlerWithOpts:  writeOpenAPIValidationError,
+		SilenceServersWarning: true,
+	}), nil
+}
+
+func writeOpenAPIValidationError(_ context.Context, err error, w http.ResponseWriter, _ *http.Request, opts nethttpmiddleware.ErrorHandlerOpts) {
+	statusCode := opts.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusBadRequest
+	}
+	errorString := err.Error()
+	resp := oapi.Error{Error: &errorString}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func RunDbUp() error {
