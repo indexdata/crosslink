@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -314,11 +313,7 @@ func writeOpenAPIValidationError(_ context.Context, err error, w http.ResponseWr
 	if statusCode == 0 {
 		statusCode = http.StatusBadRequest
 	}
-	errorString := err.Error()
-	resp := oapi.Error{Error: &errorString}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_ = json.NewEncoder(w).Encode(resp)
+	api.WriteJsonErrorResponse(w, err, statusCode)
 }
 
 func RunDbUp() error {
