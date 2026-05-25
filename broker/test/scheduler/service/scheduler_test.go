@@ -73,11 +73,12 @@ type countingEventBus struct {
 	claims []string
 }
 
-func (b *countingEventBus) CreateTask(_ string, _ events.EventName, _ events.EventData, _ events.EventDomain, _ *string, _ events.SignalTarget) (string, error) {
+func (b *countingEventBus) CreateTask(_ string, _ events.EventName, data events.EventData, _ events.EventDomain, _ *string, _ events.SignalTarget) (string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.claims = append(b.claims, uuid.NewString())
-	return uuid.NewString(), nil
+	taskId := uuid.New().String()
+	b.claims = append(b.claims, data.Note)
+	return taskId, nil
 }
 
 func (b *countingEventBus) totalClaims() int {
@@ -86,11 +87,19 @@ func (b *countingEventBus) totalClaims() int {
 	return len(b.claims)
 }
 
+func (b *countingEventBus) getClaims() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.claims
+}
+
 func overdueTask() sched_db.SaveScheduledTaskParams {
+	id := uuid.New().String()
 	return sched_db.SaveScheduledTaskParams{
-		ID:        uuid.NewString(),
+		ID:        id,
 		EventName: events.EventNameSendNotification,
 		CronExpr:  "",
+		Payload:   events.EventData{CommonEventData: events.CommonEventData{Note: id}},
 		RunAt:     pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Second), Valid: true},
 		Status:    sched_db.ScheduledTaskStatusPending,
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -101,6 +110,7 @@ func startScheduler(t *testing.T, ctx context.Context, bus events.EventBus) {
 	t.Helper()
 	pool, err := app.InitDbPool()
 	assert.NoError(t, err)
+	t.Cleanup(pool.Close)
 	repo := sched_db.CreateSchedRepo(pool)
 	svc := sched_service.NewSchedulerService(repo, bus, connString)
 	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
@@ -145,9 +155,11 @@ func TestMultipleInstances_EachTaskClaimedOnce(t *testing.T) {
 	bus := &countingEventBus{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	ids := []string{}
 
 	for i := 0; i < taskCount; i++ {
-		_, err := schedRepo.SaveScheduledTask(appCtx, overdueTask())
+		task, err := schedRepo.SaveScheduledTask(appCtx, overdueTask())
+		ids = append(ids, task.ID)
 		assert.NoError(t, err)
 	}
 
@@ -162,6 +174,7 @@ func TestMultipleInstances_EachTaskClaimedOnce(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	assert.Equal(t, taskCount, bus.totalClaims(), "each task must be dispatched exactly once")
+	assert.ElementsMatch(t, ids, bus.getClaims(), "each task must be claimed exactly once")
 }
 
 // TestMultipleInstances_HighConcurrency runs 10 tasks across 5 instances and
@@ -242,6 +255,7 @@ func TestListen_ReconnectsAfterConnectionLoss(t *testing.T) {
 	// Kill all LISTEN connections to simulate a network interruption.
 	adminPool, err := app.InitDbPool()
 	assert.NoError(t, err)
+	t.Cleanup(adminPool.Close)
 	killCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	_, err = adminPool.Exec(killCtx,
 		`SELECT pg_terminate_backend(pid)
@@ -275,6 +289,7 @@ func TestScheduler_StopsOnContextCancel(t *testing.T) {
 
 	pool, err := app.InitDbPool()
 	assert.NoError(t, err)
+	t.Cleanup(pool.Close)
 	repo := sched_db.CreateSchedRepo(pool)
 	svc := sched_service.NewSchedulerService(repo, bus, connString)
 	extCtx := common.CreateExtCtxWithArgs(ctx, nil)

@@ -201,8 +201,8 @@ func Init(ctx context.Context) (Context, error) {
 		return Context{}, err
 	}
 
-	schedRepoRepo := sched_db.CreateSchedRepo(pool)
-	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
+	schedRepo := sched_db.CreateSchedRepo(pool)
+	if err = StartScheduler(ctx, schedRepo, eventBus); err != nil {
 		return Context{}, err
 	}
 

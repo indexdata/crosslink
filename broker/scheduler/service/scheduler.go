@@ -45,9 +45,12 @@ func NewSchedulerService(schedRepo sched_db.SchedRepo, eventBus events.EventBus,
 	}
 }
 
-// Listen opens a dedicated Postgres connection and listens on sched_db.SchedulerChannel.
-// Each notification wakes the scheduler loop. Reconnects with exponential
-// backoff on connection loss. Blocks until ctx is cancelled.
+// Listen opens a dedicated Postgres connection and listens on
+// sched_db.SchedulerChannel. Each notification wakes the scheduler loop.
+// After the initial connection and LISTEN registration succeed, it starts a
+// background goroutine to receive notifications and returns. The listener
+// reconnects with exponential backoff on connection loss and runs until ctx is
+// cancelled.
 func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 	// openConn establishes a fresh connection and registers the LISTEN.
 	// The caller is responsible for closing the returned connection.
