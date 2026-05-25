@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -30,6 +31,8 @@ type SchedulerService struct {
 	// notifyCh is written by Listen and read by schedulerLoop via waitUntil.
 	notifyCh chan struct{}
 	notify   <-chan struct{}
+	// #nosec G404 - math/rand is sufficient for reconnect jitter
+	randGen *rand.Rand
 }
 
 // NewSchedulerService creates a SchedulerService wired to the given repo,
@@ -42,6 +45,8 @@ func NewSchedulerService(schedRepo sched_db.SchedRepo, eventBus events.EventBus,
 		connString: connString,
 		notifyCh:   ch,
 		notify:     ch,
+		// #nosec G404 - math/rand is sufficient for connection jitter
+		randGen: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -103,17 +108,20 @@ func (s *SchedulerService) Listen(ctx common.ExtendedContext) error {
 				delay := baseDelay
 
 				for {
+					// Add random jitter (0–500 ms) to spread reconnect attempts
+					// across multiple instances that lost their connection simultaneously.
+					jitter := time.Duration(s.randGen.Intn(500)) * time.Millisecond
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(delay):
+					case <-time.After(delay + jitter):
 					}
 					newConn, connErr := openConn()
 					if connErr == nil {
 						conn = newConn
 						break
 					}
-					ctx.Logger().Error("scheduler: reconnect failed", "error", connErr, "next_try_in", delay)
+					ctx.Logger().Error("scheduler: reconnect failed", "error", connErr, "next_try_in", delay+jitter)
 					delay = time.Duration(float64(delay) * 1.5)
 					if delay > maxDelay {
 						delay = maxDelay
@@ -281,7 +289,7 @@ func nextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
 }
 
 // rescheduleLongRunningTasks finds tasks that have been in 'running' state for
-// longer than hour (indicating a crashed or lost worker) and
+// longer than an hour (indicating a crashed or lost worker) and
 // resets them to 'pending' so they are picked up again on the next loop tick.
 func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext) {
 	tasks, err := s.schedRepo.GetStuckRunningTasks(ctx, time.Hour)

@@ -58,6 +58,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
+	pool.Close()
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }
