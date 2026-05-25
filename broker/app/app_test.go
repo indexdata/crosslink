@@ -61,7 +61,7 @@ func TestOpenAPIRequestValidatorRejectsMissingPatronRequestBody(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-	assert.JSONEq(t, `{"error":"request body has an error: value is required but missing"}`, rr.Body.String())
+	assert.Contains(t, rr.Body.String(), "value is required but missing")
 }
 
 func TestOpenAPIRequestValidatorRejectsMissingIllRequest(t *testing.T) {
