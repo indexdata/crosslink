@@ -28,7 +28,7 @@ LIMIT $1 OFFSET $2;
 SELECT requester_symbol AS value, COUNT(*) AS count
 FROM patron_request_search_view
 WHERE ill_request IS NOT NULL
-GROUP BY value
+GROUP BY 1
 ORDER BY count DESC;
 
 -- name: UpdatePatronRequest :one
