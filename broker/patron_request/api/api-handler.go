@@ -871,6 +871,7 @@ func (a *PatronRequestApiHandler) parseAndValidateIllRequest(
 		reqSymbolValue,
 		requesterReqId,
 		creationTime,
+		request.Patron,
 	)
 	if err != nil {
 		return iso18626.Request{}, "", err
@@ -910,6 +911,7 @@ func prepareAndValidateIllRequest(
 	reqSymbolValue string,
 	requesterReqId string,
 	creationTime time.Time,
+	patron *string,
 ) (iso18626.Request, error) {
 	if reflect.ValueOf(rawIllRequest).IsZero() {
 		return iso18626.Request{}, fmt.Errorf("%w: illRequest must not be empty", errInvalidPatronRequest)
@@ -931,6 +933,12 @@ func prepareAndValidateIllRequest(
 	illRequest.Header.RequestingAgencyRequestId = requesterReqId
 	if err = validateIllRequest(illRequest); err != nil {
 		return iso18626.Request{}, fmt.Errorf("%w: invalid illRequest: %w", errInvalidPatronRequest, err)
+	}
+	if patron != nil {
+		if illRequest.PatronInfo == nil {
+			illRequest.PatronInfo = &iso18626.PatronInfo{}
+		}
+		illRequest.PatronInfo.PatronId = *patron
 	}
 	return illRequest, nil
 }
