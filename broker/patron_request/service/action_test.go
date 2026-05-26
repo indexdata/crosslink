@@ -484,6 +484,7 @@ func TestHandleInvokeActionAcceptConditionMarksReceivedConditionNotificationsAcc
 			Direction: string(pr_db.NotificationDirectionReceived),
 		}, mockPrRepo.markedConditionNotificationsReceipts[0])
 	}
+	// Successful action resets NeedsAttention flag
 	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
@@ -507,7 +508,6 @@ func TestHandleInvokeActionRejectCondition(t *testing.T) {
 		assert.Equal(t, shim.RESHARE_LOAN_CONDITION_REJECT, mockIso18626Handler.lastRequestingAgencyMessage.Note)
 		assert.False(t, mockIso18626Handler.lastRequestingAgencyMessage.Header.Timestamp.IsZero())
 	}
-	// Successful action resets NeedsAttention flag
 	assert.Equal(t, BorrowerStateCancelPending, mockPrRepo.savedPr.State)
 }
 
