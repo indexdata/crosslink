@@ -785,3 +785,112 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 func getLocalhostWithPort() string {
 	return "http://localhost:" + strconv.Itoa(app.HTTP_PORT)
 }
+
+func TestFacetsOK(t *testing.T) {
+	requesterSymbols := []string{"ISIL:REQ" + uuid.NewString(), "ISIL:REQ" + uuid.NewString()}
+
+	for _, requesterSymbol := range requesterSymbols {
+		reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
+			directory.Entry{
+				LmsConfig: &directory.LmsConfig{
+					FromAgency: "from-agency",
+					Address:    ncipMockUrl,
+				},
+			})
+		assert.NotNil(t, reqPeer)
+	}
+
+	for i := 0; i < 10; i++ {
+		serviceType := "Copy"
+		if i%2 == 0 {
+			serviceType = "Loan"
+		}
+		j := 0
+		if i >= 7 {
+			j = 1
+		}
+		// POST
+		patron := "p1"
+		request := iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceType(serviceType),
+			},
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: uuid.NewString(),
+				Title:                  "Facets title " + strconv.Itoa(i),
+			},
+		}
+		newPr := proapi.CreatePatronRequest{
+			RequesterSymbol: &requesterSymbols[j],
+			Patron:          &patron,
+			IllRequest:      request,
+		}
+		newPrBytes, err := json.Marshal(newPr)
+		assert.NoError(t, err, "failed to marshal patron request")
+
+		respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+
+		var foundPr proapi.PatronRequest
+		err = json.Unmarshal(respBytes, &foundPr)
+		assert.NoError(t, err, "failed to unmarshal patron request")
+	}
+
+	var foundPrs proapi.PatronRequests
+	respBytes := httpRequest(t, "GET", basePath+"?cql=service_type%3DCopy&offset=0&limit=1", []byte{}, 200)
+	err := json.Unmarshal(respBytes, &foundPrs)
+	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
+	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(5))
+	assert.Len(t, foundPrs.Items, 1)
+	assert.Nil(t, foundPrs.About.Facets)
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
+	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(5))
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 1)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.GreaterOrEqual(t, len((*foundPrs.About.Facets)[0].Values), 2)
+	var count0 int64
+	var count1 int64
+	for i := range (*foundPrs.About.Facets)[0].Values {
+		switch (*foundPrs.About.Facets)[0].Values[i].Value {
+		case requesterSymbols[0]:
+			count0 = (*foundPrs.About.Facets)[0].Values[i].Count
+		case requesterSymbols[1]:
+			count1 = (*foundPrs.About.Facets)[0].Values[i].Count
+		}
+	}
+	assert.Equal(t, count0, int64(3))
+	assert.Equal(t, count1, int64(2))
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=cql.allRecords%3Dtrue%20&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
+	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(10))
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 1)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.GreaterOrEqual(t, len((*foundPrs.About.Facets)[0].Values), 2)
+	count0 = 0
+	count1 = 0
+	for i := range (*foundPrs.About.Facets)[0].Values {
+		switch (*foundPrs.About.Facets)[0].Values[i].Value {
+		case requesterSymbols[0]:
+			count0 = (*foundPrs.About.Facets)[0].Values[i].Count
+		case requesterSymbols[1]:
+			count1 = (*foundPrs.About.Facets)[0].Values[i].Count
+		}
+	}
+	assert.Equal(t, count0, int64(7))
+	assert.Equal(t, count1, int64(3))
+}
+
+func TestFacetsBadRequest(t *testing.T) {
+	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
+	assert.Contains(t, string(respBytes), "unsupported facet field: nosuch")
+}

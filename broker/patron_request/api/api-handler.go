@@ -185,8 +185,40 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
-	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
+	resp.About = toProAbout(api.CollectAboutData(count, offset, limit, r))
+	facets, err := a.prRepo.FacetsPatronRequests(ctx, params.Facets, &cqlStr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if len(facets) > 0 {
+		facetResults := make(proapi.FacetsResult, len(facets))
+		for i, field := range facets {
+			facetResults[i].Name = field.Field
+			facetResults[i].Values = make([]proapi.FacetResultValue, len(field.Values))
+			for j, value := range field.Values {
+				facetResults[i].Values[j] = proapi.FacetResultValue{
+					Value: value.Value,
+					Count: value.Count,
+				}
+			}
+		}
+		resp.About.Facets = &facetResults
+	}
 	api.WriteJsonResponse(w, resp)
+}
+
+// toProAbout converts an oapi.About to a proapi.About by copying the pagination fields.
+// The two types are generated independently from identical OpenAPI schemas but are not
+// directly convertible because their FacetValue types differ.
+func toProAbout(a oapi.About) proapi.About {
+	return proapi.About{
+		Count:     a.Count,
+		FirstLink: a.FirstLink,
+		LastLink:  a.LastLink,
+		NextLink:  a.NextLink,
+		PrevLink:  a.PrevLink,
+	}
 }
 
 func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {
@@ -648,7 +680,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		responseList = append(responseList, apiN)
 	}
 	resp := proapi.PrNotifications{Items: responseList}
-	resp.About = proapi.About(api.CollectAboutData(fullCount, offset, limit, r))
+	resp.About = toProAbout(api.CollectAboutData(fullCount, offset, limit, r))
 	api.WriteJsonResponse(w, resp)
 }
 

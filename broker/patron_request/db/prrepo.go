@@ -1,6 +1,7 @@
 package pr_db
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/indexdata/crosslink/broker/common"
@@ -18,6 +19,7 @@ type PrRepo interface {
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error)
+	FacetsPatronRequests(ctx common.ExtendedContext, facets *string, cql *string) ([]Facet, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
@@ -32,6 +34,16 @@ type PrRepo interface {
 	MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
+}
+
+type Facet struct {
+	Field  string
+	Values []FacetValue
+}
+
+type FacetValue struct {
+	Value string
+	Count int64
 }
 
 type PgPrRepo struct {
@@ -99,6 +111,30 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 		list = append(list, patronRequestFromSearchView(row.PatronRequestSearchView))
 	}
 	return list, fullCount, nil
+}
+
+func (r *PgPrRepo) FacetsPatronRequests(ctx common.ExtendedContext, facetParameter *string, cql *string) ([]Facet, error) {
+	if facetParameter == nil {
+		return nil, nil // no facets requested, return nil
+	}
+	facetFields := strings.Split(*facetParameter, ",")
+	var facets []Facet
+	for _, field := range facetFields {
+		switch field {
+		case "requester_symbol", "supplier_symbol":
+			values, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), field, cql)
+			if err != nil {
+				return nil, err
+			}
+			facets = append(facets, Facet{
+				Field:  field,
+				Values: values,
+			})
+		default:
+			return nil, fmt.Errorf("unsupported facet field: %s", field)
+		}
+	}
+	return facets, nil
 }
 
 func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error) {

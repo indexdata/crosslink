@@ -219,18 +219,20 @@ components:
             type: array
             description: List of facet values
             items:
-              type: object
-              required:
-                - value
-                - count
-              properties:
-                value:
-                  type: string
-                  description: Facet value
-                count:
-                  type: integer
-                  format: int64
-                  description: Count of items for this facet value
+              $ref: '#/components/schemas/FacetResultValue'
+    FacetResultValue:
+      type: object
+      required:
+        - value
+        - count
+      properties:
+        value:
+          type: string
+          description: Facet value
+        count:
+          type: integer
+          format: int64
+          description: Count of items for this facet value
     About:
       type: object
       required:
@@ -240,8 +242,6 @@ components:
           type: integer
           format: int64
           description: Total number of items in the result
-        facets:
-          $ref: '#/components/schemas/FacetsResult'
         nextLink:
           type: string
           description: Link to the next page of results
@@ -254,6 +254,8 @@ components:
         lastLink:
           type: string
           description: Link to the last page of results
+        facets:
+          $ref: '#/components/schemas/FacetsResult'
     Event:
       type: object
       properties:

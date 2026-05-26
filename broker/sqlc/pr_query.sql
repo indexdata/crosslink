@@ -24,6 +24,12 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: FacetsRequesterSymbol :many
+SELECT requester_symbol AS value, COUNT(*) AS count
+FROM patron_request_search_view
+GROUP BY value
+ORDER BY count DESC;
+
 -- name: UpdatePatronRequest :one
 UPDATE patron_request
 SET ill_request         = $3,
