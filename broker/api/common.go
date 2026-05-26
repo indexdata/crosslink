@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/url"
@@ -173,34 +174,26 @@ func WriteJsonResponse(w http.ResponseWriter, resp any) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-func AddInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+func WriteJsonErrorResponse(w http.ResponseWriter, err error, statusCode int) {
 	errorString := err.Error()
 	resp := oapi.Error{
 		Error: &errorString,
 	}
-	ctx.Logger().Error("error serving api request", "error", err.Error())
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func AddInternalError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
+	ctx.Logger().Error("error serving api request", "error", err.Error())
+	WriteJsonErrorResponse(w, err, http.StatusInternalServerError)
 }
 
 func AddBadRequestError(ctx common.ExtendedContext, w http.ResponseWriter, err error) {
-	errorString := err.Error()
-	resp := oapi.Error{
-		Error: &errorString,
-	}
 	ctx.Logger().Error("error serving api request", "error", err.Error())
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(resp)
+	WriteJsonErrorResponse(w, err, http.StatusBadRequest)
 }
 
 func AddNotFoundError(w http.ResponseWriter) {
-	errorString := "not found"
-	resp := oapi.Error{
-		Error: &errorString,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	_ = json.NewEncoder(w).Encode(resp)
+	WriteJsonErrorResponse(w, errors.New("not found"), http.StatusNotFound)
 }
