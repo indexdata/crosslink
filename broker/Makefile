@@ -30,7 +30,8 @@ SQL_GEN_OUT_ILL_DB = ill_db/ill_db_gen.go ill_db/ill_models_gen.go ill_db/ill_qu
 SQL_GEN_OUT_EVENT = events/event_db_gen.go events/event_models_gen.go events/event_query.sql_gen.go
 SQL_GEN_OUT_PR = patron_request/db/pr_db_gen.go patron_request/db/pr_models_gen.go patron_request/db/pr_query.sql_gen.go
 SQL_GEN_OUT_PS = pullslip/db/ps_db_gen.go pullslip/db/ps_models_gen.go pullslip/db/ps_query.sql_gen.go
-SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS)
+SQL_GEN_OUT_SCHED = scheduler/db/sched_db_gen.go scheduler/db/sched_models_gen.go scheduler/db/sched_query.sql_gen.go
+SQL_GEN_OUT = $(SQL_GEN_OUT_ILL_DB) $(SQL_GEN_OUT_EVENT) $(SQL_GEN_OUT_PR) $(SQL_GEN_OUT_PS) $(SQL_GEN_OUT_SCHED)
 SQL_GEN_IN = sqlc/*.sql
 
 # OpenAPI
@@ -54,6 +55,12 @@ PS_OAPI_CFG = $(PS_OAPI_DIR)/ps-cfg.yaml
 PS_OAPI_SPEC = $(PS_OAPI_DIR)/open-api.yaml
 PS_OAPI_GEN = pullslip/oapi/ps-openapi_gen.go
 
+# Scheduled task OpenAPI
+SCHED_OAPI_DIR=oapi
+SCHED_OAPI_CFG = $(SCHED_OAPI_DIR)/sched-cfg.yaml
+SCHED_OAPI_SPEC = $(SCHED_OAPI_DIR)/open-api.yaml
+SCHED_OAPI_GEN = scheduler/oapi/sched_openapi_gen.go
+
 .PHONY: all docker generate generate-sqlc generate-api generate-commit-id check run fmt fmt-check clean view-coverage deps-update tools-update lint vulncheck check-coverage
 
 all: $(BINARY) archive
@@ -67,7 +74,7 @@ generate-commit-id: $(COMMIT_ID)
 
 generate-sqlc: $(SQL_GEN_OUT)
 
-generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN)
+generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN)
 
 $(RETURNABLES_JSON): $(RETURNABLES_YAML)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
@@ -82,16 +89,19 @@ $(PR_OAPI_GEN): $(PR_OAPI_CFG) $(PR_OAPI_SPEC) $(PR_OAPI_OVERLAY)
 $(PS_OAPI_GEN): $(PS_OAPI_CFG) $(PS_OAPI_SPEC)
 	$(OAPI_CODEGEN) -config ./$(PS_OAPI_CFG) ./$(PS_OAPI_SPEC)
 
+$(SCHED_OAPI_GEN): $(SCHED_OAPI_CFG) $(SCHED_OAPI_SPEC)
+	$(OAPI_CODEGEN) -config ./$(SCHED_OAPI_CFG) ./$(SCHED_OAPI_SPEC)
+
 $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
@@ -137,3 +147,4 @@ clean:
 	rm -f $(OAPI_GEN)
 	rm -f $(PR_OAPI_GEN)
 	rm -f $(PS_OAPI_GEN)
+	rm -f $(SCHED_OAPI_GEN)
