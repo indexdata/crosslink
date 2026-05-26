@@ -848,6 +848,13 @@ func TestFacetsOK(t *testing.T) {
 	assert.Len(t, foundPrs.Items, 1)
 	assert.Nil(t, foundPrs.About.Facets)
 
+	respBytes = httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1&facets=", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 1)
+	assert.Nil(t, foundPrs.About.Facets)
+
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy+and+title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
@@ -876,7 +883,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 
-	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2C%20supplier_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2C%20supplier_symbol%2C&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(10), foundPrs.About.Count)
@@ -896,9 +903,4 @@ func TestFacetsOK(t *testing.T) {
 func TestFacetsBadRequest1(t *testing.T) {
 	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
 	assert.Contains(t, string(respBytes), "unsupported facet field: nosuch")
-}
-
-func TestFacetsBadRequest2(t *testing.T) {
-	respBytes := httpRequest(t, "GET", basePath+"?facets=", []byte{}, 400)
-	assert.Contains(t, string(respBytes), "unsupported facet field: ")
 }

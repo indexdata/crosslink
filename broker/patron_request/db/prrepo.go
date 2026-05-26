@@ -141,6 +141,7 @@ func (r *PgPrRepo) FacetsPatronRequests(ctx common.ExtendedContext, facetParamet
 				Field:  field,
 				Values: values,
 			})
+		case "":
 		default:
 			return nil, fmt.Errorf("unsupported facet field: %s", field)
 		}
