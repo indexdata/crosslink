@@ -166,8 +166,8 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	return def.Parse(query, noBaseArgs+1)
 }
 
-func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetValue, error) {
-	sql := facetsRequesterSymbol
+func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetsRequesterRow, error) {
+	sql := facetsRequester
 	sql = strings.Replace(sql, "requester_symbol", facetField, 1)
 
 	idx := strings.Index(sql, "GROUP BY")
@@ -190,21 +190,18 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}
 	defer rows.Close()
-	var values []FacetValue
+	var items []FacetsRequesterRow
 	for rows.Next() {
-		var i FacetsRequesterSymbolRow
+		var i FacetsRequesterRow
 		if err := rows.Scan(&i.Value, &i.Count); err != nil {
 			return nil, err
 		}
-		values = append(values, FacetValue{
-			Value: i.Value.String,
-			Count: i.Count,
-		})
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return values, nil
+	return items, nil
 }
 
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,

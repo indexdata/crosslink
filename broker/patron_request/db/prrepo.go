@@ -38,12 +38,7 @@ type PrRepo interface {
 
 type Facet struct {
 	Field  string
-	Values []FacetValue
-}
-
-type FacetValue struct {
-	Value string
-	Count int64
+	Values []FacetsRequesterRow
 }
 
 type PgPrRepo struct {
