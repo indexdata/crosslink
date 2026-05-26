@@ -40,6 +40,72 @@
           ]
         },
         {
+          "methods" : ["GET"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["POST"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["DELETE"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/tiers/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["GET"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["POST"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
+          "methods" : ["DELETE"],
+          "pathPattern": "/rsdir/entries/{key}/{value}/networks/{id}",
+          "permissionsRequired" : [],
+          "permissionsDesired": [ 
+            "directory.consortium.all",
+            "directory.institution.all",
+            "directory.system.all",
+            "directory.public.all" 
+          ]
+        },
+        {
           "methods": ["PATCH"],
           "pathPattern": "/rsdir/entries/{key}/{value}",
           "permissionsRequired" : [],
