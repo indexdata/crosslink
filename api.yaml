@@ -198,7 +198,252 @@ paths:
             text/plain:
               schema:
                 type: string
-
+  /entries/{key}/{value}/tiers:
+    get:
+      summary: Get all Tiers for a given Entry
+      operationId: getTiersForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Tier list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TiersResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post: 
+      summary: Add an Entry Tier to a given Entry
+      operationId: addTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Tier to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEntryTier'
+      responses:
+        '201':
+          description: Entry Tier response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/tiers/{id}:
+    delete:
+      summary: Delete an Entry Tier from a given Entry
+      operationId: deleteTierForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Tier to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tier deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal sever error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks:
+    get:
+      summary: Get all Networks for a given Entry
+      operationId: getNetworksForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      responses:
+        '200':
+          description: Network list response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworksResponse'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      summary: Add an Entry Network to a given Entry
+      operationId: addNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+      requestBody:
+        description: Entry Network to add
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddEntryNetwork'
+      responses:
+        '201':
+          description: Entry Network response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Id'
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
+  /entries/{key}/{value}/networks/{id}:
+    delete:
+      summary: Delete an Entry Network from a given Entry
+      operationId: deleteNetworkForEntry
+      parameters:
+        - $ref: '#/components/parameters/entryLookupKey'
+        - $ref: '#/components/parameters/entryLookupValue'
+        - name: id
+          in: path
+          description: ID of Network to delete from entry
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Network deleted from Entry
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Access denied
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Internal server error
+          content:
+            text/plain:
+              schema:
+                type: string
   /tiers:
     get:
       summary: Get all tiers
@@ -1647,4 +1892,23 @@ components:
           type: string
           format: uuid
           description: ID of tier
+    
+    AddEntryTier:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
 
+    AddEntryNetwork:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier

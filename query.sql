@@ -1,3 +1,6 @@
+-- name: EntryById :one
+SELECT * FROM entries WHERE id = $1 LIMIT 1;
+
 -- name: EntryByIdForUpdate :one
 SELECT * FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE;
 
@@ -226,8 +229,14 @@ SELECT * FROM tiers WHERE id = $1 LIMIT 1;
 -- name: GetEntryNetworkById :one
 SELECT * FROM entry_networks WHERE id = $1 LIMIT 1;
 
+-- name: GetEntryNetworkByNetworkAndEntry :one
+SELECT * FROM entry_networks WHERE network = $1 AND entry = $2 LIMIT 1;
+
 -- name: GetEntryTierById :one
 SELECT * FROM entry_tiers WHERE id = $1 LIMIT 1;
+
+-- name: GetEntryTierByTierAndEntry :one
+SELECT * FROM entry_tiers WHERE tier = $1 AND entry = $2 LIMIT 1;
 
 -- name: GetClosureById :one
 SELECT * FROM closures WHERE id = $1 LIMIT 1;
@@ -263,10 +272,20 @@ SELECT * FROM networks
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
 
+-- name: ListNetworksForEntry :many
+SELECT * FROM networks n
+JOIN entry_networks en ON n.id = en.network
+WHERE en.entry = $1;
+
 -- name: ListTiers :many
 SELECT * FROM tiers
   LIMIT sqlc.arg('limit')
   OFFSET sqlc.arg('offset');
+
+-- name: ListTiersForEntry :many
+SELECT * FROM tiers t
+JOIN entry_tiers et ON t.id = et.tier
+WHERE et.entry = $1;
 
 -- name: ListClosures :many
 SELECT * FROM closures

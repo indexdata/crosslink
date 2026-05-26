@@ -94,6 +94,42 @@ const (
 	UpdateEntryParamsKeyBySymbol UpdateEntryParamsKey = "by-symbol"
 )
 
+// Defines values for GetNetworksForEntryParamsKey.
+const (
+	GetNetworksForEntryParamsKeyById     GetNetworksForEntryParamsKey = "by-id"
+	GetNetworksForEntryParamsKeyBySymbol GetNetworksForEntryParamsKey = "by-symbol"
+)
+
+// Defines values for AddNetworkForEntryParamsKey.
+const (
+	AddNetworkForEntryParamsKeyById     AddNetworkForEntryParamsKey = "by-id"
+	AddNetworkForEntryParamsKeyBySymbol AddNetworkForEntryParamsKey = "by-symbol"
+)
+
+// Defines values for DeleteNetworkForEntryParamsKey.
+const (
+	DeleteNetworkForEntryParamsKeyById     DeleteNetworkForEntryParamsKey = "by-id"
+	DeleteNetworkForEntryParamsKeyBySymbol DeleteNetworkForEntryParamsKey = "by-symbol"
+)
+
+// Defines values for GetTiersForEntryParamsKey.
+const (
+	GetTiersForEntryParamsKeyById     GetTiersForEntryParamsKey = "by-id"
+	GetTiersForEntryParamsKeyBySymbol GetTiersForEntryParamsKey = "by-symbol"
+)
+
+// Defines values for AddTierForEntryParamsKey.
+const (
+	AddTierForEntryParamsKeyById     AddTierForEntryParamsKey = "by-id"
+	AddTierForEntryParamsKeyBySymbol AddTierForEntryParamsKey = "by-symbol"
+)
+
+// Defines values for DeleteTierForEntryParamsKey.
+const (
+	DeleteTierForEntryParamsKeyById     DeleteTierForEntryParamsKey = "by-id"
+	DeleteTierForEntryParamsKeyBySymbol DeleteTierForEntryParamsKey = "by-symbol"
+)
+
 // About defines model for About.
 type About struct {
 	// Count Total number of items in the result
@@ -104,6 +140,18 @@ type About struct {
 
 	// PrevLink Link to the previous page of results
 	PrevLink *string `json:"prevLink,omitempty"`
+}
+
+// AddEntryNetwork defines model for AddEntryNetwork.
+type AddEntryNetwork struct {
+	// Id Unique identifier
+	Id openapi_types.UUID `json:"id"`
+}
+
+// AddEntryTier defines model for AddEntryTier.
+type AddEntryTier struct {
+	// Id Unique identifier
+	Id openapi_types.UUID `json:"id"`
 }
 
 // Address defines model for Address.
@@ -485,6 +533,24 @@ type GetEntryParamsKey string
 // UpdateEntryParamsKey defines parameters for UpdateEntry.
 type UpdateEntryParamsKey string
 
+// GetNetworksForEntryParamsKey defines parameters for GetNetworksForEntry.
+type GetNetworksForEntryParamsKey string
+
+// AddNetworkForEntryParamsKey defines parameters for AddNetworkForEntry.
+type AddNetworkForEntryParamsKey string
+
+// DeleteNetworkForEntryParamsKey defines parameters for DeleteNetworkForEntry.
+type DeleteNetworkForEntryParamsKey string
+
+// GetTiersForEntryParamsKey defines parameters for GetTiersForEntry.
+type GetTiersForEntryParamsKey string
+
+// AddTierForEntryParamsKey defines parameters for AddTierForEntry.
+type AddTierForEntryParamsKey string
+
+// DeleteTierForEntryParamsKey defines parameters for DeleteTierForEntry.
+type DeleteTierForEntryParamsKey string
+
 // GetEntryNetworksParams defines parameters for GetEntryNetworks.
 type GetEntryNetworksParams struct {
 	// Q keywords to filter by
@@ -545,6 +611,12 @@ type AddEntryJSONRequestBody = Entry
 // UpdateEntryJSONRequestBody defines body for UpdateEntry for application/json ContentType.
 type UpdateEntryJSONRequestBody = EntryPatch
 
+// AddNetworkForEntryJSONRequestBody defines body for AddNetworkForEntry for application/json ContentType.
+type AddNetworkForEntryJSONRequestBody = AddEntryNetwork
+
+// AddTierForEntryJSONRequestBody defines body for AddTierForEntry for application/json ContentType.
+type AddTierForEntryJSONRequestBody = AddEntryTier
+
 // AddEntryNetworkJSONRequestBody defines body for AddEntryNetwork for application/json ContentType.
 type AddEntryNetworkJSONRequestBody = EntryNetwork
 
@@ -589,6 +661,24 @@ type ServerInterface interface {
 	// Update an entry
 	// (PATCH /entries/{key}/{value})
 	UpdateEntry(w http.ResponseWriter, r *http.Request, key UpdateEntryParamsKey, value EntryLookupValue)
+	// Get all Networks for a given Entry
+	// (GET /entries/{key}/{value}/networks)
+	GetNetworksForEntry(w http.ResponseWriter, r *http.Request, key GetNetworksForEntryParamsKey, value EntryLookupValue)
+	// Add an Entry Network to a given Entry
+	// (POST /entries/{key}/{value}/networks)
+	AddNetworkForEntry(w http.ResponseWriter, r *http.Request, key AddNetworkForEntryParamsKey, value EntryLookupValue)
+	// Delete an Entry Network from a given Entry
+	// (DELETE /entries/{key}/{value}/networks/{id})
+	DeleteNetworkForEntry(w http.ResponseWriter, r *http.Request, key DeleteNetworkForEntryParamsKey, value EntryLookupValue, id openapi_types.UUID)
+	// Get all Tiers for a given Entry
+	// (GET /entries/{key}/{value}/tiers)
+	GetTiersForEntry(w http.ResponseWriter, r *http.Request, key GetTiersForEntryParamsKey, value EntryLookupValue)
+	// Add an Entry Tier to a given Entry
+	// (POST /entries/{key}/{value}/tiers)
+	AddTierForEntry(w http.ResponseWriter, r *http.Request, key AddTierForEntryParamsKey, value EntryLookupValue)
+	// Delete an Entry Tier from a given Entry
+	// (DELETE /entries/{key}/{value}/tiers/{id})
+	DeleteTierForEntry(w http.ResponseWriter, r *http.Request, key DeleteTierForEntryParamsKey, value EntryLookupValue, id openapi_types.UUID)
 	// Returns all Entry Network Mappings
 	// (GET /entry-networks)
 	GetEntryNetworks(w http.ResponseWriter, r *http.Request, params GetEntryNetworksParams)
@@ -930,6 +1020,228 @@ func (siw *ServerInterfaceWrapper) UpdateEntry(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateEntry(w, r, key, value)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNetworksForEntry operation middleware
+func (siw *ServerInterfaceWrapper) GetNetworksForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key GetNetworksForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNetworksForEntry(w, r, key, value)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddNetworkForEntry operation middleware
+func (siw *ServerInterfaceWrapper) AddNetworkForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key AddNetworkForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddNetworkForEntry(w, r, key, value)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNetworkForEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNetworkForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key DeleteNetworkForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNetworkForEntry(w, r, key, value, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTiersForEntry operation middleware
+func (siw *ServerInterfaceWrapper) GetTiersForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key GetTiersForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTiersForEntry(w, r, key, value)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddTierForEntry operation middleware
+func (siw *ServerInterfaceWrapper) AddTierForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key AddTierForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddTierForEntry(w, r, key, value)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTierForEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTierForEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key DeleteTierForEntryParamsKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "value" -------------
+	var value EntryLookupValue
+
+	err = runtime.BindStyledParameterWithOptions("simple", "value", r.PathValue("value"), &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "value", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTierForEntry(w, r, key, value, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1497,6 +1809,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{key}/{value}", wrapper.DeleteEntry)
 	m.HandleFunc("GET "+options.BaseURL+"/entries/{key}/{value}", wrapper.GetEntry)
 	m.HandleFunc("PATCH "+options.BaseURL+"/entries/{key}/{value}", wrapper.UpdateEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/entries/{key}/{value}/networks", wrapper.GetNetworksForEntry)
+	m.HandleFunc("POST "+options.BaseURL+"/entries/{key}/{value}/networks", wrapper.AddNetworkForEntry)
+	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{key}/{value}/networks/{id}", wrapper.DeleteNetworkForEntry)
+	m.HandleFunc("GET "+options.BaseURL+"/entries/{key}/{value}/tiers", wrapper.GetTiersForEntry)
+	m.HandleFunc("POST "+options.BaseURL+"/entries/{key}/{value}/tiers", wrapper.AddTierForEntry)
+	m.HandleFunc("DELETE "+options.BaseURL+"/entries/{key}/{value}/tiers/{id}", wrapper.DeleteTierForEntry)
 	m.HandleFunc("GET "+options.BaseURL+"/entry-networks", wrapper.GetEntryNetworks)
 	m.HandleFunc("POST "+options.BaseURL+"/entry-networks", wrapper.AddEntryNetwork)
 	m.HandleFunc("DELETE "+options.BaseURL+"/entry-networks/{id}", wrapper.DeleteEntryNetwork)
@@ -2021,6 +2339,356 @@ func (response UpdateEntry404TextResponse) VisitUpdateEntryResponse(w http.Respo
 type UpdateEntry500TextResponse string
 
 func (response UpdateEntry500TextResponse) VisitUpdateEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworksForEntryRequestObject struct {
+	Key   GetNetworksForEntryParamsKey `json:"key"`
+	Value EntryLookupValue             `json:"value"`
+}
+
+type GetNetworksForEntryResponseObject interface {
+	VisitGetNetworksForEntryResponse(w http.ResponseWriter) error
+}
+
+type GetNetworksForEntry200JSONResponse NetworksResponse
+
+func (response GetNetworksForEntry200JSONResponse) VisitGetNetworksForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNetworksForEntry400TextResponse string
+
+func (response GetNetworksForEntry400TextResponse) VisitGetNetworksForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworksForEntry401TextResponse string
+
+func (response GetNetworksForEntry401TextResponse) VisitGetNetworksForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworksForEntry404TextResponse string
+
+func (response GetNetworksForEntry404TextResponse) VisitGetNetworksForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetNetworksForEntry500TextResponse string
+
+func (response GetNetworksForEntry500TextResponse) VisitGetNetworksForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkForEntryRequestObject struct {
+	Key   AddNetworkForEntryParamsKey `json:"key"`
+	Value EntryLookupValue            `json:"value"`
+	Body  *AddNetworkForEntryJSONRequestBody
+}
+
+type AddNetworkForEntryResponseObject interface {
+	VisitAddNetworkForEntryResponse(w http.ResponseWriter) error
+}
+
+type AddNetworkForEntry201JSONResponse Id
+
+func (response AddNetworkForEntry201JSONResponse) VisitAddNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddNetworkForEntry400TextResponse string
+
+func (response AddNetworkForEntry400TextResponse) VisitAddNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkForEntry401TextResponse string
+
+func (response AddNetworkForEntry401TextResponse) VisitAddNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkForEntry404TextResponse string
+
+func (response AddNetworkForEntry404TextResponse) VisitAddNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddNetworkForEntry500TextResponse string
+
+func (response AddNetworkForEntry500TextResponse) VisitAddNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkForEntryRequestObject struct {
+	Key   DeleteNetworkForEntryParamsKey `json:"key"`
+	Value EntryLookupValue               `json:"value"`
+	Id    openapi_types.UUID             `json:"id"`
+}
+
+type DeleteNetworkForEntryResponseObject interface {
+	VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error
+}
+
+type DeleteNetworkForEntry204Response struct {
+}
+
+func (response DeleteNetworkForEntry204Response) VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNetworkForEntry400TextResponse string
+
+func (response DeleteNetworkForEntry400TextResponse) VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkForEntry401TextResponse string
+
+func (response DeleteNetworkForEntry401TextResponse) VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkForEntry404TextResponse string
+
+func (response DeleteNetworkForEntry404TextResponse) VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteNetworkForEntry500TextResponse string
+
+func (response DeleteNetworkForEntry500TextResponse) VisitDeleteNetworkForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiersForEntryRequestObject struct {
+	Key   GetTiersForEntryParamsKey `json:"key"`
+	Value EntryLookupValue          `json:"value"`
+}
+
+type GetTiersForEntryResponseObject interface {
+	VisitGetTiersForEntryResponse(w http.ResponseWriter) error
+}
+
+type GetTiersForEntry200JSONResponse TiersResponse
+
+func (response GetTiersForEntry200JSONResponse) VisitGetTiersForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTiersForEntry400TextResponse string
+
+func (response GetTiersForEntry400TextResponse) VisitGetTiersForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiersForEntry401TextResponse string
+
+func (response GetTiersForEntry401TextResponse) VisitGetTiersForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiersForEntry404TextResponse string
+
+func (response GetTiersForEntry404TextResponse) VisitGetTiersForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type GetTiersForEntry500TextResponse string
+
+func (response GetTiersForEntry500TextResponse) VisitGetTiersForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierForEntryRequestObject struct {
+	Key   AddTierForEntryParamsKey `json:"key"`
+	Value EntryLookupValue         `json:"value"`
+	Body  *AddTierForEntryJSONRequestBody
+}
+
+type AddTierForEntryResponseObject interface {
+	VisitAddTierForEntryResponse(w http.ResponseWriter) error
+}
+
+type AddTierForEntry201JSONResponse Id
+
+func (response AddTierForEntry201JSONResponse) VisitAddTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddTierForEntry400TextResponse string
+
+func (response AddTierForEntry400TextResponse) VisitAddTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierForEntry401TextResponse string
+
+func (response AddTierForEntry401TextResponse) VisitAddTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierForEntry404TextResponse string
+
+func (response AddTierForEntry404TextResponse) VisitAddTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type AddTierForEntry500TextResponse string
+
+func (response AddTierForEntry500TextResponse) VisitAddTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(500)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierForEntryRequestObject struct {
+	Key   DeleteTierForEntryParamsKey `json:"key"`
+	Value EntryLookupValue            `json:"value"`
+	Id    openapi_types.UUID          `json:"id"`
+}
+
+type DeleteTierForEntryResponseObject interface {
+	VisitDeleteTierForEntryResponse(w http.ResponseWriter) error
+}
+
+type DeleteTierForEntry204Response struct {
+}
+
+func (response DeleteTierForEntry204Response) VisitDeleteTierForEntryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteTierForEntry400TextResponse string
+
+func (response DeleteTierForEntry400TextResponse) VisitDeleteTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(400)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierForEntry401TextResponse string
+
+func (response DeleteTierForEntry401TextResponse) VisitDeleteTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(401)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierForEntry404TextResponse string
+
+func (response DeleteTierForEntry404TextResponse) VisitDeleteTierForEntryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(404)
+
+	_, err := w.Write([]byte(response))
+	return err
+}
+
+type DeleteTierForEntry500TextResponse string
+
+func (response DeleteTierForEntry500TextResponse) VisitDeleteTierForEntryResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(500)
 
@@ -2848,6 +3516,24 @@ type StrictServerInterface interface {
 	// Update an entry
 	// (PATCH /entries/{key}/{value})
 	UpdateEntry(ctx context.Context, request UpdateEntryRequestObject) (UpdateEntryResponseObject, error)
+	// Get all Networks for a given Entry
+	// (GET /entries/{key}/{value}/networks)
+	GetNetworksForEntry(ctx context.Context, request GetNetworksForEntryRequestObject) (GetNetworksForEntryResponseObject, error)
+	// Add an Entry Network to a given Entry
+	// (POST /entries/{key}/{value}/networks)
+	AddNetworkForEntry(ctx context.Context, request AddNetworkForEntryRequestObject) (AddNetworkForEntryResponseObject, error)
+	// Delete an Entry Network from a given Entry
+	// (DELETE /entries/{key}/{value}/networks/{id})
+	DeleteNetworkForEntry(ctx context.Context, request DeleteNetworkForEntryRequestObject) (DeleteNetworkForEntryResponseObject, error)
+	// Get all Tiers for a given Entry
+	// (GET /entries/{key}/{value}/tiers)
+	GetTiersForEntry(ctx context.Context, request GetTiersForEntryRequestObject) (GetTiersForEntryResponseObject, error)
+	// Add an Entry Tier to a given Entry
+	// (POST /entries/{key}/{value}/tiers)
+	AddTierForEntry(ctx context.Context, request AddTierForEntryRequestObject) (AddTierForEntryResponseObject, error)
+	// Delete an Entry Tier from a given Entry
+	// (DELETE /entries/{key}/{value}/tiers/{id})
+	DeleteTierForEntry(ctx context.Context, request DeleteTierForEntryRequestObject) (DeleteTierForEntryResponseObject, error)
 	// Returns all Entry Network Mappings
 	// (GET /entry-networks)
 	GetEntryNetworks(ctx context.Context, request GetEntryNetworksRequestObject) (GetEntryNetworksResponseObject, error)
@@ -3207,6 +3893,184 @@ func (sh *strictHandler) UpdateEntry(w http.ResponseWriter, r *http.Request, key
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateEntryResponseObject); ok {
 		if err := validResponse.VisitUpdateEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNetworksForEntry operation middleware
+func (sh *strictHandler) GetNetworksForEntry(w http.ResponseWriter, r *http.Request, key GetNetworksForEntryParamsKey, value EntryLookupValue) {
+	var request GetNetworksForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNetworksForEntry(ctx, request.(GetNetworksForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNetworksForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNetworksForEntryResponseObject); ok {
+		if err := validResponse.VisitGetNetworksForEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddNetworkForEntry operation middleware
+func (sh *strictHandler) AddNetworkForEntry(w http.ResponseWriter, r *http.Request, key AddNetworkForEntryParamsKey, value EntryLookupValue) {
+	var request AddNetworkForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+
+	var body AddNetworkForEntryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddNetworkForEntry(ctx, request.(AddNetworkForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddNetworkForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddNetworkForEntryResponseObject); ok {
+		if err := validResponse.VisitAddNetworkForEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNetworkForEntry operation middleware
+func (sh *strictHandler) DeleteNetworkForEntry(w http.ResponseWriter, r *http.Request, key DeleteNetworkForEntryParamsKey, value EntryLookupValue, id openapi_types.UUID) {
+	var request DeleteNetworkForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNetworkForEntry(ctx, request.(DeleteNetworkForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNetworkForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNetworkForEntryResponseObject); ok {
+		if err := validResponse.VisitDeleteNetworkForEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTiersForEntry operation middleware
+func (sh *strictHandler) GetTiersForEntry(w http.ResponseWriter, r *http.Request, key GetTiersForEntryParamsKey, value EntryLookupValue) {
+	var request GetTiersForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTiersForEntry(ctx, request.(GetTiersForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTiersForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTiersForEntryResponseObject); ok {
+		if err := validResponse.VisitGetTiersForEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddTierForEntry operation middleware
+func (sh *strictHandler) AddTierForEntry(w http.ResponseWriter, r *http.Request, key AddTierForEntryParamsKey, value EntryLookupValue) {
+	var request AddTierForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+
+	var body AddTierForEntryJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddTierForEntry(ctx, request.(AddTierForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddTierForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddTierForEntryResponseObject); ok {
+		if err := validResponse.VisitAddTierForEntryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteTierForEntry operation middleware
+func (sh *strictHandler) DeleteTierForEntry(w http.ResponseWriter, r *http.Request, key DeleteTierForEntryParamsKey, value EntryLookupValue, id openapi_types.UUID) {
+	var request DeleteTierForEntryRequestObject
+
+	request.Key = key
+	request.Value = value
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteTierForEntry(ctx, request.(DeleteTierForEntryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteTierForEntry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteTierForEntryResponseObject); ok {
+		if err := validResponse.VisitDeleteTierForEntryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -3653,60 +4517,64 @@ func (sh *strictHandler) GetTier(w http.ResponseWriter, r *http.Request, id open
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"TVYzYxHiE3wsZEAFXt2v/hsAAP//Z13eH36KAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

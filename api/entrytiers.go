@@ -11,6 +11,77 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func (a ApiImpl) AddTierForEntry(ctx context.Context, request AddTierForEntryRequestObject) (AddTierForEntryResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return AddTierForEntry401TextResponse("Access denied"), nil
+	}
+
+	if request.Body == nil || request.Body.Id == uuid.Nil {
+		return AddTierForEntry400TextResponse("You must provide a valid tier to add"), nil
+	}
+
+	tx, err := a.pool.Begin(ctx)
+
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to begin transaction", "error", err, "operation", "AddTierForEntry")
+		return AddTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	//Find the Entry
+
+	qtx := a.queries.WithTx(tx)
+
+	var orig db.Entry
+
+	if request.Key == AddTierForEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return AddTierForEntry400TextResponse("Error parsing id"), nil
+		}
+		orig, err = qtx.EntryByIdForUpdate(ctx, parsedId)
+	} else if request.Key == AddTierForEntryParamsKeyBySymbol {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return AddTierForEntry400TextResponse("Unable to parse symbol"), nil
+		}
+		orig, err = qtx.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AddTierForEntry404TextResponse("Entry not found"), nil
+	} else if err != nil {
+		slog.ErrorContext(ctx, "Failed to fetch entry", "error", err)
+		return AddTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	insertedTierForEntry, err := qtx.CreateEntryTier(ctx, db.CreateEntryTierParams{
+		Entry: orig.ID,
+		Tier:  request.Body.Id,
+	})
+
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to add tier to entry", "error", err, "entry", orig.ID, "tier", request.Body.Id)
+		return AddTierForEntry500TextResponse("Error creating entry tier"), nil
+	}
+
+	var resp Id
+	resp.Id = insertedTierForEntry.ID
+
+	err = tx.Commit(ctx)
+
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to commit transaction", "error", err, "operation", "AddEntryTier")
+		return AddTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	return AddTierForEntry201JSONResponse(resp), nil
+
+}
+
 func (a ApiImpl) AddEntryTier(ctx context.Context, request AddEntryTierRequestObject) (AddEntryTierResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 
@@ -137,6 +208,66 @@ func (a ApiImpl) GetEntryTiers(ctx context.Context, request GetEntryTiersRequest
 
 }
 
+func (a ApiImpl) GetTiersForEntry(ctx context.Context, request GetTiersForEntryRequestObject) (GetTiersForEntryResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
+
+	if !authData.HasRoleFromList(validRoles) {
+		slog.ErrorContext(ctx, "permission denied")
+		return GetTiersForEntry401TextResponse("Access denied"), nil
+	}
+
+	//Get the entry
+	var entry db.Entry
+	var err error
+
+	if request.Key == GetTiersForEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return GetTiersForEntry400TextResponse("Error parsing id"), nil
+		}
+		entry, err = a.queries.EntryById(ctx, parsedId)
+	} else {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return GetTiersForEntry400TextResponse("Unable to parse symbol"), nil
+		}
+		entry, err = a.queries.EntryBySymbol(ctx, db.EntryBySymbolParams{Authority: authority, Symbol: symbol})
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return GetTiersForEntry404TextResponse("Entry not found"), nil
+		} else {
+			slog.ErrorContext(ctx, "Failed to fetch entry", "error", err, "key", request.Key, "value", request.Value)
+			return GetTiersForEntry500TextResponse("Internal server error"), nil
+
+		}
+	}
+
+	rows, err := a.queries.ListTiersForEntry(ctx, entry.ID)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list tiers for entry", "error", err, "entry", entry.ID)
+		return GetTiersForEntry500TextResponse("Internal Server Error"), nil
+	}
+
+	tierList := make([]Tier, 0, len(rows))
+
+	for _, row := range rows {
+		tier := Tier{
+			Id:   &row.ID,
+			Name: row.Name,
+		}
+		tierList = append(tierList, tier)
+	}
+
+	resp := TiersResponse{
+		Items: tierList,
+		About: About{Count: int64(len(tierList))},
+	}
+
+	return GetTiersForEntry200JSONResponse(resp), nil
+}
+
 func (a ApiImpl) DeleteEntryTier(ctx context.Context, request DeleteEntryTierRequestObject) (DeleteEntryTierResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 
@@ -151,5 +282,66 @@ func (a ApiImpl) DeleteEntryTier(ctx context.Context, request DeleteEntryTierReq
 		return DeleteEntryTier500TextResponse("Internal server error"), nil
 	}
 	return DeleteEntryTier204Response{}, nil
+
+}
+
+func (a ApiImpl) DeleteTierForEntry(ctx context.Context, request DeleteTierForEntryRequestObject) (DeleteTierForEntryResponseObject, error) {
+	authData := auth.GetAuthData(ctx)
+
+	if !authData.HasRole(auth.ConsortialAdminRole) {
+		slog.ErrorContext(ctx, "permission denied")
+		return DeleteTierForEntry401TextResponse("Access denied"), nil
+	}
+
+	var entry db.Entry
+	var err error
+	//Find the entry object
+	if request.Key == DeleteTierForEntryParamsKeyById {
+		parsedId, perr := uuid.Parse(request.Value)
+		if perr != nil {
+			return DeleteTierForEntry400TextResponse("Error parsing id"), nil
+		}
+		entry, err = a.queries.EntryByIdForUpdate(ctx, parsedId)
+	} else {
+		authority, symbol, perr := resolveCombinedSymbol(request.Value)
+		if perr != nil {
+			return DeleteTierForEntry400TextResponse("Unable to parse symbol"), nil
+		}
+		entry, err = a.queries.EntryBySymbolForUpdate(ctx, db.EntryBySymbolForUpdateParams{Authority: authority, Symbol: symbol})
+	}
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DeleteTierForEntry404TextResponse("Entry not found"), nil
+		}
+		slog.ErrorContext(ctx, "Failed to retrieve Entry", "error", err, "key", request.Key, "value", request.Value)
+		return DeleteTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	//Find the tier object
+	tier, err := a.queries.GetTierById(ctx, request.Id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DeleteTierForEntry404TextResponse("Tier not found"), nil
+		}
+		slog.ErrorContext(ctx, "Failed to retrieve Tier by Id", "error", err, "tier", request.Id)
+		return DeleteTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	//find the entry tier object
+	entryTier, err := a.queries.GetEntryTierByTierAndEntry(ctx, db.GetEntryTierByTierAndEntryParams{Tier: tier.ID, Entry: entry.ID})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return DeleteTierForEntry404TextResponse("Tier not found for entry"), nil
+		}
+		slog.ErrorContext(ctx, "Failed to retrieve Entry Tier by Tier and Entry", "error", err, "tier", tier.ID, "entry", entry.ID)
+		return DeleteTierForEntry500TextResponse("Internal server error"), nil
+	}
+
+	err = a.queries.DeleteEntryTierById(ctx, entryTier.ID)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to delete entry tier", "error", err, "id", entryTier.ID)
+		return DeleteTierForEntry500TextResponse("Internal server error"), nil
+	}
+	return DeleteTierForEntry204Response{}, nil
 
 }

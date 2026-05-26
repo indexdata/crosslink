@@ -364,6 +364,30 @@ func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const entryById = `-- name: EntryById :one
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
+	row := q.db.QueryRow(ctx, entryById, id)
+	var i Entry
+	err := row.Scan(
+		&i.ID,
+		&i.Parent,
+		&i.Name,
+		&i.Type,
+		&i.Description,
+		&i.OrganizationID,
+		&i.ContactName,
+		&i.Email,
+		&i.PhoneNumber,
+		&i.LmsLocationCode,
+		&i.Hrid,
+		&i.TimeZone,
+	)
+	return i, err
+}
+
 const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
 SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
@@ -491,12 +515,44 @@ func (q *Queries) GetEntryNetworkById(ctx context.Context, id uuid.UUID) (EntryN
 	return i, err
 }
 
+const getEntryNetworkByNetworkAndEntry = `-- name: GetEntryNetworkByNetworkAndEntry :one
+SELECT id, entry, network FROM entry_networks WHERE network = $1 AND entry = $2 LIMIT 1
+`
+
+type GetEntryNetworkByNetworkAndEntryParams struct {
+	Network uuid.UUID
+	Entry   uuid.UUID
+}
+
+func (q *Queries) GetEntryNetworkByNetworkAndEntry(ctx context.Context, arg GetEntryNetworkByNetworkAndEntryParams) (EntryNetwork, error) {
+	row := q.db.QueryRow(ctx, getEntryNetworkByNetworkAndEntry, arg.Network, arg.Entry)
+	var i EntryNetwork
+	err := row.Scan(&i.ID, &i.Entry, &i.Network)
+	return i, err
+}
+
 const getEntryTierById = `-- name: GetEntryTierById :one
 SELECT id, entry, tier FROM entry_tiers WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetEntryTierById(ctx context.Context, id uuid.UUID) (EntryTier, error) {
 	row := q.db.QueryRow(ctx, getEntryTierById, id)
+	var i EntryTier
+	err := row.Scan(&i.ID, &i.Entry, &i.Tier)
+	return i, err
+}
+
+const getEntryTierByTierAndEntry = `-- name: GetEntryTierByTierAndEntry :one
+SELECT id, entry, tier FROM entry_tiers WHERE tier = $1 AND entry = $2 LIMIT 1
+`
+
+type GetEntryTierByTierAndEntryParams struct {
+	Tier  uuid.UUID
+	Entry uuid.UUID
+}
+
+func (q *Queries) GetEntryTierByTierAndEntry(ctx context.Context, arg GetEntryTierByTierAndEntryParams) (EntryTier, error) {
+	row := q.db.QueryRow(ctx, getEntryTierByTierAndEntry, arg.Tier, arg.Entry)
 	var i EntryTier
 	err := row.Scan(&i.ID, &i.Entry, &i.Tier)
 	return i, err
@@ -717,6 +773,46 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 	return items, nil
 }
 
+const listNetworksForEntry = `-- name: ListNetworksForEntry :many
+SELECT n.id, name, en.id, entry, network FROM networks n
+JOIN entry_networks en ON n.id = en.network
+WHERE en.entry = $1
+`
+
+type ListNetworksForEntryRow struct {
+	ID      uuid.UUID
+	Name    *string
+	ID_2    uuid.UUID
+	Entry   uuid.UUID
+	Network uuid.UUID
+}
+
+func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]ListNetworksForEntryRow, error) {
+	rows, err := q.db.Query(ctx, listNetworksForEntry, entry)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNetworksForEntryRow
+	for rows.Next() {
+		var i ListNetworksForEntryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ID_2,
+			&i.Entry,
+			&i.Network,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTiers = `-- name: ListTiers :many
 SELECT id, name FROM tiers
   LIMIT $2
@@ -738,6 +834,46 @@ func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, e
 	for rows.Next() {
 		var i Tier
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTiersForEntry = `-- name: ListTiersForEntry :many
+SELECT t.id, name, et.id, entry, tier FROM tiers t
+JOIN entry_tiers et ON t.id = et.tier
+WHERE et.entry = $1
+`
+
+type ListTiersForEntryRow struct {
+	ID    uuid.UUID
+	Name  *string
+	ID_2  uuid.UUID
+	Entry uuid.UUID
+	Tier  uuid.UUID
+}
+
+func (q *Queries) ListTiersForEntry(ctx context.Context, entry uuid.UUID) ([]ListTiersForEntryRow, error) {
+	rows, err := q.db.Query(ctx, listTiersForEntry, entry)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTiersForEntryRow
+	for rows.Next() {
+		var i ListTiersForEntryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ID_2,
+			&i.Entry,
+			&i.Tier,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
