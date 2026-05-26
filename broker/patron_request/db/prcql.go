@@ -170,8 +170,8 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	return def.Parse(query, noBaseArgs+1)
 }
 
-func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetsRequesterRow, error) {
-	sql := facetsRequester
+func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetsPatronRequestsRow, error) {
+	sql := facetsPatronRequests
 	sql = strings.Replace(sql, "requester_symbol", facetField, 1)
 
 	idx := strings.Index(sql, "GROUP BY")
@@ -194,9 +194,9 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}
 	defer rows.Close()
-	var items []FacetsRequesterRow
+	var items []FacetsPatronRequestsRow
 	for rows.Next() {
-		var i FacetsRequesterRow
+		var i FacetsPatronRequestsRow
 		if err := rows.Scan(&i.Value, &i.Count); err != nil {
 			return nil, err
 		}
