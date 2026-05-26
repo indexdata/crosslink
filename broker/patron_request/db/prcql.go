@@ -167,10 +167,10 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 }
 
 func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetValue, error) {
-	orgSql := facetsRequesterSymbol
-	orgSql = strings.Replace(orgSql, "requester_symbol", facetField, 1)
+	sql := facetsRequesterSymbol
+	sql = strings.Replace(sql, "requester_symbol", facetField, 1)
 
-	idx := strings.Index(orgSql, "GROUP BY")
+	idx := strings.Index(sql, "GROUP BY")
 	if idx == -1 {
 		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
 	}
@@ -181,11 +181,11 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 			return nil, fmt.Errorf("failed to handle CQL query: %w", err)
 		}
 		if res.GetWhereClause() != "" {
-			orgSql = orgSql[:idx] + "WHERE " + res.GetWhereClause() + " " + orgSql[idx:]
+			sql = sql[:idx] + "AND " + res.GetWhereClause() + " " + sql[idx:]
 			queryArguments = res.GetQueryArguments()
 		}
 	}
-	rows, err := db.Query(ctx, orgSql, queryArguments...)
+	rows, err := db.Query(ctx, sql, queryArguments...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}
