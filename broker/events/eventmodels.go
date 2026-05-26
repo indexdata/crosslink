@@ -50,6 +50,7 @@ const (
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
 	EventNameSendNotification     EventName = "send-notification"
 	EventNameCheckAvailability    EventName = "check-availability"
+	EventNameSendEmail            EventName = "send-email"
 )
 
 type Signal string
@@ -94,6 +95,7 @@ type CommonEventData struct {
 	Action          *pr_db.PatronRequestAction `json:"action,omitempty"`
 	ActionResult    *ActionResult              `json:"actionResult,omitempty"`
 	Notification    *pr_db.Notification        `json:"notification,omitempty"`
+	BatchActionData *BatchActionData           `json:"batchActionData,omitempty"`
 }
 
 type ActionResult struct {
@@ -121,6 +123,12 @@ type NotifyData struct {
 	Event  string       `json:"event"`
 	Signal Signal       `json:"signal"`
 	Target SignalTarget `json:"target"`
+}
+
+type BatchActionData struct {
+	ActionName string `json:"actionName"`
+	Selector   string `json:"selector"`
+	TaskId     string `json:"taskId"`
 }
 
 func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {
