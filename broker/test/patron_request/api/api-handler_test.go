@@ -893,7 +893,13 @@ func TestFacetsOK(t *testing.T) {
 	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 0)
 }
 
-func TestFacetsBadRequest(t *testing.T) {
+func TestFacetsBadRequest1(t *testing.T) {
 	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
 	assert.Contains(t, string(respBytes), "unsupported facet field: nosuch")
+
+}
+
+func TestFacetsBadRequest2(t *testing.T) {
+	respBytes := httpRequest(t, "GET", basePath+"?facets=", []byte{}, 400)
+	assert.Contains(t, string(respBytes), "unsupported facet field: ")
 }
