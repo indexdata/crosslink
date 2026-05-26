@@ -875,6 +875,22 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2C%20supplier_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 2)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
+	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 0)
 }
 
 func TestFacetsBadRequest(t *testing.T) {

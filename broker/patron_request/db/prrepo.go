@@ -119,11 +119,11 @@ func (r *PgPrRepo) FacetsPatronRequests(ctx common.ExtendedContext, facetParamet
 	}
 	facetFields := strings.Split(*facetParameter, ",")
 	var facets []Facet
-	for _, field := range facetFields {
-		tField := strings.TrimSpace(field)
-		switch tField {
+	for _, comp := range facetFields {
+		field := strings.TrimSpace(comp)
+		switch field {
 		case "requester_symbol", "supplier_symbol":
-			rows, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), tField, cql)
+			rows, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), field, cql)
 			if err != nil {
 				return nil, err
 			}
