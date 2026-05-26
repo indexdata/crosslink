@@ -61,7 +61,6 @@ func TestMain(m *testing.M) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
 func newTask(cronExpr string, runAt pgtype.Timestamptz) sched_db.SaveScheduledTaskParams {
 	return sched_db.SaveScheduledTaskParams{
 		ID:        uuid.NewString(),
