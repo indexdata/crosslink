@@ -428,8 +428,12 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.Respons
 		return
 	}
 
+	var noteText string
+	if body.InternalNote != nil {
+		noteText = *body.InternalNote
+	}
 	var note pgtype.Text
-	if trimmed := strings.TrimSpace(body.InternalNote); trimmed != "" {
+	if trimmed := strings.TrimSpace(noteText); trimmed != "" {
 		note = pgtype.Text{Valid: true, String: trimmed}
 	}
 

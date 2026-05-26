@@ -310,7 +310,7 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
-func internalNoteBody(t *testing.T, note string) *bytes.Buffer {
+func internalNoteBody(t *testing.T, note *string) *bytes.Buffer {
 	jsonBytes, err := json.Marshal(proapi.UpdateInternalNote{InternalNote: note})
 	assert.NoError(t, err)
 	return bytes.NewBuffer(jsonBytes)
@@ -319,7 +319,8 @@ func internalNoteBody(t *testing.T, note string) *bytes.Buffer {
 func TestPutPatronRequestsIdInternalNoteSetsNote(t *testing.T) {
 	repo := new(PrRepoError)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, "hello staff"))
+	note := "hello staff"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
 	assert.Equal(t, http.StatusNoContent, rr.Code)
@@ -329,16 +330,28 @@ func TestPutPatronRequestsIdInternalNoteSetsNote(t *testing.T) {
 func TestPutPatronRequestsIdInternalNoteClearsOnEmpty(t *testing.T) {
 	repo := new(PrRepoError)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, ""))
+	empty := ""
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &empty))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
 	assert.Equal(t, http.StatusNoContent, rr.Code)
 	assert.False(t, repo.lastInternalNote.Valid, "empty string should clear to NULL")
 }
 
+func TestPutPatronRequestsIdInternalNoteClearsOnAbsent(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString("{}"))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.False(t, repo.lastInternalNote.Valid, "absent field should clear to NULL")
+}
+
 func TestPutPatronRequestsIdInternalNoteNotFound(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
-	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, "x"))
+	note := "x"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
 	rr := httptest.NewRecorder()
 	handler.PutPatronRequestsIdInternalNote(rr, req, "2", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
 	assert.Equal(t, http.StatusNotFound, rr.Code)
