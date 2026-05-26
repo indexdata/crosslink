@@ -86,10 +86,7 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
-	commit="$$( $(GIT) rev-parse --short HEAD )"; \
-	if [ ! -f "$@" ] || [ "$$(cat "$@")" != "$$commit" ]; then \
-		printf "%s" "$$commit" > "$@"; \
-	fi
+	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
 
 $(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
