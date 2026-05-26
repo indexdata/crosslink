@@ -5,6 +5,7 @@ output-options:
     - patron-requests-api
     - sse-api
     - pull-slips-api
+    - scheduler-api
   overlay:
     path: oapi/overlay.yaml
 generate:

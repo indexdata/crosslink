@@ -22,6 +22,10 @@ import (
 	psapi "github.com/indexdata/crosslink/broker/pullslip/api"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
 	psoapi "github.com/indexdata/crosslink/broker/pullslip/oapi"
+	schedapi "github.com/indexdata/crosslink/broker/scheduler/api"
+	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
+	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
+	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 
 	"github.com/dustin/go-humanize"
@@ -94,16 +98,17 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus       events.EventBus
-	IllRepo        ill_db.IllRepo
-	EventRepo      events.EventRepo
-	DirAdapter     adapter.DirectoryLookupAdapter
-	PrRepo         pr_db.PrRepo
-	TenantResolver *tenant.TenantResolver
-	ApiHandler     api.ApiHandler
-	PrApiHandler   prapi.PatronRequestApiHandler
-	SseBroker      *api.SseBroker
-	PsApiHandler   psapi.PullSlipApiHandler
+	EventBus        events.EventBus
+	IllRepo         ill_db.IllRepo
+	EventRepo       events.EventRepo
+	DirAdapter      adapter.DirectoryLookupAdapter
+	PrRepo          pr_db.PrRepo
+	TenantResolver  *tenant.TenantResolver
+	ApiHandler      api.ApiHandler
+	PrApiHandler    prapi.PatronRequestApiHandler
+	SseBroker       *api.SseBroker
+	PsApiHandler    psapi.PullSlipApiHandler
+	SchedApiHandler schedapi.SchedulerApiHandler
 }
 
 func configLog() slog.Handler {
@@ -198,17 +203,25 @@ func Init(ctx context.Context) (Context, error) {
 	if err != nil {
 		return Context{}, err
 	}
+
+	schedRepoRepo := sched_db.CreateSchedRepo(pool)
+	schedApiHandler := schedapi.NewSchedulerApiHandler(API_PAGE_SIZE, schedRepoRepo, tenantResolver)
+	if err = StartScheduler(ctx, schedRepoRepo, eventBus); err != nil {
+		return Context{}, err
+	}
+
 	return Context{
-		EventBus:       eventBus,
-		IllRepo:        illRepo,
-		EventRepo:      eventRepo,
-		DirAdapter:     dirAdapter,
-		PrRepo:         prRepo,
-		TenantResolver: tenantResolver,
-		ApiHandler:     apiHandler,
-		PrApiHandler:   prApiHandler,
-		SseBroker:      sseBroker,
-		PsApiHandler:   psApiHandler,
+		EventBus:        eventBus,
+		IllRepo:         illRepo,
+		EventRepo:       eventRepo,
+		DirAdapter:      dirAdapter,
+		PrRepo:          prRepo,
+		TenantResolver:  tenantResolver,
+		ApiHandler:      apiHandler,
+		PrApiHandler:    prApiHandler,
+		SseBroker:       sseBroker,
+		PsApiHandler:    psApiHandler,
+		SchedApiHandler: schedApiHandler,
 	}, nil
 }
 
@@ -242,6 +255,7 @@ func StartServer(ctx Context) error {
 		Middlewares: []proapi.MiddlewareFunc{oapiValidator},
 	})
 	psoapi.HandlerFromMux(&ctx.PsApiHandler, ServeMux)
+	schedoapi.HandlerFromMux(&ctx.SchedApiHandler, ServeMux)
 	ServeMux.HandleFunc("GET /sse/events", ctx.SseBroker.ServeHTTP)
 	if ctx.TenantResolver.HasTenantMapping() {
 		basePath := tenant.OKAPI_PATH_PREFIX
@@ -252,6 +266,7 @@ func StartServer(ctx Context) error {
 			Middlewares: []proapi.MiddlewareFunc{oapiValidator},
 		})
 		psoapi.HandlerFromMuxWithBaseURL(&ctx.PsApiHandler, ServeMux, basePath)
+		schedoapi.HandlerFromMuxWithBaseURL(&ctx.SchedApiHandler, ServeMux, basePath)
 		ServeMux.HandleFunc("GET "+basePath+"/sse/events", ctx.SseBroker.ServeHTTP)
 	}
 	signatureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -390,6 +405,18 @@ func StartEventBus(ctx context.Context, eventBus events.EventBus) error {
 	if err != nil {
 		return fmt.Errorf("starting event bus failed err=%w", err)
 	}
+	return nil
+}
+
+// StartScheduler creates the scheduler service, begins listening on
+// sched_db.SchedulerChannel, and launches the scheduling loop in a background goroutine.
+func StartScheduler(ctx context.Context, schedRepo sched_db.SchedRepo, eventBus events.EventBus) error {
+	extCtx := common.CreateExtCtxWithArgs(ctx, nil)
+	svc := sched_service.NewSchedulerService(schedRepo, eventBus, ConnectionString)
+	if err := svc.Listen(extCtx); err != nil {
+		return fmt.Errorf("starting scheduler listener failed: %w", err)
+	}
+	go svc.Run(extCtx)
 	return nil
 }
 
