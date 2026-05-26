@@ -10,6 +10,7 @@ import (
 	brokerapi "github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/oapi"
 	sched_db "github.com/indexdata/crosslink/broker/scheduler/db"
 	schedoapi "github.com/indexdata/crosslink/broker/scheduler/oapi"
 	sched_service "github.com/indexdata/crosslink/broker/scheduler/service"
@@ -64,10 +65,23 @@ func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Requ
 	}
 
 	resp := schedoapi.BatchActions{
-		About: schedoapi.About(brokerapi.CollectAboutData(count, offset, limit, r)),
+		About: toSchedAbout(brokerapi.CollectAboutData(count, offset, limit, r)),
 		Items: toBatchActionList(items),
 	}
 	brokerapi.WriteJsonResponse(w, resp)
+}
+
+// toSchedAbout converts an oapi.About to a schedoapi.About by copying the pagination fields.
+// The two types are generated independently from identical OpenAPI schemas but are not
+// directly convertible because their Facets types differ.
+func toSchedAbout(a oapi.About) schedoapi.About {
+	return schedoapi.About{
+		Count:     a.Count,
+		FirstLink: a.FirstLink,
+		LastLink:  a.LastLink,
+		NextLink:  a.NextLink,
+		PrevLink:  a.PrevLink,
+	}
 }
 
 // PostBatchActions creates a new batch action.

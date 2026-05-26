@@ -210,7 +210,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 
 // toProAbout converts an oapi.About to a proapi.About by copying the pagination fields.
 // The two types are generated independently from identical OpenAPI schemas but are not
-// directly convertible because their FacetValue types differ.
+// directly convertible because their Facets types differ.
 func toProAbout(a oapi.About) proapi.About {
 	return proapi.About{
 		Count:     a.Count,
