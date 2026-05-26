@@ -93,6 +93,12 @@ components:
       description: Patron request ID
       schema:
         type: string
+    Facets:
+      name: facets
+      in: query
+      description: Comma separated list of facet names to include in the response, for example "requester_symbol,supplier_symbol"
+      schema:
+        type: string
   schemas:
     Index:
       type: object
@@ -197,6 +203,34 @@ components:
           description: List of peers
           items:
             $ref: '#/components/schemas/LocatedSupplier'
+    FacetsResult:
+      type: array
+      description: List of facets for the result
+      items:
+        type: object
+        required:
+          - name
+          - values
+        properties:
+          name:
+            type: string
+            description: Facet name
+          values:
+            type: array
+            description: List of facet values
+            items:
+              type: object
+              required:
+                - value
+                - count
+              properties:
+                value:
+                  type: string
+                  description: Facet value
+                count:
+                  type: integer
+                  format: int64
+                  description: Count of items for this facet value
     About:
       type: object
       required:
@@ -206,6 +240,8 @@ components:
           type: integer
           format: int64
           description: Total number of items in the result
+        facets:
+          $ref: '#/components/schemas/FacetsResult'
         nextLink:
           type: string
           description: Link to the next page of results
@@ -1374,6 +1410,7 @@ paths:
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Side'
         - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Facets'
       responses:
         '200':
           description: Successful retrieval of events
