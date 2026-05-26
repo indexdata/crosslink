@@ -203,6 +203,42 @@
           "permissionsRequired": [
             "broker.pullslips.post"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions",
+          "permissionsRequired": [
+            "broker.batch_actions.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions",
+          "permissionsRequired": [
+            "broker.batch_actions.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "DELETE"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.delete"
+          ]
         }
       ]
     }
@@ -329,6 +365,56 @@
       "permissionName": "broker.pullslips.post"
     },
     {
+      "description": "List batch actions",
+      "displayName": "Broker - list batch actions",
+      "permissionName": "broker.batch_actions.get"
+    },
+    {
+      "description": "Create a batch action",
+      "displayName": "Broker - create batch action",
+      "permissionName": "broker.batch_actions.post"
+    },
+    {
+      "description": "Read a batch action",
+      "displayName": "Broker - read batch action",
+      "permissionName": "broker.batch_actions.item.get"
+    },
+    {
+      "description": "Delete a batch action",
+      "displayName": "Broker - delete batch action",
+      "permissionName": "broker.batch_actions.item.delete"
+    },
+    {
+      "description": "Read-only access to batch actions",
+      "displayName": "Broker - batch actions: read",
+      "permissionName": "broker.batch_actions.read",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.get",
+        "broker.batch_actions.item.get"
+      ]
+    },
+    {
+      "description": "Write access to batch actions",
+      "displayName": "Broker - batch actions: write",
+      "permissionName": "broker.batch_actions.write",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.post",
+        "broker.batch_actions.item.delete"
+      ]
+    },
+    {
+      "description": "Read and write access to batch actions",
+      "displayName": "Broker - batch actions: all",
+      "permissionName": "broker.batch_actions.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.batch_actions.read",
+        "broker.batch_actions.write"
+      ]
+    },
+    {
       "description": "Read-only access to patron requests",
       "displayName": "Broker - patron requests: read",
       "permissionName": "broker.patron_requests.read",
@@ -401,7 +487,11 @@
         "broker.patron_requests.item.notifications.item.receipt.put",
         "broker.pullslips.item.get",
         "broker.pullslips.item.pdf.get",
-        "broker.pullslips.post"
+        "broker.pullslips.post",
+        "broker.batch_actions.get",
+        "broker.batch_actions.post",
+        "broker.batch_actions.item.get",
+        "broker.batch_actions.item.delete"
       ]
     }
   ]

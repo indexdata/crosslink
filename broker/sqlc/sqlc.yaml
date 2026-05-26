@@ -132,3 +132,27 @@ sql:
           - column: "pull_slip.type"
             go_type:
               type: "PullSlipType"
+  - engine: "postgresql"
+    queries: "sched_query.sql"
+    schema: "sched_schema.sql"
+    gen:
+      go:
+        package: "sched_db"
+        out: "../scheduler/db"
+        output_db_file_name: "sched_db_gen.go"
+        output_models_file_name: "sched_models_gen.go"
+        output_files_suffix: "_gen"
+        sql_package: "pgx/v5"
+        emit_methods_with_db_argument: true
+        overrides:
+          - column: "scheduled_task.status"
+            go_type:
+              type: "ScheduledTaskStatus"
+          - column: "scheduled_task.event_name"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/events"
+              type: "EventName"
+          - column: "scheduled_task.payload"
+            go_type:
+              import: "github.com/indexdata/crosslink/broker/events"
+              type: "EventData"
