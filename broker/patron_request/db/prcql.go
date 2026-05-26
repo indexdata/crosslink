@@ -181,7 +181,7 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 			return nil, fmt.Errorf("failed to handle CQL query: %w", err)
 		}
 		if res.GetWhereClause() != "" {
-			sql = sql[:idx] + "AND " + res.GetWhereClause() + " " + sql[idx:]
+			sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
 			queryArguments = res.GetQueryArguments()
 		}
 	}
