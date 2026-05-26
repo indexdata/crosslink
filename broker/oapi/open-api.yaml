@@ -1480,7 +1480,7 @@ paths:
         - $ref: '#/components/parameters/Facets'
       responses:
         '200':
-          description: Successful retrieval of events
+          description: Successful retrieval of patron requests
           content:
             application/json:
               schema:
