@@ -1014,6 +1014,71 @@ components:
         - owner
         - searchCriteria
 
+    BatchAction:
+      type: object
+      title: Batch Action
+      description: A scheduled batch action
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the batch action
+        schedule:
+          type: string
+          description: Cron schedule expression, e.g. "0 6 * * 1" (every Monday at 06:00)
+        actionName:
+          type: string
+          description: Name of the batch action to run
+          enum:
+            - email
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+      required:
+        - id
+        - schedule
+        - actionName
+        - createdAt
+
+    BatchActions:
+      type: object
+      required:
+        - items
+        - about
+      properties:
+        about:
+          $ref: '#/components/schemas/About'
+        items:
+          type: array
+          description: List of batch actions
+          items:
+            $ref: '#/components/schemas/BatchAction'
+
+    CreateBatchAction:
+      type: object
+      title: Create Batch Action
+      description: Request body for creating a batch action
+      properties:
+        schedule:
+          type: string
+          description: Cron schedule expression, e.g. "0 6 * * 1" (every Monday at 06:00)
+        actionName:
+          type: string
+          description: Name of the batch action to run
+          enum:
+            - email
+        batchQuery:
+          type: string
+          description: Batch action selection query in CQL format
+      required:
+        - schedule
+        - actionName
+        - batchQuery
+
     CreatePullSlip:
       type: object
       title: Create Pull Slip
@@ -1360,9 +1425,9 @@ paths:
       description: |
         Use this endpoint to retrieve patron requests.
         Query parameter cql can be used to filter the results.
-        With cql you can use these fields state, side, requester_symbol, supplier_symbol, needs_attention,
+        With cql you can use these fields id, state, side, requester_symbol, supplier_symbol, needs_attention,
         has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
-        requester_req_id, title, author, patron, terminal_state, updated_at, cql.serverChoice.
+        requester_req_id, title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname, cql.serverChoice.
       tags:
         - patron-requests-api
       parameters:
@@ -1861,6 +1926,142 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StateModelCapabilities'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions:
+    get:
+      summary: List all batch actions
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Successful retrieval of batch actions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchActions'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create a new batch action
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchAction'
+      responses:
+        '201':
+          description: Batch action created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAction'
+        '400':
+          description: Bad Request. Invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions/{id}:
+    get:
+      summary: Get a batch action by ID
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to retrieve
+      responses:
+        '200':
+          description: Batch action retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAction'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete a batch action by ID
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to delete
+      responses:
+        '204':
+          description: Batch action deleted successfully (No Content)
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
           description: Internal Server Error
           content:
