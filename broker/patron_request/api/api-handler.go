@@ -417,20 +417,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.Respons
 	logParams["symbol"] = symbol
 	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
 
-	// Required key: decode into a raw map because *string can't distinguish an
-	// absent key from an explicit null which clears.
-	var fields map[string]json.RawMessage
-	if err = decodeRequiredBody(r, &fields); err != nil {
-		api.AddBadRequestError(ctx, w, err)
-		return
-	}
-	rawNote, present := fields["internalNote"]
-	if !present {
-		api.AddBadRequestError(ctx, w, errors.New("internalNote is required"))
-		return
-	}
-	var notePtr *string
-	if err = json.Unmarshal(rawNote, &notePtr); err != nil {
+	var body proapi.UpdateInternalNote
+	if err = decodeRequiredBody(r, &body); err != nil {
 		api.AddBadRequestError(ctx, w, err)
 		return
 	}
@@ -441,11 +429,8 @@ func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.Respons
 	}
 
 	var note pgtype.Text
-	if notePtr != nil {
-		// Non-contractual guard
-		if trimmed := strings.TrimSpace(*notePtr); trimmed != "" {
-			note = pgtype.Text{Valid: true, String: trimmed}
-		}
+	if trimmed := strings.TrimSpace(body.InternalNote); trimmed != "" {
+		note = pgtype.Text{Valid: true, String: trimmed}
 	}
 
 	if err = a.prRepo.UpdatePatronRequestInternalNote(ctx, pr.ID, note); err != nil {

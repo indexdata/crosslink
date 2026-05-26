@@ -579,8 +579,7 @@ components:
       properties:
         internalNote:
           type: string
-          nullable: true
-          description: Staff-only internal note text. Send null to clear the note.
+          description: Staff-only internal note text. Send an empty string to clear the note.
       required:
         - internalNote
 
