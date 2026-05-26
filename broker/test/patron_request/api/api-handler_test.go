@@ -838,6 +838,7 @@ func TestFacetsOK(t *testing.T) {
 	var foundPrs proapi.PatronRequests
 	respBytes := httpRequest(t, "GET", basePath+"?cql=service_type%3DCopy&offset=0&limit=1", []byte{}, 200)
 	err := json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
 	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
 	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(5))
 	assert.Len(t, foundPrs.Items, 1)
