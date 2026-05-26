@@ -53,7 +53,7 @@ func TestMain(m *testing.M) {
 	schedRepo = sched_db.CreateSchedRepo(pool)
 
 	code := m.Run()
-
+	pool.Close()
 	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
 	os.Exit(code)
 }

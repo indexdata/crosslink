@@ -91,7 +91,7 @@ func (b *countingEventBus) totalClaims() int {
 func (b *countingEventBus) getClaims() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.claims
+	return append([]string(nil), b.claims...)
 }
 
 func overdueTask() sched_db.SaveScheduledTaskParams {
