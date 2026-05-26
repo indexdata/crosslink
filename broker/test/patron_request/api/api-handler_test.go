@@ -841,59 +841,40 @@ func TestFacetsOK(t *testing.T) {
 	}
 
 	var foundPrs proapi.PatronRequests
-	respBytes := httpRequest(t, "GET", basePath+"?cql=service_type%3DCopy&offset=0&limit=1", []byte{}, 200)
+	respBytes := httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1", []byte{}, 200)
 	err := json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
-	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
-	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(5))
+	assert.Equal(t, int64(10), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 1)
 	assert.Nil(t, foundPrs.About.Facets)
 
-	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy&offset=0&limit=0", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy+and+title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
-	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
-	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(5))
+	assert.Equal(t, int64(5), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
 	assert.NotNil(t, foundPrs.About.Facets)
 	assert.Len(t, *foundPrs.About.Facets, 1)
 	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
-	assert.GreaterOrEqual(t, len((*foundPrs.About.Facets)[0].Values), 2)
-	var count0 int64
-	var count1 int64
-	for i := range (*foundPrs.About.Facets)[0].Values {
-		switch (*foundPrs.About.Facets)[0].Values[i].Value {
-		case requesterSymbols[0]:
-			count0 = (*foundPrs.About.Facets)[0].Values[i].Count
-		case requesterSymbols[1]:
-			count1 = (*foundPrs.About.Facets)[0].Values[i].Count
-		}
-	}
-	assert.Equal(t, count0, int64(3))
-	assert.Equal(t, count1, int64(2))
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(2), (*foundPrs.About.Facets)[0].Values[1].Count)
 
-	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=cql.allRecords%3Dtrue%20&offset=0&limit=0", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
-	// a little brittle as there are patron requests created in other tests, but should be ok as long as we create more than 5 in this test
-	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(10))
+	assert.Equal(t, int64(10), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
 	assert.NotNil(t, foundPrs.About.Facets)
 	assert.Len(t, *foundPrs.About.Facets, 1)
 	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
-	assert.GreaterOrEqual(t, len((*foundPrs.About.Facets)[0].Values), 2)
-	count0 = 0
-	count1 = 0
-	for i := range (*foundPrs.About.Facets)[0].Values {
-		switch (*foundPrs.About.Facets)[0].Values[i].Value {
-		case requesterSymbols[0]:
-			count0 = (*foundPrs.About.Facets)[0].Values[i].Count
-		case requesterSymbols[1]:
-			count1 = (*foundPrs.About.Facets)[0].Values[i].Count
-		}
-	}
-	assert.Equal(t, count0, int64(7))
-	assert.Equal(t, count1, int64(3))
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 }
 
 func TestFacetsBadRequest(t *testing.T) {
