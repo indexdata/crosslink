@@ -430,6 +430,52 @@ func (a *PatronRequestApiHandler) GetPatronRequestsId(w http.ResponseWriter, r *
 	api.WriteJsonResponse(w, toApiPatronRequest(r, *pr))
 }
 
+func (a *PatronRequestApiHandler) PutPatronRequestsIdInternalNote(w http.ResponseWriter, r *http.Request, id string, params proapi.PutPatronRequestsIdInternalNoteParams) {
+	logParams := map[string]string{"method": "PutPatronRequestsIdInternalNote", "id": id}
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	var body proapi.UpdateInternalNote
+	if err = decodeRequiredBody(r, &body); err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
+	if pr == nil {
+		return
+	}
+
+	var noteText string
+	if body.InternalNote != nil {
+		noteText = *body.InternalNote
+	}
+	var note pgtype.Text
+	if trimmed := strings.TrimSpace(noteText); trimmed != "" {
+		note = pgtype.Text{Valid: true, String: trimmed}
+	}
+
+	if err = a.prRepo.UpdatePatronRequestInternalNote(ctx, pr.ID, note); err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWriter, r *http.Request, id string, params proapi.GetPatronRequestsIdActionsParams) {
 	logParams := map[string]string{"method": "GetPatronRequestsIdActions", "id": id}
 	if params.Side != nil {
@@ -857,6 +903,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		IllTransactionLink:       illTransactionLink,
 		EventsLink:               eventsLink,
 		TerminalState:            request.TerminalState,
+		InternalNote:             toString(request.InternalNote),
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
@@ -993,6 +1040,7 @@ func buildDbPatronRequest(
 		IllRequest:      illRequest,
 		Tenant:          getDbText(tenant),
 		RequesterReqID:  getDbText(&requesterReqId),
+		InternalNote:    getDbText(request.InternalNote),
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,

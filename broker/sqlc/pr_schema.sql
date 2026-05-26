@@ -19,7 +19,8 @@ CREATE TABLE patron_request
     language            regconfig NOT NULL DEFAULT 'english',
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
     updated_at          TIMESTAMP,
-    ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb
+    ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    internal_note       TEXT
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$
@@ -104,6 +105,7 @@ SELECT
         WHERE n.pr_id = pr.id and cost is not null
     ) AS has_cost,
     (unread.unread_notifications_count > 0) AS has_unread_notification,
+    (pr.internal_note IS NOT NULL AND btrim(pr.internal_note) <> '') AS has_internal_note,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
     immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at,
