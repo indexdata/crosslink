@@ -1412,6 +1412,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Tenant'
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1543,6 +1544,7 @@ paths:
         - $ref: '#/components/parameters/Side'
         - $ref: '#/components/parameters/Symbol'
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1714,6 +1716,7 @@ paths:
       tags:
         - patron-requests-api
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -1766,6 +1769,7 @@ paths:
       tags:
         - patron-requests-api
       requestBody:
+        required: true
         content:
           application/json:
             schema:
