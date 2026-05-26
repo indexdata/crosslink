@@ -471,7 +471,7 @@ func TestHandleInvokeActionAcceptConditionMarksReceivedConditionNotificationsAcc
 	mockIso18626Handler := new(MockIso18626Handler)
 	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
 	illRequest := iso18626.Request{}
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateConditionPending, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}, NeedsAttention: true}, nil)
 	action := BorrowerActionAcceptCondition
 
 	status, _ := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}}})
@@ -484,6 +484,8 @@ func TestHandleInvokeActionAcceptConditionMarksReceivedConditionNotificationsAcc
 			Direction: string(pr_db.NotificationDirectionReceived),
 		}, mockPrRepo.markedConditionNotificationsReceipts[0])
 	}
+	// Successful action resets NeedsAttention flag
+	assert.False(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
 func TestHandleInvokeActionRejectCondition(t *testing.T) {

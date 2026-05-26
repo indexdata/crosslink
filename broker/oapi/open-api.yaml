@@ -770,6 +770,9 @@ components:
         terminal:
           type: boolean
           description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
+        needsAttention:
+          type: boolean
+          description: Indicates that this state requires user attention (e.g. displayed as a flag in the UI)
       oneOf:
         - anyOf:
           - required:

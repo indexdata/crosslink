@@ -78,6 +78,7 @@ states:
     desc: Received supply conditions
     side: REQUESTER
     primaryAction: accept-condition
+    needsAttention: true
     actions:
       - name: accept-condition
         desc: Accept supplier conditions (ISO18626 Notification)
