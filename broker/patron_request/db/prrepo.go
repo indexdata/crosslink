@@ -19,6 +19,7 @@ type PrRepo interface {
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
+	UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
 	DeletePatronRequest(ctx common.ExtendedContext, id string) error
 	GetLendingRequestBySupplierSymbolAndRequesterReqId(ctx common.ExtendedContext, supplierSymbol string, requesterReId string) (PatronRequest, error)
@@ -156,12 +157,20 @@ func patronRequestFromSearchView(v PatronRequestSearchView) PatronRequest {
 		TerminalState:     v.TerminalState,
 		UpdatedAt:         v.UpdatedAt,
 		IllResponse:       v.IllResponse,
+		InternalNote:      v.InternalNote,
 	}
 }
 
 func (r *PgPrRepo) UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error) {
 	row, err := r.queries.UpdatePatronRequest(ctx, r.GetConnOrTx(), params)
 	return row.PatronRequest, err
+}
+
+func (r *PgPrRepo) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error {
+	return r.queries.UpdatePatronRequestInternalNote(ctx, r.GetConnOrTx(), UpdatePatronRequestInternalNoteParams{
+		ID:           id,
+		InternalNote: internalNote,
+	})
 }
 func (r *PgPrRepo) CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error) {
 	row, err := r.queries.CreatePatronRequest(ctx, r.GetConnOrTx(), params)

@@ -116,6 +116,10 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	fb = pgcql.NewFieldBool()
 	def.AddField("has_unread_notification", fb)
 
+	// presence flag only; note contents are not searchable.
+	fb = pgcql.NewFieldBool()
+	def.AddField("has_internal_note", fb)
+
 	fb = pgcql.NewFieldBool()
 	def.AddField("terminal_state", fb)
 
@@ -248,9 +252,11 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.TerminalState,
 			&i.PatronRequestSearchView.UpdatedAt,
 			&i.PatronRequestSearchView.IllResponse,
+			&i.PatronRequestSearchView.InternalNote,
 			&i.PatronRequestSearchView.HasNotification,
 			&i.PatronRequestSearchView.HasCost,
 			&i.PatronRequestSearchView.HasUnreadNotification,
+			&i.PatronRequestSearchView.HasInternalNote,
 			&i.PatronRequestSearchView.ServiceType,
 			&i.PatronRequestSearchView.ServiceLevel,
 			&i.PatronRequestSearchView.NeededAt,
