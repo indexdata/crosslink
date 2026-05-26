@@ -669,10 +669,12 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	creationTime := time.Now()
 	id := uuid.NewString()
+	patron := "user-1"
 	reqWithID := &proapi.CreatePatronRequest{
 		Id:              &id,
 		RequesterSymbol: &symbol,
 		IllRequest:      validIllRequest(),
+		Patron:          &patron,
 	}
 
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
@@ -684,6 +686,8 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	assert.True(t, pr.RequesterReqID.Valid)
 	assert.Equal(t, id, pr.RequesterReqID.String)
 	assert.False(t, pr.SupplierSymbol.Valid)
+	assert.Equal(t, patron, pr.Patron.String)
+	assert.Equal(t, patron, pr.IllRequest.PatronInfo.PatronId)
 
 	reqWithoutID := &proapi.CreatePatronRequest{RequesterSymbol: &symbol}
 	_, _, err = handler.parseAndValidateIllRequest(ctx, reqWithoutID, creationTime)

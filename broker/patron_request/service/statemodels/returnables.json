@@ -114,6 +114,7 @@
       "desc": "Received supply conditions",
       "side": "REQUESTER",
       "primaryAction": "accept-condition",
+      "needsAttention": true,
       "actions": [
         {
           "name": "accept-condition",
