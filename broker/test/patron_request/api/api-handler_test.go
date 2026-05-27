@@ -848,12 +848,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.Len(t, foundPrs.Items, 1)
 	assert.Nil(t, foundPrs.About.Facets)
 
-	respBytes = httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1&facets=", []byte{}, 200)
-	err = json.Unmarshal(respBytes, &foundPrs)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(10), foundPrs.About.Count)
-	assert.Len(t, foundPrs.Items, 1)
-	assert.Nil(t, foundPrs.About.Facets)
+	httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1&facets=", []byte{}, 400)
 
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy+and+title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)

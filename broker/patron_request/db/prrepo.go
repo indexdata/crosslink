@@ -19,7 +19,7 @@ type PrRepo interface {
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
 	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
 	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error)
-	GetPatronRequestsFacets(ctx common.ExtendedContext, facets *string, cql string) ([]Facet, error)
+	GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, cql string) ([]Facet, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
@@ -114,11 +114,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 	return list, fullCount, nil
 }
 
-func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetParameter *string, cql string) ([]Facet, error) {
-	if facetParameter == nil {
-		return nil, nil // no facets requested, return nil
-	}
-	facetFields := strings.Split(*facetParameter, ",")
+func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, cql string) ([]Facet, error) {
 	var facets []Facet
 	for _, comp := range facetFields {
 		field := strings.TrimSpace(comp)

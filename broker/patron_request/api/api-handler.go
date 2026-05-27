@@ -186,7 +186,10 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 
 	resp := proapi.PatronRequests{Items: responseItems}
 	resp.About = toProAbout(api.CollectAboutData(count, offset, limit, r))
-	facets, err := a.prRepo.GetPatronRequestsFacets(ctx, params.Facets, cqlStr)
+	var facets []pr_db.Facet
+	if params.Facets != nil {
+		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, cqlStr)
+	}
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
 		return

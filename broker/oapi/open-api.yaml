@@ -97,8 +97,12 @@ components:
       name: facets
       in: query
       description: Comma separated list of facet names to include in the response, for example "requester_symbol,supplier_symbol"
+      style: form
+      explode: false
       schema:
-        type: string
+        type: array
+        items:
+          type: string
   schemas:
     Index:
       type: object
