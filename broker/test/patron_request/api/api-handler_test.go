@@ -904,7 +904,12 @@ func TestFacetsOK(t *testing.T) {
 	assert.GreaterOrEqual(t, len(*foundPrs.About.Facets), 2)
 }
 
-func TestFacetsBadRequest(t *testing.T) {
+func TestFacetsUnknownField(t *testing.T) {
 	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
+	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
+}
+
+func TestFacetsEmptyField(t *testing.T) {
+	respBytes := httpRequest(t, "GET", basePath+"?facets=", []byte{}, 400)
 	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
 }

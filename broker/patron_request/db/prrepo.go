@@ -119,8 +119,7 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 
 func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, cql string) ([]Facet, error) {
 	var facets []Facet
-	for _, comp := range facetFields {
-		field := strings.TrimSpace(comp)
+	for _, field := range facetFields {
 		switch field {
 		case "requester_symbol", "supplier_symbol":
 			rows, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), field, cql)
@@ -140,7 +139,6 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 				Field:  field,
 				Values: values,
 			})
-		case "":
 		default:
 			return nil, fmt.Errorf("%w: %s", ErrUnsupportedFacet, field)
 		}
