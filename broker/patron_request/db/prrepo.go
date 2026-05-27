@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/repo"
 	"github.com/jackc/pgx/v5"
@@ -18,9 +19,9 @@ type PrRepo interface {
 	GetPatronRequestSearchView(ctx common.ExtendedContext, id string) (PatronRequestSearchView, error)
 	GetPatronRequestByIdForUpdate(ctx common.ExtendedContext, id string) (PatronRequest, error)
 	GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id string, side PatronRequestSide) (PatronRequest, error)
-	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error)
-	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error)
-	GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, cql string) ([]Facet, error)
+	ListPatronRequests(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequest, int64, error)
+	ListPatronRequestsSearchView(ctx common.ExtendedContext, args ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequestSearchView, int64, error)
+	GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, pgcql pgcql.Query) ([]Facet, error)
 	UpdatePatronRequest(ctx common.ExtendedContext, params UpdatePatronRequestParams) (PatronRequest, error)
 	UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error
 	CreatePatronRequest(ctx common.ExtendedContext, params CreatePatronRequestParams) (PatronRequest, error)
@@ -105,8 +106,8 @@ func (r *PgPrRepo) GetPatronRequestByIdAndSide(ctx common.ExtendedContext, id st
 	return pr, nil
 }
 
-func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequest, int64, error) {
-	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequest, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, pgcql)
 	if err != nil {
 		return nil, fullCount, err
 	}
@@ -117,12 +118,12 @@ func (r *PgPrRepo) ListPatronRequests(ctx common.ExtendedContext, params ListPat
 	return list, fullCount, nil
 }
 
-func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, cql string) ([]Facet, error) {
+func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFields []string, pgcql pgcql.Query) ([]Facet, error) {
 	var facets []Facet
 	for _, field := range facetFields {
 		switch field {
 		case "requester_symbol", "supplier_symbol":
-			rows, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), field, cql)
+			rows, err := r.queries.FacetsPatronRequestsCql(ctx, r.GetConnOrTx(), field, pgcql)
 			if err != nil {
 				return nil, err
 			}
@@ -146,8 +147,8 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 	return facets, nil
 }
 
-func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]PatronRequestSearchView, int64, error) {
-	rows, fullCount, err := r.listPatronRequestRows(ctx, params, cql)
+func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]PatronRequestSearchView, int64, error) {
+	rows, fullCount, err := r.listPatronRequestRows(ctx, params, pgcql)
 	if err != nil {
 		return nil, fullCount, err
 	}
@@ -158,8 +159,8 @@ func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, para
 	return list, fullCount, nil
 }
 
-func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, cql *string) ([]ListPatronRequestsRow, int64, error) {
-	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, r.explainAnalyze)
+func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]ListPatronRequestsRow, int64, error) {
+	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, pgcql, r.explainAnalyze)
 	var fullCount int64
 	if err == nil {
 		for _, line := range explainResult {
@@ -170,7 +171,7 @@ func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params List
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, cql, false)
+			countRows, _, countErr := r.queries.ListPatronRequestsCql(ctx, r.GetConnOrTx(), params, pgcql, false)
 			err = countErr
 			if err == nil && len(countRows) > 0 {
 				fullCount = countRows[0].FullCount

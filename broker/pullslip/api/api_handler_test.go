@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	ps_db "github.com/indexdata/crosslink/broker/pullslip/db"
@@ -41,8 +42,8 @@ type MockPrRepo struct {
 	pr_db.PrRepo
 }
 
-func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
-	args := m.Called(*cql)
+func (m *MockPrRepo) ListPatronRequests(ctx common.ExtendedContext, params pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	args := m.Called(pgcql)
 	return args.Get(0).([]pr_db.PatronRequest), args.Get(1).(int64), args.Error(2)
 }
 
@@ -207,7 +208,9 @@ func patronRequest(id, requesterSym string) pr_db.PatronRequest {
 func TestPostPullslips_OK(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -249,7 +252,7 @@ func TestPostPullslips_InvalidJSON(t *testing.T) {
 
 func TestPostPullslips_PrNotFound(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-missing and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{}, int64(1), pgx.ErrNoRows)
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-missing"))
@@ -262,7 +265,7 @@ func TestPostPullslips_PrNotFound(t *testing.T) {
 
 func TestPostPullslips_PrRepoError(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-err and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{}, int64(1), errors.New("db err"))
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-err"))
@@ -277,7 +280,7 @@ func TestPostPullslips_SaveError(t *testing.T) {
 	pr := patronRequest("pr-1", sym)
 
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", "id any pr-1 and (side = lending and supplier_symbol_exact = ISIL:TEST or (side = borrowing and requester_symbol_exact = ISIL:TEST))").Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{{Note: pgtype.Text{String: "Be careful with item"}}}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{{Condition: pgtype.Text{String: "Library use only"}}}, int64(1), nil)
 
@@ -323,7 +326,7 @@ func cqlBody(cql string) string {
 func TestPostPullslips_CqlBased_OK(t *testing.T) {
 	pr := patronRequest("pr-cql", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", mock.AnythingOfType("string")).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-cql", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 
@@ -343,7 +346,7 @@ func TestPostPullslips_CqlBased_OK(t *testing.T) {
 
 func TestPostPullslips_EmptyPrList(t *testing.T) {
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", mock.AnythingOfType("string")).Return([]pr_db.PatronRequest{}, int64(0), nil)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{}, int64(0), nil)
 
 	h := newHandler(nil, prRepo)
 	req := newRequest(http.MethodPost, postBody("pr-none"))
@@ -362,7 +365,7 @@ func TestPostPullslipsIdRegenerate_OK(t *testing.T) {
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 
@@ -403,7 +406,7 @@ func TestPostPullslipsIdRegenerate_PrRepoError(t *testing.T) {
 	psRepo.On("GetPullSlipByIdAndOwner", "ps-err", sym).Return(slip, nil)
 
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{}, int64(0), errors.New("db err"))
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{}, int64(0), errors.New("db err"))
 
 	h := newHandler(psRepo, prRepo)
 	req := newRequest(http.MethodPost, "")
@@ -421,7 +424,7 @@ func TestPostPullslipsIdRegenerate_SaveError(t *testing.T) {
 
 	pr := patronRequest("pr-1", sym)
 	prRepo := new(MockPrRepo)
-	prRepo.On("ListPatronRequests", slip.SearchCriteria).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
+	prRepo.On("ListPatronRequests", mock.Anything).Return([]pr_db.PatronRequest{pr}, int64(1), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindNote)).Return([]pr_db.Notification{}, int64(0), nil)
 	prRepo.On("GetNotificationsByPrId", "pr-1", string(pr_db.NotificationKindCondition)).Return([]pr_db.Notification{}, int64(0), nil)
 

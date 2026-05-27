@@ -3,6 +3,7 @@ package psapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -215,7 +216,13 @@ func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.Respo
 }
 
 func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, error) {
-	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, &cql)
+	pgcql, err := pr_db.ParsePatronRequestsCQL(cql, 2)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, fmt.Errorf("invalid CQL query: %w", err))
+		return []byte{}, err
+	}
+
+	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, pgcql)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			api.AddNotFoundError(w)

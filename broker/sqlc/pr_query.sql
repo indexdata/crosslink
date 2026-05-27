@@ -33,7 +33,7 @@ FROM patron_request_search_view
 WHERE ill_request IS NOT NULL
 GROUP BY 1
 ORDER BY count DESC, value ASC
-LIMIT 100;
+LIMIT $1 OFFSET $2;
 
 -- name: UpdatePatronRequest :one
 -- internal_note ($20) is a pass-through to keep PatronRequest <-> UpdatePatronRequestParams

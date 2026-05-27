@@ -74,7 +74,7 @@ func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentInde
 	}
 }
 
-func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+func ParsePatronRequestsCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	def := pgcql.NewPgDefinition()
 
 	fa := &FieldAllRecords{}
@@ -174,7 +174,7 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 // FacetsPatronRequestsCql substitutes it with the validated facet field at runtime.
 const facetFieldPlaceholder = "requester_symbol"
 
-func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString string) ([]FacetsPatronRequestsRow, error) {
+func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, pgcql pgcql.Query) ([]FacetsPatronRequestsRow, error) {
 	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets),
 	// so it is safe to substitute directly as a column name.
 	sql := strings.Replace(facetsPatronRequests, facetFieldPlaceholder, facetField, 1)
@@ -183,14 +183,13 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 	if idx == -1 {
 		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
 	}
-	res, err := handlePatronRequestsQuery(cqlString, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to handle CQL query: %w", err)
+	if pgcql.GetWhereClause() != "" {
+		sql = sql[:idx] + "AND (" + pgcql.GetWhereClause() + ") " + sql[idx:]
 	}
-	if res.GetWhereClause() != "" {
-		sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
-	}
-	rows, err := db.Query(ctx, sql, res.GetQueryArguments()...)
+	sqlArguments := make([]interface{}, 0, 2+len(pgcql.GetQueryArguments()))
+	sqlArguments = append(sqlArguments, int64(100), int64(0)) // 100 facet values should be more than enough; offset is always 0 for facets
+	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
+	rows, err := db.Query(ctx, sql, sqlArguments...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}
@@ -210,16 +209,8 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 }
 
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,
-	cqlString *string, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
-	if cqlString == nil {
-		rows, err := q.ListPatronRequests(ctx, db, arg)
-		return rows, nil, err
-	}
+	pgcql pgcql.Query, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
 	noBaseArgs := 2 // we have two base arguments: limit and offset
-	res, err := handlePatronRequestsQuery(*cqlString, noBaseArgs)
-	if err != nil {
-		return nil, nil, err
-	}
 	orgSql := listPatronRequests
 	pos := strings.Index(orgSql, "ORDER BY")
 	if pos == -1 {
@@ -230,21 +221,21 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 		return nil, nil, fmt.Errorf("base query missing LIMIT")
 	}
 	orderBy := orgSql[pos:limitPos]
-	if res.GetOrderByClause() != "" {
-		orderBy = res.GetOrderByClause() + " "
+	if pgcql.GetOrderByClause() != "" {
+		orderBy = pgcql.GetOrderByClause() + " "
 	}
 	sqlPrefix := orgSql[:pos]
-	if res.GetWhereClause() != "" {
+	if pgcql.GetWhereClause() != "" {
 		if strings.Contains(strings.ToUpper(sqlPrefix), "WHERE ") {
-			sqlPrefix += "AND " + res.GetWhereClause() + " "
+			sqlPrefix += "AND " + pgcql.GetWhereClause() + " "
 		} else {
-			sqlPrefix += "WHERE " + res.GetWhereClause() + " "
+			sqlPrefix += "WHERE " + pgcql.GetWhereClause() + " "
 		}
 	}
 	sql := sqlPrefix + orderBy + orgSql[limitPos:]
-	sqlArguments := make([]interface{}, 0, noBaseArgs+len(res.GetQueryArguments()))
+	sqlArguments := make([]interface{}, 0, noBaseArgs+len(pgcql.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
-	sqlArguments = append(sqlArguments, res.GetQueryArguments()...)
+	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
 	explainResult := []string{}
 	if explainAnalyze {
 		explainRows, err := db.Query(ctx, "EXPLAIN ANALYZE "+sql, sqlArguments...)
