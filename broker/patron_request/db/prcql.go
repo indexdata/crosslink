@@ -170,9 +170,14 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	return def.Parse(query, noBaseArgs+1)
 }
 
+// facetFieldPlaceholder is the column name used in the facetsPatronRequests SQL template.
+// FacetsPatronRequestsCql substitutes it with the validated facet field at runtime.
+const facetFieldPlaceholder = "requester_symbol"
+
 func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString string) ([]FacetsPatronRequestsRow, error) {
-	sql := facetsPatronRequests
-	sql = strings.Replace(sql, "requester_symbol", facetField, 1)
+	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets),
+	// so it is safe to substitute directly as a column name.
+	sql := strings.Replace(facetsPatronRequests, facetFieldPlaceholder, facetField, 1)
 
 	idx := strings.Index(sql, "GROUP BY")
 	if idx == -1 {
