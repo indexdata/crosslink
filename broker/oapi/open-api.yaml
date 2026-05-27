@@ -227,7 +227,7 @@ components:
             description: Facet name
           values:
             type: array
-            description: List of facet values
+            description: List of facet values. At most 100 entries are returned.
             items:
               $ref: '#/components/schemas/FacetResultValue'
     FacetResultValue:
