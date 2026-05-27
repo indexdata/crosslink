@@ -12,6 +12,8 @@ import (
 
 var LANGUAGE = utils.GetEnv("LANGUAGE", "english")
 
+const NumberBaseArgs = 2 // SQLC base query has two args: $1=limit, $2=offset
+
 type FieldAllRecords struct{}
 
 func (f *FieldAllRecords) GetColumn() string       { return "" }
@@ -74,7 +76,11 @@ func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentInde
 	}
 }
 
-func ParsePatronRequestsCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
+// ParsePatronRequestsCql parses cqlString into a pgcql.Query whose placeholder
+// numbering starts at $3, matching the two base SQL arguments (limit and offset)
+// used by both ListPatronRequestsCql and GetPatronRequestsFacetsCql.
+func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
+
 	def := pgcql.NewPgDefinition()
 
 	fa := &FieldAllRecords{}
@@ -167,17 +173,20 @@ func ParsePatronRequestsCQL(cqlString string, noBaseArgs int) (pgcql.Query, erro
 	if err != nil {
 		return nil, err
 	}
-	return def.Parse(query, noBaseArgs+1)
+	return def.Parse(query, NumberBaseArgs+1)
 }
 
-// facetFieldPlaceholder is the column name used in the facetsPatronRequests SQL template.
-// FacetsPatronRequestsCql substitutes it with the validated facet field at runtime.
+// facetFieldPlaceholder is the column name used in the getPatronRequestsFacets SQL template.
+// GetPatronRequestsFacetsCql substitutes it with the validated facet field at runtime.
 const facetFieldPlaceholder = "requester_symbol"
 
-func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, pgcql pgcql.Query) ([]FacetsPatronRequestsRow, error) {
+func (q *Queries) GetPatronRequestsFacetsCql(ctx context.Context, db DBTX, facetField string, pgcql pgcql.Query) ([]GetPatronRequestsFacetsRow, error) {
+	if pgcql == nil {
+		return nil, fmt.Errorf("pgcql.Query must not be nil; use cql.allRecords=1 for no filter")
+	}
 	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets),
 	// so it is safe to substitute directly as a column name.
-	sql := strings.Replace(facetsPatronRequests, facetFieldPlaceholder, facetField, 1)
+	sql := strings.Replace(getPatronRequestsFacets, facetFieldPlaceholder, facetField, 1)
 
 	idx := strings.Index(sql, "GROUP BY")
 	if idx == -1 {
@@ -186,7 +195,7 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 	if pgcql.GetWhereClause() != "" {
 		sql = sql[:idx] + "AND (" + pgcql.GetWhereClause() + ") " + sql[idx:]
 	}
-	sqlArguments := make([]interface{}, 0, 2+len(pgcql.GetQueryArguments()))
+	sqlArguments := make([]interface{}, 0, NumberBaseArgs+len(pgcql.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, int64(100), int64(0)) // 100 facet values should be more than enough; offset is always 0 for facets
 	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
 	rows, err := db.Query(ctx, sql, sqlArguments...)
@@ -194,9 +203,9 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}
 	defer rows.Close()
-	var items []FacetsPatronRequestsRow
+	var items []GetPatronRequestsFacetsRow
 	for rows.Next() {
-		var i FacetsPatronRequestsRow
+		var i GetPatronRequestsFacetsRow
 		if err := rows.Scan(&i.Value, &i.Count); err != nil {
 			return nil, err
 		}
@@ -210,7 +219,9 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,
 	pgcql pgcql.Query, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
-	noBaseArgs := 2 // we have two base arguments: limit and offset
+	if pgcql == nil {
+		return nil, nil, fmt.Errorf("pgcql.Query must not be nil; use cql.allRecords=1 for no filter")
+	}
 	orgSql := listPatronRequests
 	pos := strings.Index(orgSql, "ORDER BY")
 	if pos == -1 {
@@ -233,7 +244,7 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 		}
 	}
 	sql := sqlPrefix + orderBy + orgSql[limitPos:]
-	sqlArguments := make([]interface{}, 0, noBaseArgs+len(pgcql.GetQueryArguments()))
+	sqlArguments := make([]interface{}, 0, NumberBaseArgs+len(pgcql.GetQueryArguments()))
 	sqlArguments = append(sqlArguments, arg.Limit, arg.Offset)
 	sqlArguments = append(sqlArguments, pgcql.GetQueryArguments()...)
 	explainResult := []string{}

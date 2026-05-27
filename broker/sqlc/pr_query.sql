@@ -24,9 +24,9 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
--- name: FacetsPatronRequests :many
+-- name: GetPatronRequestsFacets :many
 -- TEMPLATE: 'requester_symbol' is a placeholder column name. This query is not
--- meant to be called directly; use FacetsPatronRequestsCql in prcql.go, which
+-- meant to be called directly; use GetPatronRequestsFacetsCql in prcql.go, which
 -- substitutes the column with the validated facet field at runtime.
 SELECT requester_symbol AS value, COUNT(*) AS count
 FROM patron_request_search_view

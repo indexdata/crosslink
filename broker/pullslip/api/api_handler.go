@@ -216,10 +216,11 @@ func (p PullSlipApiHandler) getPullSlip(ctx common.ExtendedContext, w http.Respo
 }
 
 func (p PullSlipApiHandler) getPdfByte(ctx common.ExtendedContext, w http.ResponseWriter, cql string) ([]byte, error) {
-	pgcql, err := pr_db.ParsePatronRequestsCQL(cql, 2)
+	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
 	if err != nil {
-		api.AddBadRequestError(ctx, w, fmt.Errorf("invalid CQL query: %w", err))
-		return []byte{}, err
+		wrappedErr := fmt.Errorf("invalid CQL query: %w", err)
+		api.AddBadRequestError(ctx, w, wrappedErr)
+		return []byte{}, wrappedErr
 	}
 
 	prs, _, err := p.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_PDF, Offset: 0}, pgcql)

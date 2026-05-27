@@ -174,7 +174,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		return
 	}
 	cqlStr := cql.String()
-	pgcql, err := pr_db.ParsePatronRequestsCQL(cqlStr, 2)
+	pgcql, err := pr_db.ParsePatronRequestsCql(cqlStr)
 	if err != nil {
 		api.AddBadRequestError(ctx, w, err)
 		return

@@ -10,7 +10,7 @@ import (
 func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	cql := "cql.allRecords = 1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))"
 
-	query, err := ParsePatronRequestsCQL(cql, 2)
+	query, err := ParsePatronRequestsCql(cql)
 	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	want := "TRUE AND ((side = $3 AND supplier_symbol = $4) OR (side = $5 AND requester_symbol = $6))"
@@ -86,7 +86,7 @@ func TestFieldTextArrayContainsGenerate(t *testing.T) {
 func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 	cql := `isbn = "978-3-16-148410-0"`
 
-	query, err := ParsePatronRequestsCQL(cql, 2)
+	query, err := ParsePatronRequestsCql(cql)
 	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	wantWhere := "bibliographic_item_identifiers(ill_request, 'ISBN') @> ARRAY[norm_isxn($3)]::text[]"
