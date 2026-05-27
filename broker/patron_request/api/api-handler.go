@@ -185,8 +185,44 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
-	resp.About = proapi.About(api.CollectAboutData(count, offset, limit, r))
+	resp.About = toProAboutWithFacets(api.CollectAboutData(count, offset, limit, r))
+	var facets []pr_db.Facet
+	if params.Facets != nil {
+		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, cqlStr)
+	}
+	if err != nil {
+		if errors.Is(err, pr_db.ErrUnsupportedFacet) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
+		return
+	}
+	if len(facets) > 0 {
+		facetResults := make(proapi.FacetsResult, len(facets))
+		for i, field := range facets {
+			facetResults[i].Name = field.Field
+			facetResults[i].Values = make([]proapi.FacetResultValue, len(field.Values))
+			for j, value := range field.Values {
+				facetResults[i].Values[j] = proapi.FacetResultValue{
+					Value: value.Value,
+					Count: value.Count,
+				}
+			}
+		}
+		resp.About.Facets = &facetResults
+	}
 	api.WriteJsonResponse(w, resp)
+}
+
+func toProAboutWithFacets(a oapi.About) proapi.AboutWithFacets {
+	return proapi.AboutWithFacets{
+		Count:     a.Count,
+		FirstLink: a.FirstLink,
+		LastLink:  a.LastLink,
+		NextLink:  a.NextLink,
+		PrevLink:  a.PrevLink,
+	}
 }
 
 func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, side pr_db.PatronRequestSide) (*cqlbuilder.QueryBuilder, error) {

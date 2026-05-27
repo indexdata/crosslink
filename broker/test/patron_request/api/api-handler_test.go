@@ -790,3 +790,126 @@ func httpRequest(t *testing.T, method string, uriPath string, reqbytes []byte, e
 func getLocalhostWithPort() string {
 	return "http://localhost:" + strconv.Itoa(app.HTTP_PORT)
 }
+
+func TestFacetsOK(t *testing.T) {
+	requesterSymbols := []string{"ISIL:REQ" + uuid.NewString(), "ISIL:REQ" + uuid.NewString()}
+
+	for _, requesterSymbol := range requesterSymbols {
+		reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
+			directory.Entry{
+				LmsConfig: &directory.LmsConfig{
+					FromAgency: "from-agency",
+					Address:    ncipMockUrl,
+				},
+			})
+		assert.NotNil(t, reqPeer)
+	}
+
+	for i := 0; i < 10; i++ {
+		serviceType := "Copy"
+		if i%2 == 0 {
+			serviceType = "Loan"
+		}
+		j := 0
+		if i >= 7 {
+			j = 1
+		}
+		// POST
+		patron := "p1"
+		request := iso18626.Request{
+			ServiceInfo: &iso18626.ServiceInfo{
+				ServiceType: iso18626.TypeServiceType(serviceType),
+			},
+			BibliographicInfo: iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: uuid.NewString(),
+				Title:                  "Facets title " + strconv.Itoa(i),
+			},
+		}
+		newPr := proapi.CreatePatronRequest{
+			RequesterSymbol: &requesterSymbols[j],
+			Patron:          &patron,
+			IllRequest:      request,
+		}
+		newPrBytes, err := json.Marshal(newPr)
+		assert.NoError(t, err, "failed to marshal patron request")
+
+		respBytes := httpRequest(t, "POST", basePath, newPrBytes, 201)
+
+		var foundPr proapi.PatronRequest
+		err = json.Unmarshal(respBytes, &foundPr)
+		assert.NoError(t, err, "failed to unmarshal patron request")
+	}
+
+	var foundPrs proapi.PatronRequests
+	respBytes := httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1", []byte{}, 200)
+	err := json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 1)
+	assert.Nil(t, foundPrs.About.Facets)
+
+	httpRequest(t, "GET", basePath+"?cql=title%3Dfacets%20title&offset=0&limit=1&facets=", []byte{}, 400)
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=service_type%3DCopy+and+title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 1)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(2), (*foundPrs.About.Facets)[0].Values[1].Count)
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 1)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
+
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(10), foundPrs.About.Count)
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 2)
+	assert.Equal(t, "requester_symbol", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 2)
+	assert.Equal(t, requesterSymbols[0], (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(7), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
+	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
+	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 0)
+
+	// omit CQL (all records), we might get more results than in earlier tests
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(10))
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.GreaterOrEqual(t, len(*foundPrs.About.Facets), 2)
+}
+
+func TestFacetsUnknownField(t *testing.T) {
+	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
+	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
+}
+
+func TestFacetsEmptyField(t *testing.T) {
+	respBytes := httpRequest(t, "GET", basePath+"?facets=", []byte{}, 400)
+	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
+}

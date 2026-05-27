@@ -170,6 +170,45 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	return def.Parse(query, noBaseArgs+1)
 }
 
+// facetFieldPlaceholder is the column name used in the facetsPatronRequests SQL template.
+// FacetsPatronRequestsCql substitutes it with the validated facet field at runtime.
+const facetFieldPlaceholder = "requester_symbol"
+
+func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString string) ([]FacetsPatronRequestsRow, error) {
+	// facetField is validated against an allowlist by the caller (GetPatronRequestsFacets),
+	// so it is safe to substitute directly as a column name.
+	sql := strings.Replace(facetsPatronRequests, facetFieldPlaceholder, facetField, 1)
+
+	idx := strings.Index(sql, "GROUP BY")
+	if idx == -1 {
+		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
+	}
+	res, err := handlePatronRequestsQuery(cqlString, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to handle CQL query: %w", err)
+	}
+	if res.GetWhereClause() != "" {
+		sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
+	}
+	rows, err := db.Query(ctx, sql, res.GetQueryArguments()...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute facets query: %w", err)
+	}
+	defer rows.Close()
+	var items []FacetsPatronRequestsRow
+	for rows.Next() {
+		var i FacetsPatronRequestsRow
+		if err := rows.Scan(&i.Value, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPatronRequestsParams,
 	cqlString *string, explainAnalyze bool) ([]ListPatronRequestsRow, []string, error) {
 	if cqlString == nil {
