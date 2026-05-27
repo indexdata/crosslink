@@ -170,7 +170,7 @@ func handlePatronRequestsQuery(cqlString string, noBaseArgs int) (pgcql.Query, e
 	return def.Parse(query, noBaseArgs+1)
 }
 
-func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString *string) ([]FacetsPatronRequestsRow, error) {
+func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetField string, cqlString string) ([]FacetsPatronRequestsRow, error) {
 	sql := facetsPatronRequests
 	sql = strings.Replace(sql, "requester_symbol", facetField, 1)
 
@@ -179,15 +179,13 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
 	}
 	var queryArguments []any
-	if cqlString != nil {
-		res, err := handlePatronRequestsQuery(*cqlString, 0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to handle CQL query: %w", err)
-		}
-		if res.GetWhereClause() != "" {
-			sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
-			queryArguments = res.GetQueryArguments()
-		}
+	res, err := handlePatronRequestsQuery(cqlString, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to handle CQL query: %w", err)
+	}
+	if res.GetWhereClause() != "" {
+		sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
+		queryArguments = res.GetQueryArguments()
 	}
 	rows, err := db.Query(ctx, sql, queryArguments...)
 	if err != nil {
