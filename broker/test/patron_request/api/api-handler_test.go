@@ -904,7 +904,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.GreaterOrEqual(t, len(*foundPrs.About.Facets), 2)
 }
 
-func TestFacetsBadRequest1(t *testing.T) {
+func TestFacetsBadRequest(t *testing.T) {
 	respBytes := httpRequest(t, "GET", basePath+"?facets=nosuch", []byte{}, 400)
-	assert.Contains(t, string(respBytes), "unsupported facet field: nosuch")
+	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
 }
