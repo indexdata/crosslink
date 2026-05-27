@@ -878,7 +878,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 
-	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2C%20supplier_symbol%2C&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&cql=title%3Dfacets%20title&offset=0&limit=0", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(10), foundPrs.About.Count)
