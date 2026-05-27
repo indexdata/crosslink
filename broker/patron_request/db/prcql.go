@@ -183,16 +183,14 @@ func (q *Queries) FacetsPatronRequestsCql(ctx context.Context, db DBTX, facetFie
 	if idx == -1 {
 		return nil, fmt.Errorf("base SQL query missing GROUP BY clause")
 	}
-	var queryArguments []any
 	res, err := handlePatronRequestsQuery(cqlString, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to handle CQL query: %w", err)
 	}
 	if res.GetWhereClause() != "" {
 		sql = sql[:idx] + "AND (" + res.GetWhereClause() + ") " + sql[idx:]
-		queryArguments = res.GetQueryArguments()
 	}
-	rows, err := db.Query(ctx, sql, queryArguments...)
+	rows, err := db.Query(ctx, sql, res.GetQueryArguments()...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute facets query: %w", err)
 	}

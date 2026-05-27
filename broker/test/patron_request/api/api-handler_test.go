@@ -893,6 +893,15 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
 	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 0)
+
+	// omit CQL (all records), we might get more results than in earlier tests
+	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&offset=0&limit=0", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, foundPrs.About.Count, int64(10))
+	assert.Len(t, foundPrs.Items, 0)
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.GreaterOrEqual(t, len(*foundPrs.About.Facets), 2)
 }
 
 func TestFacetsBadRequest1(t *testing.T) {
