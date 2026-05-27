@@ -80,7 +80,6 @@ func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentInde
 // numbering starts at $3, matching the two base SQL arguments (limit and offset)
 // used by both ListPatronRequestsCql and GetPatronRequestsFacetsCql.
 func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
-
 	def := pgcql.NewPgDefinition()
 
 	fa := &FieldAllRecords{}
