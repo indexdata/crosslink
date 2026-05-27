@@ -4,15 +4,14 @@ import (
 	"testing"
 
 	"github.com/indexdata/cql-go/cql"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHandlePatronRequestsQueryKeepsOwnerRestrictionGrouped(t *testing.T) {
 	cql := "cql.allRecords = 1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))"
 
-	query, err := handlePatronRequestsQuery(cql, 2)
-	if err != nil {
-		t.Fatalf("handlePatronRequestsQuery() error = %v", err)
-	}
+	query, err := ParsePatronRequestsCql(cql)
+	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	want := "TRUE AND ((side = $3 AND supplier_symbol = $4) OR (side = $5 AND requester_symbol = $6))"
 	if got := query.GetWhereClause(); got != want {
@@ -87,15 +86,11 @@ func TestFieldTextArrayContainsGenerate(t *testing.T) {
 func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 	cql := `isbn = "978-3-16-148410-0"`
 
-	query, err := handlePatronRequestsQuery(cql, 2)
-	if err != nil {
-		t.Fatalf("handlePatronRequestsQuery() error = %v", err)
-	}
+	query, err := ParsePatronRequestsCql(cql)
+	assert.NoError(t, err, "ParsePatronRequestsCQL() error = %v", err)
 
 	wantWhere := "bibliographic_item_identifiers(ill_request, 'ISBN') @> ARRAY[norm_isxn($3)]::text[]"
-	if got := query.GetWhereClause(); got != wantWhere {
-		t.Fatalf("where clause = %q, want %q", got, wantWhere)
-	}
+	assert.Equal(t, wantWhere, query.GetWhereClause(), "where clause = %q, want %q", query.GetWhereClause(), wantWhere)
 }
 
 func searchClauseForTest(term, relation string) cql.SearchClause {

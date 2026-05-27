@@ -492,122 +492,137 @@ func TestListPatronRequests(t *testing.T) {
 		assert.NoError(t, err)
 	}
 	cql := "title = Androids"
+	pgcql, err := pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err := prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "requester_symbol = isil:req"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "supplier_symbol = isil:sup"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = "requester_req_id = req-123"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `isbn = "978-3-16-148410-0"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "2049-3630"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `isbn = "9783161484100"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "20493630"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	cql = `issn = "1234567x"`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 2)
 	assert.Equal(t, int64(2), fullCount)
 
 	// not found
 	cql = "title = banners"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 
 	assert.NoError(t, err)
 	assert.Len(t, list, 0)
 	assert.Equal(t, int64(0), fullCount)
 
-	// no CQL
-	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
-		Limit:  1,
-		Offset: 0,
-	}, nil)
-	assert.NoError(t, err)
-	assert.Len(t, list, 1)
-	assert.Equal(t, int64(2), fullCount)
-
 	cql = "cql.allRecords=1"
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, fullCount, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  1,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, int64(2), fullCount)
 
 	// has_internal_note=true selects requests that have a note (and round-trips its value)
 	cql = `requester_req_id_exact = REQ-123 and has_internal_note=true`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	if assert.Len(t, list, 1) {
 		assert.Equal(t, prIds[0], list[0].ID)
@@ -616,10 +631,12 @@ func TestListPatronRequests(t *testing.T) {
 
 	// has_internal_note=false selects requests without one
 	cql = `requester_req_id_exact = REQ-123 and has_internal_note=false`
+	pgcql, err = pr_db.ParsePatronRequestsCql(cql)
+	assert.NoError(t, err)
 	list, _, err = prRepo.ListPatronRequests(appCtx, pr_db.ListPatronRequestsParams{
 		Limit:  10,
 		Offset: 0,
-	}, &cql)
+	}, pgcql)
 	assert.NoError(t, err)
 	if assert.Len(t, list, 1) {
 		assert.Equal(t, prIds[1], list[0].ID)

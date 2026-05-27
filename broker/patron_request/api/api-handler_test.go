@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -205,10 +206,10 @@ func TestGetPatronRequestsNoSymbol(t *testing.T) {
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.NotContains(t, *repo.cql, "supplier_symbol =")
-		assert.NotContains(t, *repo.cql, "requester_symbol =")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "requester_symbol =")
 	}
 }
 
@@ -244,10 +245,10 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "requester_req_id_exact = req-123")
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.Contains(t, *repo.cql, "supplier_symbol_exact = ISIL:REQ")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "requester_req_id =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
 	}
 }
 
@@ -265,8 +266,8 @@ func TestGetPatronRequestsWithSymbolNoSideGroupsOwnerRestriction(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Equal(t, "id = pr-1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))", *repo.cql)
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Equal(t, "id = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))", repo.pgcql.GetWhereClause())
 	}
 }
 
@@ -940,7 +941,7 @@ func (r *PrRepoOkapiOwner) GetPatronRequestSearchView(ctx common.ExtendedContext
 
 type PrRepoCapture struct {
 	PrRepoError
-	cql *string
+	pgcql pgcql.Query
 }
 
 type PrRepoNotificationsCapture struct {
@@ -950,13 +951,13 @@ type PrRepoNotificationsCapture struct {
 	fullCount     int64
 }
 
-func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequest{}, 0, nil
 }
 
-func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequestSearchView{}, 0, nil
 }
 
@@ -986,11 +987,11 @@ func (r *PrRepoError) GetPatronRequestSearchView(ctx common.ExtendedContext, id 
 	return patronRequestSearchViewFromPatronRequest(pr, false), err
 }
 
-func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
+func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
 	return []pr_db.PatronRequest{}, 0, errors.New("DB error")
 }
 
-func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
+func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
 	return []pr_db.PatronRequestSearchView{}, 0, errors.New("DB error")
 }
 
@@ -1044,7 +1045,7 @@ func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string)
 	}
 }
 
-func (r *PrRepoError) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ string) ([]pr_db.Facet, error) {
+func (r *PrRepoError) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
 	return nil, errors.New("DB error")
 }
 
@@ -1052,7 +1053,7 @@ type PrRepoFacetsUnsupported struct {
 	PrRepoCapture
 }
 
-func (r *PrRepoFacetsUnsupported) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ string) ([]pr_db.Facet, error) {
+func (r *PrRepoFacetsUnsupported) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
 	return nil, fmt.Errorf("%w: nosuch", pr_db.ErrUnsupportedFacet)
 }
 

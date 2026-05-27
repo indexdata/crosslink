@@ -174,7 +174,13 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		return
 	}
 	cqlStr := cql.String()
-	prs, count, err := a.prRepo.ListPatronRequestsSearchView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, &cqlStr)
+	pgcql, err := pr_db.ParsePatronRequestsCql(cqlStr)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+
+	prs, count, err := a.prRepo.ListPatronRequestsSearchView(ctx, pr_db.ListPatronRequestsParams{Limit: limit, Offset: offset}, pgcql)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) { //DB error
 		api.AddInternalError(ctx, w, err)
 		return
@@ -188,7 +194,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	resp.About = toProAboutWithFacets(api.CollectAboutData(count, offset, limit, r))
 	var facets []pr_db.Facet
 	if params.Facets != nil {
-		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, cqlStr)
+		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, pgcql)
 	}
 	if err != nil {
 		if errors.Is(err, pr_db.ErrUnsupportedFacet) {
