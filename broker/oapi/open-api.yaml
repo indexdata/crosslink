@@ -258,6 +258,27 @@ components:
         lastLink:
           type: string
           description: Link to the last page of results
+    AboutWithFacets:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of items in the result
+        nextLink:
+          type: string
+          description: Link to the next page of results
+        prevLink:
+          type: string
+          description: Link to the previous page of results
+        firstLink:
+          type: string
+          description: Link to the first page of results
+        lastLink:
+          type: string
+          description: Link to the last page of results
         facets:
           $ref: '#/components/schemas/FacetsResult'
     Event:
@@ -588,7 +609,7 @@ components:
         - about
       properties:
         about:
-          $ref: '#/components/schemas/About'
+          $ref: '#/components/schemas/AboutWithFacets'
         items:
           type: array
           description: List of patron request

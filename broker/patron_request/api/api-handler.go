@@ -185,7 +185,7 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	}
 
 	resp := proapi.PatronRequests{Items: responseItems}
-	resp.About = toProAbout(api.CollectAboutData(count, offset, limit, r))
+	resp.About = toProAboutWithFacets(api.CollectAboutData(count, offset, limit, r))
 	var facets []pr_db.Facet
 	if params.Facets != nil {
 		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, cqlStr)
@@ -215,11 +215,11 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 	api.WriteJsonResponse(w, resp)
 }
 
-// toProAbout converts an oapi.About to a proapi.About by copying the pagination fields.
+// toProAbout converts an oapi.About to a proapi.AboutWithFacets by copying the pagination fields.
 // The two types are generated independently from identical OpenAPI schemas but are not
 // directly convertible because their Facets types differ.
-func toProAbout(a oapi.About) proapi.About {
-	return proapi.About{
+func toProAboutWithFacets(a oapi.About) proapi.AboutWithFacets {
+	return proapi.AboutWithFacets{
 		Count:     a.Count,
 		FirstLink: a.FirstLink,
 		LastLink:  a.LastLink,
@@ -733,7 +733,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdNotifications(w http.Respon
 		responseList = append(responseList, apiN)
 	}
 	resp := proapi.PrNotifications{Items: responseList}
-	resp.About = toProAbout(api.CollectAboutData(fullCount, offset, limit, r))
+	resp.About = proapi.About(api.CollectAboutData(fullCount, offset, limit, r))
 	api.WriteJsonResponse(w, resp)
 }
 
