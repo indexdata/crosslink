@@ -1,6 +1,7 @@
 package pr_db
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,6 +37,8 @@ type PrRepo interface {
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
 }
+
+var ErrUnsupportedFacet = errors.New("unsupported facet field")
 
 type Facet struct {
 	Field  string
@@ -139,7 +142,7 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 			})
 		case "":
 		default:
-			return nil, fmt.Errorf("unsupported facet field: %s", field)
+			return nil, fmt.Errorf("%w: %s", ErrUnsupportedFacet, field)
 		}
 	}
 	return facets, nil

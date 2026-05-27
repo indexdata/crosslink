@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -166,6 +167,32 @@ func TestGetPatronRequests(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsFacetsDBError(t *testing.T) {
+	facets := proapi.Facets{"requester_symbol"}
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsFacetsUnsupported(t *testing.T) {
+	facets := proapi.Facets{"nosuch"}
+	handler := NewPrApiHandler(new(PrRepoFacetsUnsupported), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "nosuch")
 }
 
 func TestGetPatronRequestsNoSymbol(t *testing.T) {
@@ -1015,6 +1042,18 @@ func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string)
 	default:
 		return pr_db.Notification{ID: id, PrID: id}, nil
 	}
+}
+
+func (r *PrRepoError) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ string) ([]pr_db.Facet, error) {
+	return nil, errors.New("DB error")
+}
+
+type PrRepoFacetsUnsupported struct {
+	PrRepoCapture
+}
+
+func (r *PrRepoFacetsUnsupported) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ string) ([]pr_db.Facet, error) {
+	return nil, fmt.Errorf("%w: nosuch", pr_db.ErrUnsupportedFacet)
 }
 
 type MockIso18626Handler struct {

@@ -191,7 +191,11 @@ func (a *PatronRequestApiHandler) GetPatronRequests(w http.ResponseWriter, r *ht
 		facets, err = a.prRepo.GetPatronRequestsFacets(ctx, *params.Facets, cqlStr)
 	}
 	if err != nil {
-		api.AddBadRequestError(ctx, w, err)
+		if errors.Is(err, pr_db.ErrUnsupportedFacet) {
+			api.AddBadRequestError(ctx, w, err)
+		} else {
+			api.AddInternalError(ctx, w, err)
+		}
 		return
 	}
 	if len(facets) > 0 {
