@@ -93,6 +93,22 @@ components:
       description: Patron request ID
       schema:
         type: string
+    Facets:
+      name: facets
+      in: query
+      description: Comma separated list of facet names to include in the response.
+        Supported values are "requester_symbol" and "supplier_symbol";
+        unsupported facet names result in a 400 response.
+        For example "requester_symbol,supplier_symbol"
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          enum:
+            - requester_symbol
+            - supplier_symbol
   schemas:
     Index:
       type: object
@@ -197,6 +213,36 @@ components:
           description: List of peers
           items:
             $ref: '#/components/schemas/LocatedSupplier'
+    FacetsResult:
+      type: array
+      description: List of facets for the result
+      items:
+        type: object
+        required:
+          - name
+          - values
+        properties:
+          name:
+            type: string
+            description: Facet name
+          values:
+            type: array
+            description: List of facet values. At most 100 entries are returned.
+            items:
+              $ref: '#/components/schemas/FacetResultValue'
+    FacetResultValue:
+      type: object
+      required:
+        - value
+        - count
+      properties:
+        value:
+          type: string
+          description: Facet value
+        count:
+          type: integer
+          format: int64
+          description: Count of items for this facet value
     About:
       type: object
       required:
@@ -218,6 +264,13 @@ components:
         lastLink:
           type: string
           description: Link to the last page of results
+    AboutWithFacets:
+      allOf:
+        - $ref: '#/components/schemas/About'
+        - type: object
+          properties:
+            facets:
+              $ref: '#/components/schemas/FacetsResult'
     Event:
       type: object
       properties:
@@ -526,6 +579,9 @@ components:
         illResponse:
           type: object
           description: JSON of ISO18626 supplying agency message
+        internalNote:
+          type: string
+          description: Staff-only internal note, local to this request and never shared with peers
       required:
         - id
         - createdAt
@@ -543,7 +599,7 @@ components:
         - about
       properties:
         about:
-          $ref: '#/components/schemas/About'
+          $ref: '#/components/schemas/AboutWithFacets'
         items:
           type: array
           description: List of patron request
@@ -565,8 +621,18 @@ components:
         requesterSymbol:
           type: string
           description: Requester symbol
+        internalNote:
+          type: string
+          description: Staff-only internal note, local to this request and never shared with peers
       required:
         - illRequest
+
+    UpdateInternalNote:
+      type: object
+      properties:
+        internalNote:
+          type: string
+          description: Staff-only internal note text. Send an empty string or omit to clear the note.
 
     ExecuteAction:
       type: object
@@ -1427,7 +1493,8 @@ paths:
         Query parameter cql can be used to filter the results.
         With cql you can use these fields id, state, side, requester_symbol, supplier_symbol, needs_attention,
         has_notification, has_cost, has_unread_notification, service_type, service_level, created_at, needed_at,
-        requester_req_id, title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname, cql.serverChoice.
+        requester_req_id, title, author, patron, terminal_state, updated_at, isbn, issn, given_name, surname,
+        has_internal_note, cql.serverChoice.
       tags:
         - patron-requests-api
       parameters:
@@ -1439,9 +1506,10 @@ paths:
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Side'
         - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Facets'
       responses:
         '200':
-          description: Successful retrieval of events
+          description: Successful retrieval of patron requests
           content:
             application/json:
               schema:
@@ -1832,6 +1900,48 @@ paths:
           description: Patron request notification updated successfully
         '400':
           description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not Found. Patron request not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/internal_note:
+    put:
+      summary: Update the staff-only internal note on a patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInternalNote'
+      responses:
+        '204':
+          description: Internal note updated successfully (No Content)
+        '400':
+          description: Bad Request. Invalid or missing body.
           content:
             application/json:
               schema:

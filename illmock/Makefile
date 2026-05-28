@@ -6,7 +6,6 @@ DOCKER ?= docker
 PACKAGES ?= $(shell $(GO) list ./...)
 GOFILES := $(shell find . -name "*.go")
 MODULE=illmock
-COMMIT_ID=commit.txt
 COVERAGE=coverage.out
 PROGRAMS := $(shell cd cmd; ls)
 
@@ -17,10 +16,7 @@ all: $(PROGRAMS)
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: $(COMMIT_ID)
-
-$(COMMIT_ID):
-	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
+generate:
 
 $(PROGRAMS): $(GOFILES) $(COMMIT_ID) $(OAPI_GEN)
 	$(GO) build -v -o $@ ./cmd/$@

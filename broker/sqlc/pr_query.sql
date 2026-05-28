@@ -24,7 +24,20 @@ WHERE ill_request IS NOT NULL
 ORDER BY created_at
 LIMIT $1 OFFSET $2;
 
+-- name: GetPatronRequestsFacets :many
+-- TEMPLATE: 'requester_symbol' is a placeholder column name. This query is not
+-- meant to be called directly; use GetPatronRequestsFacetsCql in prcql.go, which
+-- substitutes the column with the validated facet field at runtime.
+SELECT requester_symbol AS value, COUNT(*) AS count
+FROM patron_request_search_view
+WHERE ill_request IS NOT NULL
+GROUP BY 1
+ORDER BY count DESC, value ASC
+LIMIT $1 OFFSET $2;
+
 -- name: UpdatePatronRequest :one
+-- internal_note ($20) is a pass-through to keep PatronRequest <-> UpdatePatronRequestParams
+-- convertible; edits go through UpdatePatronRequestInternalNote.
 UPDATE patron_request
 SET ill_request         = $3,
     state               = $4,
@@ -42,14 +55,21 @@ SET ill_request         = $3,
     language            = $16,
     terminal_state      = $17,
     updated_at          = now(),
-    ill_response    = $19
+    ill_response    = $19,
+    internal_note       = $20
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 RETURNING sqlc.embed(patron_request);
+
+-- name: UpdatePatronRequestInternalNote :exec
+UPDATE patron_request
+SET internal_note = $2,
+    updated_at    = now()
+WHERE id = $1;
 
 -- name: DeletePatronRequest :exec
 DELETE

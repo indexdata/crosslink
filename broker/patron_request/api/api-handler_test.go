@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
@@ -117,6 +119,18 @@ func TestToApiPatronRequestOmitsIllTransactionLinkWithoutRequesterReqID(t *testi
 	assert.Nil(t, apiPr.IllTransactionLink)
 }
 
+func TestToApiPatronRequestSurfacesInternalNote(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://localhost/patron_requests/pr-1", nil)
+	pr := pr_db.PatronRequest{
+		ID:           "pr-1",
+		InternalNote: pgtype.Text{String: "staff note", Valid: true},
+	}
+	apiPr := toApiPatronRequest(req, patronRequestSearchViewFromPatronRequest(pr, false))
+	if assert.NotNil(t, apiPr.InternalNote) {
+		assert.Equal(t, "staff note", *apiPr.InternalNote)
+	}
+}
+
 func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bool) pr_db.PatronRequestSearchView {
 	return pr_db.PatronRequestSearchView{
 		ID:                pr.ID,
@@ -138,6 +152,7 @@ func patronRequestSearchViewFromPatronRequest(pr pr_db.PatronRequest, hasCost bo
 		TerminalState:     pr.TerminalState,
 		UpdatedAt:         pr.UpdatedAt,
 		IllResponse:       pr.IllResponse,
+		InternalNote:      pr.InternalNote,
 		HasCost:           hasCost,
 	}
 }
@@ -155,6 +170,32 @@ func TestGetPatronRequests(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetPatronRequestsFacetsDBError(t *testing.T) {
+	facets := proapi.Facets{"requester_symbol"}
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	assert.Contains(t, rr.Body.String(), "DB error")
+}
+
+func TestGetPatronRequestsFacetsUnsupported(t *testing.T) {
+	facets := proapi.Facets{"nosuch"}
+	handler := NewPrApiHandler(new(PrRepoFacetsUnsupported), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	params := proapi.GetPatronRequestsParams{
+		Facets: &facets,
+	}
+	handler.GetPatronRequests(rr, req, params)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "nosuch")
+}
+
 func TestGetPatronRequestsNoSymbol(t *testing.T) {
 	repo := new(PrRepoCapture)
 	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
@@ -165,10 +206,10 @@ func TestGetPatronRequestsNoSymbol(t *testing.T) {
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.NotContains(t, *repo.cql, "supplier_symbol =")
-		assert.NotContains(t, *repo.cql, "requester_symbol =")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
+		assert.NotContains(t, repo.pgcql.GetWhereClause(), "requester_symbol =")
 	}
 }
 
@@ -204,10 +245,10 @@ func TestGetPatronRequestsWithRequesterReqId(t *testing.T) {
 	}
 	handler.GetPatronRequests(rr, req, params)
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Contains(t, *repo.cql, "requester_req_id_exact = req-123")
-		assert.Contains(t, *repo.cql, "side = lending")
-		assert.Contains(t, *repo.cql, "supplier_symbol_exact = ISIL:REQ")
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "requester_req_id =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "side =")
+		assert.Contains(t, repo.pgcql.GetWhereClause(), "supplier_symbol =")
 	}
 }
 
@@ -225,8 +266,8 @@ func TestGetPatronRequestsWithSymbolNoSideGroupsOwnerRestriction(t *testing.T) {
 	handler.GetPatronRequests(rr, req, params)
 
 	assert.Equal(t, http.StatusOK, rr.Code)
-	if assert.NotNil(t, repo.cql) {
-		assert.Equal(t, "id = pr-1 and (side = lending and supplier_symbol_exact = ISIL:REQ or (side = borrowing and requester_symbol_exact = ISIL:REQ))", *repo.cql)
+	if assert.NotNil(t, repo.pgcql) {
+		assert.Equal(t, "id = $3 AND ((side = $4 AND supplier_symbol = $5) OR (side = $6 AND requester_symbol = $7))", repo.pgcql.GetWhereClause())
 	}
 }
 
@@ -294,6 +335,53 @@ func TestDeletePatronRequestsIdNotFound(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	rr := httptest.NewRecorder()
 	handler.DeletePatronRequestsId(rr, req, "2", proapi.DeletePatronRequestsIdParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
+func internalNoteBody(t *testing.T, note *string) *bytes.Buffer {
+	jsonBytes, err := json.Marshal(proapi.UpdateInternalNote{InternalNote: note})
+	assert.NoError(t, err)
+	return bytes.NewBuffer(jsonBytes)
+}
+
+func TestPutPatronRequestsIdInternalNoteSetsNote(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	note := "hello staff"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.Equal(t, pgtype.Text{Valid: true, String: "hello staff"}, repo.lastInternalNote)
+}
+
+func TestPutPatronRequestsIdInternalNoteClearsOnEmpty(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	empty := ""
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &empty))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.False(t, repo.lastInternalNote.Valid, "empty string should clear to NULL")
+}
+
+func TestPutPatronRequestsIdInternalNoteClearsOnAbsent(t *testing.T) {
+	repo := new(PrRepoError)
+	handler := NewPrApiHandler(repo, mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("PUT", "/", bytes.NewBufferString("{}"))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "4", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
+	assert.Equal(t, http.StatusNoContent, rr.Code)
+	assert.False(t, repo.lastInternalNote.Valid, "absent field should clear to NULL")
+}
+
+func TestPutPatronRequestsIdInternalNoteNotFound(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
+	note := "x"
+	req, _ := http.NewRequest("PUT", "/", internalNoteBody(t, &note))
+	rr := httptest.NewRecorder()
+	handler.PutPatronRequestsIdInternalNote(rr, req, "2", proapi.PutPatronRequestsIdInternalNoteParams{Symbol: &symbol})
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
 
@@ -831,7 +919,8 @@ func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *te
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
-	counter int64
+	counter          int64
+	lastInternalNote pgtype.Text
 }
 
 type PrRepoOkapiOwner struct {
@@ -852,7 +941,7 @@ func (r *PrRepoOkapiOwner) GetPatronRequestSearchView(ctx common.ExtendedContext
 
 type PrRepoCapture struct {
 	PrRepoError
-	cql *string
+	pgcql pgcql.Query
 }
 
 type PrRepoNotificationsCapture struct {
@@ -862,13 +951,13 @@ type PrRepoNotificationsCapture struct {
 	fullCount     int64
 }
 
-func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequest{}, 0, nil
 }
 
-func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
-	r.cql = cql
+func (r *PrRepoCapture) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
+	r.pgcql = pgcql
 	return []pr_db.PatronRequestSearchView{}, 0, nil
 }
 
@@ -898,16 +987,24 @@ func (r *PrRepoError) GetPatronRequestSearchView(ctx common.ExtendedContext, id 
 	return patronRequestSearchViewFromPatronRequest(pr, false), err
 }
 
-func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequest, int64, error) {
+func (r *PrRepoError) ListPatronRequests(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
 	return []pr_db.PatronRequest{}, 0, errors.New("DB error")
 }
 
-func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, cql *string) ([]pr_db.PatronRequestSearchView, int64, error) {
+func (r *PrRepoError) ListPatronRequestsSearchView(ctx common.ExtendedContext, args pr_db.ListPatronRequestsParams, pgcql pgcql.Query) ([]pr_db.PatronRequestSearchView, int64, error) {
 	return []pr_db.PatronRequestSearchView{}, 0, errors.New("DB error")
 }
 
 func (r *PrRepoError) UpdatePatronRequest(ctx common.ExtendedContext, params pr_db.UpdatePatronRequestParams) (pr_db.PatronRequest, error) {
 	return pr_db.PatronRequest{}, errors.New("DB error")
+}
+
+func (r *PrRepoError) UpdatePatronRequestInternalNote(ctx common.ExtendedContext, id string, internalNote pgtype.Text) error {
+	r.lastInternalNote = internalNote
+	if id == "4" {
+		return nil
+	}
+	return errors.New("DB error")
 }
 
 func (r *PrRepoError) CreatePatronRequest(ctx common.ExtendedContext, params pr_db.CreatePatronRequestParams) (pr_db.PatronRequest, error) {
@@ -946,6 +1043,18 @@ func (r *PrRepoError) GetNotificationById(ctx common.ExtendedContext, id string)
 	default:
 		return pr_db.Notification{ID: id, PrID: id}, nil
 	}
+}
+
+func (r *PrRepoError) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
+	return nil, errors.New("DB error")
+}
+
+type PrRepoFacetsUnsupported struct {
+	PrRepoCapture
+}
+
+func (r *PrRepoFacetsUnsupported) GetPatronRequestsFacets(_ common.ExtendedContext, _ []string, _ pgcql.Query) ([]pr_db.Facet, error) {
+	return nil, fmt.Errorf("%w: nosuch", pr_db.ErrUnsupportedFacet)
 }
 
 type MockIso18626Handler struct {
