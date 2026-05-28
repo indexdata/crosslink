@@ -416,7 +416,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Symbol: "ISIL:SUP2"}, {Symbol: "ISIL:SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Authority: "ISIL", Symbol: "SUP3"}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-1", BorrowsCount: 1},
 			{ID: "peer-2", BorrowsCount: 1},
@@ -457,7 +457,7 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
 		},
 		consortiumPeers: []ill_db.Peer{
-			{ID: "consortium-peer-1", CustomData: directory.Entry{Symbols: &[]directory.Symbol{{Symbol: "ISIL:SUPC"}}, LenderOfLastResort: &[]directory.Symbol{{Symbol: "ISIL:SUP2"}}}},
+			{ID: "consortium-peer-1", CustomData: directory.Entry{Symbols: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}},
 		},
 	}
 
@@ -491,7 +491,7 @@ func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.Extended
 	if len(r.consortiumPeers) > 0 && r.consortiumPeers[0].CustomData.Symbols != nil {
 		for _, sym := range *r.consortiumPeers[0].CustomData.Symbols {
 			for _, s := range symbols {
-				if sym.Symbol == s {
+				if sym.Authority+":"+sym.Symbol == s {
 					return r.consortiumPeers, "<refresh>", nil
 				}
 			}

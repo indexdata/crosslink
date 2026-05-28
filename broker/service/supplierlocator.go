@@ -146,8 +146,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		lastResortSymbols = *consortiumPeers[0].CustomData.LenderOfLastResort
 	}
 	for _, sym := range lastResortSymbols {
+		var fullSymbol string
+		if sym.Authority != "" {
+			fullSymbol = sym.Authority + ":" + sym.Symbol
+		} else {
+			fullSymbol = sym.Symbol
+		}
 		holdingsResult = append(holdingsResult, holdings.Holding{
-			Symbol:          sym.Symbol,
+			Symbol:          fullSymbol,
 			LocalIdentifier: holdingsParams.Identifier,
 		})
 	}
