@@ -434,6 +434,20 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2", "ISIL:SUP3"}}, mockIllRepo.refreshSymbols)
+
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 3) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "L3", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP3", mockIllRepo.savedLocatedSuppliers[2].SupplierSymbol)
+		assert.Equal(t, "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3", mockIllRepo.savedLocatedSuppliers[2].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[2].LocalID.Valid)
+	}
 }
 
 func TestLocateSuppliersLastResortConsortium(t *testing.T) {
@@ -466,6 +480,15 @@ func TestLocateSuppliersLastResortConsortium(t *testing.T) {
 
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "return-ISIL:SUP1::L1", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+	}
 }
 
 type MockIllRepoLocateSuppliers struct {
