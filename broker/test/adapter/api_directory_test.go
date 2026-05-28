@@ -566,5 +566,4 @@ func TestCompareSuppliers(t *testing.T) {
 	assert.False(t, suppliers[1].Local)
 	assert.True(t, suppliers[2].LenderOfLastResort) // LenderOfLastResort sorted as last
 	assert.True(t, suppliers[2].Local)
-
 }
