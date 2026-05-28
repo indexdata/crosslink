@@ -150,7 +150,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if sym.Authority != "" {
 			fullSymbol = sym.Authority + ":" + sym.Symbol
 		} else {
-			fullSymbol = sym.Symbol
+			fullSymbol = "ISIL:" + sym.Symbol
 		}
 		holdingsResult = append(holdingsResult, holdings.Holding{
 			Symbol:          fullSymbol,
