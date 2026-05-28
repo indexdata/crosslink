@@ -261,7 +261,6 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			}
 			supMatch.Priority = sup.Priority
 			supMatch.Local = sup.Local
-			supMatch.LenderOfLastResort = sup.LenderOfLastResort
 			supMatch.Ratio = sup.Ratio
 		}
 		rotaInfo.Suppliers = append(rotaInfo.Suppliers, supMatch)
@@ -291,11 +290,6 @@ func costMatches(suppCost, maxCost float64) bool {
 }
 
 func CompareSuppliers(a, b SupplierOrdering) int {
-	if a.IsLenderOfLastResort() && !b.IsLenderOfLastResort() {
-		return 1
-	} else if !a.IsLenderOfLastResort() && b.IsLenderOfLastResort() {
-		return -1
-	}
 	if a.IsLocal() && !b.IsLocal() {
 		return -1
 	} else if !a.IsLocal() && b.IsLocal() {

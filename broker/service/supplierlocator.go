@@ -138,6 +138,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
 
+	// save symbols from holdings results for later use in determining if a supplier is a match for the original holdings results or
+	// just a last resort match - this is needed because last resort symbols are added to the holdings results before filtering and
+	// sorting but we want to be able to determine which suppliers are matching the original holdings results vs just matching the
+	// last resort symbols
+	var lookupSymbols []string
+	for _, holding := range holdingsResult {
+		lookupSymbols = append(lookupSymbols, holding.Symbol)
+	}
+
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lenderLastResort []directory.Symbol
@@ -146,7 +155,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
 		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
 	}
-	var lastResortSymbols []string
 	for _, sym := range lenderLastResort {
 		var fullSymbol string
 		if sym.Authority != "" {
@@ -154,7 +162,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		} else {
 			fullSymbol = "ISIL:" + sym.Symbol
 		}
-		lastResortSymbols = append(lastResortSymbols, fullSymbol)
 		holdingsResult = append(holdingsResult, holdings.Holding{
 			Symbol:          fullSymbol,
 			LocalIdentifier: holdingsParams.Identifier,
@@ -234,14 +241,13 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 						}
 					}
 					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
-						PeerId:             peer.ID,
-						CustomData:         peer.CustomData,
-						LocalIdentifier:    localId,
-						Ratio:              getPeerRatio(peer),
-						Symbol:             sym,
-						Local:              local,
-						SupplierStatus:     supplierStatus,
-						LenderOfLastResort: slices.Contains(lastResortSymbols, sym),
+						PeerId:          peer.ID,
+						CustomData:      peer.CustomData,
+						LocalIdentifier: localId,
+						Ratio:           getPeerRatio(peer),
+						Symbol:          sym,
+						Local:           local,
+						SupplierStatus:  supplierStatus,
 					})
 				}
 			}
@@ -260,12 +266,24 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	for i, sup := range potentialSuppliers {
-		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
-		if loopErr == nil {
-			locatedSuppliers = append(locatedSuppliers, added)
-		} else {
-			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+	i := 0
+	for pass := 1; pass <= 2; pass++ {
+		for _, sup := range potentialSuppliers {
+			matchPass := 1
+			// only if symbol was not part of holdings lookup results it must come exclusively from last resort
+			if !slices.Contains(lookupSymbols, sup.Symbol) {
+				matchPass = 2
+			}
+			if pass != matchPass {
+				continue
+			}
+			added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
+			i++
+			if loopErr == nil {
+				locatedSuppliers = append(locatedSuppliers, added)
+			} else {
+				ctx.Logger().Error("failed to add supplier", "error", loopErr)
+			}
 		}
 	}
 

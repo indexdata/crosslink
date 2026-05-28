@@ -557,13 +557,10 @@ func TestCompareSuppliers(t *testing.T) {
 		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: false},
 		adapter.Supplier{Cost: 1, Priority: 1, Ratio: 1, Local: true}) > 0)
 
-	suppliers := []adapter.Supplier{{Cost: 0, Local: true, LenderOfLastResort: true}, {Cost: 1, Priority: 1, Ratio: 1, Local: false}, {Cost: 1, Priority: 1, Ratio: 1, Local: true}}
+	suppliers := []adapter.Supplier{{Cost: 1, Priority: 1, Ratio: 1, Local: false}, {Cost: 1, Priority: 1, Ratio: 1, Local: true}}
 	slices.SortFunc(suppliers, func(a, b adapter.Supplier) int {
 		return adapter.CompareSuppliers(a, b)
 	})
-	assert.True(t, suppliers[0].Local)               // Local sorted as first
-	assert.False(t, suppliers[0].LenderOfLastResort) // LenderOfLastResort sorted as last
+	assert.True(t, suppliers[0].Local) // Local sorted as first
 	assert.False(t, suppliers[1].Local)
-	assert.True(t, suppliers[2].LenderOfLastResort) // LenderOfLastResort sorted as last
-	assert.True(t, suppliers[2].Local)
 }
