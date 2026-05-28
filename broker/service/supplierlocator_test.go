@@ -416,7 +416,7 @@ func TestLocateSuppliersLastResortRequester(t *testing.T) {
 				},
 			},
 		},
-		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Authority: "ISIL", Symbol: "SUP3"}}}},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
 		peers: []ill_db.Peer{
 			{ID: "peer-1", BorrowsCount: 1},
 			{ID: "peer-2", BorrowsCount: 1},
