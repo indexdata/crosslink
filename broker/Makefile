@@ -96,7 +96,7 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 	$(SQLC) generate -f $(SQLC_CONFIG)
 
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
-	$(GIT) rev-parse --short HEAD | tr -d '\n' > $(COMMIT_ID)
+	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
 $(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
