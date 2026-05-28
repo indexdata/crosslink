@@ -136,14 +136,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
-	if len(holdingsResult) == 0 {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
-			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
-	}
-	holdingsLog["entries"] = holdingsResult
 
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
-	// be processed like normal holdings, but with no local identifier since they are not real holdings
+	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lastResortSymbols []directory.Symbol
 	if requester.CustomData.LenderOfLastResort != nil {
 		lastResortSymbols = *requester.CustomData.LenderOfLastResort
@@ -153,9 +148,15 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	for _, sym := range lastResortSymbols {
 		holdingsResult = append(holdingsResult, holdings.Holding{
 			Symbol:          sym.Symbol,
-			LocalIdentifier: holdingsParams.Identifier, // no local identifier for last resort
+			LocalIdentifier: holdingsParams.Identifier,
 		})
 	}
+	if len(holdingsResult) == 0 {
+		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
+			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
+	}
+	holdingsLog["entries"] = holdingsResult
+
 	holdingsSymbols := make([]string, 0, len(holdingsResult))
 	symbolToLocalId := make(map[string]string, len(holdingsResult))
 	holdingSymbolCounts := make(map[string]int, len(holdingsResult))
