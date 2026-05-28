@@ -155,17 +155,19 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
 		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
 	}
-	for _, sym := range lenderLastResort {
-		var fullSymbol string
-		if sym.Authority != "" {
-			fullSymbol = sym.Authority + ":" + sym.Symbol
-		} else {
-			fullSymbol = "ISIL:" + sym.Symbol
+	if holdingsParams.Identifier != "" {
+		for _, sym := range lenderLastResort {
+			var fullSymbol string
+			if sym.Authority != "" {
+				fullSymbol = sym.Authority + ":" + sym.Symbol
+			} else {
+				fullSymbol = "ISIL:" + sym.Symbol
+			}
+			holdingsResult = append(holdingsResult, holdings.Holding{
+				Symbol:          fullSymbol,
+				LocalIdentifier: holdingsParams.Identifier,
+			})
 		}
-		holdingsResult = append(holdingsResult, holdings.Holding{
-			Symbol:          fullSymbol,
-			LocalIdentifier: holdingsParams.Identifier,
-		})
 	}
 	if len(holdingsResult) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
