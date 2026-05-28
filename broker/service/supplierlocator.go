@@ -79,7 +79,7 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings
 
 // 3 cases to consider for getting the adapter:
 // 1. If holdingsAdapter is set from the start (for example for testing), use it directly
-// 2. If consortiumPeers is present, lookup the peer for the consortium and use its holdings adapter
+// 2. If consortiumPeers are present, lookup the peer for the consortium and use its holdings adapter
 // 3. Otherwise, use the holdings adapter for the requesting peer
 func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consortiumPeers []ill_db.Peer) (holdings.LookupAdapter, error) {
 	lookupAdapter := s.holdingsAdapter
