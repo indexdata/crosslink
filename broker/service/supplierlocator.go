@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	_ "time/tzdata"
@@ -139,19 +140,21 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
-	var lastResortSymbols []directory.Symbol
+	var lenderLastResort []directory.Symbol
 	if requester.CustomData.LenderOfLastResort != nil {
-		lastResortSymbols = *requester.CustomData.LenderOfLastResort
+		lenderLastResort = *requester.CustomData.LenderOfLastResort
 	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
-		lastResortSymbols = *consortiumPeers[0].CustomData.LenderOfLastResort
+		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
 	}
-	for _, sym := range lastResortSymbols {
+	var lastResortSymbols []string
+	for _, sym := range lenderLastResort {
 		var fullSymbol string
 		if sym.Authority != "" {
 			fullSymbol = sym.Authority + ":" + sym.Symbol
 		} else {
 			fullSymbol = "ISIL:" + sym.Symbol
 		}
+		lastResortSymbols = append(lastResortSymbols, fullSymbol)
 		holdingsResult = append(holdingsResult, holdings.Holding{
 			Symbol:          fullSymbol,
 			LocalIdentifier: holdingsParams.Identifier,
@@ -231,13 +234,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 						}
 					}
 					potentialSuppliers = append(potentialSuppliers, adapter.Supplier{
-						PeerId:          peer.ID,
-						CustomData:      peer.CustomData,
-						LocalIdentifier: localId,
-						Ratio:           getPeerRatio(peer),
-						Symbol:          sym,
-						Local:           local,
-						SupplierStatus:  supplierStatus,
+						PeerId:             peer.ID,
+						CustomData:         peer.CustomData,
+						LocalIdentifier:    localId,
+						Ratio:              getPeerRatio(peer),
+						Symbol:             sym,
+						Local:              local,
+						SupplierStatus:     supplierStatus,
+						LenderOfLastResort: slices.Contains(lastResortSymbols, sym),
 					})
 				}
 			}
