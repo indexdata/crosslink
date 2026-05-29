@@ -220,6 +220,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Symbol'
+        lenderOfLastResort:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
         tenant:
           description: The tenant this entry belongs to, if applicable.
           type: string

@@ -719,4 +719,5 @@ func TestCompareSuppliers(t *testing.T) {
 		return adapter.CompareSuppliers(a, b)
 	})
 	assert.True(t, suppliers[0].Local) // Local sorted as first
+	assert.False(t, suppliers[1].Local)
 }

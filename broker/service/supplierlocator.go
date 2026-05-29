@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	_ "time/tzdata"
@@ -13,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -78,24 +80,17 @@ func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings
 
 // 3 cases to consider for getting the adapter:
 // 1. If holdingsAdapter is set from the start (for example for testing), use it directly
-// 2. If consortiumSymbol is set, lookup the peer for the consortium and use its holdings adapter
+// 2. If consortiumPeers are present, lookup the peer for the consortium and use its holdings adapter
 // 3. Otherwise, use the holdings adapter for the requesting peer
-func (s *SupplierLocator) getConsortialAdapter(ctx common.ExtendedContext, requestPeer ill_db.Peer) (holdings.LookupAdapter, error) {
+func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consortiumPeers []ill_db.Peer) (holdings.LookupAdapter, error) {
 	lookupAdapter := s.holdingsAdapter
 	if lookupAdapter != nil {
 		return lookupAdapter, nil
 	}
-	if s.consortiumSymbol == "" {
-		return s.availabilityCreator.GetAdapter(requestPeer)
+	if len(consortiumPeers) > 0 {
+		return s.availabilityCreator.GetAdapter(consortiumPeers[0])
 	}
-	peers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup consortium peer: %w", err)
-	}
-	if len(peers) == 0 {
-		return nil, fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol)
-	}
-	return s.availabilityCreator.GetAdapter(peers[0])
+	return s.availabilityCreator.GetAdapter(requestPeer)
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
@@ -113,29 +108,77 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
-	lookupAdapter, err := s.getConsortialAdapter(ctx, requester)
+
+	// get consortium peer if configured
+	var consortiumPeers []ill_db.Peer
+	if s.consortiumSymbol != "" {
+		consortiumPeers, _, err = s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to lookup consortium peer", err)
+		}
+		if len(consortiumPeers) == 0 {
+			return events.LogErrorAndReturnResult(ctx, "no peer found for consortium symbol", fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol))
+		}
+		if len(consortiumPeers) > 1 {
+			ctx.Logger().Warn("multiple peers found for consortium symbol, using first peer", "consortiumSymbol", s.consortiumSymbol, "peerCount", len(consortiumPeers))
+		}
+	}
+
+	lookupAdapter, err := s.getConsortialAdapter(requester, consortiumPeers)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
 		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
-	holdings, query, err := lookupAdapter.Lookup(holdingsParams)
+	holdingsResult, query, err := lookupAdapter.Lookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
-	if len(holdings) == 0 {
+
+	// save symbols from holdings results for later use in determining if a supplier is a match for the original holdings results or
+	// just a last resort match - this is needed because last resort symbols are added to the holdings results before filtering and
+	// sorting but we want to be able to determine which suppliers are matching the original holdings results vs just matching the
+	// last resort symbols
+	var lookupSymbols []string
+	for _, holding := range holdingsResult {
+		lookupSymbols = append(lookupSymbols, holding.Symbol)
+	}
+
+	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
+	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
+	var lenderLastResort []directory.Symbol
+	if requester.CustomData.LenderOfLastResort != nil {
+		lenderLastResort = *requester.CustomData.LenderOfLastResort
+	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
+		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
+	}
+	if holdingsParams.Identifier != "" {
+		for _, sym := range lenderLastResort {
+			var fullSymbol string
+			if sym.Authority != "" {
+				fullSymbol = sym.Authority + ":" + sym.Symbol
+			} else {
+				fullSymbol = "ISIL:" + sym.Symbol
+			}
+			holdingsResult = append(holdingsResult, holdings.Holding{
+				Symbol:          fullSymbol,
+				LocalIdentifier: holdingsParams.Identifier,
+			})
+		}
+	}
+	if len(holdingsResult) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
 			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
 	}
-	holdingsLog["entries"] = holdings
-	holdingsSymbols := make([]string, 0, len(holdings))
-	symbolToLocalId := make(map[string]string, len(holdings))
-	holdingSymbolCounts := make(map[string]int, len(holdings))
-	potentialSuppliers := make([]adapter.Supplier, 0, len(holdings))
-	for _, holding := range holdings {
+	holdingsLog["entries"] = holdingsResult
+
+	holdingsSymbols := make([]string, 0, len(holdingsResult))
+	symbolToLocalId := make(map[string]string, len(holdingsResult))
+	holdingSymbolCounts := make(map[string]int, len(holdingsResult))
+	for _, holding := range holdingsResult {
 		holdingSymbolCounts[holding.Symbol]++
 		if holdingSymbolCounts[holding.Symbol] > 1 {
 			if holdingSymbolCounts[holding.Symbol] == 2 {
@@ -158,6 +201,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		directoryLog["error"] = err.Error()
 	}
+	potentialSuppliers := make([]adapter.Supplier, 0, len(holdingsResult))
 	if len(peers) > 0 { //even with lookup error we may have locally cached peers
 		var dirEntriesLog = []any{}
 		for _, peer := range peers {
@@ -224,12 +268,24 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	for i, sup := range potentialSuppliers {
-		added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
-		if loopErr == nil {
-			locatedSuppliers = append(locatedSuppliers, added)
-		} else {
-			ctx.Logger().Error("failed to add supplier", "error", loopErr)
+	i := 0
+	for pass := 1; pass <= 2; pass++ {
+		for _, sup := range potentialSuppliers {
+			matchPass := 1
+			// only if symbol was not part of holdings lookup results it must come exclusively from last resort
+			if !slices.Contains(lookupSymbols, sup.Symbol) {
+				matchPass = 2
+			}
+			if pass != matchPass {
+				continue
+			}
+			added, loopErr := s.addLocatedSupplier(ctx, illTrans.ID, ToInt32(i), &sup)
+			i++
+			if loopErr == nil {
+				locatedSuppliers = append(locatedSuppliers, added)
+			} else {
+				ctx.Logger().Error("failed to add supplier", "error", loopErr)
+			}
 		}
 	}
 
