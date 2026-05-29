@@ -238,7 +238,7 @@ states:
       - name: ask-retry
         desc: Ask requester to retry with new ISO18626 metadata
         transitions:
-          success: NEW
+          success: RETRY_REQUESTED
     events:
       - name: cancel-request
         desc: Requester sent ISO18626 Cancel
@@ -374,5 +374,11 @@ states:
   - name: UNFILLED
     display: Unfilled
     desc: After manual cannot-supply or automatically if auto-responder is on
+    side: SUPPLIER
+    terminal: true
+
+  - name: RETRY_REQUESTED
+    display: Retry Requested
+    desc: After manual retry request
     side: SUPPLIER
     terminal: true
