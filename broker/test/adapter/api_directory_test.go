@@ -33,6 +33,22 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 	return adapter.CreateApiDirectory(http.DefaultClient, urls)
 }
 
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func withNetworkReciprocal(entry directory.Entry, reciprocal *bool) directory.Entry {
+	if entry.Networks == nil {
+		return entry
+	}
+	networks := slices.Clone(*entry.Networks)
+	for i := range networks {
+		networks[i].Reciprocal = reciprocal
+	}
+	entry.Networks = &networks
+	return entry
+}
+
 func TestGetVendorFromUrl(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -493,6 +509,96 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 	assert.Len(t, entries, 1)
 	assert.Equal(t, "3", entries[0].PeerId)
 	assert.Equal(t, "copy", rotaInfo.Request.Type)
+}
+
+func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(true))
+	entries := []adapter.Supplier{
+		{PeerId: "2", Ratio: 0.7, Symbol: "AU-NU", CustomData: dirEntries.Items[2]},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+
+	assert.Empty(t, entries)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.False(t, rotaInfo.Suppliers[0].Match)
+}
+
+func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[4], boolPtr(false))
+	entries := []adapter.Supplier{
+		{PeerId: "3", Ratio: 0.7, Symbol: "AU-VVWA", CustomData: dirEntries.Items[4]},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Rush",
+		},
+		ServiceType: iso18626.TypeServiceTypeCopy,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 0,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+
+	assert.Empty(t, entries)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.False(t, rotaInfo.Suppliers[0].Match)
+}
+
+func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := createDirectoryAdapter("")
+	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(false))
+	entries := []adapter.Supplier{
+		{PeerId: "2", Ratio: 0.7, Symbol: "AU-NU", CustomData: withNetworkReciprocal(dirEntries.Items[2], boolPtr(false))},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, rotaInfo := ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "2", entries[0].PeerId)
+	assert.Equal(t, 34.4, entries[0].Cost)
+	assert.Len(t, rotaInfo.Suppliers, 1)
+	assert.True(t, rotaInfo.Suppliers[0].Match)
+	assert.Equal(t, "34.40", rotaInfo.Suppliers[0].Cost)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {

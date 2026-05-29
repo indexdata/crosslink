@@ -217,8 +217,9 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				suppTypeMatch := svcType == "" || svcType == strings.ToLower(suppTier.Type)
 				suppLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(suppTier.Level)
 				suppCostMatch := costMatches(suppTier.Cost, maxCost)
+				suppNetworkMatch := tierMatchesSharedNetwork(suppTier.Cost, reqNetworks, supNetworks)
 
-				if suppTypeMatch && suppLevelMatch && suppCostMatch {
+				if suppTypeMatch && suppLevelMatch && suppCostMatch && suppNetworkMatch {
 					reciprocal := true
 					//supplier tier matched the request, if the tier is free it must be reciprocal
 					if suppTier.Cost == 0 {
@@ -289,6 +290,29 @@ func costMatches(suppCost, maxCost float64) bool {
 	}
 }
 
+func tierMatchesSharedNetwork(suppCost float64, reqNetworks, supNetworks map[string]Network) bool {
+	for name, reqNet := range reqNetworks {
+		supNet, ok := supNetworks[name]
+		if !ok {
+			continue
+		}
+		if networkAllowsCost(reqNet, suppCost) && networkAllowsCost(supNet, suppCost) {
+			return true
+		}
+	}
+	return false
+}
+
+func networkAllowsCost(network Network, cost float64) bool {
+	if network.Reciprocal == nil {
+		return true
+	}
+	if *network.Reciprocal {
+		return cost == 0
+	}
+	return cost > 0
+}
+
 func CompareSuppliers(a, b SupplierOrdering) int {
 	if a.IsLocal() && !b.IsLocal() {
 		return -1
@@ -316,8 +340,9 @@ func getPeerNetworks(peerData directory.Entry) map[string]Network {
 		for _, n := range *peerData.Networks {
 			if n.Priority != nil {
 				networks[n.Name] = Network{
-					Name:     n.Name,
-					Priority: int(*n.Priority),
+					Name:       n.Name,
+					Priority:   int(*n.Priority),
+					Reciprocal: n.Reciprocal,
 				}
 			}
 		}
