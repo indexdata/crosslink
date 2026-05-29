@@ -176,11 +176,11 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				Match:    false,
 			})
 		}
-		priority := math.MaxInt
+		sharedPriority := math.MaxInt
 		for name, reqNet := range reqNetworks {
 			if _, ok := supNetworks[name]; ok {
-				if priority > reqNet.Priority {
-					priority = reqNet.Priority
+				if sharedPriority > reqNet.Priority {
+					sharedPriority = reqNet.Priority
 				}
 				for i, n := range supMatch.Networks {
 					if n.Name == name {
@@ -202,11 +202,12 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 			}
 			return cmp.Compare(a.Name, b.Name)
 		})
-		if priority < math.MaxInt {
-			sup.Priority = priority
+		if sharedPriority < math.MaxInt {
+			sup.Priority = sharedPriority
 			suppTiers := getPeerTiers(sup.CustomData)
 			supMatch.Tiers = make([]TierMatch, 0, len(suppTiers))
 			cost := math.MaxFloat64
+			priority := math.MaxInt
 			for _, suppTier := range suppTiers {
 				var tierMatch TierMatch
 				tierMatch.Name = suppTier.Name
@@ -217,7 +218,8 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				suppTypeMatch := svcType == "" || svcType == strings.ToLower(suppTier.Type)
 				suppLevelMatch := svcLevel == "" || svcLevel == strings.ToLower(suppTier.Level)
 				suppCostMatch := costMatches(suppTier.Cost, maxCost)
-				suppNetworkMatch := tierMatchesSharedNetwork(suppTier.Cost, reqNetworks, supNetworks)
+				tierPriority := sharedNetworkPriorityForCost(suppTier.Cost, reqNetworks, supNetworks)
+				suppNetworkMatch := tierPriority < math.MaxInt
 
 				if suppTypeMatch && suppLevelMatch && suppCostMatch && suppNetworkMatch {
 					reciprocal := true
@@ -235,8 +237,9 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 						}
 					}
 					tierMatch.Match = reciprocal
-					if reciprocal && cost > suppTier.Cost {
+					if reciprocal && (cost > suppTier.Cost || cost == suppTier.Cost && priority > tierPriority) {
 						cost = suppTier.Cost
+						priority = tierPriority
 					}
 				}
 				supMatch.Tiers = append(supMatch.Tiers, tierMatch)
@@ -258,6 +261,7 @@ func (a *ApiDirectory) FilterAndSort(ctx common.ExtendedContext, entries []Suppl
 				supMatch.Match = true
 				supMatch.Cost = fmt.Sprintf("%.2f", cost)
 				sup.Cost = cost
+				sup.Priority = priority
 				filtered = append(filtered, sup)
 			}
 			supMatch.Priority = sup.Priority
@@ -290,17 +294,20 @@ func costMatches(suppCost, maxCost float64) bool {
 	}
 }
 
-func tierMatchesSharedNetwork(suppCost float64, reqNetworks, supNetworks map[string]Network) bool {
+func sharedNetworkPriorityForCost(suppCost float64, reqNetworks, supNetworks map[string]Network) int {
+	priority := math.MaxInt
 	for name, reqNet := range reqNetworks {
 		supNet, ok := supNetworks[name]
 		if !ok {
 			continue
 		}
 		if networkAllowsCost(reqNet, suppCost) && networkAllowsCost(supNet, suppCost) {
-			return true
+			if priority > reqNet.Priority {
+				priority = reqNet.Priority
+			}
 		}
 	}
-	return false
+	return priority
 }
 
 func networkAllowsCost(network Network, cost float64) bool {

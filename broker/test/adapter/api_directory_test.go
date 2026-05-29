@@ -37,6 +37,10 @@ func boolPtr(v bool) *bool {
 	return &v
 }
 
+func intPtr(v int) *int {
+	return &v
+}
+
 func withNetworkReciprocal(entry directory.Entry, reciprocal *bool) directory.Entry {
 	if entry.Networks == nil {
 		return entry
@@ -599,6 +603,53 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 	assert.Len(t, rotaInfo.Suppliers, 1)
 	assert.True(t, rotaInfo.Suppliers[0].Match)
 	assert.Equal(t, "34.40", rotaInfo.Suppliers[0].Cost)
+}
+
+func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	ad := createDirectoryAdapter("")
+	requesterNetworks := []directory.Network{
+		{Name: "Reciprocal", Priority: intPtr(1), Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: intPtr(5), Reciprocal: boolPtr(false)},
+		{Name: "Paid High", Priority: intPtr(3), Reciprocal: boolPtr(false)},
+	}
+	paidTier := []directory.Tier{
+		{Name: "Paid Core Loan", Level: "Core", Type: "Loan", Cost: 34.4},
+	}
+	requesterData := directory.Entry{Name: "Requester", Networks: &requesterNetworks}
+	supplierANetworks := []directory.Network{
+		{Name: "Reciprocal", Priority: intPtr(1), Reciprocal: boolPtr(true)},
+		{Name: "Paid Low", Priority: intPtr(5), Reciprocal: boolPtr(false)},
+	}
+	supplierBNetworks := []directory.Network{
+		{Name: "Paid High", Priority: intPtr(3), Reciprocal: boolPtr(false)},
+	}
+	entries := []adapter.Supplier{
+		{PeerId: "A", Symbol: "A", CustomData: directory.Entry{Name: "Supplier A", Networks: &supplierANetworks, Tiers: &paidTier}},
+		{PeerId: "B", Symbol: "B", CustomData: directory.Entry{Name: "Supplier B", Networks: &supplierBNetworks, Tiers: &paidTier}},
+	}
+	serviceInfo := iso18626.ServiceInfo{
+		ServiceLevel: &iso18626.TypeSchemeValuePair{
+			Text: "Core",
+		},
+		ServiceType: iso18626.TypeServiceTypeLoan,
+	}
+	billingInfo := iso18626.BillingInfo{
+		MaximumCosts: &iso18626.TypeCosts{
+			MonetaryValue: utils.XSDDecimal{
+				Base: 3500,
+				Exp:  2,
+			},
+		},
+	}
+
+	entries, _ = ad.FilterAndSort(appCtx, entries, requesterData, &serviceInfo, &billingInfo)
+
+	assert.Len(t, entries, 2)
+	assert.Equal(t, "B", entries[0].PeerId)
+	assert.Equal(t, 3, entries[0].Priority)
+	assert.Equal(t, "A", entries[1].PeerId)
+	assert.Equal(t, 5, entries[1].Priority)
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
