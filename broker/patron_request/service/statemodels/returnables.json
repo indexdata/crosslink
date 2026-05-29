@@ -67,6 +67,11 @@
           "name": "unfilled",
           "desc": "Supplier cannot supply (ISO18626 Unfilled)",
           "transition": "UNFILLED"
+        },
+        {
+          "name": "accept-retry",
+          "desc": "Supplier accepts retry with new metadata",
+          "transition": "NEW"
         }
       ]
     },
@@ -337,6 +342,13 @@
           "desc": "Indicate will supply with conditions and send ISO18626 WillSupply",
           "transitions": {
             "success": "CONDITION_PENDING"
+          }
+        },
+        {
+          "name": "ask-retry",
+          "desc": "Ask requester to retry with new ISO18626 metadata",
+          "transitions": {
+            "success": "NEW"
           }
         }
       ],
