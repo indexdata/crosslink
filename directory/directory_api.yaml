@@ -144,6 +144,9 @@ components:
           type: string
         priority:
           type: integer
+        reciprocal:
+          type: boolean
+          default: true
     Membership:
       type: object
       required:

@@ -49,7 +49,8 @@
           "id": "231f36d2-1497-572f-8361-562ae3391f2c",
           "name": "National",
           "consortium": "b915c0b7-d6e9-5058-8c9b-30e57059b449",
-          "priority": 9
+          "priority": 50,
+          "reciprocal": false
         }
       ],
       "tiers": [
