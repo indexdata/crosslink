@@ -405,6 +405,131 @@ func TestLocateSuppliersUsesFirstHoldingLocalIdentifierForDuplicateSymbol(t *tes
 	}
 }
 
+func TestLocateSuppliersLastResortRequester(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		peers: []ill_db.Peer{
+			{ID: "peer-1", BorrowsCount: 1},
+			{ID: "peer-2", BorrowsCount: 1},
+			{ID: "peer-3", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+			"peer-3": {{SymbolValue: "ISIL:SUP3", PeerID: "peer-3"}},
+		},
+	}
+
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(holdings.MockHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2", "ISIL:SUP3"}}, mockIllRepo.refreshSymbols)
+
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 3) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "L3", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP3", mockIllRepo.savedLocatedSuppliers[2].SupplierSymbol)
+		assert.Equal(t, "return-ISIL:SUP1::L1;return-ISIL:SUP1::L2;return-ISIL:SUP2::L3", mockIllRepo.savedLocatedSuppliers[2].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[2].LocalID.Valid)
+	}
+}
+
+func TestLocateSuppliersLastResortLookupEmpty(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "not-found",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1", CustomData: directory.Entry{LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}, {Symbol: "SUP3"}}}},
+		peers: []ill_db.Peer{
+			{ID: "peer-2", BorrowsCount: 1},
+			{ID: "peer-3", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+			"peer-3": {{SymbolValue: "ISIL:SUP3", PeerID: "peer-3"}},
+		},
+	}
+
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(holdings.MockHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "")
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP2", "ISIL:SUP3"}}, mockIllRepo.refreshSymbols)
+
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "not-found", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP3", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "not-found", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+	}
+}
+
+func TestLocateSuppliersLastResortConsortium(t *testing.T) {
+	mockIllRepo := &MockIllRepoLocateSuppliers{
+		illTransaction: ill_db.IllTransaction{
+			ID:          "ill-1",
+			RequesterID: pgtype.Text{String: "requester-1", Valid: true},
+			IllTransactionData: ill_db.IllTransactionData{
+				BibliographicInfo: iso18626.BibliographicInfo{
+					SupplierUniqueRecordId: "return-ISIL:SUP1::L1",
+				},
+			},
+		},
+		requester: ill_db.Peer{ID: "requester-1"},
+		peers: []ill_db.Peer{
+			{ID: "peer-1", BorrowsCount: 1},
+			{ID: "peer-2", BorrowsCount: 1},
+		},
+		peerSymbols: map[string][]ill_db.Symbol{
+			"peer-1": {{SymbolValue: "ISIL:SUP1", PeerID: "peer-1"}},
+			"peer-2": {{SymbolValue: "ISIL:SUP2", PeerID: "peer-2"}},
+		},
+		consortiumPeers: []ill_db.Peer{
+			{ID: "consortium-peer-1", CustomData: directory.Entry{Symbols: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUPC"}}, LenderOfLastResort: &[]directory.Symbol{{Authority: "ISIL", Symbol: "SUP2"}}}},
+		},
+	}
+
+	locator := CreateSupplierLocator(new(events.PostgresEventBus), mockIllRepo, new(adapter.MockDirectoryLookupAdapter), new(holdings.MockHoldingsLookupAdapter), new(holdings.AvailabilityCreatorImpl), "ISIL:SUPC")
+	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.Equal(t, [][]string{{"ISIL:SUP1", "ISIL:SUP2"}}, mockIllRepo.refreshSymbols)
+	if assert.Len(t, mockIllRepo.savedLocatedSuppliers, 2) {
+		assert.Equal(t, "ISIL:SUP1", mockIllRepo.savedLocatedSuppliers[0].SupplierSymbol)
+		assert.Equal(t, "L1", mockIllRepo.savedLocatedSuppliers[0].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[0].LocalID.Valid)
+
+		assert.Equal(t, "ISIL:SUP2", mockIllRepo.savedLocatedSuppliers[1].SupplierSymbol)
+		assert.Equal(t, "return-ISIL:SUP1::L1", mockIllRepo.savedLocatedSuppliers[1].LocalID.String)
+		assert.True(t, mockIllRepo.savedLocatedSuppliers[1].LocalID.Valid)
+	}
+}
+
 type MockIllRepoLocateSuppliers struct {
 	mocks.MockIllRepositorySuccess
 	illTransaction        ill_db.IllTransaction
@@ -413,6 +538,7 @@ type MockIllRepoLocateSuppliers struct {
 	peerSymbols           map[string][]ill_db.Symbol
 	refreshSymbols        [][]string
 	savedLocatedSuppliers []ill_db.SaveLocatedSupplierParams
+	consortiumPeers       []ill_db.Peer
 }
 
 func (r *MockIllRepoLocateSuppliers) GetIllTransactionById(ctx common.ExtendedContext, id string) (ill_db.IllTransaction, error) {
@@ -424,6 +550,15 @@ func (r *MockIllRepoLocateSuppliers) GetPeerById(ctx common.ExtendedContext, id 
 }
 
 func (r *MockIllRepoLocateSuppliers) GetCachedPeersBySymbols(ctx common.ExtendedContext, symbols []string, directoryAdapter adapter.DirectoryLookupAdapter) ([]ill_db.Peer, string, error) {
+	if len(r.consortiumPeers) > 0 && r.consortiumPeers[0].CustomData.Symbols != nil {
+		for _, sym := range *r.consortiumPeers[0].CustomData.Symbols {
+			for _, s := range symbols {
+				if sym.Authority+":"+sym.Symbol == s {
+					return r.consortiumPeers, "<refresh>", nil
+				}
+			}
+		}
+	}
 	r.refreshSymbols = append(r.refreshSymbols, append([]string(nil), symbols...))
 	return r.peers, "<refresh>", nil
 }
