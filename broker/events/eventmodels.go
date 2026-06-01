@@ -50,7 +50,7 @@ const (
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
 	EventNameSendNotification     EventName = "send-notification"
 	EventNameCheckAvailability    EventName = "check-availability"
-	EventNameSendEmail            EventName = "send-email"
+	EventNameEmailPullslips       EventName = "email-pullslips"
 )
 
 type Signal string

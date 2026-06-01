@@ -98,17 +98,18 @@ var ServeMux *http.ServeMux
 var appCtx = common.CreateExtCtxWithLogArgsAndHandler(context.Background(), nil, configLog())
 
 type Context struct {
-	EventBus        events.EventBus
-	IllRepo         ill_db.IllRepo
-	EventRepo       events.EventRepo
-	DirAdapter      adapter.DirectoryLookupAdapter
-	PrRepo          pr_db.PrRepo
-	TenantResolver  *tenant.TenantResolver
-	ApiHandler      api.ApiHandler
-	PrApiHandler    prapi.PatronRequestApiHandler
-	SseBroker       *api.SseBroker
-	PsApiHandler    psapi.PullSlipApiHandler
-	SchedApiHandler schedapi.SchedulerApiHandler
+	EventBus           events.EventBus
+	IllRepo            ill_db.IllRepo
+	EventRepo          events.EventRepo
+	DirAdapter         adapter.DirectoryLookupAdapter
+	PrRepo             pr_db.PrRepo
+	TenantResolver     *tenant.TenantResolver
+	ApiHandler         api.ApiHandler
+	PrApiHandler       prapi.PatronRequestApiHandler
+	SseBroker          *api.SseBroker
+	PsApiHandler       psapi.PullSlipApiHandler
+	SchedApiHandler    schedapi.SchedulerApiHandler
+	EmailSenderService *sched_service.EmailSenderService
 }
 
 func configLog() slog.Handler {
@@ -198,7 +199,14 @@ func Init(ctx context.Context) (Context, error) {
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
 
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, *prActionService, prApiHandler, sseBroker)
+	var emailSenderService *sched_service.EmailSenderService
+	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, eventBus)
+	if err != nil {
+		appCtx.Logger().Warn("email service not available, send-email events will fail", "error", err)
+		emailSenderService = nil
+	}
+
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, sseBroker, emailSenderService)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
@@ -211,17 +219,18 @@ func Init(ctx context.Context) (Context, error) {
 	}
 
 	return Context{
-		EventBus:        eventBus,
-		IllRepo:         illRepo,
-		EventRepo:       eventRepo,
-		DirAdapter:      dirAdapter,
-		PrRepo:          prRepo,
-		TenantResolver:  tenantResolver,
-		ApiHandler:      apiHandler,
-		PrApiHandler:    prApiHandler,
-		SseBroker:       sseBroker,
-		PsApiHandler:    psApiHandler,
-		SchedApiHandler: schedApiHandler,
+		EventBus:           eventBus,
+		IllRepo:            illRepo,
+		EventRepo:          eventRepo,
+		DirAdapter:         dirAdapter,
+		PrRepo:             prRepo,
+		TenantResolver:     tenantResolver,
+		ApiHandler:         apiHandler,
+		PrApiHandler:       prApiHandler,
+		SseBroker:          sseBroker,
+		PsApiHandler:       psApiHandler,
+		SchedApiHandler:    schedApiHandler,
+		EmailSenderService: emailSenderService,
 	}, nil
 }
 
@@ -376,7 +385,7 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
 	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
-	prActionService prservice.PatronRequestActionService, prApiHandler prapi.PatronRequestApiHandler, sseBroker *api.SseBroker) {
+	sseBroker *api.SseBroker, emailSenderService *sched_service.EmailSenderService) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, events.HandlerRoleConsumer, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, iso18626Handler.ConfirmRequesterMsg)
@@ -396,6 +405,11 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleConsumer, workflowManager.OnMessageRequesterComplete)
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
+
+	// Register the email handler only when SES is configured.
+	if emailSenderService != nil {
+		eventBus.HandleEventCreated(events.EventNameEmailPullslips, events.HandlerRoleConsumer, emailSenderService.EmailPullslip)
+	}
 
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.

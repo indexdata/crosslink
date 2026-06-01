@@ -45,14 +45,15 @@ FROM scheduled_task
 WHERE id = $1;
 
 -- name: SaveBatchAction :one
-INSERT INTO batch_action (id, action_name, schedule, batch_query, owner, scheduled_task_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO batch_action (id, action_name, schedule, batch_query, owner, scheduled_task_id, action_params, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
     SET action_name       = EXCLUDED.action_name,
         schedule          = EXCLUDED.schedule,
         batch_query       = EXCLUDED.batch_query,
         owner             = EXCLUDED.owner,
         scheduled_task_id = EXCLUDED.scheduled_task_id,
+        action_params = EXCLUDED.action_params,
         updated_at        = now()
 RETURNING sqlc.embed(batch_action);
 

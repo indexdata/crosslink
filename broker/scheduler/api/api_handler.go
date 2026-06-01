@@ -112,16 +112,25 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		id := uuid.NewString()
 		now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 		taskId := uuid.New().String()
+		paramsMap := make(map[string]any)
+		if create.ActionParams != nil {
+			paramsMap = *create.ActionParams
+		}
 		task, inErr := schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
 			ID:        taskId,
-			EventName: events.EventNameSendEmail,
+			EventName: events.EventNameEmailPullslips,
 			CronExpr:  create.Schedule,
 			Status:    sched_db.ScheduledTaskStatusPending,
-			Payload: events.EventData{CommonEventData: events.CommonEventData{BatchActionData: &events.BatchActionData{
-				ActionName: string(create.ActionName),
-				Selector:   create.BatchQuery,
-				TaskId:     taskId,
-			}}},
+			Payload: events.EventData{
+				CommonEventData: events.CommonEventData{
+					BatchActionData: &events.BatchActionData{
+						ActionName: string(create.ActionName),
+						Selector:   create.BatchQuery,
+						TaskId:     taskId,
+					},
+				},
+				CustomData: paramsMap,
+			},
 			RunAt:     next,
 			CreatedAt: now,
 		})
@@ -136,6 +145,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			Owner:           owner,
 			CreatedAt:       now,
 			ScheduledTaskID: task.ID,
+			ActionParams:    create.ActionParams,
 		})
 		return inErr
 	})
