@@ -15,8 +15,14 @@ func main() {
 
 	// AWS Query protocol endpoint (SES v1 style path "/")
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		_ = r.Body.Close()
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		if err := r.Body.Close(); err != nil {
+			log.Printf("mock-ses: failed to close request body: %v", err)
+		}
 
 		log.Printf("mock-ses request: method=%s path=%s query=%s", r.Method, r.URL.Path, r.URL.RawQuery)
 		log.Printf("headers: x-amz-target=%q content-type=%q", r.Header.Get("X-Amz-Target"), r.Header.Get("Content-Type"))

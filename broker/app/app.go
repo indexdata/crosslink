@@ -203,7 +203,6 @@ func Init(ctx context.Context) (Context, error) {
 	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, eventBus)
 	if err != nil {
 		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
-		emailSenderService = nil
 	}
 
 	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, sseBroker, emailSenderService)
@@ -406,10 +405,7 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageSupplier, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 
-	// Register the email handler only when SES is configured.
-	if emailSenderService != nil {
-		eventBus.HandleEventCreated(events.EventNameEmailPullslips, events.HandlerRoleConsumer, emailSenderService.EmailPullslip)
-	}
+	eventBus.HandleEventCreated(events.EventNameEmailPullslips, events.HandlerRoleConsumer, emailSenderService.EmailPullslip)
 
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.

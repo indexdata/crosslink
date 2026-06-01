@@ -158,4 +158,4 @@ sql:
               type: "EventData"
           - column: "batch_action.action_params"
             go_type:
-              type: "*map[string]any"
+              type: "map[string]any"

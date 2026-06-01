@@ -56,11 +56,12 @@ type EmailData struct {
 }
 
 type EmailSenderService struct {
-	prRepo   pr_db.PrRepo
-	eventBus events.EventBus
-	pdf      PdfGenerator
-	client   SESClient
-	fromAddr string
+	prRepo      pr_db.PrRepo
+	eventBus    events.EventBus
+	pdf         PdfGenerator
+	client      SESClient
+	fromAddr    string
+	readyToSend bool
 }
 
 func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*EmailSenderService, error) {
@@ -70,10 +71,18 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 	}
 	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), opts...)
 	if err != nil {
-		return nil, fmt.Errorf("email: failed to load AWS config: %w", err)
+		return &EmailSenderService{
+			prRepo:      prRepo,
+			eventBus:    eventBus,
+			readyToSend: false,
+		}, fmt.Errorf("email: failed to load AWS config: %w", err)
 	}
 	if SES_FROM_ADDR == "" {
-		return nil, fmt.Errorf("email: SES_FROM_ADDR environment variable is required")
+		return &EmailSenderService{
+			prRepo:      prRepo,
+			eventBus:    eventBus,
+			readyToSend: false,
+		}, fmt.Errorf("email: SES_FROM_ADDR environment variable is required")
 	}
 	pdfSvc := psservice.NewPdfService(prRepo)
 	sesEndpointOverride := utils.GetEnv("SES_ENDPOINT_OVERRIDE", "")
@@ -83,11 +92,12 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 		}
 	})
 	return &EmailSenderService{
-		prRepo:   prRepo,
-		eventBus: eventBus,
-		client:   sesClient,
-		fromAddr: SES_FROM_ADDR,
-		pdf:      pdfSvc,
+		prRepo:      prRepo,
+		eventBus:    eventBus,
+		client:      sesClient,
+		fromAddr:    SES_FROM_ADDR,
+		pdf:         pdfSvc,
+		readyToSend: true,
 	}, nil
 }
 
@@ -99,7 +109,15 @@ func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus,
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
-	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.generateAndEmailPullslip)
+	if s.readyToSend {
+		_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.generateAndEmailPullslip)
+	} else {
+		_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.emailPullslipMarkFailed)
+	}
+}
+
+func (s *EmailSenderService) emailPullslipMarkFailed(_ common.ExtendedContext, _ events.Event) (events.EventStatus, *events.EventResult) {
+	return events.NewErrorResult("email not sent", "email sending configuration missing")
 }
 
 func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {

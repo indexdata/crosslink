@@ -145,7 +145,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			Owner:           owner,
 			CreatedAt:       now,
 			ScheduledTaskID: task.ID,
-			ActionParams:    create.ActionParams,
+			ActionParams:    paramsMap,
 		})
 		return inErr
 	})
