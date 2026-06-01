@@ -69,9 +69,9 @@
           "transition": "UNFILLED"
         },
         {
-          "name": "accept-retry",
-          "desc": "Supplier accepts retry with new metadata",
-          "transition": "NEW"
+          "name": "retry-conditional",
+          "desc": "Received retry from supplier",
+          "transition": "RETRY_PENDING"
         }
       ]
     },
@@ -100,6 +100,11 @@
           "name": "will-supply-conditional",
           "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
           "transition": "CONDITION_PENDING"
+        },
+        {
+          "name": "retry-conditional",
+          "desc": "Received retry from supplier",
+          "transition": "RETRY_PENDING"
         },
         {
           "name": "loaned",
@@ -146,6 +151,30 @@
           "name": "unfilled",
           "desc": "Supplier cannot supply (ISO18626 Unfilled)",
           "transition": "UNFILLED"
+        }
+      ]
+    },
+    {
+      "name": "RETRY_PENDING",
+      "display": "Retry Pending",
+      "desc": "Received supplier retry request with new conditions after initial conditions were rejected",
+      "side": "REQUESTER",
+      "primaryAction": "accept-retry",
+      "needsAttention": true,
+      "actions": [
+        {
+          "name": "accept-retry",
+          "desc": "Requester accepts supplier retry request",
+          "transitions": {
+            "success": "RETRY_ACCEPTED"
+          }
+        },
+        {
+          "name": "reject-retry",
+          "desc": "Requester rejects supplier retry request",
+          "transitions": {
+            "success": "RETRY_REJECTED"
+          }
         }
       ]
     },
@@ -299,6 +328,20 @@
       "terminal": true
     },
     {
+      "name": "RETRY_ACCEPTED",
+      "display": "Retry Accepted",
+      "desc": "Retry request is accepted by supplier with new metadata",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "RETRY_REJECTED",
+      "display": "Retry Rejected",
+      "desc": "Retry request is rejected by supplier",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
       "name": "NEW",
       "display": "New",
       "desc": "Item is created on the supplier side for local fulfillment",
@@ -348,7 +391,7 @@
           "name": "ask-retry",
           "desc": "Ask requester to retry with new ISO18626 metadata",
           "transitions": {
-            "success": "RETRY_REQUESTED"
+            "success": "COMPLETED_WITH_RETRY"
           }
         }
       ],
@@ -561,9 +604,9 @@
       "terminal": true
     },
     {
-      "name": "RETRY_REQUESTED",
-      "display": "Retry Requested",
-      "desc": "After manual retry request",
+      "name": "COMPLETED_WITH_RETRY",
+      "display": "Completed with Retry",
+      "desc": "After sending retry to requester",
       "side": "SUPPLIER",
       "terminal": true
     }

@@ -22,11 +22,12 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}},
 		BorrowerStateCheckedOut:       {{actionName: BorrowerActionCheckIn}},
 		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
+		BorrowerStateRetryPending:     {{actionName: BorrowerActionAcceptRetry}, {actionName: BorrowerActionRejectRetry}},
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
-		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}},
+		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
 		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionAccepted: {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
@@ -165,7 +166,7 @@ func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]PatronRequestA
 	for stateName := range map1 {
 		listOne := map1[stateName]
 		listTwo := map2[stateName]
-		assert.Equal(t, len(listOne), len(listTwo))
+		assert.Equal(t, len(listOne), len(listTwo), "State %s has different number of actions in the two maps", stateName)
 		for i := range listOne {
 			assert.Equal(t, listOne[i].actionName, listTwo[i].actionName)
 			assert.Equal(t, listOne[i].auto, listTwo[i].auto)

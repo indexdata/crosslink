@@ -36,6 +36,9 @@ const (
 	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
 	BorrowerStateCancelled        pr_db.PatronRequestState = "CANCELLED"
 	BorrowerStateUnfilled         pr_db.PatronRequestState = "UNFILLED"
+	BorrowerStateRetryPending     pr_db.PatronRequestState = "RETRY_PENDING"
+	BorrowerStateRetryAccepted    pr_db.PatronRequestState = "RETRY_ACCEPTED"
+	BorrowerStateRetryRejected    pr_db.PatronRequestState = "RETRY_REJECTED"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
@@ -48,6 +51,7 @@ const (
 	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
 	LenderStateCancelled          pr_db.PatronRequestState = "CANCELLED"
 	LenderStateUnfilled           pr_db.PatronRequestState = "UNFILLED"
+	LenderStateCompletedWithRetry pr_db.PatronRequestState = "COMPLETED_WITH_RETRY"
 )
 
 const (
@@ -60,6 +64,8 @@ const (
 	BorrowerActionCheckOut        pr_db.PatronRequestAction = "check-out"
 	BorrowerActionCheckIn         pr_db.PatronRequestAction = "check-in"
 	BorrowerActionShipReturn      pr_db.PatronRequestAction = "ship-return"
+	BorrowerActionAcceptRetry     pr_db.PatronRequestAction = "accept-retry"
+	BorrowerActionRejectRetry     pr_db.PatronRequestAction = "reject-retry"
 
 	LenderActionValidate     pr_db.PatronRequestAction = "validate"
 	LenderActionWillSupply   pr_db.PatronRequestAction = "will-supply"
@@ -69,22 +75,24 @@ const (
 	LenderActionShip         pr_db.PatronRequestAction = "ship"
 	LenderActionMarkReceived pr_db.PatronRequestAction = "mark-received"
 	LenderActionAcceptCancel pr_db.PatronRequestAction = "accept-cancel"
+	LenderActionAskRetry     pr_db.PatronRequestAction = "ask-retry"
 )
 
 const (
-	SupplierExpectToSupply MessageEvent = "expect-to-supply"
-	SupplierWillSupply     MessageEvent = "will-supply"
-	SupplierWillSupplyCond MessageEvent = "will-supply-conditional"
-	SupplierLoaned         MessageEvent = "loaned"
-	SupplierCompleted      MessageEvent = "completed"
-	SupplierUnfilled       MessageEvent = "unfilled"
-	SupplierCancelAccepted MessageEvent = "cancel-accepted"
-	SupplierCancelRejected MessageEvent = "cancel-rejected"
-	RequesterCancelRequest MessageEvent = "cancel-request"
-	RequesterReceived      MessageEvent = "received"
-	RequesterShippedReturn MessageEvent = "shipped-return"
-	RequesterCondAccepted  MessageEvent = "conditions-accepted"
-	RequesterCondRejected  MessageEvent = "condition-rejected"
+	SupplierExpectToSupply   MessageEvent = "expect-to-supply"
+	SupplierWillSupply       MessageEvent = "will-supply"
+	SupplierWillSupplyCond   MessageEvent = "will-supply-conditional"
+	SupplierLoaned           MessageEvent = "loaned"
+	SupplierCompleted        MessageEvent = "completed"
+	SupplierUnfilled         MessageEvent = "unfilled"
+	SupplierCancelAccepted   MessageEvent = "cancel-accepted"
+	SupplierCancelRejected   MessageEvent = "cancel-rejected"
+	RequesterCancelRequest   MessageEvent = "cancel-request"
+	RequesterReceived        MessageEvent = "received"
+	RequesterShippedReturn   MessageEvent = "shipped-return"
+	RequesterCondAccepted    MessageEvent = "conditions-accepted"
+	RequesterCondRejected    MessageEvent = "condition-rejected"
+	SupplierRetryConditional MessageEvent = "retry-conditional"
 )
 
 func requesterBuiltInStates() []string {
@@ -104,6 +112,9 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateCompleted),
 		string(BorrowerStateCancelled),
 		string(BorrowerStateUnfilled),
+		string(BorrowerStateRetryAccepted),
+		string(BorrowerStateRetryRejected),
+		string(BorrowerStateRetryPending),
 	})
 }
 
@@ -121,6 +132,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateCompleted),
 		string(LenderStateCancelled),
 		string(LenderStateUnfilled),
+		string(LenderStateCompletedWithRetry),
 	})
 }
 
@@ -160,6 +172,14 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(BorrowerActionShipReturn),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionAcceptRetry),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionRejectRetry),
 			Parameters: []string{},
 		},
 	}
@@ -211,6 +231,10 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			Name:       string(LenderActionAcceptCancel),
 			Parameters: []string{},
 		},
+		{
+			Name:       string(LenderActionAskRetry),
+			Parameters: []string{},
+		},
 	}
 }
 
@@ -234,6 +258,7 @@ func supplierBuiltInMessageEvents() []string {
 		string(SupplierUnfilled),
 		string(SupplierCancelAccepted),
 		string(SupplierCancelRejected),
+		string(SupplierRetryConditional),
 	})
 }
 
