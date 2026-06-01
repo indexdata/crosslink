@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/textproto"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -62,9 +64,11 @@ type EmailSenderService struct {
 }
 
 func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*EmailSenderService, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(),
-		awsconfig.WithRegion(SES_REGION),
-	)
+	opts := []func(*awsconfig.LoadOptions) error{}
+	if SES_REGION != "" {
+		opts = append(opts, awsconfig.WithRegion(SES_REGION))
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("email: failed to load AWS config: %w", err)
 	}
@@ -166,6 +170,18 @@ type pdfAttach struct {
 // buildRawMessage constructs a MIME multipart/mixed raw message.
 // If attachment is non-nil its bytes are included as a PDF attachment.
 func buildRawMessage(fromAddr string, data EmailData, attachment *pdfAttach) ([]byte, error) {
+	if strings.ContainsAny(fromAddr, "\r\n") {
+		return nil, errors.New("header injection detected in fromAddr")
+	}
+	if strings.ContainsAny(data.Subject, "\r\n") {
+		return nil, errors.New("header injection detected in subject")
+	}
+	for _, addr := range data.To {
+		if strings.ContainsAny(addr, "\r\n") {
+			return nil, errors.New("header injection detected in to address")
+		}
+	}
+
 	var buf bytes.Buffer
 
 	// Create the multipart writer first to capture its randomly-generated
@@ -211,7 +227,7 @@ func buildRawMessage(fromAddr string, data EmailData, attachment *pdfAttach) ([]
 		if createErr != nil {
 			return nil, fmt.Errorf("create attachment part: %w", createErr)
 		}
-		// Encode as base64 with 76-character line wrapping per RFC 2045.
+		// Encode as base64
 		encoder := base64.NewEncoder(base64.StdEncoding, attPart)
 		if _, writeErr := encoder.Write(attachment.data); writeErr != nil {
 			return nil, fmt.Errorf("write attachment: %w", writeErr)

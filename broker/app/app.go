@@ -202,7 +202,7 @@ func Init(ctx context.Context) (Context, error) {
 	var emailSenderService *sched_service.EmailSenderService
 	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, eventBus)
 	if err != nil {
-		appCtx.Logger().Warn("email service not available, send-email events will fail", "error", err)
+		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
 		emailSenderService = nil
 	}
 
