@@ -224,7 +224,7 @@ states:
 
   - name: RETRY_ACCEPTED
     display: Retry Accepted
-    desc: Retry request is accepted by supplier with new metadata
+    desc: Requester accepted supplier retry request with new metadata
     side: REQUESTER
     terminal: true
 
