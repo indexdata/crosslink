@@ -230,7 +230,7 @@ states:
 
   - name: RETRY_REJECTED
     display: Retry Rejected
-    desc: Retry request is rejected by supplier
+    desc: Requester rejected supplier retry request
     side: REQUESTER
     terminal: true
 
