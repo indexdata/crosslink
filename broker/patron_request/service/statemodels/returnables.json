@@ -330,14 +330,14 @@
     {
       "name": "RETRY_ACCEPTED",
       "display": "Retry Accepted",
-      "desc": "Retry request is accepted by supplier with new metadata",
+      "desc": "Requester accepted supplier retry request with new metadata",
       "side": "REQUESTER",
       "terminal": true
     },
     {
       "name": "RETRY_REJECTED",
       "display": "Retry Rejected",
-      "desc": "Retry request is rejected by supplier",
+      "desc": "Requester rejected supplier retry request",
       "side": "REQUESTER",
       "terminal": true
     },
