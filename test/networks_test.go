@@ -26,6 +26,14 @@ func TestNetworkCases(t *testing.T) {
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
+			name:        "GET networks with a name query",
+			method:      http.MethodGet,
+			endpoint:    "/networks?q=name=*The+Ultimate*",
+			status:      http.StatusOK,
+			resFile:     "networks-filter.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
 			name:        "GET a network",
 			method:      http.MethodGet,
 			endpoint:    "/networks/20000000-0000-0000-0000-000000000001",

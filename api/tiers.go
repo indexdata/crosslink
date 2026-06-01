@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"indexdata/directory/auth"
-	"indexdata/directory/db"
 	"log/slog"
 
+	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -78,40 +81,126 @@ func (a ApiImpl) GetTier(ctx context.Context, request GetTierRequestObject) (Get
 	return GetTier200JSONResponse(tierResponse), nil
 }
 
+const defaultTierOrder = "ORDER BY t.name, t.id"
+const defaultTierLimit = 1000
+
+func getTierCQLQuery(cqlString string, baseArgCount int) (pgcql.Query, error) {
+	pgDefinition := pgcql.NewPgDefinition()
+
+	nameField := pgcql.NewFieldString().WithLikeOps()
+	nameField.SetColumn("t.name")
+	pgDefinition.AddField("name", nameField)
+
+	var parser cql.Parser
+	query, err := parser.Parse(cqlString)
+	if err != nil {
+		return nil, err
+	}
+	return pgDefinition.Parse(query, baseArgCount+1)
+}
+
+func buildTierSQL(whereClause string) string {
+	baseQuery := `
+	SELECT
+		t.id,
+		t.name,
+		COUNT(*) OVER() as total_count
+		FROM tiers t
+	`
+
+	if whereClause != "" {
+		return baseQuery + "\n" + whereClause
+	}
+
+	return baseQuery
+}
+
+func scanTierRow(rows pgx.Rows) (Tier, int, error) {
+	var (
+		id         uuid.UUID
+		name       string
+		totalCount int
+	)
+	if err := rows.Scan(&id, &name, &totalCount); err != nil {
+		return Tier{}, 0, err
+	}
+
+	return Tier{
+		Id:   &id,
+		Name: &name,
+	}, totalCount, nil
+}
+
 func (a ApiImpl) GetTiers(ctx context.Context, request GetTiersRequestObject) (GetTiersResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.PublicUserRole}
+
+	var query string
+	var args []interface{}
 
 	if !authData.HasRoleFromList(validRoles) {
 		slog.ErrorContext(ctx, "permission denied")
 		return GetTiers401TextResponse("Access denied"), nil
 	}
 
-	params := db.ListTiersParams{
-		Limit:  derefOrDefault(request.Params.Limit, 1000),
-		Offset: derefOrDefault(request.Params.Offset, 0),
+	if request.Params.Q != nil && *request.Params.Q != "" {
+		baseArgCount := 0
+		cqlQuery, err := getTierCQLQuery(*request.Params.Q, baseArgCount)
+		if err != nil {
+			return GetTiers400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+		}
+
+		whereClause := cqlQuery.GetWhereClause()
+		if whereClause != "" {
+			whereClause = "WHERE " + whereClause
+		}
+
+		query = buildTierSQL(whereClause + "\n" + defaultTierOrder)
+		args = cqlQuery.GetQueryArguments()
+	} else {
+		query = buildTierSQL(defaultTierOrder)
+		args = []interface{}{}
 	}
 
-	rows, err := a.queries.ListTiers(ctx, params)
+	limit := derefOrDefault(request.Params.Limit, defaultTierLimit)
+	args = append(args, limit)
+	query += fmt.Sprintf("\nLIMIT $%d", len(args))
+
+	offset := derefOrDefault(request.Params.Offset, 0)
+	if offset != 0 {
+		args = append(args, offset)
+		query += fmt.Sprintf("\nOFFSET $%d", len(args))
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list tiers", "error", err)
 		return GetTiers500TextResponse("Internal Server Error"), nil
 	}
+	defer rows.Close()
 
-	tierList := make([]Tier, 0, len(rows))
+	tierList := make([]Tier, 0)
+	var totalCount int
 
-	for _, row := range rows {
-		tier := Tier{
-			Id:   &row.ID,
-			Name: row.Name,
+	for rows.Next() {
+		tier, count, err := scanTierRow(rows)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to scan tier row", "error", err)
+			return GetTiers500TextResponse("Internal server error"), nil
 		}
 		tierList = append(tierList, tier)
+		totalCount = count
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.ErrorContext(ctx, "error iterating tier rows", "error", err)
+		return GetTiers500TextResponse("Internal server error"), nil
 	}
 
 	resp := TiersResponse{
 		Items: tierList,
 		About: About{
-			Count: int64(len(tierList)),
+			Count: int64(totalCount),
 		},
 	}
 

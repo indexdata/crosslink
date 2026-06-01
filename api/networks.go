@@ -3,10 +3,13 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"indexdata/directory/auth"
-	"indexdata/directory/db"
 	"log/slog"
 
+	"github.com/google/uuid"
+	"github.com/indexdata/cql-go/cql"
+	"github.com/indexdata/cql-go/pgcql"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -78,40 +81,126 @@ func (a ApiImpl) GetNetwork(ctx context.Context, request GetNetworkRequestObject
 	return GetNetwork200JSONResponse(networkResponse), nil
 }
 
+const defaultOrder = "ORDER BY n.name, n.id"
+const defaultLimit = 10
+
+func getCQLQuery(cqlString string, baseArgCount int) (pgcql.Query, error) {
+	pgDefinition := pgcql.NewPgDefinition()
+
+	nameField := pgcql.NewFieldString().WithLikeOps()
+	nameField.SetColumn("n.name") //We will alias the network object to 'n' in our query
+	pgDefinition.AddField("name", nameField)
+
+	var parser cql.Parser
+	query, err := parser.Parse(cqlString)
+	if err != nil {
+		return nil, err
+	}
+	return pgDefinition.Parse(query, baseArgCount+1)
+}
+
+func buildNetworkSQL(whereClause string) string {
+	baseQuery := `
+	SELECT
+		n.id,
+		n.name,
+		COUNT(*) OVER() as total_count
+		FROM networks n	
+	`
+
+	if whereClause != "" {
+		return baseQuery + "\n" + whereClause
+	}
+
+	return baseQuery
+}
+
+func scanNetworkRow(rows pgx.Rows) (Network, int, error) {
+	var (
+		id         uuid.UUID
+		name       string
+		totalCount int
+	)
+	if err := rows.Scan(&id, &name, &totalCount); err != nil {
+		return Network{}, 0, err
+	}
+
+	return Network{
+		Id:   &id,
+		Name: &name,
+	}, totalCount, nil
+}
+
 func (a ApiImpl) GetNetworks(ctx context.Context, request GetNetworksRequestObject) (GetNetworksResponseObject, error) {
 	authData := auth.GetAuthData(ctx)
 	validRoles := []auth.DirectoryRole{auth.ConsortialAdminRole, auth.InstitutionalAdminRole, auth.SystemUserRole}
+
+	var query string
+	var args []interface{}
 
 	if !authData.HasRoleFromList(validRoles) {
 		slog.ErrorContext(ctx, "permission denied")
 		return GetNetworks401TextResponse("Access denied"), nil
 	}
 
-	params := db.ListNetworksParams{
-		Limit:  derefOrDefault(request.Params.Limit, 1000),
-		Offset: derefOrDefault(request.Params.Offset, 0),
+	if request.Params.Q != nil && *request.Params.Q != "" {
+		baseArgCount := 0
+		cqlQuery, err := getCQLQuery(*request.Params.Q, baseArgCount)
+		if err != nil {
+			return GetNetworks400TextResponse(fmt.Sprintf("CQL parse error: %v", err)), nil
+		}
+
+		whereClause := cqlQuery.GetWhereClause()
+		if whereClause != "" {
+			whereClause = "WHERE " + whereClause
+		}
+
+		query = buildNetworkSQL(whereClause + "\n" + defaultOrder)
+		args = cqlQuery.GetQueryArguments()
+	} else {
+		query = buildNetworkSQL(defaultOrder)
+		args = []interface{}{}
 	}
 
-	rows, err := a.queries.ListNetworks(ctx, params)
+	limit := derefOrDefault(request.Params.Limit, defaultLimit)
+	args = append(args, limit)
+	query += fmt.Sprintf("\nLIMIT $%d", len(args))
+
+	offset := derefOrDefault(request.Params.Offset, 0)
+	if offset != 0 {
+		args = append(args, offset)
+		query += fmt.Sprintf("\nOFFSET $%d", len(args))
+	}
+
+	rows, err := a.pool.Query(ctx, query, args...)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to list networks", "error", err)
 		return GetNetworks500TextResponse("Internal Server Error"), nil
 	}
+	defer rows.Close()
 
-	networkList := make([]Network, 0, len(rows))
+	networkList := make([]Network, 0)
+	var totalCount int
 
-	for _, row := range rows {
-		network := Network{
-			Id:   &row.ID,
-			Name: row.Name,
+	for rows.Next() {
+		network, count, err := scanNetworkRow(rows)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to scan network row", "error", err)
+			return GetNetworks500TextResponse("Internal server error"), nil
 		}
 		networkList = append(networkList, network)
+		totalCount = count
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.ErrorContext(ctx, "error iterating network rows", "error", err)
+		return GetNetworks500TextResponse("Internal server error"), nil
 	}
 
 	resp := NetworksResponse{
 		Items: networkList,
 		About: About{
-			Count: int64(len(networkList)),
+			Count: int64(totalCount),
 		},
 	}
 

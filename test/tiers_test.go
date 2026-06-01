@@ -26,6 +26,14 @@ func TestTierCases(t *testing.T) {
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
+			name:        "GET tiers with a name query",
+			method:      http.MethodGet,
+			endpoint:    "/tiers?q=name=*Top*",
+			status:      http.StatusOK,
+			resFile:     "tiers-filter.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
 			name:        "GET a tier",
 			method:      http.MethodGet,
 			endpoint:    "/tiers/30000000-0000-0000-0000-000000000001",
