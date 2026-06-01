@@ -99,7 +99,7 @@ func validEmailEvent() events.Event {
 
 // newEmailSvc creates an EmailSenderService wired to the supplied mocks.
 func newEmailSvc(prRepo pr_db.PrRepo, sesClient SESClient, pdf PdfGenerator) *EmailSenderService {
-	return EmailSenderServiceWithClient(prRepo, nil, sesClient, "from@example.com", pdf)
+	return EmailSenderServiceWithClient(prRepo, nil, sesClient, "from@example.com", pdf, true)
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +446,7 @@ func TestEmailPullslip_CallsProcessTask(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	sesClient := &mockSESClient{}
 	bus := &mockEmailEventBus{}
-	svc := EmailSenderServiceWithClient(prRepo, bus, sesClient, "from@example.com", nil)
+	svc := EmailSenderServiceWithClient(prRepo, bus, sesClient, "from@example.com", nil, true)
 
 	svc.EmailPullslip(testCtx, validEmailEvent())
 
@@ -458,7 +458,7 @@ func TestEmailPullslip_ProcessTaskErrorIgnored(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	sesClient := &mockSESClient{}
 	bus := &mockEmailEventBus{processTaskErr: errors.New("bus error")}
-	svc := EmailSenderServiceWithClient(prRepo, bus, sesClient, "from@example.com", nil)
+	svc := EmailSenderServiceWithClient(prRepo, bus, sesClient, "from@example.com", nil, true)
 
 	// EmailPullslip ignores the ProcessTask error (_, _ = ...); verify no panic.
 	svc.EmailPullslip(testCtx, validEmailEvent())
@@ -466,10 +466,22 @@ func TestEmailPullslip_ProcessTaskErrorIgnored(t *testing.T) {
 
 func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
 	bus := &mockEmailEventBus{}
-	svc := EmailSenderServiceWithClient(nil, bus, &mockSESClient{}, "from@example.com", nil)
+	svc := EmailSenderServiceWithClient(nil, bus, &mockSESClient{}, "from@example.com", nil, true)
 
 	// Event with no BatchActionData → handler returns error status.
 	svc.EmailPullslip(testCtx, events.Event{})
 
 	assert.Equal(t, events.EventStatusError, bus.lastStatus)
+}
+
+func TestEmailPullslip_SetEventToFailed(t *testing.T) {
+	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
+	sesClient := &mockSESClient{}
+	bus := &mockEmailEventBus{}
+	svc := EmailSenderServiceWithClient(prRepo, bus, sesClient, "from@example.com", nil, false)
+
+	svc.EmailPullslip(testCtx, validEmailEvent())
+
+	assert.Equal(t, events.EventStatusError, bus.lastStatus)
+	assert.False(t, sesClient.called)
 }

@@ -103,8 +103,8 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
 // dependencies, intended for use in tests.
-func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus, client SESClient, fromAddr string, pdf PdfGenerator) *EmailSenderService {
-	return &EmailSenderService{prRepo: prRepo, eventBus: eventBus, client: client, fromAddr: fromAddr, pdf: pdf}
+func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus, client SESClient, fromAddr string, pdf PdfGenerator, readyToSend bool) *EmailSenderService {
+	return &EmailSenderService{prRepo: prRepo, eventBus: eventBus, client: client, fromAddr: fromAddr, pdf: pdf, readyToSend: readyToSend}
 }
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) {
