@@ -1380,6 +1380,8 @@ func TestService(t *testing.T) {
 		m = ret[len(ret)-2].Message
 		assert.NotNil(t, m.SupplyingAgencyMessage)
 		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryNotFoundAsCited), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, "123456789", m.SupplyingAgencyMessage.DeliveryInfo.ItemId)
 
 		m = ret[len(ret)-1].Message
 		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)

@@ -294,7 +294,9 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 			msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}
 		case iso18626.ReasonRetryNotFoundAsCited:
-			// no special handling for this one, just a reason for retry
+			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{
+				ItemId: "123456789",
+			}
 		}
 	}
 	if state.presentResponse {
