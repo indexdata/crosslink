@@ -125,7 +125,7 @@ Configuration is provided via environment variables:
 | `SMTP_PORT`               | SMTP server port                                                                        | `2525`                                    |
 | `SMTP_USERNAME`           | Username for SMTP authentication                                                        | (empty value)                             |
 | `SMTP_PASSWORD`           | Password for SMTP authentication                                                        | (empty value)                             |
-| `SMTP_FROM_ADDR`          | Default sender address for outgoing emails                                              | `noreply@example.com`                     |
+| `SMTP_FROM_ADDR`          | Default sender address for outgoing emails                                              | (empty value)                             |
 
 # Build
 

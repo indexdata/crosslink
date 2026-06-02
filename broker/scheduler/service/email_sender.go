@@ -32,7 +32,7 @@ var (
 	SMTP_PORT     = utils.GetEnv("SMTP_PORT", "2525")
 	SMTP_USERNAME = utils.GetEnv("SMTP_USERNAME", "")
 	SMTP_PASSWORD = utils.GetEnv("SMTP_PASSWORD", "")
-	SMTP_FROM     = utils.GetEnv("SMTP_FROM_ADDR", "noreply@example.com")
+	SMTP_FROM     = utils.GetEnv("SMTP_FROM_ADDR", "")
 )
 
 // Mailer is an interface over smtp.SendMail, allowing mocking in tests.
@@ -236,13 +236,16 @@ func buildRawMessage(fromAddr string, data EmailData, attachment *pdfAttach) ([]
 		if createErr != nil {
 			return nil, fmt.Errorf("create attachment part: %w", createErr)
 		}
-		// Encode as base64
-		encoder := base64.NewEncoder(base64.StdEncoding, attPart)
-		if _, writeErr := encoder.Write(attachment.data); writeErr != nil {
-			return nil, fmt.Errorf("write attachment: %w", writeErr)
-		}
-		if closeErr := encoder.Close(); closeErr != nil {
-			return nil, fmt.Errorf("close attachment encoder: %w", closeErr)
+		// Encode as base64 with RFC 2045 line wrapping (76 chars + CRLF).
+		enc := base64.StdEncoding.EncodeToString(attachment.data)
+		for i := 0; i < len(enc); i += 76 {
+			end := i + 76
+			if end > len(enc) {
+				end = len(enc)
+			}
+			if _, writeErr := attPart.Write([]byte(enc[i:end] + "\r\n")); writeErr != nil {
+				return nil, fmt.Errorf("write attachment: %w", writeErr)
+			}
 		}
 	}
 
