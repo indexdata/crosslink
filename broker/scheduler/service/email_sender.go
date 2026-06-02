@@ -2,20 +2,17 @@ package sched_service
 
 import (
 	"bytes"
-	"context"
+
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"mime"
 	"mime/multipart"
 	"mime/quotedprintable"
+	"net/smtp"
 	"net/textproto"
 	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ses"
-	"github.com/aws/aws-sdk-go-v2/service/ses/types"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -29,21 +26,24 @@ const COMP = "email_sender"
 // email batch. Selectors matching more records will be truncated with a warning.
 const maxRecordsPerEmail = 100
 
-// Environment variables for SES configuration.
+// Environment variables for SMTP configuration.
 var (
-	SES_REGION    = utils.GetEnv("SES_REGION", "")
-	SES_FROM_ADDR = utils.GetEnv("SES_FROM_ADDR", "")
+	SMTP_HOST     = utils.GetEnv("SMTP_HOST", "localhost")
+	SMTP_PORT     = utils.GetEnv("SMTP_PORT", "2525")
+	SMTP_USERNAME = utils.GetEnv("SMTP_USERNAME", "")
+	SMTP_PASSWORD = utils.GetEnv("SMTP_PASSWORD", "")
+	SMTP_FROM     = utils.GetEnv("SMTP_FROM_ADDR", "noreply@example.com")
 )
 
-// SESClient is an interface over ses.SendRawEmail, allowing mocking in tests.
-// SendRawEmail is required (vs SendEmail) because it supports attachments.
-type SESClient interface {
-	SendRawEmail(ctx context.Context, params *ses.SendRawEmailInput, optFns ...func(*ses.Options)) (*ses.SendRawEmailOutput, error)
+// Mailer is an interface over smtp.SendMail, allowing mocking in tests.
+type Mailer interface {
+	SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error
 }
 
-// PdfGenerator generates a merged PDF pull-slip for a list of patron requests.
-type PdfGenerator interface {
-	GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error)
+type DefaultMailer struct{}
+
+func (m *DefaultMailer) SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+	return smtp.SendMail(addr, a, from, to, msg)
 }
 
 // EmailData carries the email payload inside an EventData.CustomData map.
@@ -58,44 +58,37 @@ type EmailData struct {
 type EmailSenderService struct {
 	prRepo      pr_db.PrRepo
 	eventBus    events.EventBus
-	pdf         PdfGenerator
-	client      SESClient
+	pdf         psservice.PdfService
+	mailer      Mailer
 	fromAddr    string
+	smtpAddr    string
+	smtpAuth    smtp.Auth
 	readyToSend bool
 }
 
 func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*EmailSenderService, error) {
-	opts := []func(*awsconfig.LoadOptions) error{}
-	if SES_REGION != "" {
-		opts = append(opts, awsconfig.WithRegion(SES_REGION))
-	}
-	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), opts...)
-	if err != nil {
+	if SMTP_FROM == "" {
 		return &EmailSenderService{
 			prRepo:      prRepo,
 			eventBus:    eventBus,
 			readyToSend: false,
-		}, fmt.Errorf("email: failed to load AWS config: %w", err)
+		}, errors.New("email: SMTP_FROM_ADDR environment variable is required")
 	}
-	if SES_FROM_ADDR == "" {
-		return &EmailSenderService{
-			prRepo:      prRepo,
-			eventBus:    eventBus,
-			readyToSend: false,
-		}, fmt.Errorf("email: SES_FROM_ADDR environment variable is required")
+
+	var auth smtp.Auth
+	if SMTP_USERNAME != "" {
+		auth = smtp.PlainAuth("", SMTP_USERNAME, SMTP_PASSWORD, SMTP_HOST)
 	}
+
 	pdfSvc := psservice.NewPdfService(prRepo)
-	sesEndpointOverride := utils.GetEnv("SES_ENDPOINT_OVERRIDE", "")
-	sesClient := ses.NewFromConfig(cfg, func(o *ses.Options) {
-		if sesEndpointOverride != "" {
-			o.BaseEndpoint = aws.String(sesEndpointOverride)
-		}
-	})
+
 	return &EmailSenderService{
 		prRepo:      prRepo,
 		eventBus:    eventBus,
-		client:      sesClient,
-		fromAddr:    SES_FROM_ADDR,
+		mailer:      &DefaultMailer{},
+		fromAddr:    SMTP_FROM,
+		smtpAddr:    fmt.Sprintf("%s:%s", SMTP_HOST, SMTP_PORT),
+		smtpAuth:    auth,
 		pdf:         pdfSvc,
 		readyToSend: true,
 	}, nil
@@ -103,8 +96,8 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
 // dependencies, intended for use in tests.
-func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus, client SESClient, fromAddr string, pdf PdfGenerator, readyToSend bool) *EmailSenderService {
-	return &EmailSenderService{prRepo: prRepo, eventBus: eventBus, client: client, fromAddr: fromAddr, pdf: pdf, readyToSend: readyToSend}
+func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus, mailer Mailer, fromAddr string, pdf psservice.PdfService, readyToSend bool) *EmailSenderService {
+	return &EmailSenderService{prRepo: prRepo, eventBus: eventBus, mailer: mailer, fromAddr: fromAddr, pdf: pdf, readyToSend: readyToSend}
 }
 
 func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) {
@@ -170,11 +163,9 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("failed to build email message", err.Error())
 	}
 
-	_, err = s.client.SendRawEmail(ctx, &ses.SendRawEmailInput{
-		RawMessage: &types.RawMessage{Data: raw},
-	})
+	err = s.mailer.SendMail(s.smtpAddr, s.smtpAuth, s.fromAddr, emailData.To, raw)
 	if err != nil {
-		return events.NewErrorResult("failed to send email via SES", err.Error())
+		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}
 	return events.EventStatusSuccess, nil
 }

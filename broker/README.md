@@ -105,7 +105,7 @@ Configuration is provided via environment variables:
 | `HOLDINGS_SRU_URL`        | Comma separated list of URLs when `HOLDINGS_ADAPTER` is `sru`                           | `http://localhost:8081/sru`               |
 | `HOLDINGS_ISXN_LOOKUP`    | Whether to use ISBN/ISSN lookup for `sru` method                                        | `false`                                   |
 | `HOLDINGS_FORMAT`         | Parser for SRU holdings: `reservoir`, `marc`, `opac` or `MARC-21plus-1`                 | `reservoir`                               |
-| `CONSORTIUM_SYMBOL`       | Designates peer for which configuration is used for consortium. At this time, it is     |  (empty value)                            |
+| `CONSORTIUM_SYMBOL`       | Designates peer for which configuration is used for consortium. At this time, it is     | (empty value)                             |
 |                           | used when `HOLDINGS_ADAPTER` = `consortium`.                                            |                                           |
 | `DIRECTORY_ADAPTER`       | Directory lookup method: `mock` or `api`                                                | `mock`                                    |
 | `DIRECTORY_API_URL`       | Comma separated list of URLs when `DIRECTORY_ADAPTER` is `api`                          | `http://localhost:8081/directory/entries` |
@@ -121,6 +121,11 @@ Configuration is provided via environment variables:
 | `SUPPLIER_PATRON_PATTERN` | Pattern used to create patron ID when receiving Request on supplier side                | `%v_user`                                 |
 | `LANGUAGE`                | Language parameter used for ts_vector search in DB                                      | `english`                                 |
 | `SCHEDULER_RETRY_DELAY`   | Delay for rescheduling failed scheduled tasks and fallback poll interval in `waitUntil` | `5m`                                      |
+| `SMTP_HOST`               | SMTP server host for sending emails                                                     | `localhost`                               |
+| `SMTP_PORT`               | SMTP server port                                                                        | `2525`                                    |
+| `SMTP_USERNAME`           | Username for SMTP authentication                                                        | (empty value)                             |
+| `SMTP_PASSWORD`           | Password for SMTP authentication                                                        | (empty value)                             |
+| `SMTP_FROM_ADDR`          | Default sender address for outgoing emails                                              | `noreply@example.com`                     |
 
 # Build
 

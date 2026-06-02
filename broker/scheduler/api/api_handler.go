@@ -242,6 +242,9 @@ func toBatchAction(ba sched_db.BatchAction) schedoapi.BatchAction {
 		ActionName: schedoapi.BatchActionActionName(ba.ActionName),
 		CreatedAt:  ba.CreatedAt.Time,
 	}
+	if len(ba.ActionParams) > 0 {
+		resp.ActionParams = &ba.ActionParams
+	}
 	if ba.UpdatedAt.Valid {
 		resp.UpdatedAt = &ba.UpdatedAt.Time
 	}

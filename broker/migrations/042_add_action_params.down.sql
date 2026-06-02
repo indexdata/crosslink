@@ -6,6 +6,7 @@ VALUES ('send-email', 'TASK', 1)
     ON CONFLICT (event_name) DO NOTHING;
 UPDATE scheduled_task SET event_name = 'send-email' WHERE event_name = 'email-pullslips';
 UPDATE event SET event_name = 'send-email' WHERE event_name = 'email-pullslips';
+UPDATE batch_action SET action_name = 'email' WHERE action_name = 'email-pullslips';
 
 DELETE FROM event_config
 WHERE event_name = 'email-pullslips';
