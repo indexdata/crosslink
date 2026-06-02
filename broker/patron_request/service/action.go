@@ -277,6 +277,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptConditionBorrowingRequest(ctx, pr)
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
+	case BorrowerActionRejectRetry:
+		return a.rejectRetryBorrowingRequest(pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -529,6 +531,11 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 	}); err != nil {
 		ctx.Logger().Error("failed to mark condition notifications rejected", "pr_id", pr.ID, "error", err)
 	}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
