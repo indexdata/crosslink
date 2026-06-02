@@ -87,12 +87,12 @@ const (
 	SupplierUnfilled         MessageEvent = "unfilled"
 	SupplierCancelAccepted   MessageEvent = "cancel-accepted"
 	SupplierCancelRejected   MessageEvent = "cancel-rejected"
+	SupplierRetryConditional MessageEvent = "retry-conditional"
 	RequesterCancelRequest   MessageEvent = "cancel-request"
 	RequesterReceived        MessageEvent = "received"
 	RequesterShippedReturn   MessageEvent = "shipped-return"
 	RequesterCondAccepted    MessageEvent = "conditions-accepted"
 	RequesterCondRejected    MessageEvent = "condition-rejected"
-	SupplierRetryConditional MessageEvent = "retry-conditional"
 )
 
 func requesterBuiltInStates() []string {

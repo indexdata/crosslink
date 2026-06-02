@@ -267,6 +267,8 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 			}
 			eventName = SupplierCancelAccepted
 		}
+	case iso18626.TypeStatusRetryPossible:
+		eventName = SupplierRetryConditional
 	}
 
 	if eventName == "" {
