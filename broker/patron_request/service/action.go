@@ -279,6 +279,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.rejectConditionBorrowingRequest(ctx, pr)
 	case BorrowerActionRejectRetry:
 		return a.rejectRetryBorrowingRequest(pr)
+	case BorrowerActionAcceptRetry:
+		return a.acceptRetryBorrowingRequest(pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -535,6 +537,12 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 }
 
 func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) acceptRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	// TODO: link request IDs
 	result := events.EventResult{}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }

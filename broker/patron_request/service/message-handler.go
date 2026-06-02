@@ -229,6 +229,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	eventName := MessageEvent("")
+	retryItemId := ""
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
@@ -269,6 +270,9 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		}
 	case iso18626.TypeStatusRetryPossible:
 		eventName = SupplierRetryConditional
+		if sam.DeliveryInfo != nil {
+			retryItemId = sam.DeliveryInfo.ItemId
+		}
 	}
 
 	if eventName == "" {
@@ -284,6 +288,11 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 	if !eventDefined {
 		return statusChangeNotAllowed()
+	}
+	if retryItemId != "" {
+		// needs to be stored in the patron request so it can be used if the requester accepts the retry offer
+		// could be a field on its own (extend the db schema)
+		updatedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = retryItemId
 	}
 	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
 }
