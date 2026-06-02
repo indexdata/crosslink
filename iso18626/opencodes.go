@@ -9,6 +9,7 @@ const (
 	ReasonRetryCostExceedsMaxCost ReasonRetry = "CostExceedsMaxCost"
 	ReasonRetryOnLoan             ReasonRetry = "OnLoan"
 	ReasonRetryLoanCondition      ReasonRetry = "LoanCondition"
+	ReasonRetryNotFoundAsCited    ReasonRetry = "NotFoundAsCited"
 )
 
 type ReasonUnfilled string

@@ -51,6 +51,8 @@ type actionParams struct {
 	Cost           *float64 `json:"cost,omitempty"`
 	Currency       string   `json:"currency,omitempty"`
 	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
+	ReasonRetry    string   `json:"reasonRetry,omitempty"`
+	ItemId         string   `json:"itemId,omitempty"`
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -329,6 +331,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
 		return a.acceptCancelLenderRequest(ctx, pr)
+	case LenderActionAskRetry:
+		return a.askRetryLenderRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -769,6 +773,32 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	var deliveryInfo *iso18626.DeliveryInfo
+	if params.ItemId != "" {
+		deliveryInfo = &iso18626.DeliveryInfo{
+			ItemId: params.ItemId,
+		}
+	}
+	reasonRetry := string(iso18626.ReasonRetryNotFoundAsCited)
+	if params.ReasonRetry != "" {
+		reasonRetry = params.ReasonRetry
+	}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonRetry:      &iso18626.TypeSchemeValuePair{Text: reasonRetry},
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusRetryPossible},
+		deliveryInfo)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 
