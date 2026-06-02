@@ -582,6 +582,12 @@ components:
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers
+        nextReqId:
+          type: string
+          description: ID of the next patron request in the sequence
+        prevReqId:
+          type: string
+          description: ID of the previous patron request in the sequence
       required:
         - id
         - createdAt

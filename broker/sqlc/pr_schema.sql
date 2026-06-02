@@ -20,7 +20,9 @@ CREATE TABLE patron_request
     terminal_state      BOOLEAN NOT NULL DEFAULT false,
     updated_at          TIMESTAMP,
     ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
-    internal_note       TEXT
+    internal_note       TEXT,
+    next_req_id         VARCHAR,
+    prev_req_id         VARCHAR
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

@@ -293,6 +293,8 @@ func (q *Queries) ListPatronRequestsCql(ctx context.Context, db DBTX, arg ListPa
 			&i.PatronRequestSearchView.UpdatedAt,
 			&i.PatronRequestSearchView.IllResponse,
 			&i.PatronRequestSearchView.InternalNote,
+			&i.PatronRequestSearchView.NextReqID,
+			&i.PatronRequestSearchView.PrevReqID,
 			&i.PatronRequestSearchView.HasNotification,
 			&i.PatronRequestSearchView.HasCost,
 			&i.PatronRequestSearchView.HasUnreadNotification,

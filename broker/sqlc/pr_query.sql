@@ -55,14 +55,16 @@ SET ill_request         = $3,
     language            = $16,
     terminal_state      = $17,
     updated_at          = now(),
-    ill_response    = $19,
-    internal_note       = $20
+    ill_response        = $19,
+    internal_note       = $20,
+    next_req_id         = $21,
+    prev_req_id         = $22
 WHERE id = $1 AND created_at = $2 AND (updated_at is null OR updated_at = $18)
 RETURNING sqlc.embed(patron_request);
 
 -- name: CreatePatronRequest :one
-INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+INSERT INTO patron_request (id, created_at, ill_request, state, side, patron, requester_symbol, supplier_symbol, tenant, requester_req_id, needs_attention, last_action, last_action_outcome, last_action_result, items, language, terminal_state, updated_at, ill_response, internal_note, next_req_id, prev_req_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 RETURNING sqlc.embed(patron_request);
 
 -- name: UpdatePatronRequestInternalNote :exec
