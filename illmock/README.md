@@ -82,6 +82,7 @@ The scenario is used by the supplier to perform a particular workflow. The follo
 |`RETRY:COND_` ...            | Response with `RetryPossible` and ReasonRetry `LoanCondition`                       |
 |`RETRY:COST_` ...            | Response with `RetryPossible` and ReasonRetry+ReasonUnfilled `CostExceedsMaxCost`   |
 |`RETRY:ONLOAN_` ...          | Response with `RetryPossible` and ReasonRetry `OnLoan`                              |
+|`RETRY:NOTFOUNDASCITED`      | Response with `RetryPossible` and ReasonRetry `NotFoundAsCited`                     |
 
 ### Delivery method
 
