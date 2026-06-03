@@ -28,7 +28,7 @@ replace (
 
 require (
 	github.com/boombuler/barcode v1.1.0
-	github.com/carlos7ags/folio v0.7.1
+	github.com/carlos7ags/folio v0.9.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/getkin/kin-openapi v0.139.0
 	github.com/go-playground/validator/v10 v10.30.2
