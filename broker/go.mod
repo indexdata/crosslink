@@ -31,7 +31,7 @@ require (
 	github.com/carlos7ags/folio v0.7.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/getkin/kin-openapi v0.139.0
-	github.com/go-playground/validator/v10 v10.30.2
+	github.com/go-playground/validator/v10 v10.30.3
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/indexdata/cql-go v1.0.1-0.20260428173300-66724413770c
