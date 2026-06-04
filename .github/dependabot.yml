@@ -15,7 +15,9 @@ updates:
       - "/zoom"
     schedule:
       interval: daily
-    open-pull-requests-limit: 10
+    # Disabled for grouped rebase bug; use one PR at a time for now.
+    # rebase-strategy: auto
+    open-pull-requests-limit: 1
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -23,6 +25,7 @@ updates:
       - "deps"
     groups:
       go-minor-patch:
+        # Rebase is broken for groups: https://github.com/dependabot/dependabot-core/issues/14780
         group-by: dependency-name
         patterns:
           - "*"
