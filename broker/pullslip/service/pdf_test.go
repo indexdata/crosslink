@@ -92,7 +92,7 @@ func TestRenderPullSlipHTML_ExecuteError(t *testing.T) {
 }
 
 func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{
 			String: "REQ-DEFAULTS",
@@ -108,7 +108,7 @@ func TestGeneratePdfPullSlip_Defaults(t *testing.T) {
 }
 
 func TestGeneratePdfPullSlip_WithBibliographicInfo(t *testing.T) {
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		ID: "REQ-BIB",
 		RequesterReqID: pgtype.Text{
@@ -132,7 +132,7 @@ func TestGeneratePdfPullSlip_FullData(t *testing.T) {
 	callNumber := "QA76.9.A25"
 	dueDate := utils.XSDDateTime{Time: time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)}
 
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		ID: "REQ-FULL",
 		RequesterReqID: pgtype.Text{
@@ -208,7 +208,7 @@ func TestGetBarcodeBase64_EncodeError(t *testing.T) {
 }
 
 func TestGeneratePdfPullSlip_BarcodeError(t *testing.T) {
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{
 			String: "\x80invalid", // non-ASCII causes code128 encoding to fail
@@ -224,7 +224,7 @@ func TestGeneratePdfPullSlip_TemplateError(t *testing.T) {
 	defer func() { pullSlipTemplate = orig }()
 	pullSlipTemplate = `{{.Unclosed`
 
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		ID: "REQ-X",
 		RequesterReqID: pgtype.Text{
@@ -415,8 +415,8 @@ func (m *mockPrRepo) GetNotificationsByPrId(_ common.ExtendedContext, params pr_
 	return m.conditions, int64(len(m.conditions)), m.condErr
 }
 
-func newSvcWithMock(repo pr_db.PrRepo) *PdfService {
-	return &PdfService{prRepo: repo}
+func newSvcWithMock(repo pr_db.PrRepo) *PdfServiceImpl {
+	return &PdfServiceImpl{prRepo: repo}
 }
 
 func TestGeneratePdfPullSlipForPrs_Single(t *testing.T) {
@@ -462,7 +462,7 @@ func TestGeneratePdfPullSlipForPrs_ConditionError(t *testing.T) {
 // ── ServiceInfo edge cases ────────────────────────────────────────────────────
 
 func TestGeneratePdfPullSlip_ServiceInfoEmptyServiceLevel(t *testing.T) {
-	svc := &PdfService{}
+	svc := &PdfServiceImpl{}
 	pr := pr_db.PatronRequest{
 		RequesterReqID: pgtype.Text{String: "REQ-SVC", Valid: true},
 		IllRequest: iso18626.Request{
