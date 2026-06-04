@@ -79,7 +79,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
-		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{Component: "api_directory"})
 		if len(symbols) == 0 {
 			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
