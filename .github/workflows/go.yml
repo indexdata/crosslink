@@ -94,6 +94,7 @@ jobs:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
         go-package: ./...
+        output-format: text
         work-dir: ${{ matrix.modules }}
         #setup go already restores the cache
         cache: false
