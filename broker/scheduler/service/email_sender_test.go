@@ -9,8 +9,10 @@ import (
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,6 +32,20 @@ func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, _ pr_db.L
 	return m.listResult, int64(len(m.listResult)), m.listErr
 }
 
+// mockEmailIllRepo implements the owner lookup needed to resolve the sender address.
+type mockEmailIllRepo struct {
+	ill_db.IllRepo
+	fromEmail string
+	err       error
+}
+
+func (m *mockEmailIllRepo) GetPeerBySymbol(_ common.ExtendedContext, _ string) (ill_db.Peer, error) {
+	if m.err != nil {
+		return ill_db.Peer{}, m.err
+	}
+	return ill_db.Peer{CustomData: directory.Entry{FromEmail: &m.fromEmail}}, nil
+}
+
 // mockMailer records the raw message bytes passed to SendMail.
 type mockMailer struct {
 	err    error
@@ -37,7 +53,7 @@ type mockMailer struct {
 	data   []byte
 }
 
-func (m *mockMailer) SendMail(addr string, a smtp.Auth, from string, to []string, msg []byte) error {
+func (m *mockMailer) SendMail(_ string, _ smtp.Auth, _ string, _ []string, msg []byte) error {
 	m.called = true
 	m.data = append([]byte(nil), msg...)
 	return m.err
@@ -51,25 +67,6 @@ type mockPdfGen struct {
 
 func (m *mockPdfGen) GeneratePdfPullSlipForPrs(_ common.ExtendedContext, _ []pr_db.PatronRequest) ([]byte, error) {
 	return m.data, m.err
-}
-
-// mockEmailEventBus implements the ProcessTask method of events.EventBus.
-type mockEmailEventBus struct {
-	events.EventBus   // nil embed: panics on any unreachable method
-	processTaskErr    error
-	lastStatus        events.EventStatus
-	processTaskCalled bool
-}
-
-func (m *mockEmailEventBus) ProcessTask(ctx common.ExtendedContext, event events.Event, _ events.SignalTarget, h func(common.ExtendedContext, events.Event) (events.EventStatus, *events.EventResult)) (events.Event, error) {
-	m.processTaskCalled = true
-	status, result := h(ctx, event)
-	m.lastStatus = status
-	if result != nil {
-		event.ResultData = *result
-	}
-	event.EventStatus = status
-	return event, m.processTaskErr
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +87,7 @@ func validEmailEvent() events.Event {
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
 					Selector: "cql.allRecords=1",
+					Owner:    "ISIL:OWNER",
 				},
 			},
 			CustomData: validEmailCustomData(),
@@ -99,7 +97,7 @@ func validEmailEvent() events.Event {
 
 // newEmailSvc creates an EmailSenderService wired to the supplied mocks.
 func newEmailSvc(prRepo pr_db.PrRepo, mailer Mailer, pdf psservice.PdfService) *EmailSenderService {
-	return EmailSenderServiceWithClient(prRepo, &mockEmailEventBus{}, mailer, "from@example.com", pdf, true)
+	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, pdf, true)
 }
 
 // ---------------------------------------------------------------------------
@@ -291,7 +289,7 @@ func TestGenerateAndEmailPullslip_InvalidCQL(t *testing.T) {
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "unknownFieldXYZ = test"},
+				BatchActionData: &events.BatchActionData{Selector: "unknownFieldXYZ = test", Owner: "ISIL:OWNER"},
 			},
 		},
 	}
@@ -305,7 +303,7 @@ func TestGenerateAndEmailPullslip_NilCustomData(t *testing.T) {
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1"},
+				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			// CustomData intentionally nil
 		},
@@ -319,7 +317,7 @@ func TestGenerateAndEmailPullslip_EmptyTo(t *testing.T) {
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1"},
+				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			CustomData: map[string]any{
 				"to": []string{}, "subject": "Sub", "body": "Body",
@@ -336,7 +334,7 @@ func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1"},
+				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			CustomData: map[string]any{
 				"to": []string{"a@b.com"}, "subject": "", "body": "Body",
@@ -352,7 +350,7 @@ func TestGenerateAndEmailPullslip_EmptyBody(t *testing.T) {
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
-				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1"},
+				BatchActionData: &events.BatchActionData{Selector: "cql.allRecords=1", Owner: "ISIL:OWNER"},
 			},
 			CustomData: map[string]any{
 				"to": []string{"a@b.com"}, "subject": "Sub", "body": "",
@@ -446,43 +444,39 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 func TestEmailPullslip_CallsProcessTask(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockMailer{}
-	bus := &mockEmailEventBus{}
-	svc := EmailSenderServiceWithClient(prRepo, bus, mailer, "from@example.com", nil, true)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)
 
-	svc.EmailPullslip(testCtx, validEmailEvent())
+	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
-	assert.True(t, bus.processTaskCalled)
+	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.True(t, mailer.called)
 }
 
 func TestEmailPullslip_ProcessTaskErrorIgnored(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockMailer{}
-	bus := &mockEmailEventBus{processTaskErr: errors.New("bus error")}
-	svc := EmailSenderServiceWithClient(prRepo, bus, mailer, "from@example.com", nil, true)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)
 
 	// EmailPullslip ignores the ProcessTask error (_, _ = ...); verify no panic.
 	svc.EmailPullslip(testCtx, validEmailEvent())
 }
 
 func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
-	bus := &mockEmailEventBus{}
-	svc := EmailSenderServiceWithClient(nil, bus, &mockMailer{}, "from@example.com", nil, true)
+	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockMailer{}, nil, true)
 
 	// Event with no BatchActionData → handler returns error status.
-	svc.EmailPullslip(testCtx, events.Event{})
+	status, _ := svc.EmailPullslip(testCtx, events.Event{})
 
-	assert.Equal(t, events.EventStatusError, bus.lastStatus)
+	assert.Equal(t, events.EventStatusError, status)
 }
 
 func TestEmailPullslip_SetEventToFailed(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockMailer{}
-	bus := &mockEmailEventBus{}
-	svc := EmailSenderServiceWithClient(prRepo, bus, mailer, "from@example.com", nil, false)
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, false)
 
-	svc.EmailPullslip(testCtx, validEmailEvent())
+	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
-	assert.True(t, bus.processTaskCalled)
+	assert.Equal(t, events.EventStatusError, status)
 	assert.False(t, mailer.called)
 }

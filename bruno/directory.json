@@ -6,6 +6,7 @@
           "organizationId": "001",
           "type": "institution",
           "email": "test@example.com",
+          "fromEmail": "from@example.com",
           "hrid": "RS1",
           "endpoints": [],
           "symbols": [
@@ -109,6 +110,7 @@
           "organizationId": "002",
           "type": "institution",
           "email": "test@example.com",
+          "fromEmail": "from@example.com",
           "hrid": "RS2",
           "endpoints": [],
           "symbols": [
@@ -212,6 +214,7 @@
           "organizationId": "003",
           "type": "institution",
           "email": "test@example.com",
+          "fromEmail": "from@example.com",
           "hrid": "RS3",
           "symbols": [
             {

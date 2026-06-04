@@ -118,7 +118,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		}
 		task, inErr := schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
 			ID:        taskId,
-			EventName: events.EventNameEmailPullslips,
+			EventName: events.EventNameInvokeBatchAction,
 			CronExpr:  create.Schedule,
 			Status:    sched_db.ScheduledTaskStatusPending,
 			Payload: events.EventData{
@@ -127,6 +127,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 						ActionName: string(create.ActionName),
 						Selector:   create.BatchQuery,
 						TaskId:     taskId,
+						Owner:      owner,
 					},
 				},
 				CustomData: paramsMap,

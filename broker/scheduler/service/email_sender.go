@@ -15,6 +15,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	psservice "github.com/indexdata/crosslink/broker/pullslip/service"
 	"github.com/indexdata/go-utils/utils"
@@ -22,17 +23,13 @@ import (
 
 const COMP = "email_sender"
 
-// maxRecordsPerEmail caps the number of patron requests fetched for a single
-// email batch. Selectors matching more records will be truncated with a warning.
-const maxRecordsPerEmail = 100
-
 // Environment variables for SMTP configuration.
 var (
-	SMTP_HOST     = utils.GetEnv("SMTP_HOST", "localhost")
-	SMTP_PORT     = utils.GetEnv("SMTP_PORT", "2525")
-	SMTP_USERNAME = utils.GetEnv("SMTP_USERNAME", "")
-	SMTP_PASSWORD = utils.GetEnv("SMTP_PASSWORD", "")
-	SMTP_FROM     = utils.GetEnv("SMTP_FROM_ADDR", "")
+	SMTP_HOST             = utils.GetEnv("SMTP_HOST", "")
+	SMTP_PORT             = utils.GetEnv("SMTP_PORT", "2525")
+	SMTP_USERNAME         = utils.GetEnv("SMTP_USERNAME", "")
+	SMTP_PASSWORD         = utils.GetEnv("SMTP_PASSWORD", "")
+	MAX_RECORDS_PER_EMAIL = int32(utils.Must(utils.GetEnvInt("BATCH_PULLSLIP_MAX_COUNT", 100)))
 )
 
 // Mailer is an interface over smtp.SendMail, allowing mocking in tests.
@@ -57,22 +54,21 @@ type EmailData struct {
 
 type EmailSenderService struct {
 	prRepo      pr_db.PrRepo
-	eventBus    events.EventBus
+	illRepo     ill_db.IllRepo
 	pdf         psservice.PdfService
 	mailer      Mailer
-	fromAddr    string
 	smtpAddr    string
 	smtpAuth    smtp.Auth
 	readyToSend bool
 }
 
-func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*EmailSenderService, error) {
-	if SMTP_FROM == "" {
+func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo) (*EmailSenderService, error) {
+	if SMTP_HOST == "" {
 		return &EmailSenderService{
 			prRepo:      prRepo,
-			eventBus:    eventBus,
+			illRepo:     illRepo,
 			readyToSend: false,
-		}, errors.New("email: SMTP_FROM_ADDR environment variable is required")
+		}, errors.New("email: SMTP_HOST environment variable is required")
 	}
 
 	var auth smtp.Auth
@@ -84,9 +80,8 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 
 	return &EmailSenderService{
 		prRepo:      prRepo,
-		eventBus:    eventBus,
+		illRepo:     illRepo,
 		mailer:      &DefaultMailer{},
-		fromAddr:    SMTP_FROM,
 		smtpAddr:    fmt.Sprintf("%s:%s", SMTP_HOST, SMTP_PORT),
 		smtpAuth:    auth,
 		pdf:         pdfSvc,
@@ -96,17 +91,16 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, eventBus events.EventBus) (*Emai
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
 // dependencies, intended for use in tests.
-func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, eventBus events.EventBus, mailer Mailer, fromAddr string, pdf psservice.PdfService, readyToSend bool) *EmailSenderService {
-	return &EmailSenderService{prRepo: prRepo, eventBus: eventBus, mailer: mailer, fromAddr: fromAddr, pdf: pdf, readyToSend: readyToSend}
+func EmailSenderServiceWithClient(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, mailer Mailer, pdf psservice.PdfService, readyToSend bool) *EmailSenderService {
+	return &EmailSenderService{prRepo: prRepo, illRepo: illRepo, mailer: mailer, pdf: pdf, readyToSend: readyToSend}
 }
 
-func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) {
+func (s *EmailSenderService) EmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	if s.readyToSend {
-		_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.generateAndEmailPullslip)
-	} else {
-		_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.emailPullslipMarkFailed)
+		return s.generateAndEmailPullslip(ctx, event)
 	}
+	return s.emailPullslipMarkFailed(ctx, event)
 }
 
 func (s *EmailSenderService) emailPullslipMarkFailed(_ common.ExtendedContext, _ events.Event) (events.EventStatus, *events.EventResult) {
@@ -114,12 +108,22 @@ func (s *EmailSenderService) emailPullslipMarkFailed(_ common.ExtendedContext, _
 }
 
 func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	if event.EventData.BatchActionData == nil || event.EventData.BatchActionData.Selector == "" {
+	if event.EventData.BatchActionData == nil || event.EventData.BatchActionData.Selector == "" ||
+		event.EventData.BatchActionData.Owner == "" {
 		return events.NewErrorResult("invalid email event data", "batch action data is empty")
 	}
 	pgcql, err := pr_db.ParsePatronRequestsCql(event.EventData.BatchActionData.Selector)
 	if err != nil {
 		return events.NewErrorResult("invalid cql selector", err.Error())
+	}
+
+	owner, err := s.illRepo.GetPeerBySymbol(ctx, event.EventData.BatchActionData.Owner)
+	if err != nil {
+		return events.NewErrorResult("invalid email event data", "owner not found: "+err.Error())
+	}
+
+	if owner.CustomData.FromEmail == nil || *owner.CustomData.FromEmail == "" {
+		return events.NewErrorResult("invalid email event data", "owner is missing fromEmail in customData")
 	}
 
 	emailData, err := extractEmailData(event.EventData)
@@ -136,13 +140,13 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		return events.NewErrorResult("invalid email event data", "body field is required")
 	}
 
-	prs, fullCount, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: maxRecordsPerEmail, Offset: 0}, pgcql)
+	prs, fullCount, err := s.prRepo.ListPatronRequests(ctx, pr_db.ListPatronRequestsParams{Limit: MAX_RECORDS_PER_EMAIL, Offset: 0}, pgcql)
 	if err != nil {
 		return events.NewErrorResult("did not select data for processing", err.Error())
 	}
-	if fullCount > maxRecordsPerEmail {
+	if fullCount > int64(MAX_RECORDS_PER_EMAIL) {
 		ctx.Logger().Warn("email batch truncated: selector matched more records than the per-email limit",
-			"matched", fullCount, "limit", maxRecordsPerEmail)
+			"matched", fullCount, "limit", MAX_RECORDS_PER_EMAIL)
 	}
 
 	// Optionally generate a pull-slip PDF and attach it.
@@ -158,12 +162,16 @@ func (s *EmailSenderService) generateAndEmailPullslip(ctx common.ExtendedContext
 		pdfAttachment = &pdfAttach{filename: "pull-slips.pdf", data: pdfBytes}
 	}
 
-	raw, err := buildRawMessage(s.fromAddr, emailData, pdfAttachment)
+	emailData.Body = strings.ReplaceAll(emailData.Body, "{{fullCount}}", fmt.Sprintf("%d", fullCount))
+	emailData.Body = strings.ReplaceAll(emailData.Body, "{{actualCount}}", fmt.Sprintf("%d", len(prs)))
+	emailData.Body = strings.ReplaceAll(emailData.Body, "{{batchQuery}}", event.EventData.BatchActionData.Selector)
+
+	raw, err := buildRawMessage(*owner.CustomData.FromEmail, emailData, pdfAttachment)
 	if err != nil {
 		return events.NewErrorResult("failed to build email message", err.Error())
 	}
 
-	err = s.mailer.SendMail(s.smtpAddr, s.smtpAuth, s.fromAddr, emailData.To, raw)
+	err = s.mailer.SendMail(s.smtpAddr, s.smtpAuth, *owner.CustomData.FromEmail, emailData.To, raw)
 	if err != nil {
 		return events.NewErrorResult("failed to send email via SMTP", err.Error())
 	}
