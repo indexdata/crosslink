@@ -33,6 +33,10 @@ func createDirectoryAdapter(urls ...string) adapter.DirectoryLookupAdapter {
 	return adapter.CreateApiDirectory(http.DefaultClient, urls)
 }
 
+func createLookupCtx() common.ExtendedContext {
+	return common.CreateExtCtxWithArgs(context.Background(), nil)
+}
+
 func boolPtr(v bool) *bool {
 	return &v
 }
@@ -115,7 +119,7 @@ func TestLookup400(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "400")
 }
 
@@ -124,7 +128,7 @@ func TestLookupInvalidUrl(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "unsupported protocol scheme")
 }
 
@@ -140,7 +144,7 @@ func TestLookupInvalidJson(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	_, _, err := ad.Lookup(p)
+	_, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.ErrorContains(t, err, "unexpected end of JSON input")
 }
 
@@ -158,7 +162,7 @@ func TestLookupEmptyList(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 }
@@ -178,7 +182,7 @@ func TestLookupNoVendor(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, directory.Unknown, entries[0].Vendor)
@@ -200,7 +204,7 @@ func TestLookupWithVendor(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, directory.ReShare, entries[0].Vendor)
@@ -223,7 +227,7 @@ func TestLookupMissingSymbols(t *testing.T) {
 		Symbols: []string{"ISIL:PEER"},
 		Tenant:  "tenant1",
 	}
-	entries, cql, err := ad.Lookup(p)
+	entries, cql, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 0)
 	assert.Equal(t, "?maximumRecords=1000&cql=symbol+any+%22ISIL%3APEER%22+and+tenant%3D%22tenant1%22", cql)
@@ -244,7 +248,7 @@ func TestLookupDefaultsEmptyAuthorityToISIL(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 1)
 	assert.Equal(t, []string{"ISIL:PEER"}, entries[0].Symbols)
@@ -263,7 +267,7 @@ func TestLookup(t *testing.T) {
 	p := adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err := ad.Lookup(p)
+	entries, _, err := ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 6)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
@@ -278,7 +282,7 @@ func TestLookup(t *testing.T) {
 	p = adapter.DirectoryLookupParams{
 		Symbols: []string{"ISIL:PEER"},
 	}
-	entries, _, err = ad.Lookup(p)
+	entries, _, err = ad.Lookup(createLookupCtx(), p)
 	assert.Nil(t, err)
 	assert.Len(t, entries, 12)
 	assert.Equal(t, entries[0].Name, "Albury City Libraries")
@@ -287,7 +291,7 @@ func TestLookup(t *testing.T) {
 }
 
 func TestFilterAndSort(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -375,7 +379,7 @@ func TestFilterAndSort(t *testing.T) {
 }
 
 func TestFilterAndSortFilterByCost(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
@@ -401,7 +405,7 @@ func TestFilterAndSortFilterByCost(t *testing.T) {
 }
 
 func TestFilterAndSortFilterByCost0(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{{PeerId: "1", Ratio: 0.5, CustomData: dirEntries.Items[0]}, {PeerId: "2", Ratio: 0.7, CustomData: dirEntries.Items[1]}}
@@ -427,7 +431,7 @@ func TestFilterAndSortFilterByCost0(t *testing.T) {
 }
 
 func TestFilterAndSortByType(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -457,7 +461,7 @@ func TestFilterAndSortByType(t *testing.T) {
 }
 
 func TestFilterAndSortByLevel(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{
@@ -487,7 +491,7 @@ func TestFilterAndSortByLevel(t *testing.T) {
 }
 
 func TestFilterAndSortReciprocal(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[4]
 	entries := []adapter.Supplier{
@@ -516,7 +520,7 @@ func TestFilterAndSortReciprocal(t *testing.T) {
 }
 
 func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(true))
 	entries := []adapter.Supplier{
@@ -545,7 +549,7 @@ func TestFilterAndSortReciprocalNetworkExcludesPaidTiers(t *testing.T) {
 }
 
 func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := withNetworkReciprocal(dirEntries.Items[4], boolPtr(false))
 	entries := []adapter.Supplier{
@@ -574,7 +578,7 @@ func TestFilterAndSortPaidNetworkExcludesFreeTiers(t *testing.T) {
 }
 
 func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := withNetworkReciprocal(dirEntries.Items[0], boolPtr(false))
 	entries := []adapter.Supplier{
@@ -606,7 +610,7 @@ func TestFilterAndSortPaidNetworkAllowsPaidTiers(t *testing.T) {
 }
 
 func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterNetworks := []directory.Network{
 		{Name: "Reciprocal", Priority: intPtr(1), Reciprocal: boolPtr(true)},
@@ -653,7 +657,7 @@ func TestFilterAndSortUsesCompatibleNetworkPriority(t *testing.T) {
 }
 
 func TestFilterAndSortNoFilters(t *testing.T) {
-	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	appCtx := createLookupCtx()
 	ad := createDirectoryAdapter("")
 	requesterData := dirEntries.Items[0]
 	entries := []adapter.Supplier{

@@ -13,7 +13,7 @@ import (
 var DEFAULT_BROKER_MODE common.BrokerMode
 
 type DirectoryLookupAdapter interface {
-	Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error)
+	Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error)
 	FilterAndSort(ctx common.ExtendedContext, entries []Supplier, requesterData directory.Entry, serviceInfo *iso18626.ServiceInfo, billingInfo *iso18626.BillingInfo) ([]Supplier, RotaInfo)
 }
 
