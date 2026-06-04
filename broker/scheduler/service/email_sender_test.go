@@ -441,7 +441,7 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 // EmailPullslip
 // ---------------------------------------------------------------------------
 
-func TestEmailPullslip_CallsProcessTask(t *testing.T) {
+func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockMailer{}
 	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)
@@ -452,7 +452,7 @@ func TestEmailPullslip_CallsProcessTask(t *testing.T) {
 	assert.True(t, mailer.called)
 }
 
-func TestEmailPullslip_ProcessTaskErrorIgnored(t *testing.T) {
+func TestEmailPullslip_DoesNotPanic(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
 	mailer := &mockMailer{}
 	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)

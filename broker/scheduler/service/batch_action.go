@@ -33,6 +33,6 @@ func (s *BatchActionService) batchAction(ctx common.ExtendedContext, event event
 			return events.NewErrorResult("cannot process event", "unknown batch action")
 		}
 	}
-	ctx.Logger().Error("batch action data is empty", "event", event)
+	ctx.Logger().Error("batch action data is empty", "event", event.ID)
 	return events.NewErrorResult("cannot process event", "batch action data is empty")
 }
