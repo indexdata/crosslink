@@ -37,7 +37,7 @@ require (
 	github.com/indexdata/cql-go v1.0.1-0.20260428173300-66724413770c
 	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
-	github.com/jackc/pgx/v5 v5.9.2
+	github.com/jackc/pgx/v5 v5.10.0
 	github.com/lib/pq v1.12.3
 	github.com/oapi-codegen/nethttp-middleware v1.1.2
 	github.com/oapi-codegen/runtime v1.4.1
