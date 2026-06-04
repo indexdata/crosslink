@@ -16,7 +16,7 @@ var MOCK_PEER_URL = common.GetEnvWithDeprecated("MOCK_PEER_URL", "MOCK_CLIENT_UR
 type MockDirectoryLookupAdapter struct {
 }
 
-func (m *MockDirectoryLookupAdapter) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+func (m *MockDirectoryLookupAdapter) Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
 	if params.Tenant != "" {
 		if params.Tenant == "tenanterror" {
 			return []DirectoryEntry{}, "", errors.New("there is an error")
