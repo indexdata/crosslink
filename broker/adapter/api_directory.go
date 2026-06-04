@@ -81,7 +81,7 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 		}
 		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 		if len(symbols) == 0 {
-			ctx.Logger().Warn("Directory entry has no symbols", "entryName", d.Name)
+			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
 		}
 		apiUrl := ""
