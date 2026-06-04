@@ -61,11 +61,11 @@ func TestMain(m *testing.M) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-func newTask(cronExpr string, runAt pgtype.Timestamptz) sched_db.SaveScheduledTaskParams {
+func newTask(schedule string, runAt pgtype.Timestamptz) sched_db.SaveScheduledTaskParams {
 	return sched_db.SaveScheduledTaskParams{
 		ID:        uuid.NewString(),
 		EventName: events.EventNameSendNotification,
-		CronExpr:  cronExpr,
+		Schedule:  schedule,
 		RunAt:     runAt,
 		Status:    sched_db.ScheduledTaskStatusPending,
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -94,7 +94,7 @@ func TestSaveScheduledTask_Insert(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, saved.ID)
 	assert.Equal(t, params.EventName, saved.EventName)
-	assert.Equal(t, params.CronExpr, saved.CronExpr)
+	assert.Equal(t, params.Schedule, saved.Schedule)
 	assert.Equal(t, sched_db.ScheduledTaskStatusPending, saved.Status)
 	assert.True(t, saved.CreatedAt.Valid)
 
@@ -106,14 +106,14 @@ func TestSaveScheduledTask_Upsert_UpdatesFields(t *testing.T) {
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	params.CronExpr = "0 9 * * 1"
+	params.Schedule = "0 9 * * 1"
 	params.RunAt = tstz(time.Now().Add(2 * time.Hour))
 
 	updated, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, updated.ID)
-	assert.Equal(t, "0 9 * * 1", updated.CronExpr)
+	assert.Equal(t, "0 9 * * 1", updated.Schedule)
 
 	stopTask(t, updated)
 }

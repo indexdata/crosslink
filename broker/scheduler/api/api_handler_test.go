@@ -64,7 +64,7 @@ func (m *MockSchedRepo) GetBatchActions(ctx common.ExtendedContext, params sched
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const testSymbol = "ISIL:TEST"
-const validCron = "0 6 * * 1"
+const validRrule = "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0"
 
 func newHandler(repo sched_db.SchedRepo) SchedulerApiHandler {
 	return NewSchedulerApiHandler(10, repo, tenant.NewResolver())
@@ -83,7 +83,7 @@ func batchActionFixture(id string) sched_db.BatchAction {
 	return sched_db.BatchAction{
 		ID:              id,
 		ActionName:      "email-pullslips",
-		Schedule:        validCron,
+		Schedule:        validRrule,
 		BatchQuery:      "",
 		Owner:           testSymbol,
 		ScheduledTaskID: "task-" + id,
@@ -185,7 +185,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 	repo.On("SaveBatchAction", mock.Anything).Return(ba, nil)
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -220,7 +220,7 @@ func TestPostBatchActions_InvalidJSON(t *testing.T) {
 
 func TestPostBatchActions_InvalidActionName(t *testing.T) {
 	h := newHandler(new(MockSchedRepo))
-	req := newReq(http.MethodPost, `{"actionName":"unknown","schedule":"`+validCron+`"}`)
+	req := newReq(http.MethodPost, `{"actionName":"unknown","schedule":"`+validRrule+`"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -236,9 +236,9 @@ func TestPostBatchActions_EmptySchedule(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
-func TestPostBatchActions_InvalidCronExpression(t *testing.T) {
+func TestPostBatchActions_InvalidSchedule(t *testing.T) {
 	h := newHandler(new(MockSchedRepo))
-	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","schedule":"not-a-cron"}`)
+	req := newReq(http.MethodPost, `{"actionName":"email-pullslips","schedule":"not-a-rrule"}`)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
 
@@ -250,7 +250,7 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 	repo.On("SaveScheduledTask", mock.Anything).Return(sched_db.ScheduledTask{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})
@@ -265,7 +265,7 @@ func TestPostBatchActions_SaveBatchActionError(t *testing.T) {
 	repo.On("SaveBatchAction", mock.Anything).Return(sched_db.BatchAction{}, errors.New("db error"))
 
 	h := newHandler(repo)
-	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validCron + `"}`
+	body := `{"actionName":"email-pullslips","batchQuery":"title=test","schedule":"` + validRrule + `"}`
 	req := newReq(http.MethodPost, body)
 	rr := httptest.NewRecorder()
 	h.PostBatchActions(rr, req, schedoapi.PostBatchActionsParams{Symbol: symPtr(testSymbol)})

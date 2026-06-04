@@ -102,7 +102,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	next, err := sched_service.NextCronTime(create.Schedule)
+	next, err := sched_service.NextScheduleTime(create.Schedule)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
@@ -119,7 +119,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		task, inErr := schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
 			ID:        taskId,
 			EventName: events.EventNameInvokeBatchAction,
-			CronExpr:  create.Schedule,
+			Schedule:  create.Schedule,
 			Status:    sched_db.ScheduledTaskStatusPending,
 			Payload: events.EventData{
 				CommonEventData: events.CommonEventData{

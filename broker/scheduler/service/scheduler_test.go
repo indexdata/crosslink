@@ -91,25 +91,25 @@ func (m *mockEventBus) CreateTask(_ string, name events.EventName, _ events.Even
 }
 
 // ---------------------------------------------------------------------------
-// nextCronTime
+// NextScheduleTime
 // ---------------------------------------------------------------------------
 
-func TestNextCronTime_ValidExpr(t *testing.T) {
-	ts, err := NextCronTime("* * * * *") // every minute
+func TestNextScheduleTime_ValidExpr(t *testing.T) {
+	ts, err := NextScheduleTime("FREQ=MINUTELY") // every minute
 	assert.NoError(t, err)
 	assert.True(t, ts.Valid)
 	assert.True(t, ts.Time.After(time.Now()))
 }
 
-func TestNextCronTime_InvalidExpr(t *testing.T) {
-	_, err := NextCronTime("not-a-cron")
+func TestNextScheduleTime_InvalidExpr(t *testing.T) {
+	_, err := NextScheduleTime("not-a-rrule")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid cron expression")
+	assert.Contains(t, err.Error(), "invalid rrule string")
 }
 
-func TestNextCronTime_SpecificSchedule(t *testing.T) {
-	// "0 9 * * 1" = every Monday at 09:00 — just verify it's in the future
-	ts, err := NextCronTime("0 9 * * 1")
+func TestNextScheduleTime_SpecificSchedule(t *testing.T) {
+	// "FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0" = every Monday at 09:00 — just verify it's in the future
+	ts, err := NextScheduleTime("FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=0")
 	assert.NoError(t, err)
 	assert.True(t, ts.Valid)
 	assert.True(t, ts.Time.After(time.Now()))
@@ -232,7 +232,7 @@ func TestRunDueTasks_ClaimError_NonNoRows(t *testing.T) {
 }
 
 func TestRunDueTasks_OneShot_DisablesAfterFiring(t *testing.T) {
-	task := sched_db.ScheduledTask{ID: "t1", EventName: "my-event", CronExpr: "", RunAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
+	task := sched_db.ScheduledTask{ID: "t1", EventName: "my-event", Schedule: "", RunAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}
 	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
 	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
@@ -245,8 +245,8 @@ func TestRunDueTasks_OneShot_DisablesAfterFiring(t *testing.T) {
 	assert.False(t, repo.savedTasks[0].RunAt.Valid, "one-shot task should be disabled")
 }
 
-func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
-	task := sched_db.ScheduledTask{ID: "t2", EventName: "cron-ev", CronExpr: "* * * * *"}
+func TestRunDueTasks_Recurring_ReschedulesWithNextScheduleTime(t *testing.T) {
+	task := sched_db.ScheduledTask{ID: "t2", EventName: "rrule-ev", Schedule: "FREQ=MINUTELY"}
 	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
 	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
@@ -254,7 +254,7 @@ func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
 	progress := svc.runDueTasks(testCtx)
 
 	assert.True(t, progress)
-	assert.Equal(t, []events.EventName{"cron-ev"}, bus.createdTaskNames)
+	assert.Equal(t, []events.EventName{"rrule-ev"}, bus.createdTaskNames)
 	assert.Len(t, repo.savedTasks, 1)
 	saved := repo.savedTasks[0]
 	assert.True(t, saved.RunAt.Valid)
@@ -262,8 +262,8 @@ func TestRunDueTasks_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
 	assert.Equal(t, sched_db.ScheduledTaskStatusPending, saved.Status)
 }
 
-func TestRunDueTasks_Recurring_InvalidCronExpr_DisablesTask(t *testing.T) {
-	task := sched_db.ScheduledTask{ID: "t3", EventName: "bad", CronExpr: "not-valid"}
+func TestRunDueTasks_Recurring_InvalidSchedule_DisablesTask(t *testing.T) {
+	task := sched_db.ScheduledTask{ID: "t3", EventName: "bad", Schedule: "not-valid"}
 	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
 	svc := &SchedulerService{schedRepo: repo, eventBus: bus}
@@ -347,12 +347,12 @@ func TestRescheduleLongRunning_RepoError_DoesNotSave(t *testing.T) {
 }
 
 // TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay verifies that a
-// stuck one-shot task (no cron) is reset to pending with run_at = now + retry.
+// stuck one-shot task (no rrule) is reset to pending with run_at = now + retry.
 func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 	stuck := sched_db.ScheduledTask{
 		ID:        "stuck-1",
 		EventName: "one-shot",
-		CronExpr:  "",
+		Schedule:  "",
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
@@ -370,13 +370,13 @@ func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 	assert.True(t, saved.RunAt.Time.After(after)) // run_at is in the future
 }
 
-// TestRescheduleLongRunning_Recurring_ReschedulesWithNextCronTime verifies that
-// a stuck recurring task is reset to pending with the next cron-computed run_at.
-func TestRescheduleLongRunning_Recurring_ReschedulesWithNextCronTime(t *testing.T) {
+// TestRescheduleLongRunning_Recurring_ReschedulesWithNextScheduleTime verifies that
+// a stuck recurring task is reset to pending with the next schedule-computed run_at.
+func TestRescheduleLongRunning_Recurring_ReschedulesWithNextScheduleTime(t *testing.T) {
 	stuck := sched_db.ScheduledTask{
 		ID:        "stuck-2",
-		EventName: "cron-ev",
-		CronExpr:  "* * * * *", // every minute
+		EventName: "rrule-ev",
+		Schedule:  "FREQ=MINUTELY", // every minute
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
@@ -391,13 +391,13 @@ func TestRescheduleLongRunning_Recurring_ReschedulesWithNextCronTime(t *testing.
 	assert.True(t, saved.RunAt.Time.After(time.Now()))
 }
 
-// TestRescheduleLongRunning_InvalidCron_DisablesTask verifies that a stuck task
-// with an invalid cron expression is disabled rather than rescheduled.
-func TestRescheduleLongRunning_InvalidCron_DisablesTask(t *testing.T) {
+// TestRescheduleLongRunning_InvalidRrule_DisablesTask verifies that a stuck task
+// with an invalid rrule expression is disabled rather than rescheduled.
+func TestRescheduleLongRunning_InvalidRrule_DisablesTask(t *testing.T) {
 	stuck := sched_db.ScheduledTask{
 		ID:        "stuck-3",
-		EventName: "bad-cron",
-		CronExpr:  "not-a-cron",
+		EventName: "bad-rrule",
+		Schedule:  "not-a-rrule",
 		Status:    sched_db.ScheduledTaskStatusRunning,
 	}
 	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
@@ -415,8 +415,8 @@ func TestRescheduleLongRunning_InvalidCron_DisablesTask(t *testing.T) {
 // stuck tasks in the result set are processed.
 func TestRescheduleLongRunning_MultipleStuck_AllRescheduled(t *testing.T) {
 	stuckTasks := []sched_db.ScheduledTask{
-		{ID: "s1", EventName: "ev-a", CronExpr: "", Status: sched_db.ScheduledTaskStatusRunning},
-		{ID: "s2", EventName: "ev-b", CronExpr: "* * * * *", Status: sched_db.ScheduledTaskStatusRunning},
+		{ID: "s1", EventName: "ev-a", Schedule: "", Status: sched_db.ScheduledTaskStatusRunning},
+		{ID: "s2", EventName: "ev-b", Schedule: "FREQ=MINUTELY", Status: sched_db.ScheduledTaskStatusRunning},
 	}
 	repo := &mockSchedRepo{stuckTasks: stuckTasks}
 	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}

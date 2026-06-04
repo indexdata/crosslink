@@ -1090,7 +1090,7 @@ components:
           description: Unique identifier of the batch action
         schedule:
           type: string
-          description: Cron schedule expression, e.g. "0 6 * * 1" (every Monday at 06:00)
+          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
           type: string
           description: Name of the batch action to run
@@ -1135,7 +1135,7 @@ components:
       properties:
         schedule:
           type: string
-          description: Cron schedule expression, e.g. "0 6 * * 1" (every Monday at 06:00)
+          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
           type: string
           description: Name of the batch action to run
