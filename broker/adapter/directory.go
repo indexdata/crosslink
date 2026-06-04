@@ -59,8 +59,9 @@ func (s Supplier) IsLocal() bool     { return s.Local }
 func (s Supplier) GetRatio() float32 { return s.Ratio }
 
 type Network struct {
-	Name     string `json:"name"`
-	Priority int    `json:"priority"`
+	Name       string `json:"name"`
+	Priority   int    `json:"priority"`
+	Reciprocal *bool  `json:"reciprocal,omitempty"`
 }
 
 type Tier struct {

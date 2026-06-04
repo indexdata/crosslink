@@ -144,6 +144,8 @@ components:
           type: string
         priority:
           type: integer
+        reciprocal:
+          type: boolean
     Membership:
       type: object
       required:
@@ -215,6 +217,10 @@ components:
         timeZone:
           type: string
         symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        lenderOfLastResort:
           type: array
           items:
             $ref: '#/components/schemas/Symbol'
