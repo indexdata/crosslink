@@ -43,6 +43,7 @@ type mockSchedRepo struct {
 	nextRunAtErr  error
 	stuckTasks    []sched_db.ScheduledTask
 	stuckTasksErr error
+	stuckAfter    time.Duration
 }
 
 func (m *mockSchedRepo) WithTxFunc(ctx common.ExtendedContext, fn func(sched_db.SchedRepo) error) error {
@@ -71,7 +72,8 @@ func (m *mockSchedRepo) GetNextRunAt(_ common.ExtendedContext) (pgtype.Timestamp
 	return m.nextRunAt, m.nextRunAtErr
 }
 
-func (m *mockSchedRepo) GetStuckRunningTasks(_ common.ExtendedContext, _ time.Duration) ([]sched_db.ScheduledTask, error) {
+func (m *mockSchedRepo) GetStuckRunningTasks(_ common.ExtendedContext, stuckAfter time.Duration) ([]sched_db.ScheduledTask, error) {
+	m.stuckAfter = stuckAfter
 	return m.stuckTasks, m.stuckTasksErr
 }
 
@@ -368,6 +370,27 @@ func TestRescheduleLongRunning_OneShot_ReschedulesWithRetryDelay(t *testing.T) {
 	assert.True(t, saved.RunAt.Valid)
 	assert.True(t, saved.RunAt.Time.After(before))
 	assert.True(t, saved.RunAt.Time.After(after)) // run_at is in the future
+}
+
+// TestRescheduleLongRunning_ProcessesRepoReturnedTaskRegardlessOfUpdatedAt
+// verifies that GetStuckRunningTasks is the sole age filter for stuck tasks.
+func TestRescheduleLongRunning_ProcessesRepoReturnedTaskRegardlessOfUpdatedAt(t *testing.T) {
+	stuck := sched_db.ScheduledTask{
+		ID:        "stuck-recent",
+		EventName: "one-shot",
+		Schedule:  "",
+		Status:    sched_db.ScheduledTaskStatusRunning,
+		UpdatedAt: tstz(time.Now()),
+	}
+	repo := &mockSchedRepo{stuckTasks: []sched_db.ScheduledTask{stuck}}
+	svc := &SchedulerService{schedRepo: repo, eventBus: &mockEventBus{}}
+
+	svc.rescheduleLongRunningTasks(testCtx)
+
+	assert.Equal(t, time.Hour, repo.stuckAfter)
+	assert.Len(t, repo.savedTasks, 1)
+	assert.Equal(t, sched_db.ScheduledTaskStatusPending, repo.savedTasks[0].Status)
+	assert.True(t, repo.savedTasks[0].RunAt.Valid)
 }
 
 // TestRescheduleLongRunning_Recurring_ReschedulesWithNextScheduleTime verifies that

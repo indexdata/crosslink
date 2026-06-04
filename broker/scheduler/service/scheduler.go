@@ -283,13 +283,13 @@ func NextScheduleTime(schedule string) (pgtype.Timestamptz, error) {
 
 	rule.DTStart(time.Now().UTC())
 
-	nextOccurrences := rule.Between(time.Now().Add(1*time.Second).UTC(), time.Now().AddDate(10, 0, 0).UTC(), true)
-	if len(nextOccurrences) == 0 {
+	next := rule.After(time.Now().UTC(), false)
+	if next.IsZero() {
 		return pgtype.Timestamptz{}, fmt.Errorf("no future occurrences derived from RRULE")
 	}
 
 	return pgtype.Timestamptz{
-		Time:  nextOccurrences[0],
+		Time:  next,
 		Valid: true,
 	}, nil
 }
@@ -304,23 +304,20 @@ func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext
 		return
 	}
 	for _, task := range tasks {
-		delay := SCHEDULER_RETRY_DELAY
-		if time.Since(task.UpdatedAt.Time) > delay {
-			ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
-			var nextRunAt time.Time
-			if task.Schedule != "" {
-				next, err := NextScheduleTime(task.Schedule)
-				if err != nil {
-					ctx.Logger().Error("invalid rrule string, disabling task", "error", err, "taskId", task.ID)
-					s.disableTask(ctx, task)
-					continue
-				}
-				nextRunAt = next.Time
-			} else {
-				nextRunAt = time.Now().Add(SCHEDULER_RETRY_DELAY)
+		ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
+		var nextRunAt time.Time
+		if task.Schedule != "" {
+			next, err := NextScheduleTime(task.Schedule)
+			if err != nil {
+				ctx.Logger().Error("invalid rrule string, disabling task", "error", err, "taskId", task.ID)
+				s.disableTask(ctx, task)
+				continue
 			}
-			task.RunAt = pgtype.Timestamptz{Time: nextRunAt, Valid: true}
-			s.unlockAndReschedule(ctx, task)
+			nextRunAt = next.Time
+		} else {
+			nextRunAt = time.Now().Add(SCHEDULER_RETRY_DELAY)
 		}
+		task.RunAt = pgtype.Timestamptz{Time: nextRunAt, Valid: true}
+		s.unlockAndReschedule(ctx, task)
 	}
 }
