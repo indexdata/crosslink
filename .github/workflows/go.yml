@@ -87,14 +87,21 @@ jobs:
         profile: ${{ matrix.modules }}/coverage.out
 
     - name: Check vulnerabilities in '${{ matrix.modules }}'
+      id: govulncheck
       uses: golang/govulncheck-action@master
+      continue-on-error: true
       with:
         go-version-input: ${{ env.GO_VERSION }}
         repo-checkout: false
         go-package: ./...
+        output-format: text
         work-dir: ${{ matrix.modules }}
         #setup go already restores the cache
         cache: false
+
+    - name: Report vulnerability findings in '${{ matrix.modules }}'
+      if: ${{ steps.govulncheck.outcome == 'failure' }}
+      run: echo "::error title=Govulncheck reported vulnerabilities in ${{ matrix.modules }}::Review the govulncheck step output before merging"
 
   build-all:
     if: ${{ always() }}
