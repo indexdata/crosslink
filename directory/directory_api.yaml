@@ -208,6 +208,8 @@ components:
           type: string
         email:
           type: string
+        fromEmail:
+          type: string
         phoneNumber:
           type: string
         lmsLocationCode:

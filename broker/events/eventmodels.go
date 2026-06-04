@@ -50,7 +50,7 @@ const (
 	EventNameLmsSupplierMessage   EventName = "lms-supplier-message"
 	EventNameSendNotification     EventName = "send-notification"
 	EventNameCheckAvailability    EventName = "check-availability"
-	EventNameSendEmail            EventName = "send-email"
+	EventNameInvokeBatchAction    EventName = "invoke-batch-action"
 )
 
 type Signal string
@@ -129,6 +129,7 @@ type BatchActionData struct {
 	ActionName string `json:"actionName"`
 	Selector   string `json:"selector"`
 	TaskId     string `json:"taskId"`
+	Owner      string `json:"owner"`
 }
 
 func NewErrorResult(message string, cause string) (EventStatus, *EventResult) {
