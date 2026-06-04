@@ -20,12 +20,16 @@ import (
 const DEFAULT_FOR_NO_VALUE = "n/a"
 const DATE_LAYOUT = "2006-01-02"
 
-type PdfService struct {
+type PdfService interface {
+	GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error)
+}
+
+type PdfServiceImpl struct {
 	prRepo pr_db.PrRepo
 }
 
 func NewPdfService(prRepo pr_db.PrRepo) PdfService {
-	return PdfService{
+	return &PdfServiceImpl{
 		prRepo: prRepo,
 	}
 }
@@ -54,7 +58,7 @@ type PullSlipData struct {
 //go:embed pull_slip_template.html
 var pullSlipTemplate string
 
-func (p *PdfService) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error) {
+func (p *PdfServiceImpl) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs []pr_db.PatronRequest) ([]byte, error) {
 	pdfs := []*reader.PdfReader{}
 	for _, pr := range prs {
 		notes, _, err := p.prRepo.GetNotificationsByPrId(ctx, pr_db.GetNotificationsByPrIdParams{Limit: 100, Offset: 0, PrID: pr.ID, Kind: string(pr_db.NotificationKindNote)})
@@ -86,7 +90,7 @@ func (p *PdfService) GeneratePdfPullSlipForPrs(ctx common.ExtendedContext, prs [
 	return buf.Bytes(), nil
 }
 
-func (p *PdfService) GeneratePdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification) ([]byte, error) {
+func (p *PdfServiceImpl) GeneratePdfPullSlip(pr pr_db.PatronRequest, notes []pr_db.Notification, conditions []pr_db.Notification) ([]byte, error) {
 	barcodeData, err := getBarcodeBase64(pr.RequesterReqID.String)
 	if err != nil {
 		return nil, err

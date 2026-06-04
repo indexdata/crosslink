@@ -1101,7 +1101,11 @@ components:
           type: string
           description: Name of the batch action to run
           enum:
-            - email
+            - email-pullslips
+        actionParams:
+          type: object
+          description: Parameters for the batch action
+          additionalProperties: true
         createdAt:
           type: string
           format: date-time
@@ -1142,10 +1146,14 @@ components:
           type: string
           description: Name of the batch action to run
           enum:
-            - email
+            - email-pullslips
         batchQuery:
           type: string
           description: Batch action selection query in CQL format
+        actionParams:
+          type: object
+          description: Parameters for the batch action
+          additionalProperties: true
       required:
         - schedule
         - actionName
