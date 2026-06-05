@@ -2,7 +2,7 @@ CREATE TABLE scheduled_task
 (
     id         TEXT PRIMARY KEY,
     event_name TEXT        NOT NULL,
-    cron_expr  TEXT        NOT NULL,
+    schedule   TEXT        NOT NULL,
     payload    JSONB,
     run_at     TIMESTAMPTZ,
     status     TEXT        NOT NULL DEFAULT 'pending',

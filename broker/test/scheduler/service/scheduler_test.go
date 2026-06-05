@@ -99,7 +99,7 @@ func overdueTask() sched_db.SaveScheduledTaskParams {
 	return sched_db.SaveScheduledTaskParams{
 		ID:        id,
 		EventName: events.EventNameSendNotification,
-		CronExpr:  "",
+		Schedule:  "",
 		Payload:   events.EventData{CommonEventData: events.CommonEventData{Note: id}},
 		RunAt:     pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Second), Valid: true},
 		Status:    sched_db.ScheduledTaskStatusPending,

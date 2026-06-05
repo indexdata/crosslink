@@ -13,7 +13,7 @@ import (
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/robfig/cron/v3"
+	"github.com/teambition/rrule-go"
 )
 
 var SCHEDULER_RETRY_DELAY, _ = utils.GetEnvAny("SCHEDULER_RETRY_DELAY", time.Duration(5*float64(time.Minute)), func(val string) (time.Duration, error) {
@@ -176,10 +176,10 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 			}
 
 			// Compute and persist the task's next state.
-			if task.CronExpr != "" {
-				next, cronErr := NextCronTime(task.CronExpr)
-				if cronErr != nil {
-					ctx.Logger().Error("invalid cron expression, disabling task", "error", cronErr, "taskId", task.ID)
+			if task.Schedule != "" {
+				next, innerErr := NextScheduleTime(task.Schedule)
+				if innerErr != nil {
+					ctx.Logger().Error("invalid rrule string, disabling task", "error", innerErr, "taskId", task.ID)
 					task.Status = sched_db.ScheduledTaskStatusStopped
 					task.RunAt = pgtype.Timestamptz{Valid: false}
 				} else {
@@ -272,18 +272,34 @@ func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyC
 	}
 }
 
-// NextCronTime parses a standard 5-field cron expression and returns the next
-// scheduled execution time after now as a pgtype.Timestamptz.
+// NextScheduleTime parses an RRULE expression and returns the next
+// scheduled execution time strictly after now as a pgtype.Timestamptz.
 // Returns an error if the expression is invalid.
-func NextCronTime(cronExpr string) (pgtype.Timestamptz, error) {
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	schedule, err := parser.Parse(cronExpr)
+func NextScheduleTime(schedule string) (pgtype.Timestamptz, error) {
+	return nextScheduleTimeAt(schedule, time.Now().UTC())
+}
+
+func nextScheduleTimeAt(schedule string, now time.Time) (pgtype.Timestamptz, error) {
+	now = now.UTC()
+
+	options, err := rrule.StrToROption(schedule)
 	if err != nil {
-		return pgtype.Timestamptz{}, fmt.Errorf("invalid cron expression %q: %w", cronExpr, err)
+		return pgtype.Timestamptz{}, fmt.Errorf("invalid rrule string %q: %w", schedule, err)
 	}
-	next := schedule.Next(time.Now())
+	options.Dtstart = now
+
+	rule, err := rrule.NewRRule(*options)
+	if err != nil {
+		return pgtype.Timestamptz{}, fmt.Errorf("invalid rrule options %q: %w", schedule, err)
+	}
+
+	next := rule.After(now, false)
+	if next.IsZero() {
+		return pgtype.Timestamptz{}, fmt.Errorf("no future occurrences derived from RRULE")
+	}
+
 	return pgtype.Timestamptz{
-		Time:  next,
+		Time:  next.UTC(),
 		Valid: true,
 	}, nil
 }
@@ -299,17 +315,19 @@ func (s *SchedulerService) rescheduleLongRunningTasks(ctx common.ExtendedContext
 	}
 	for _, task := range tasks {
 		ctx.Logger().Info("rescheduling stuck task", "taskId", task.ID, "eventName", task.EventName)
-		if task.CronExpr != "" {
-			next, err := NextCronTime(task.CronExpr)
+		var nextRunAt time.Time
+		if task.Schedule != "" {
+			next, err := NextScheduleTime(task.Schedule)
 			if err != nil {
-				ctx.Logger().Error("invalid cron expression, disabling task", "error", err, "taskId", task.ID)
+				ctx.Logger().Error("invalid rrule string, disabling task", "error", err, "taskId", task.ID)
 				s.disableTask(ctx, task)
 				continue
 			}
-			task.RunAt = next
+			nextRunAt = next.Time
 		} else {
-			task.RunAt = pgtype.Timestamptz{Time: time.Now().Add(SCHEDULER_RETRY_DELAY), Valid: true}
+			nextRunAt = time.Now().Add(SCHEDULER_RETRY_DELAY)
 		}
+		task.RunAt = pgtype.Timestamptz{Time: nextRunAt, Valid: true}
 		s.unlockAndReschedule(ctx, task)
 	}
 }

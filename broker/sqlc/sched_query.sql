@@ -1,9 +1,9 @@
 -- name: SaveScheduledTask :one
-INSERT INTO scheduled_task (id, event_name, cron_expr, payload, run_at, status, created_at, updated_at)
+INSERT INTO scheduled_task (id, event_name, schedule, payload, run_at, status, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (id) DO UPDATE
     SET event_name = EXCLUDED.event_name,
-        cron_expr  = EXCLUDED.cron_expr,
+        schedule  = EXCLUDED.schedule,
         payload    = EXCLUDED.payload,
         run_at     = EXCLUDED.run_at,
         status     = EXCLUDED.status,
