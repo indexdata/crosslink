@@ -87,7 +87,7 @@ func stopTask(t *testing.T, task sched_db.ScheduledTask) {
 // ---------------------------------------------------------------------------
 
 func TestSaveScheduledTask_Insert(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(1*time.Minute)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(1*time.Minute)))
 
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
@@ -102,18 +102,18 @@ func TestSaveScheduledTask_Insert(t *testing.T) {
 }
 
 func TestSaveScheduledTask_Upsert_UpdatesFields(t *testing.T) {
-	params := newTask("0 * * * *", tstz(time.Now().Add(1*time.Hour)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(1*time.Hour)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	params.Schedule = "0 9 * * 1"
+	params.Schedule = "FREQ=WEEKLY;BYDAY=MO;BYHOUR=7;BYMINUTE=0"
 	params.RunAt = tstz(time.Now().Add(2 * time.Hour))
 
 	updated, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, updated.ID)
-	assert.Equal(t, "0 9 * * 1", updated.Schedule)
+	assert.Equal(t, "FREQ=WEEKLY;BYDAY=MO;BYHOUR=7;BYMINUTE=0", updated.Schedule)
 
 	stopTask(t, updated)
 }
@@ -137,7 +137,7 @@ func TestSaveScheduledTask_WithPayload(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetNextRunAt_ReturnsPendingTask(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(5*time.Minute)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(5*time.Minute)))
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
@@ -192,7 +192,7 @@ func TestClaimNextScheduledTask_OverdueTask_ClaimedAndSetToRunning(t *testing.T)
 }
 
 func TestClaimNextScheduledTask_SetsStatusToRunning(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(-30*time.Second)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(-30*time.Second)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
@@ -231,7 +231,7 @@ func TestClaimNextScheduledTask_FutureTask_NotClaimed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRescheduleAfterClaim(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(-1*time.Second)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(-1*time.Second)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 

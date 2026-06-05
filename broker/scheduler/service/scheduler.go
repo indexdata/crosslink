@@ -276,20 +276,30 @@ func waitUntil(ctx common.ExtendedContext, nextRunAt pgtype.Timestamptz, notifyC
 // scheduled execution time strictly after now as a pgtype.Timestamptz.
 // Returns an error if the expression is invalid.
 func NextScheduleTime(schedule string) (pgtype.Timestamptz, error) {
-	rule, err := rrule.StrToRRule(schedule)
+	return nextScheduleTimeAt(schedule, time.Now().UTC())
+}
+
+func nextScheduleTimeAt(schedule string, now time.Time) (pgtype.Timestamptz, error) {
+	now = now.UTC()
+
+	options, err := rrule.StrToROption(schedule)
 	if err != nil {
 		return pgtype.Timestamptz{}, fmt.Errorf("invalid rrule string %q: %w", schedule, err)
 	}
+	options.Dtstart = now
 
-	rule.DTStart(time.Now().UTC())
+	rule, err := rrule.NewRRule(*options)
+	if err != nil {
+		return pgtype.Timestamptz{}, fmt.Errorf("invalid rrule options %q: %w", schedule, err)
+	}
 
-	next := rule.After(time.Now().UTC(), false)
+	next := rule.After(now, false)
 	if next.IsZero() {
 		return pgtype.Timestamptz{}, fmt.Errorf("no future occurrences derived from RRULE")
 	}
 
 	return pgtype.Timestamptz{
-		Time:  next,
+		Time:  next.UTC(),
 		Valid: true,
 	}, nil
 }

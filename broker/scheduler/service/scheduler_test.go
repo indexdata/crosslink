@@ -117,6 +117,51 @@ func TestNextScheduleTime_SpecificSchedule(t *testing.T) {
 	assert.True(t, ts.Time.After(time.Now()))
 }
 
+func TestNextScheduleTime_UsesDynamicDTStartDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		schedule string
+		now      time.Time
+		expected time.Time
+	}{
+		{
+			name:     "daily defaults to current time of day",
+			schedule: "FREQ=DAILY",
+			now:      time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+			expected: time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC),
+		},
+		{
+			name:     "weekly defaults to current weekday and time",
+			schedule: "FREQ=WEEKLY",
+			now:      time.Date(2026, 1, 7, 10, 11, 12, 0, time.UTC),
+			expected: time.Date(2026, 1, 14, 10, 11, 12, 0, time.UTC),
+		},
+		{
+			name:     "monthly defaults to current day of month and time",
+			schedule: "FREQ=MONTHLY",
+			now:      time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC),
+			expected: time.Date(2026, 2, 15, 8, 30, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts, err := nextScheduleTimeAt(tt.schedule, tt.now)
+
+			assert.NoError(t, err)
+			assert.True(t, ts.Valid)
+			assert.Equal(t, tt.expected, ts.Time)
+		})
+	}
+}
+
+func TestNextScheduleTime_NoFutureOccurrences(t *testing.T) {
+	_, err := nextScheduleTimeAt("FREQ=DAILY;COUNT=1", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no future occurrences")
+}
+
 // ---------------------------------------------------------------------------
 // waitUntil
 // ---------------------------------------------------------------------------
