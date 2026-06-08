@@ -157,7 +157,7 @@
     {
       "name": "RETRY_PENDING",
       "display": "Retry Pending",
-      "desc": "Received supplier retry request with new conditions after initial conditions were rejected",
+      "desc": "Received ISO18626 RetryPossible from supplier (may include updated metadata/conditions)",
       "side": "REQUESTER",
       "primaryAction": "accept-retry",
       "needsAttention": true,
