@@ -929,7 +929,6 @@ func TestAcceptRetry(t *testing.T) {
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 	// TODO
 	// assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
-
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
