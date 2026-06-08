@@ -242,11 +242,38 @@
         },
         {
           "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}",
+          "permissionsRequired": [
+            "broker.batch_actions.item.put"
+          ]
+        },
+        {
+          "methods": [
             "DELETE"
           ],
           "pathPattern": "/broker/batch_actions/{id}",
           "permissionsRequired": [
             "broker.batch_actions.item.delete"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/enable",
+          "permissionsRequired": [
+            "broker.batch_actions.item.enable.post"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/batch_actions/{id}/disable",
+          "permissionsRequired": [
+            "broker.batch_actions.item.disable.post"
           ]
         }
       ]
@@ -394,9 +421,24 @@
       "permissionName": "broker.batch_actions.item.get"
     },
     {
+      "description": "Update a batch action",
+      "displayName": "Broker - update batch action",
+      "permissionName": "broker.batch_actions.item.put"
+    },
+    {
       "description": "Delete a batch action",
       "displayName": "Broker - delete batch action",
       "permissionName": "broker.batch_actions.item.delete"
+    },
+    {
+      "description": "Enable a batch action",
+      "displayName": "Broker - enable batch action",
+      "permissionName": "broker.batch_actions.item.enable.post"
+    },
+    {
+      "description": "Disable a batch action",
+      "displayName": "Broker - disable batch action",
+      "permissionName": "broker.batch_actions.item.disable.post"
     },
     {
       "description": "Read-only access to batch actions",
@@ -415,7 +457,10 @@
       "visible": true,
       "subPermissions": [
         "broker.batch_actions.post",
-        "broker.batch_actions.item.delete"
+        "broker.batch_actions.item.put",
+        "broker.batch_actions.item.delete",
+        "broker.batch_actions.item.enable.post",
+        "broker.batch_actions.item.disable.post"
       ]
     },
     {
@@ -507,7 +552,10 @@
         "broker.batch_actions.get",
         "broker.batch_actions.post",
         "broker.batch_actions.item.get",
-        "broker.batch_actions.item.delete"
+        "broker.batch_actions.item.put",
+        "broker.batch_actions.item.delete",
+        "broker.batch_actions.item.enable.post",
+        "broker.batch_actions.item.disable.post"
       ]
     }
   ]
