@@ -120,14 +120,14 @@ func TestSaveScheduledTask_Upsert_UpdatesFields(t *testing.T) {
 
 func TestSaveScheduledTask_WithPayload(t *testing.T) {
 	params := newTask("", tstz(time.Now().Add(1*time.Minute)))
-	params.Payload = events.EventData{
+	params.ActionData = events.EventData{
 		CommonEventData: events.CommonEventData{Note: "hello from scheduler"},
 	}
 
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "hello from scheduler", saved.Payload.Note)
+	assert.Equal(t, "hello from scheduler", saved.ActionData.Note)
 
 	stopTask(t, saved)
 }

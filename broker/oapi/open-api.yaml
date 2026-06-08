@@ -1096,10 +1096,17 @@ components:
           description: Name of the batch action to run
           enum:
             - email-pullslips
+        batchQuery:
+          type: string
+          description: Batch action selection query in CQL format
         actionParams:
           type: object
           description: Parameters for the batch action
           additionalProperties: true
+        nextRun:
+          type: string
+          format: date-time
+          description: Next execution time according to the schedule
         createdAt:
           type: string
           format: date-time
@@ -1108,11 +1115,16 @@ components:
           type: string
           format: date-time
           description: Last update timestamp
+        active:
+          type: boolean
+          description: Indicates if the batch action is active
       required:
         - id
         - schedule
         - actionName
         - createdAt
+        - batchQuery
+        - active
 
     BatchActions:
       type: object
@@ -1151,6 +1163,25 @@ components:
       required:
         - schedule
         - actionName
+        - batchQuery
+
+    UpdateBatchAction:
+      type: object
+      title: Update Batch Action
+      description: Request body for updating a batch action
+      properties:
+        schedule:
+          type: string
+          description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
+        batchQuery:
+          type: string
+          description: Batch action selection query in CQL format
+        actionParams:
+          type: object
+          description: Parameters for the batch action
+          additionalProperties: true
+      required:
+        - schedule
         - batchQuery
 
     CreatePullSlip:
@@ -2152,6 +2183,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    put:
+      summary: Update a batch action by ID
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBatchAction'
+      responses:
+        '200':
+          description: Batch action updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAction'
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       summary: Delete a batch action by ID
       tags:
@@ -2168,6 +2243,78 @@ paths:
       responses:
         '204':
           description: Batch action deleted successfully (No Content)
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions/{id}/disable:
+    post:
+      summary: Disable a batch action by ID
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to disable
+      responses:
+        '204':
+          description: Batch action disabled successfully (No Content)
+        '400':
+          description: Bad Request. Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Batch action not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /batch_actions/{id}/enable:
+    post:
+      summary: Enable a batch action by ID
+      tags:
+        - scheduler-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Symbol'
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the batch action to enable
+      responses:
+        '204':
+          description: Batch action enabled successfully (No Content)
         '400':
           description: Bad Request. Invalid query parameters.
           content:

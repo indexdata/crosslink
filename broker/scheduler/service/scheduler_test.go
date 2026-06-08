@@ -353,9 +353,9 @@ func TestRunDueTasks_MultipleTasks_ProcessedInOrder(t *testing.T) {
 
 func TestRunDueTasks_ValidJsonPayload_Dispatched(t *testing.T) {
 	task := sched_db.ScheduledTask{
-		ID:        "t5",
-		EventName: "payload-ev",
-		Payload:   events.EventData{},
+		ID:         "t5",
+		EventName:  "payload-ev",
+		ActionData: events.EventData{},
 	}
 	repo := &mockSchedRepo{claimResults: []sched_db.ScheduledTask{task}}
 	bus := &mockEventBus{}
