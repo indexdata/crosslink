@@ -232,8 +232,12 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 			Parameters: []string{},
 		},
 		{
-			Name:       string(LenderActionAskRetry),
-			Parameters: []string{},
+			Name: string(LenderActionAskRetry),
+			Parameters: []string{
+				"note",
+				"reasonRetry",
+				"itemId",
+			},
 		},
 	}
 }
