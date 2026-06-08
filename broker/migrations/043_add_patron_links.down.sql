@@ -16,6 +16,7 @@ SELECT
         WHERE n.pr_id = pr.id and cost is not null
     ) AS has_cost,
     (unread.unread_notifications_count > 0) AS has_unread_notification,
+    (pr.internal_note IS NOT NULL AND btrim(pr.internal_note) <> '') AS has_internal_note,
     pr.ill_request -> 'serviceInfo' ->> 'serviceType' AS service_type,
     pr.ill_request -> 'serviceInfo' -> 'serviceLevel' ->> '#text' AS service_level,
     immutable_to_timestamp(pr.ill_request -> 'serviceInfo' ->> 'needBeforeDate') AS needed_at,
