@@ -142,6 +142,15 @@ func (ms *PatronRequestMessageSender) sendBorrowingRequest(ctx common.ExtendedCo
 		illRequest.PatronInfo = &iso18626.PatronInfo{}
 	}
 	illRequest.PatronInfo.PatronId = pr.Patron.String
+	if illRequest.ServiceInfo == nil {
+		illRequest.ServiceInfo = &iso18626.ServiceInfo{}
+	}
+	requestType := iso18626.TypeRequestTypeNew
+	if pr.PrevReqID.Valid {
+		illRequest.ServiceInfo.RequestingAgencyPreviousRequestId = pr.PrevReqID.String
+		requestType = iso18626.TypeRequestTypeRetry
+	}
+	illRequest.ServiceInfo.RequestType = &requestType
 
 	var illMessage = iso18626.NewISO18626Message()
 	illMessage.Request = &illRequest

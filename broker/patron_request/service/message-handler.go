@@ -290,6 +290,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return statusChangeNotAllowed()
 	}
 	if retryItemId != "" {
+		ctx.Logger().Info("AD: received retry possible status with retry item id", "retryItemId", retryItemId)
 		// needs to be stored in the patron request so it can be used if the requester accepts the retry offer
 		// could be a field on its own (extend the db schema)
 		updatedPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = retryItemId

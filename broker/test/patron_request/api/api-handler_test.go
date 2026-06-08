@@ -900,10 +900,36 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, "accept-retry", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NextReqId, "got pr "+string(respBytes))
 
 	// accept again - should fail as the request state it terminated
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
 	assert.Contains(t, string(respBytes), "Action accept-retry is not allowed for patron request")
+
+	// send request for the new PR created by accept-retry
+	thisPrPath = basePath + "/" + *foundPr.NextReqId
+	action = proapi.ExecuteAction{
+		Action: "send-request",
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	assert.Equal(t, "success", pResult.Outcome)
+	assert.Equal(t, "VALIDATED", pResult.FromState)
+	assert.Equal(t, "SENT", *pResult.ToState)
+	assert.Nil(t, pResult.Message)
+
+	test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+		return strings.Contains(string(respBytes), "\"name\":\"accept-retry\"")
+	})
+	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+	// TODO
+	// assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
+
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

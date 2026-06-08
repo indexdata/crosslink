@@ -280,7 +280,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	case BorrowerActionRejectRetry:
 		return a.rejectRetryBorrowingRequest(pr)
 	case BorrowerActionAcceptRetry:
-		return a.acceptRetryBorrowingRequest(pr)
+		return a.acceptRetryBorrowingRequest(ctx, pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -541,9 +541,38 @@ func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.Patron
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
-func (a *PatronRequestActionService) acceptRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
-	// TODO: link request IDs
+func clonePatronRequest(pr pr_db.PatronRequest) (pr_db.PatronRequest, error) {
+	prJSON, err := json.Marshal(pr)
+	if err != nil {
+		return pr_db.PatronRequest{}, err
+	}
+	var clone pr_db.PatronRequest
+	if err = json.Unmarshal(prJSON, &clone); err != nil {
+		return pr_db.PatronRequest{}, err
+	}
+	return clone, nil
+}
+
+func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
+
+	clone, err := clonePatronRequest(pr)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to clone patron request for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	ctx.Logger().Info("cloned patron request for retry", "IllRequest.BibliographicInfo.SupplierUniqueRecordId", clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+	clone.State = pr_db.PatronRequestState("VALIDATED")
+	clone.ID = uuid.NewString()
+	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	clone.PrevReqID = getDbTextPtr(&pr.ID)
+	pr.NextReqID = getDbTextPtr(&clone.ID)
+
+	_, err = a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(clone))
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to create patron request for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
