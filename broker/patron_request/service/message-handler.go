@@ -270,6 +270,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		}
 	case iso18626.TypeStatusRetryPossible:
 		eventName = SupplierRetryConditional
+		setSupplierMessage(sam, &pr)
 		if sam.DeliveryInfo != nil {
 			retryItemId = sam.DeliveryInfo.ItemId
 		}
