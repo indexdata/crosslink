@@ -7,6 +7,7 @@ import (
 	"indexdata/directory/db"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -16,6 +17,23 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 	if !authData.HasRole(auth.ConsortialAdminRole) {
 		slog.ErrorContext(ctx, "permission denied")
 		return AddNetwork401TextResponse("Access denied"), nil
+	}
+
+	if request.Body == nil || request.Body.Consortium == uuid.Nil {
+		return AddNetwork400TextResponse("You must provide a consortium"), nil
+	}
+
+	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AddNetwork400TextResponse("Consortium not found"), nil
+		}
+		slog.ErrorContext(ctx, "failed to get consortium", "error", err, "consortium", request.Body.Consortium)
+		return AddNetwork500TextResponse("Internal server error"), nil
+	}
+
+	if consortium.Type != string(EntryTypeConsortium) {
+		return AddNetwork400TextResponse("Entry is not a consortium"), nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
@@ -29,7 +47,10 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 
 	qtx := a.queries.WithTx(tx)
 
-	insertedNetwork, err := qtx.CreateNetwork(ctx, request.Body.Name)
+	insertedNetwork, err := qtx.CreateNetwork(ctx, db.CreateNetworkParams{
+		Name:       request.Body.Name,
+		Consortium: request.Body.Consortium,
+	})
 
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create network", "error", err, "name", request.Body.Name)
@@ -71,8 +92,9 @@ func (a ApiImpl) GetNetwork(ctx context.Context, request GetNetworkRequestObject
 	}
 
 	networkResponse := Network{
-		Id:   &network.ID,
-		Name: network.Name,
+		Id:         &network.ID,
+		Consortium: network.Consortium,
+		Name:       network.Name,
 	}
 
 	return GetNetwork200JSONResponse(networkResponse), nil
@@ -102,8 +124,9 @@ func (a ApiImpl) GetNetworks(ctx context.Context, request GetNetworksRequestObje
 
 	for _, row := range rows {
 		network := Network{
-			Id:   &row.ID,
-			Name: row.Name,
+			Id:         &row.ID,
+			Consortium: row.Consortium,
+			Name:       row.Name,
 		}
 		networkList = append(networkList, network)
 	}

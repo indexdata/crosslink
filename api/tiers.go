@@ -7,6 +7,7 @@ import (
 	"indexdata/directory/db"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -16,6 +17,23 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 	if !authData.HasRole(auth.ConsortialAdminRole) {
 		slog.ErrorContext(ctx, "permission denied")
 		return AddTier401TextResponse("Access denied"), nil
+	}
+
+	if request.Body == nil || request.Body.Consortium == uuid.Nil {
+		return AddTier400TextResponse("You must provide a consortium"), nil
+	}
+
+	consortium, err := a.queries.EntryById(ctx, request.Body.Consortium)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return AddTier400TextResponse("Consortium not found"), nil
+		}
+		slog.ErrorContext(ctx, "failed to get consortium", "error", err, "consortium", request.Body.Consortium)
+		return AddTier500TextResponse("Internal server error"), nil
+	}
+
+	if consortium.Type != string(EntryTypeConsortium) {
+		return AddTier400TextResponse("Entry is not a consortium"), nil
 	}
 
 	tx, err := a.pool.Begin(ctx)
@@ -29,7 +47,10 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 
 	qtx := a.queries.WithTx(tx)
 
-	insertedTier, err := qtx.CreateTier(ctx, request.Body.Name)
+	insertedTier, err := qtx.CreateTier(ctx, db.CreateTierParams{
+		Name:       request.Body.Name,
+		Consortium: request.Body.Consortium,
+	})
 
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create tier", "error", err, "name", request.Body.Name)
@@ -71,8 +92,9 @@ func (a ApiImpl) GetTier(ctx context.Context, request GetTierRequestObject) (Get
 	}
 
 	tierResponse := Tier{
-		Id:   &tier.ID,
-		Name: tier.Name,
+		Id:         &tier.ID,
+		Consortium: tier.Consortium,
+		Name:       tier.Name,
 	}
 
 	return GetTier200JSONResponse(tierResponse), nil
@@ -102,8 +124,9 @@ func (a ApiImpl) GetTiers(ctx context.Context, request GetTiersRequestObject) (G
 
 	for _, row := range rows {
 		tier := Tier{
-			Id:   &row.ID,
-			Name: row.Name,
+			Id:         &row.ID,
+			Consortium: row.Consortium,
+			Name:       row.Name,
 		}
 		tierList = append(tierList, tier)
 	}

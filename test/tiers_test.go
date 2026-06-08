@@ -44,6 +44,22 @@ func TestTierCases(t *testing.T) {
 			addlHeaders:     consortiumPermissionHeaders,
 		},
 		{
+			name:        "POST tier missing consortium",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"No Consortium Tier"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST tier with non-consortium entry",
+			method:      http.MethodPost,
+			endpoint:    "/tiers",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"Institution Tier","consortium":"00000000-0000-0000-0000-000000000002"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
 			name:          "DELETE tier",
 			method:        http.MethodDelete,
 			endpoint:      "/tiers/30000000-0000-0000-0000-000000000002",

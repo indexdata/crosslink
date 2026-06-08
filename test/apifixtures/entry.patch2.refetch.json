@@ -3,6 +3,7 @@
   "name":"An Institution",
   "email":"what@ever.tk",
   "type": "Institution",
+  "parent":"00000000-0000-0000-0000-000000000004",
   "endpoints": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

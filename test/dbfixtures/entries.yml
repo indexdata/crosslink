@@ -1,12 +1,18 @@
+- id: 00000000-0000-0000-0000-000000000004
+  name: Das Konsortium
+  type: Consortium
 - id: 00000000-0000-0000-0000-000000000001
+  parent: 00000000-0000-0000-0000-000000000004
   name: No Symbol
   description: A very particular test entry
   type: Institution
 - id: 00000000-0000-0000-0000-000000000002
+  parent: 00000000-0000-0000-0000-000000000004
   name: An Institution
   contact_name: Bob
   type: Institution
 - id: 00000000-0000-0000-0000-000000000003
+  parent: 00000000-0000-0000-0000-000000000004
   name: Eine Weitere Einrichtung
   contact_name: Klaus
   type: Institution

@@ -31,6 +31,14 @@ func TestTiersForEntry(t *testing.T) {
 			resFile:     "entry-tiers-for-entry-empty.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
+		{
+			name:        "GET tiers for consortium",
+			method:      http.MethodGet,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000004/tiers",
+			status:      http.StatusOK,
+			resFile:     "entry-tiers-for-consortium.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
 	}
 
 	testCases(t, cases)

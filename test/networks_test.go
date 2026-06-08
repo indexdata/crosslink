@@ -44,6 +44,22 @@ func TestNetworkCases(t *testing.T) {
 			addlHeaders:     consortiumPermissionHeaders,
 		},
 		{
+			name:        "POST network missing consortium",
+			method:      http.MethodPost,
+			endpoint:    "/networks",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"No Consortium Network"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
+			name:        "POST network with non-consortium entry",
+			method:      http.MethodPost,
+			endpoint:    "/networks",
+			status:      http.StatusBadRequest,
+			body:        `{"name":"Institution Network","consortium":"00000000-0000-0000-0000-000000000002"}`,
+			addlHeaders: consortiumPermissionHeaders,
+		},
+		{
 			name:          "DELETE network",
 			method:        http.MethodDelete,
 			endpoint:      "/networks/20000000-0000-0000-0000-000000000002",

@@ -31,6 +31,14 @@ func TestNetworksForEntry(t *testing.T) {
 			resFile:     "entry-networks-for-entry-empty.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
+		{
+			name:        "GET networks for consortium",
+			method:      http.MethodGet,
+			endpoint:    "/entries/by-id/00000000-0000-0000-0000-000000000004/networks",
+			status:      http.StatusOK,
+			resFile:     "entry-networks-for-consortium.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
 	}
 
 	testCases(t, cases)

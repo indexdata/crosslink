@@ -190,20 +190,38 @@ func (a ApiImpl) GetNetworksForEntry(ctx context.Context, request GetNetworksFor
 		}
 	}
 
-	rows, err := a.queries.ListNetworksForEntry(ctx, entry.ID)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to list networks for entry", "error", err, "entry", entry.ID)
-		return GetNetworksForEntry500TextResponse("Internal Server Error"), nil
-	}
+	networkList := make([]Network, 0)
 
-	networkList := make([]Network, 0, len(rows))
-
-	for _, row := range rows {
-		network := Network{
-			Id:   &row.ID,
-			Name: row.Name,
+	if entry.Type == string(EntryTypeConsortium) {
+		rows, err := a.queries.ListNetworksForConsortium(ctx, entry.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to list networks for consortium", "error", err, "entry", entry.ID)
+			return GetNetworksForEntry500TextResponse("Internal Server Error"), nil
 		}
-		networkList = append(networkList, network)
+
+		for _, row := range rows {
+			network := Network{
+				Id:         &row.ID,
+				Consortium: row.Consortium,
+				Name:       row.Name,
+			}
+			networkList = append(networkList, network)
+		}
+	} else {
+		rows, err := a.queries.ListNetworksForEntry(ctx, entry.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to list networks for entry", "error", err, "entry", entry.ID)
+			return GetNetworksForEntry500TextResponse("Internal Server Error"), nil
+		}
+
+		for _, row := range rows {
+			network := Network{
+				Id:         &row.ID,
+				Consortium: row.Consortium,
+				Name:       row.Name,
+			}
+			networkList = append(networkList, network)
+		}
 	}
 
 	resp := NetworksResponse{

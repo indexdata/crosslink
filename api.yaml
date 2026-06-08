@@ -1829,12 +1829,16 @@ components:
       type: object
       required:
         - id
+        - consortium
       properties:
         id:
           readOnly: true
           type: string
           format: uuid
           description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
         name:
           type: string
 
@@ -1842,12 +1846,16 @@ components:
       type: object
       required:
         - id
+        - consortium
       properties:
         id:
           readOnly: true
           type: string
           format: uuid
           description: Unique identifier
+        consortium:
+          type: string
+          format: uuid
         name:
           type: string
     

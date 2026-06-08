@@ -3,9 +3,10 @@
   "name":"An Institution",
   "contactName":"Bob",
   "type":"Institution",
+  "parent":"00000000-0000-0000-0000-000000000004",
   "symbols": [
-    {"authority":"TEST","id":"00000000-0000-0000-0000-000000000001","symbol":"ANINST"},
-    {"authority":"TEST","id":"00000000-0000-0000-0000-000000000002","symbol":"ANINSTTOO"}
+    {"authority":"TEST","id":"60000000-0000-0000-0000-000000000001","symbol":"ANINST"},
+    {"authority":"TEST","id":"60000000-0000-0000-0000-000000000002","symbol":"ANINSTTOO"}
   ],
   "endpoints": [
     {

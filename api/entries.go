@@ -235,6 +235,7 @@ func buildEntrySQL(whereClause string) string {
 		ARRAY(
 			SELECT json_build_object(
 				'id', tiers.id,
+				'consortium', tiers.consortium,
 				'name', tiers.name
 			) from entry_tiers INNER JOIN tiers ON tiers.id = entry_tiers.tier
 			WHERE entry_tiers.entry = e.id
@@ -243,6 +244,7 @@ func buildEntrySQL(whereClause string) string {
 		ARRAY(
 			SELECT json_build_object(
 				'id', networks.id,
+				'consortium', networks.consortium,
 				'name', networks.name
 			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
 			WHERE entry_networks.entry = e.id

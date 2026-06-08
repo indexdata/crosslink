@@ -60,6 +60,14 @@ func TestEntryCases(t *testing.T) {
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
+			name:        "GET consortium by symbol",
+			method:      http.MethodGet,
+			endpoint:    "/entries/by-symbol/TEST:ANCONS",
+			status:      http.StatusOK,
+			resFile:     "entry-consortium.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
 			name:     "GET by symbol no permissions",
 			method:   http.MethodGet,
 			endpoint: "/entries/by-symbol/TEST:ANINST",

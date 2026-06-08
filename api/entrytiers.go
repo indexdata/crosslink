@@ -244,20 +244,38 @@ func (a ApiImpl) GetTiersForEntry(ctx context.Context, request GetTiersForEntryR
 		}
 	}
 
-	rows, err := a.queries.ListTiersForEntry(ctx, entry.ID)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to list tiers for entry", "error", err, "entry", entry.ID)
-		return GetTiersForEntry500TextResponse("Internal Server Error"), nil
-	}
+	tierList := make([]Tier, 0)
 
-	tierList := make([]Tier, 0, len(rows))
-
-	for _, row := range rows {
-		tier := Tier{
-			Id:   &row.ID,
-			Name: row.Name,
+	if entry.Type == string(EntryTypeConsortium) {
+		rows, err := a.queries.ListTiersForConsortium(ctx, entry.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to list tiers for consortium", "error", err, "entry", entry.ID)
+			return GetTiersForEntry500TextResponse("Internal Server Error"), nil
 		}
-		tierList = append(tierList, tier)
+
+		for _, row := range rows {
+			tier := Tier{
+				Id:         &row.ID,
+				Consortium: row.Consortium,
+				Name:       row.Name,
+			}
+			tierList = append(tierList, tier)
+		}
+	} else {
+		rows, err := a.queries.ListTiersForEntry(ctx, entry.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "failed to list tiers for entry", "error", err, "entry", entry.ID)
+			return GetTiersForEntry500TextResponse("Internal Server Error"), nil
+		}
+
+		for _, row := range rows {
+			tier := Tier{
+				Id:         &row.ID,
+				Consortium: row.Consortium,
+				Name:       row.Name,
+			}
+			tierList = append(tierList, tier)
+		}
 	}
 
 	resp := TiersResponse{

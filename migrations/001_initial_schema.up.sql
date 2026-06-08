@@ -55,13 +55,19 @@ CREATE TABLE IF NOT EXISTS closures (
 
 CREATE TABLE IF NOT EXISTS tiers (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255)
 );
 
+CREATE INDEX tiers_consortium_idx ON tiers (consortium);
+
 CREATE TABLE IF NOT EXISTS networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
 	name varchar(255)
 );
+
+CREATE INDEX networks_consortium_idx ON networks (consortium);
 
 CREATE TABLE IF NOT EXISTS entry_tiers (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,

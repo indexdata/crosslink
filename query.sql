@@ -129,17 +129,17 @@ DELETE FROM address_components WHERE address = @address;
 
 -- name: CreateTier :one
 INSERT INTO tiers (
-  name
+  name, consortium
 ) VALUES (
-  @name
+  @name, @consortium
 )
 RETURNING *;
 
 -- name: CreateNetwork :one
 INSERT INTO networks (
-  name
+  name, consortium
 ) VALUES (
-  @name
+  @name, @consortium
 )
 RETURNING *;
 
@@ -277,6 +277,10 @@ SELECT * FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1;
 
+-- name: ListNetworksForConsortium :many
+SELECT * FROM networks
+WHERE consortium = $1;
+
 -- name: ListTiers :many
 SELECT * FROM tiers
   LIMIT sqlc.arg('limit')
@@ -286,6 +290,10 @@ SELECT * FROM tiers
 SELECT * FROM tiers t
 JOIN entry_tiers et ON t.id = et.tier
 WHERE et.entry = $1;
+
+-- name: ListTiersForConsortium :many
+SELECT * FROM tiers
+WHERE consortium = $1;
 
 -- name: ListClosures :many
 SELECT * FROM closures

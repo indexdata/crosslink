@@ -6,16 +6,17 @@
       "name": "An Institution",
       "contactName":"Bob",
       "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
       "symbols": [
         "<<UNORDERED>>",
         {
           "authority": "TEST",
-          "id": "00000000-0000-0000-0000-000000000001",
+          "id": "60000000-0000-0000-0000-000000000001",
           "symbol": "ANINST"
         },
         {
           "authority": "TEST",
-          "id": "00000000-0000-0000-0000-000000000002",
+          "id": "60000000-0000-0000-0000-000000000002",
           "symbol": "ANINSTTOO"
         }
       ],
@@ -44,10 +45,23 @@
       ]
     },
     {
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "Das Konsortium",
+      "type":"Consortium",
+      "symbols": [
+        {
+          "authority": "TEST",
+          "id": "60000000-0000-0000-0000-000000000003",
+          "symbol": "ANCONS"
+        }
+      ]
+    },
+    {
       "id": "00000000-0000-0000-0000-000000000003",
       "name": "Eine Weitere Einrichtung",
       "contactName": "Klaus",
       "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
       "addresses": [
         "<<UNORDERED>>",
         {
@@ -76,19 +90,20 @@
       "name": "No Symbol",
       "description": "A very particular test entry",
       "type":"Institution",
+      "parent":"00000000-0000-0000-0000-000000000004",
       "networks": [
         {
-          "id":"20000000-0000-0000-0000-000000000001",
+          "id":"20000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004",
           "name":"The Ultimate Network"
         },
         {
-          "id":"20000000-0000-0000-0000-000000000003",
+          "id":"20000000-0000-0000-0000-000000000003","consortium":"00000000-0000-0000-0000-000000000004",
           "name": "The Completely Normal Network"
         }
       ],
       "tiers":[
         {
-        "id":"30000000-0000-0000-0000-000000000001",
+        "id":"30000000-0000-0000-0000-000000000001","consortium":"00000000-0000-0000-0000-000000000004",
         "name":"Top Tier"
         }
       ],
@@ -100,6 +115,6 @@
     }
   ],
   "about": {
-    "count": 3
+    "count": 4
   }
 }

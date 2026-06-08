@@ -80,8 +80,9 @@ type LmsConfig struct {
 }
 
 type Network struct {
-	ID   uuid.UUID
-	Name *string
+	ID         uuid.UUID
+	Consortium uuid.UUID
+	Name       *string
 }
 
 type ServiceEndpoint struct {
@@ -100,6 +101,7 @@ type Symbol struct {
 }
 
 type Tier struct {
-	ID   uuid.UUID
-	Name *string
+	ID         uuid.UUID
+	Consortium uuid.UUID
+	Name       *string
 }

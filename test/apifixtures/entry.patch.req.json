@@ -3,7 +3,7 @@
   "contactName":null,
   "email":"what@ever.tk",
   "symbols": [
-    {"authority":"TEST","id":"00000000-0000-0000-0000-000000000001","symbol":"INST"}
+    {"authority":"TEST","id":"60000000-0000-0000-0000-000000000001","symbol":"INST"}
   ],
   "endpoints": null
 }

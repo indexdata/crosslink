@@ -185,33 +185,43 @@ func (q *Queries) CreateEntryTier(ctx context.Context, arg CreateEntryTierParams
 
 const createNetwork = `-- name: CreateNetwork :one
 INSERT INTO networks (
-  name
+  name, consortium
 ) VALUES (
-  $1
+  $1, $2
 )
-RETURNING id, name
+RETURNING id, consortium, name
 `
 
-func (q *Queries) CreateNetwork(ctx context.Context, name *string) (Network, error) {
-	row := q.db.QueryRow(ctx, createNetwork, name)
+type CreateNetworkParams struct {
+	Name       *string
+	Consortium uuid.UUID
+}
+
+func (q *Queries) CreateNetwork(ctx context.Context, arg CreateNetworkParams) (Network, error) {
+	row := q.db.QueryRow(ctx, createNetwork, arg.Name, arg.Consortium)
 	var i Network
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
 	return i, err
 }
 
 const createTier = `-- name: CreateTier :one
 INSERT INTO tiers (
-  name
+  name, consortium
 ) VALUES (
-  $1
+  $1, $2
 )
-RETURNING id, name
+RETURNING id, consortium, name
 `
 
-func (q *Queries) CreateTier(ctx context.Context, name *string) (Tier, error) {
-	row := q.db.QueryRow(ctx, createTier, name)
+type CreateTierParams struct {
+	Name       *string
+	Consortium uuid.UUID
+}
+
+func (q *Queries) CreateTier(ctx context.Context, arg CreateTierParams) (Tier, error) {
+	row := q.db.QueryRow(ctx, createTier, arg.Name, arg.Consortium)
 	var i Tier
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
 	return i, err
 }
 
@@ -590,24 +600,24 @@ func (q *Queries) GetLMSConfigByEntry(ctx context.Context, entry uuid.UUID) (Lms
 }
 
 const getNetworkById = `-- name: GetNetworkById :one
-SELECT id, name FROM networks WHERE id = $1 LIMIT 1
+SELECT id, consortium, name FROM networks WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, error) {
 	row := q.db.QueryRow(ctx, getNetworkById, id)
 	var i Network
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
 	return i, err
 }
 
 const getTierById = `-- name: GetTierById :one
-SELECT id, name FROM tiers WHERE id = $1 LIMIT 1
+SELECT id, consortium, name FROM tiers WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetTierById(ctx context.Context, id uuid.UUID) (Tier, error) {
 	row := q.db.QueryRow(ctx, getTierById, id)
 	var i Tier
-	err := row.Scan(&i.ID, &i.Name)
+	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
 	return i, err
 }
 
@@ -743,7 +753,7 @@ func (q *Queries) ListEntryTiers(ctx context.Context, arg ListEntryTiersParams) 
 }
 
 const listNetworks = `-- name: ListNetworks :many
-SELECT id, name FROM networks
+SELECT id, consortium, name FROM networks
   LIMIT $2
   OFFSET $1
 `
@@ -762,7 +772,32 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 	var items []Network
 	for rows.Next() {
 		var i Network
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNetworksForConsortium = `-- name: ListNetworksForConsortium :many
+SELECT id, consortium, name FROM networks
+WHERE consortium = $1
+`
+
+func (q *Queries) ListNetworksForConsortium(ctx context.Context, consortium uuid.UUID) ([]Network, error) {
+	rows, err := q.db.Query(ctx, listNetworksForConsortium, consortium)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Network
+	for rows.Next() {
+		var i Network
+		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -774,17 +809,18 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 }
 
 const listNetworksForEntry = `-- name: ListNetworksForEntry :many
-SELECT n.id, name, en.id, entry, network FROM networks n
+SELECT n.id, consortium, name, en.id, entry, network FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1
 `
 
 type ListNetworksForEntryRow struct {
-	ID      uuid.UUID
-	Name    *string
-	ID_2    uuid.UUID
-	Entry   uuid.UUID
-	Network uuid.UUID
+	ID         uuid.UUID
+	Consortium uuid.UUID
+	Name       *string
+	ID_2       uuid.UUID
+	Entry      uuid.UUID
+	Network    uuid.UUID
 }
 
 func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]ListNetworksForEntryRow, error) {
@@ -798,6 +834,7 @@ func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]
 		var i ListNetworksForEntryRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Consortium,
 			&i.Name,
 			&i.ID_2,
 			&i.Entry,
@@ -814,7 +851,7 @@ func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]
 }
 
 const listTiers = `-- name: ListTiers :many
-SELECT id, name FROM tiers
+SELECT id, consortium, name FROM tiers
   LIMIT $2
   OFFSET $1
 `
@@ -833,7 +870,32 @@ func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, e
 	var items []Tier
 	for rows.Next() {
 		var i Tier
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTiersForConsortium = `-- name: ListTiersForConsortium :many
+SELECT id, consortium, name FROM tiers
+WHERE consortium = $1
+`
+
+func (q *Queries) ListTiersForConsortium(ctx context.Context, consortium uuid.UUID) ([]Tier, error) {
+	rows, err := q.db.Query(ctx, listTiersForConsortium, consortium)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tier
+	for rows.Next() {
+		var i Tier
+		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -845,17 +907,18 @@ func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, e
 }
 
 const listTiersForEntry = `-- name: ListTiersForEntry :many
-SELECT t.id, name, et.id, entry, tier FROM tiers t
+SELECT t.id, consortium, name, et.id, entry, tier FROM tiers t
 JOIN entry_tiers et ON t.id = et.tier
 WHERE et.entry = $1
 `
 
 type ListTiersForEntryRow struct {
-	ID    uuid.UUID
-	Name  *string
-	ID_2  uuid.UUID
-	Entry uuid.UUID
-	Tier  uuid.UUID
+	ID         uuid.UUID
+	Consortium uuid.UUID
+	Name       *string
+	ID_2       uuid.UUID
+	Entry      uuid.UUID
+	Tier       uuid.UUID
 }
 
 func (q *Queries) ListTiersForEntry(ctx context.Context, entry uuid.UUID) ([]ListTiersForEntryRow, error) {
@@ -869,6 +932,7 @@ func (q *Queries) ListTiersForEntry(ctx context.Context, entry uuid.UUID) ([]Lis
 		var i ListTiersForEntryRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.Consortium,
 			&i.Name,
 			&i.ID_2,
 			&i.Entry,
