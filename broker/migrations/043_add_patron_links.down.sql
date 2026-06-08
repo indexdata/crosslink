@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS patron_request_search_view;
 ALTER TABLE patron_request DROP COLUMN next_req_id;
 ALTER TABLE patron_request DROP COLUMN prev_req_id;
 
