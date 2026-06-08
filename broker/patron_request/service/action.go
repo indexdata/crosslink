@@ -563,16 +563,22 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	}
 	ctx.Logger().Info("cloned patron request for retry", "IllRequest.BibliographicInfo.SupplierUniqueRecordId", clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 	clone.State = pr_db.PatronRequestState("VALIDATED")
+	clone.TerminalState = false
 	clone.ID = uuid.NewString()
 	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	clone.PrevReqID = getDbTextPtr(&pr.ID)
-	pr.NextReqID = getDbTextPtr(&clone.ID)
+	if pr.RetryItemID.Valid {
+		ctx.Logger().Info("AD: setting SupplierUniqueRecordId for retry", "SupplierUniqueRecordId", pr.RetryItemID.String)
+		clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryItemID.String
+	}
 
 	_, err = a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(clone))
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to create patron request for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+	pr.NextReqID = getDbTextPtr(&clone.ID)
+	ctx.Logger().Info("AD: created new patron request for retry", "new_pr_id", clone.ID, "prev_pr_id", pr.ID)
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 

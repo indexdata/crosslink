@@ -22,7 +22,8 @@ CREATE TABLE patron_request
     ill_response        jsonb NOT NULL DEFAULT '{}'::jsonb,
     internal_note       TEXT,
     next_req_id         VARCHAR,
-    prev_req_id         VARCHAR
+    prev_req_id         VARCHAR,
+    retry_item_id       VARCHAR
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

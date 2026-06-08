@@ -907,7 +907,19 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Contains(t, string(respBytes), "Action accept-retry is not allowed for patron request")
 
 	// send request for the new PR created by accept-retry
-	thisPrPath = basePath + "/" + *foundPr.NextReqId
+	newId := *foundPr.NextReqId
+	thisPrPath = basePath + "/" + newId
+
+	// check cloned request
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, newId, foundPr.Id)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.Equal(t, "123456789", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+
 	action = proapi.ExecuteAction{
 		Action: "send-request",
 	}
