@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"cmp"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +19,8 @@ import (
 	"github.com/indexdata/go-utils/utils"
 )
 
+const COMP = "api_directory"
+
 type ApiDirectory struct {
 	urls   []string
 	client *http.Client
@@ -31,7 +32,8 @@ func CreateApiDirectory(client *http.Client, urls []string) DirectoryLookupAdapt
 	return &ApiDirectory{client: client, urls: urls}
 }
 
-func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) getDirectory(ctx common.ExtendedContext, symbols []string, tenant string, durl string) ([]DirectoryEntry, string, error) {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
 	var cql string
 	if len(symbols) > 0 {
 		cql = "symbol any \"" + cqlbuilder.EscapeMaskingChars(cqlbuilder.EscapeSpecialChars(strings.Join(symbols, " "))) + "\""
@@ -79,9 +81,8 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 				childSymbolsById[*d.Parent] = append(childSymbolsById[*d.Parent], symbols...)
 			}
 		}
-		ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 		if len(symbols) == 0 {
-			ctx.Logger().Warn("Directory entry has no symbols", "entryName", d.Name)
+			ctx.Logger().Info("Directory entry has no symbols and will be ignored", "entryName", d.Name)
 			continue
 		}
 		apiUrl := ""
@@ -120,11 +121,11 @@ func (a *ApiDirectory) GetDirectory(symbols []string, tenant string, durl string
 	return dirEntries, query, nil
 }
 
-func (a *ApiDirectory) Lookup(params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
+func (a *ApiDirectory) Lookup(ctx common.ExtendedContext, params DirectoryLookupParams) ([]DirectoryEntry, string, error) {
 	var directoryList []DirectoryEntry
 	var query string
 	for _, durl := range a.urls {
-		d, queryVal, err := a.GetDirectory(params.Symbols, params.Tenant, durl)
+		d, queryVal, err := a.getDirectory(ctx, params.Symbols, params.Tenant, durl)
 		query = queryVal
 		if err != nil {
 			return []DirectoryEntry{}, query, err

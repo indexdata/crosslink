@@ -61,11 +61,11 @@ func TestMain(m *testing.M) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-func newTask(cronExpr string, runAt pgtype.Timestamptz) sched_db.SaveScheduledTaskParams {
+func newTask(schedule string, runAt pgtype.Timestamptz) sched_db.SaveScheduledTaskParams {
 	return sched_db.SaveScheduledTaskParams{
 		ID:        uuid.NewString(),
 		EventName: events.EventNameSendNotification,
-		CronExpr:  cronExpr,
+		Schedule:  schedule,
 		RunAt:     runAt,
 		Status:    sched_db.ScheduledTaskStatusPending,
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -87,14 +87,14 @@ func stopTask(t *testing.T, task sched_db.ScheduledTask) {
 // ---------------------------------------------------------------------------
 
 func TestSaveScheduledTask_Insert(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(1*time.Minute)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(1*time.Minute)))
 
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, saved.ID)
 	assert.Equal(t, params.EventName, saved.EventName)
-	assert.Equal(t, params.CronExpr, saved.CronExpr)
+	assert.Equal(t, params.Schedule, saved.Schedule)
 	assert.Equal(t, sched_db.ScheduledTaskStatusPending, saved.Status)
 	assert.True(t, saved.CreatedAt.Valid)
 
@@ -102,32 +102,32 @@ func TestSaveScheduledTask_Insert(t *testing.T) {
 }
 
 func TestSaveScheduledTask_Upsert_UpdatesFields(t *testing.T) {
-	params := newTask("0 * * * *", tstz(time.Now().Add(1*time.Hour)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(1*time.Hour)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
-	params.CronExpr = "0 9 * * 1"
+	params.Schedule = "FREQ=WEEKLY;BYDAY=MO;BYHOUR=7;BYMINUTE=0"
 	params.RunAt = tstz(time.Now().Add(2 * time.Hour))
 
 	updated, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
 	assert.Equal(t, params.ID, updated.ID)
-	assert.Equal(t, "0 9 * * 1", updated.CronExpr)
+	assert.Equal(t, "FREQ=WEEKLY;BYDAY=MO;BYHOUR=7;BYMINUTE=0", updated.Schedule)
 
 	stopTask(t, updated)
 }
 
 func TestSaveScheduledTask_WithPayload(t *testing.T) {
 	params := newTask("", tstz(time.Now().Add(1*time.Minute)))
-	params.Payload = events.EventData{
+	params.ActionData = events.EventData{
 		CommonEventData: events.CommonEventData{Note: "hello from scheduler"},
 	}
 
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 
 	assert.NoError(t, err)
-	assert.Equal(t, "hello from scheduler", saved.Payload.Note)
+	assert.Equal(t, "hello from scheduler", saved.ActionData.Note)
 
 	stopTask(t, saved)
 }
@@ -137,7 +137,7 @@ func TestSaveScheduledTask_WithPayload(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetNextRunAt_ReturnsPendingTask(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(5*time.Minute)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(5*time.Minute)))
 	saved, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
@@ -192,7 +192,7 @@ func TestClaimNextScheduledTask_OverdueTask_ClaimedAndSetToRunning(t *testing.T)
 }
 
 func TestClaimNextScheduledTask_SetsStatusToRunning(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(-30*time.Second)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(-30*time.Second)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 
@@ -231,7 +231,7 @@ func TestClaimNextScheduledTask_FutureTask_NotClaimed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRescheduleAfterClaim(t *testing.T) {
-	params := newTask("* * * * *", tstz(time.Now().Add(-1*time.Second)))
+	params := newTask("FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0", tstz(time.Now().Add(-1*time.Second)))
 	_, err := schedRepo.SaveScheduledTask(appCtx, params)
 	assert.NoError(t, err)
 

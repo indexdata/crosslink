@@ -53,7 +53,7 @@ func (h SchedulerApiHandler) GetBatchActions(w http.ResponseWriter, r *http.Requ
 		offset = *params.Offset
 	}
 
-	items, count, err := h.schedRepo.GetBatchActions(ctx, sched_db.GetBatchActionsParams{
+	items, count, err := h.schedRepo.GetScheduledTasks(ctx, sched_db.GetScheduledTasksParams{
 		Owner:  owner,
 		Limit:  limit,
 		Offset: offset,
@@ -102,85 +102,80 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	next, err := sched_service.NextCronTime(create.Schedule)
+	next, err := sched_service.NextScheduleTime(create.Schedule)
 	if err != nil {
 		brokerapi.AddBadRequestError(ctx, w, err)
 		return
 	}
-	var ba sched_db.BatchAction
-	err = h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
-		id := uuid.NewString()
-		now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-		taskId := uuid.New().String()
-		paramsMap := make(map[string]any)
-		if create.ActionParams != nil {
-			paramsMap = *create.ActionParams
-		}
-		task, inErr := schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
-			ID:        taskId,
-			EventName: events.EventNameInvokeBatchAction,
-			CronExpr:  create.Schedule,
-			Status:    sched_db.ScheduledTaskStatusPending,
-			Payload: events.EventData{
-				CommonEventData: events.CommonEventData{
-					BatchActionData: &events.BatchActionData{
-						ActionName: string(create.ActionName),
-						Selector:   create.BatchQuery,
-						TaskId:     taskId,
-						Owner:      owner,
-					},
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	taskId := uuid.New().String()
+	paramsMap := make(map[string]any)
+	if create.ActionParams != nil {
+		paramsMap = *create.ActionParams
+	}
+	task, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams{
+		ID:        taskId,
+		EventName: events.EventNameInvokeBatchAction,
+		Schedule:  create.Schedule,
+		Status:    sched_db.ScheduledTaskStatusPending,
+		Owner:     owner,
+		ActionData: events.EventData{
+			CommonEventData: events.CommonEventData{
+				BatchActionData: &events.BatchActionData{
+					ActionName: string(create.ActionName),
+					Selector:   create.BatchQuery,
+					TaskId:     taskId,
+					Owner:      owner,
 				},
-				CustomData: paramsMap,
 			},
-			RunAt:     next,
-			CreatedAt: now,
-		})
-		if inErr != nil {
-			return inErr
-		}
-		ba, inErr = schedRepo.SaveBatchAction(ctx, sched_db.SaveBatchActionParams{
-			ID:              id,
-			Schedule:        create.Schedule,
-			ActionName:      string(create.ActionName),
-			BatchQuery:      create.BatchQuery,
-			Owner:           owner,
-			CreatedAt:       now,
-			ScheduledTaskID: task.ID,
-			ActionParams:    paramsMap,
-		})
-		return inErr
+			CustomData: paramsMap,
+		},
+		RunAt:     next,
+		CreatedAt: now,
 	})
 	if err != nil {
 		brokerapi.AddInternalError(ctx, w, err)
 		return
 	}
 
-	w.Header().Set("Location", brokerapi.Link(r, brokerapi.Path("batch_actions", ba.ID), nil))
+	w.Header().Set("Location", brokerapi.Link(r, brokerapi.Path("batch_actions", task.ID), nil))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(toBatchAction(ba))
+	_ = json.NewEncoder(w).Encode(toBatchAction(task))
 }
 
 // GetBatchActionsId returns a single batch action by ID.
 func (h SchedulerApiHandler) GetBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.GetBatchActionsIdParams) {
-	logParams := map[string]string{"method": "GetBatchActionsId", "id": id}
-	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
-
-	owner, ok := h.resolveOwner(ctx, w, r, params.Symbol)
-	if !ok {
+	task, _, done := h.getScheduledTask(w, r, "GetBatchActionsId", id, params.Symbol)
+	if done {
 		return
 	}
+	brokerapi.WriteJsonResponse(w, toBatchAction(task))
+}
 
-	ba, err := h.schedRepo.GetBatchActionById(ctx, id, owner)
+func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Request, methodName string, id string, symbol *schedoapi.Symbol) (sched_db.ScheduledTask, common.ExtendedContext, bool) {
+	logParams := map[string]string{"method": methodName, "id": id}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	owner, ok := h.resolveOwner(ctx, w, r, symbol)
+	if !ok {
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+
+	task, err := h.schedRepo.GetScheduledTaskByIdAndOwner(ctx, id, owner)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			brokerapi.AddNotFoundError(w)
-			return
+			return sched_db.ScheduledTask{}, ctx, true
 		}
 		brokerapi.AddInternalError(ctx, w, err)
-		return
+		return sched_db.ScheduledTask{}, ctx, true
 	}
-	brokerapi.WriteJsonResponse(w, toBatchAction(ba))
+	if task.ActionData.BatchActionData == nil {
+		brokerapi.AddInternalError(ctx, w, errors.New("missing batchActionData"))
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+	return task, ctx, false
 }
 
 // DeleteBatchActionsId deletes a batch action by ID.
@@ -194,26 +189,92 @@ func (h SchedulerApiHandler) DeleteBatchActionsId(w http.ResponseWriter, r *http
 	}
 
 	err := h.schedRepo.WithTxFunc(ctx, func(schedRepo sched_db.SchedRepo) error {
-		ba, inErr := schedRepo.GetBatchActionById(ctx, id, owner)
+		task, inErr := schedRepo.GetScheduledTaskByIdAndOwner(ctx, id, owner)
 		if inErr != nil {
 			return inErr
 		}
-		task, inErr := schedRepo.GetScheduledTaskById(ctx, ba.ScheduledTaskID)
-		if inErr != nil {
-			return inErr
-		}
-		task.Status = sched_db.ScheduledTaskStatusStopped
-		task, inErr = schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
-		if inErr != nil {
-			return inErr
-		}
-		return schedRepo.DeleteBatchAction(ctx, id, owner)
+		return schedRepo.DeleteScheduledTask(ctx, task.ID, owner)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			brokerapi.AddNotFoundError(w)
 			return
 		}
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PutBatchActionsIdParams) {
+	task, ctx, done := h.getScheduledTask(w, r, "PutBatchActionsId", id, params.Symbol)
+	if done {
+		return
+	}
+	if r.Body == nil || r.Body == http.NoBody {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("missing body"))
+		return
+	}
+	var update schedoapi.UpdateBatchAction
+	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	if update.Schedule == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("schedule must not be empty"))
+		return
+	}
+	if update.BatchQuery == "" {
+		brokerapi.AddBadRequestError(ctx, w, errors.New("batchQuery must not be empty"))
+		return
+	}
+	next, err := sched_service.NextScheduleTime(update.Schedule)
+	if err != nil {
+		brokerapi.AddBadRequestError(ctx, w, err)
+		return
+	}
+	task.Schedule = update.Schedule
+	task.RunAt = next
+	if task.ActionData.BatchActionData == nil {
+		task.ActionData.BatchActionData = &events.BatchActionData{}
+	}
+	task.ActionData.BatchActionData.Selector = update.BatchQuery
+
+	if update.ActionParams != nil {
+		task.ActionData.CustomData = *update.ActionParams
+	}
+
+	task, err = h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	if err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+
+	brokerapi.WriteJsonResponse(w, toBatchAction(task))
+}
+
+func (h SchedulerApiHandler) PostBatchActionsIdDisable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdDisableParams) {
+	task, ctx, done := h.getScheduledTask(w, r, "PostBatchActionsIdDisable", id, params.Symbol)
+	if done {
+		return
+	}
+	task.Status = sched_db.ScheduledTaskStatusStopped
+	_, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	if err != nil {
+		brokerapi.AddInternalError(ctx, w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h SchedulerApiHandler) PostBatchActionsIdEnable(w http.ResponseWriter, r *http.Request, id string, params schedoapi.PostBatchActionsIdEnableParams) {
+	task, ctx, done := h.getScheduledTask(w, r, "PostBatchActionsIdEnable", id, params.Symbol)
+	if done {
+		return
+	}
+	task.Status = sched_db.ScheduledTaskStatusPending
+	_, err := h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	if err != nil {
 		brokerapi.AddInternalError(ctx, w, err)
 		return
 	}
@@ -236,26 +297,38 @@ func (h SchedulerApiHandler) resolveOwner(ctx common.ExtendedContext, w http.Res
 	return owner, true
 }
 
-func toBatchAction(ba sched_db.BatchAction) schedoapi.BatchAction {
+func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
+	actionData := task.ActionData.BatchActionData
+	if actionData == nil { // Prevent panic for nil, should never happen
+		actionData = &events.BatchActionData{}
+	}
+	active := task.Status != sched_db.ScheduledTaskStatusStopped
 	resp := schedoapi.BatchAction{
-		Id:         ba.ID,
-		Schedule:   ba.Schedule,
-		ActionName: schedoapi.BatchActionActionName(ba.ActionName),
-		CreatedAt:  ba.CreatedAt.Time,
+		Id:         task.ID,
+		Schedule:   task.Schedule,
+		ActionName: schedoapi.BatchActionActionName(actionData.ActionName),
+		CreatedAt:  task.CreatedAt.Time,
+		BatchQuery: actionData.Selector,
+		Active:     active,
 	}
-	if len(ba.ActionParams) > 0 {
-		resp.ActionParams = &ba.ActionParams
+	if len(task.ActionData.CustomData) > 0 {
+		resp.ActionParams = &task.ActionData.CustomData
 	}
-	if ba.UpdatedAt.Valid {
-		resp.UpdatedAt = &ba.UpdatedAt.Time
+	if task.UpdatedAt.Valid {
+		resp.UpdatedAt = &task.UpdatedAt.Time
+	}
+	if task.RunAt.Valid {
+		resp.NextRun = &task.RunAt.Time
 	}
 	return resp
 }
 
-func toBatchActionList(items []sched_db.BatchAction) []schedoapi.BatchAction {
+func toBatchActionList(items []sched_db.ScheduledTask) []schedoapi.BatchAction {
 	result := make([]schedoapi.BatchAction, 0, len(items))
-	for _, ba := range items {
-		result = append(result, toBatchAction(ba))
+	for _, task := range items {
+		if task.ActionData.BatchActionData != nil {
+			result = append(result, toBatchAction(task))
+		}
 	}
 	return result
 }

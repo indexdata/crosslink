@@ -152,10 +152,7 @@ sql:
             go_type:
               import: "github.com/indexdata/crosslink/broker/events"
               type: "EventName"
-          - column: "scheduled_task.payload"
+          - column: "scheduled_task.action_data"
             go_type:
               import: "github.com/indexdata/crosslink/broker/events"
               type: "EventData"
-          - column: "batch_action.action_params"
-            go_type:
-              type: "map[string]any"

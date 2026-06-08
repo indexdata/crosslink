@@ -17,13 +17,9 @@ type SchedRepo interface {
 	ClaimNextScheduledTask(ctx common.ExtendedContext) (ScheduledTask, error)
 	GetNextRunAt(ctx common.ExtendedContext) (pgtype.Timestamptz, error)
 	GetStuckRunningTasks(ctx common.ExtendedContext, stuckAfter time.Duration) ([]ScheduledTask, error)
-	GetScheduledTaskById(ctx common.ExtendedContext, id string) (ScheduledTask, error)
-
-	// Batch action methods.
-	SaveBatchAction(ctx common.ExtendedContext, params SaveBatchActionParams) (BatchAction, error)
-	GetBatchActionById(ctx common.ExtendedContext, id, owner string) (BatchAction, error)
-	DeleteBatchAction(ctx common.ExtendedContext, id, owner string) error
-	GetBatchActions(ctx common.ExtendedContext, params GetBatchActionsParams) ([]BatchAction, int64, error)
+	GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error)
+	DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error
+	GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error)
 }
 
 type PgSchedRepo struct {
@@ -81,11 +77,6 @@ func (r *PgSchedRepo) GetStuckRunningTasks(ctx common.ExtendedContext, stuckAfte
 	return tasks, nil
 }
 
-func (r *PgSchedRepo) GetScheduledTaskById(ctx common.ExtendedContext, id string) (ScheduledTask, error) {
-	row, err := r.queries.GetScheduledTaskById(ctx, r.GetConnOrTx(), id)
-	return row.ScheduledTask, err
-}
-
 func pgDuration(d time.Duration) pgtype.Interval {
 	return pgtype.Interval{Microseconds: d.Microseconds(), Valid: true}
 }
@@ -97,44 +88,39 @@ func (r *PgSchedRepo) notify(ctx common.ExtendedContext) {
 	}
 }
 
-func (r *PgSchedRepo) SaveBatchAction(ctx common.ExtendedContext, params SaveBatchActionParams) (BatchAction, error) {
-	row, err := r.queries.SaveBatchAction(ctx, r.GetConnOrTx(), params)
-	return row.BatchAction, err
-}
-
-func (r *PgSchedRepo) GetBatchActionById(ctx common.ExtendedContext, id, owner string) (BatchAction, error) {
-	row, err := r.queries.GetBatchActionById(ctx, r.GetConnOrTx(), GetBatchActionByIdParams{
+func (r *PgSchedRepo) GetScheduledTaskByIdAndOwner(ctx common.ExtendedContext, id, owner string) (ScheduledTask, error) {
+	row, err := r.queries.GetScheduledTaskByIdAndOwner(ctx, r.GetConnOrTx(), GetScheduledTaskByIdAndOwnerParams{
 		ID:    id,
 		Owner: owner,
 	})
-	return row.BatchAction, err
+	return row.ScheduledTask, err
 }
 
-func (r *PgSchedRepo) DeleteBatchAction(ctx common.ExtendedContext, id, owner string) error {
-	return r.queries.DeleteBatchAction(ctx, r.GetConnOrTx(), DeleteBatchActionParams{
+func (r *PgSchedRepo) DeleteScheduledTask(ctx common.ExtendedContext, id, owner string) error {
+	return r.queries.DeleteScheduledTask(ctx, r.GetConnOrTx(), DeleteScheduledTaskParams{
 		ID:    id,
 		Owner: owner,
 	})
 }
 
-func (r *PgSchedRepo) GetBatchActions(ctx common.ExtendedContext, params GetBatchActionsParams) ([]BatchAction, int64, error) {
-	rows, err := r.queries.GetBatchActions(ctx, r.GetConnOrTx(), params)
-	var actions []BatchAction
+func (r *PgSchedRepo) GetScheduledTasks(ctx common.ExtendedContext, params GetScheduledTasksParams) ([]ScheduledTask, int64, error) {
+	rows, err := r.queries.GetScheduledTasks(ctx, r.GetConnOrTx(), params)
+	var tasks []ScheduledTask
 	var fullCount int64
 	if err == nil {
 		if len(rows) > 0 {
 			fullCount = rows[0].FullCount
 			for _, r := range rows {
-				actions = append(actions, r.BatchAction)
+				tasks = append(tasks, r.ScheduledTask)
 			}
 		} else {
 			params.Limit = 1
 			params.Offset = 0
-			rows, err = r.queries.GetBatchActions(ctx, r.GetConnOrTx(), params)
+			rows, err = r.queries.GetScheduledTasks(ctx, r.GetConnOrTx(), params)
 			if err == nil && len(rows) > 0 {
 				fullCount = rows[0].FullCount
 			}
 		}
 	}
-	return actions, fullCount, err
+	return tasks, fullCount, err
 }
