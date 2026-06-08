@@ -1,14 +1,14 @@
 CREATE TABLE scheduled_task
 (
-    id         TEXT PRIMARY KEY,
-    event_name TEXT        NOT NULL,
-    schedule   TEXT        NOT NULL,
-    payload    JSONB,
-    run_at     TIMESTAMPTZ,
-    status     TEXT        NOT NULL DEFAULT 'pending',
-    owner      TEXT       NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ,
+    id          TEXT PRIMARY KEY,
+    event_name  TEXT        NOT NULL,
+    schedule    TEXT        NOT NULL,
+    action_data JSONB,
+    run_at      TIMESTAMPTZ,
+    status      TEXT        NOT NULL DEFAULT 'pending',
+    owner       TEXT        NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ,
     FOREIGN KEY (event_name) REFERENCES event_config (event_name)
 );
 

@@ -119,7 +119,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 		Schedule:  create.Schedule,
 		Status:    sched_db.ScheduledTaskStatusPending,
 		Owner:     owner,
-		Payload: events.EventData{
+		ActionData: events.EventData{
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
 					ActionName: string(create.ActionName),
@@ -169,6 +169,10 @@ func (h SchedulerApiHandler) getScheduledTask(w http.ResponseWriter, r *http.Req
 			return sched_db.ScheduledTask{}, ctx, true
 		}
 		brokerapi.AddInternalError(ctx, w, err)
+		return sched_db.ScheduledTask{}, ctx, true
+	}
+	if task.ActionData.BatchActionData == nil {
+		brokerapi.AddInternalError(ctx, w, errors.New("missing batchActionData"))
 		return sched_db.ScheduledTask{}, ctx, true
 	}
 	return task, ctx, false
@@ -231,16 +235,16 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 	}
 	task.Schedule = update.Schedule
 	task.RunAt = next
-	if task.Payload.BatchActionData == nil {
-		task.Payload.BatchActionData = &events.BatchActionData{}
+	if task.ActionData.BatchActionData == nil {
+		task.ActionData.BatchActionData = &events.BatchActionData{}
 	}
-	task.Payload.BatchActionData.Selector = update.BatchQuery
+	task.ActionData.BatchActionData.Selector = update.BatchQuery
 
 	if update.ActionParams != nil {
-		task.Payload.CustomData = *update.ActionParams
+		task.ActionData.CustomData = *update.ActionParams
 	}
 
-	_, err = h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
+	task, err = h.schedRepo.SaveScheduledTask(ctx, sched_db.SaveScheduledTaskParams(task))
 	if err != nil {
 		brokerapi.AddInternalError(ctx, w, err)
 		return
@@ -294,7 +298,10 @@ func (h SchedulerApiHandler) resolveOwner(ctx common.ExtendedContext, w http.Res
 }
 
 func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
-	actionData := task.Payload.BatchActionData
+	actionData := task.ActionData.BatchActionData
+	if actionData == nil { // Prevent panic for nil, should never happen
+		actionData = &events.BatchActionData{}
+	}
 	active := task.Status != sched_db.ScheduledTaskStatusStopped
 	resp := schedoapi.BatchAction{
 		Id:         task.ID,
@@ -304,8 +311,8 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 		BatchQuery: actionData.Selector,
 		Active:     active,
 	}
-	if len(task.Payload.CustomData) > 0 {
-		resp.ActionParams = &task.Payload.CustomData
+	if len(task.ActionData.CustomData) > 0 {
+		resp.ActionParams = &task.ActionData.CustomData
 	}
 	if task.UpdatedAt.Valid {
 		resp.UpdatedAt = &task.UpdatedAt.Time
@@ -318,8 +325,10 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 
 func toBatchActionList(items []sched_db.ScheduledTask) []schedoapi.BatchAction {
 	result := make([]schedoapi.BatchAction, 0, len(items))
-	for _, ba := range items {
-		result = append(result, toBatchAction(ba))
+	for _, task := range items {
+		if task.ActionData.BatchActionData != nil {
+			result = append(result, toBatchAction(task))
+		}
 	}
 	return result
 }

@@ -1182,7 +1182,6 @@ components:
           additionalProperties: true
       required:
         - schedule
-        - actionName
         - batchQuery
 
     CreatePullSlip:

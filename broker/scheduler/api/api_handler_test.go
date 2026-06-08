@@ -84,7 +84,7 @@ func scheduledTaskFixture(id string) sched_db.ScheduledTask {
 		ID:        id,
 		EventName: events.EventNameInvokeBatchAction,
 		Schedule:  validRrule,
-		Payload: events.EventData{
+		ActionData: events.EventData{
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
 					ActionName: string(schedoapi.BatchActionActionNameEmailPullslips),
@@ -206,12 +206,12 @@ func TestPostBatchActions_OK(t *testing.T) {
 			p.Owner == testSymbol &&
 			p.RunAt.Valid && p.RunAt.Time.After(before) &&
 			p.CreatedAt.Valid &&
-			p.Payload.BatchActionData != nil &&
-			p.Payload.BatchActionData.ActionName == string(schedoapi.BatchActionActionNameEmailPullslips) &&
-			p.Payload.BatchActionData.Selector == "title=test" &&
-			p.Payload.BatchActionData.TaskId == p.ID &&
-			p.Payload.BatchActionData.Owner == testSymbol &&
-			len(p.Payload.CustomData) == 0
+			p.ActionData.BatchActionData != nil &&
+			p.ActionData.BatchActionData.ActionName == string(schedoapi.BatchActionActionNameEmailPullslips) &&
+			p.ActionData.BatchActionData.Selector == "title=test" &&
+			p.ActionData.BatchActionData.TaskId == p.ID &&
+			p.ActionData.BatchActionData.Owner == testSymbol &&
+			len(p.ActionData.CustomData) == 0
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
@@ -257,7 +257,7 @@ func TestPostBatchActions_ActionParamsPersisted(t *testing.T) {
 	repo := new(MockSchedRepo)
 
 	repo.On("SaveScheduledTask", mock.MatchedBy(func(p sched_db.SaveScheduledTaskParams) bool {
-		return p.Payload.CustomData["delivery"] == "email" && p.Payload.CustomData["max"] == float64(3)
+		return p.ActionData.CustomData["delivery"] == "email" && p.ActionData.CustomData["max"] == float64(3)
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)
@@ -362,7 +362,7 @@ func TestPostBatchActions_SaveScheduledTaskError(t *testing.T) {
 func TestGetBatchActionsId_OK(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
-	task.Payload.CustomData = map[string]any{"delivery": "email"}
+	task.ActionData.CustomData = map[string]any{"delivery": "email"}
 	repo.On("GetScheduledTaskByIdAndOwner", "task-1", testSymbol).Return(task, nil)
 
 	h := newHandler(repo)
@@ -411,7 +411,7 @@ func TestGetBatchActionsId_DBError(t *testing.T) {
 
 // ── PutBatchActionsId ─────────────────────────────────────────────────────────
 
-func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsPayload(t *testing.T) {
+func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsActionData(t *testing.T) {
 	repo := new(MockSchedRepo)
 	task := scheduledTaskFixture("task-1")
 	oldRunAt := task.RunAt.Time
@@ -421,9 +421,9 @@ func TestPutBatchActionsId_OK_RecomputesRunAtAndPersistsPayload(t *testing.T) {
 		return p.ID == "task-1" &&
 			p.Schedule == newSchedule &&
 			p.RunAt.Valid && p.RunAt.Time.After(oldRunAt) &&
-			p.Payload.BatchActionData != nil &&
-			p.Payload.BatchActionData.Selector == "author=doe" &&
-			p.Payload.CustomData["delivery"] == "email"
+			p.ActionData.BatchActionData != nil &&
+			p.ActionData.BatchActionData.Selector == "author=doe" &&
+			p.ActionData.CustomData["delivery"] == "email"
 	})).Return(saveScheduledTaskReturn, nil)
 
 	h := newHandler(repo)

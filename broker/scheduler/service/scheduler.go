@@ -170,7 +170,7 @@ func (s *SchedulerService) runDueTasks(ctx common.ExtendedContext) bool {
 
 			// Publish the event. If this fails the transaction rolls back,
 			// the claim is undone, and the task stays 'pending' for the next cycle.
-			_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.Payload, events.EventDomainScheduler, nil, events.SignalConsumers)
+			_, txErr = s.eventBus.CreateTask(events.DEFAULT_ILL_TRANSACTION_ID, task.EventName, task.ActionData, events.EventDomainScheduler, nil, events.SignalConsumers)
 			if txErr != nil {
 				return txErr
 			}

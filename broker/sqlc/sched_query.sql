@@ -1,10 +1,10 @@
 -- name: SaveScheduledTask :one
-INSERT INTO scheduled_task (id, event_name, schedule, payload, run_at, status, owner, created_at, updated_at)
+INSERT INTO scheduled_task (id, event_name, schedule, action_data, run_at, status, owner, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE
     SET event_name = EXCLUDED.event_name,
         schedule  = EXCLUDED.schedule,
-        payload    = EXCLUDED.payload,
+        action_data    = EXCLUDED.action_data,
         run_at     = EXCLUDED.run_at,
         status     = EXCLUDED.status,
         owner      = EXCLUDED.owner,

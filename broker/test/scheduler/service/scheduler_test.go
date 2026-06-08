@@ -97,13 +97,13 @@ func (b *countingEventBus) getClaims() []string {
 func overdueTask() sched_db.SaveScheduledTaskParams {
 	id := uuid.New().String()
 	return sched_db.SaveScheduledTaskParams{
-		ID:        id,
-		EventName: events.EventNameSendNotification,
-		Schedule:  "",
-		Payload:   events.EventData{CommonEventData: events.CommonEventData{Note: id}},
-		RunAt:     pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Second), Valid: true},
-		Status:    sched_db.ScheduledTaskStatusPending,
-		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ID:         id,
+		EventName:  events.EventNameSendNotification,
+		Schedule:   "",
+		ActionData: events.EventData{CommonEventData: events.CommonEventData{Note: id}},
+		RunAt:      pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Second), Valid: true},
+		Status:     sched_db.ScheduledTaskStatusPending,
+		CreatedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
