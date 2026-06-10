@@ -26,9 +26,15 @@ type mockEmailPrRepo struct {
 	pr_db.PrRepo
 	listResult []pr_db.PatronRequest
 	listErr    error
+	listCalled bool
+	gotParams  pr_db.ListPatronRequestsParams
+	gotQuery   pgcql.Query
 }
 
-func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, _ pr_db.ListPatronRequestsParams, _ pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+func (m *mockEmailPrRepo) ListPatronRequests(_ common.ExtendedContext, params pr_db.ListPatronRequestsParams, query pgcql.Query) ([]pr_db.PatronRequest, int64, error) {
+	m.listCalled = true
+	m.gotParams = params
+	m.gotQuery = query
 	return m.listResult, int64(len(m.listResult)), m.listErr
 }
 
