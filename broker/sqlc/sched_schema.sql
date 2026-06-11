@@ -4,6 +4,7 @@ CREATE TABLE scheduled_task
     event_name  TEXT        NOT NULL,
     schedule    TEXT        NOT NULL,
     action_data JSONB,
+    title       TEXT,
     run_at      TIMESTAMPTZ,
     status      TEXT        NOT NULL DEFAULT 'pending',
     owner       TEXT        NOT NULL,

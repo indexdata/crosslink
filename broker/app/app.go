@@ -200,13 +200,13 @@ func Init(ctx context.Context) (Context, error) {
 
 	var emailSenderService *sched_service.EmailSenderService
 	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo)
-	batchActionService := sched_service.NewBatchActionService(eventBus, emailSenderService)
+	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, emailSenderService)
 
 	if err != nil {
 		appCtx.Logger().Warn("email service not available, email sending events will fail", "error", err)
 	}
 
-	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, sseBroker, batchActionService)
+	AddDefaultHandlers(eventBus, iso18626Client, supplierLocator, workflowManager, iso18626Handler, sseBroker, batchActionService, *prActionService)
 	err = StartEventBus(ctx, eventBus)
 	if err != nil {
 		return Context{}, err
@@ -384,7 +384,7 @@ func CreateEventBus(eventRepo events.EventRepo) events.EventBus {
 
 func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626Client,
 	supplierLocator service.SupplierLocator, workflowManager service.WorkflowManager, iso18626Handler handler.Iso18626Handler,
-	sseBroker *api.SseBroker, batchActionService *sched_service.BatchActionService) {
+	sseBroker *api.SseBroker, batchActionService *sched_service.BatchActionService, prActionService prservice.PatronRequestActionService) {
 	eventBus.HandleEventCreated(events.EventNameMessageSupplier, events.HandlerRoleConsumer, iso18626Client.MessageSupplier)
 	eventBus.HandleEventCreated(events.EventNameMessageRequester, events.HandlerRoleConsumer, iso18626Client.MessageRequester)
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, iso18626Handler.ConfirmRequesterMsg)
@@ -406,6 +406,8 @@ func AddDefaultHandlers(eventBus events.EventBus, iso18626Client client.Iso18626
 	eventBus.HandleTaskCompleted(events.EventNameMessageRequester, events.HandlerRoleObserver, sseBroker.IncomingIsoMessage)
 
 	eventBus.HandleEventCreated(events.EventNameInvokeBatchAction, events.HandlerRoleConsumer, batchActionService.BatchAction)
+
+	eventBus.HandleEventCreated(events.EventNameInvokeBackgroundAction, events.HandlerRoleConsumer, prActionService.InvokeAction)
 
 	// Invoke-action is intentionally not registered on event-created/task-completed handlers.
 	// It is processed inline by patron-request services and API handlers.

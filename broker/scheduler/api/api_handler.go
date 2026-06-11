@@ -130,6 +130,7 @@ func (h SchedulerApiHandler) PostBatchActions(w http.ResponseWriter, r *http.Req
 			},
 			CustomData: paramsMap,
 		},
+		Title:     toPgText(create.Title),
 		RunAt:     next,
 		CreatedAt: now,
 	})
@@ -239,6 +240,7 @@ func (h SchedulerApiHandler) PutBatchActionsId(w http.ResponseWriter, r *http.Re
 		task.ActionData.BatchActionData = &events.BatchActionData{}
 	}
 	task.ActionData.BatchActionData.Selector = update.BatchQuery
+	task.Title = toPgText(update.Title)
 
 	if update.ActionParams != nil {
 		task.ActionData.CustomData = *update.ActionParams
@@ -306,7 +308,7 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 	resp := schedoapi.BatchAction{
 		Id:         task.ID,
 		Schedule:   task.Schedule,
-		ActionName: schedoapi.BatchActionActionName(actionData.ActionName),
+		ActionName: schedoapi.BatchActionName(actionData.ActionName),
 		CreatedAt:  task.CreatedAt.Time,
 		BatchQuery: actionData.Selector,
 		Active:     active,
@@ -320,6 +322,9 @@ func toBatchAction(task sched_db.ScheduledTask) schedoapi.BatchAction {
 	if task.RunAt.Valid {
 		resp.NextRun = &task.RunAt.Time
 	}
+	if task.Title.Valid {
+		resp.Title = &task.Title.String
+	}
 	return resp
 }
 
@@ -331,4 +336,11 @@ func toBatchActionList(items []sched_db.ScheduledTask) []schedoapi.BatchAction {
 		}
 	}
 	return result
+}
+
+func toPgText(text *string) pgtype.Text {
+	if text == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: *text, Valid: true}
 }
