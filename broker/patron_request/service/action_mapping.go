@@ -60,7 +60,7 @@ type ActionMapping struct {
 type stateConfig struct {
 	actions        map[pr_db.PatronRequestAction]proapi.ModelAction
 	events         map[string]proapi.ModelEvent
-	autoActions    []pr_db.PatronRequestAction
+	autoActions    []proapi.ModelAction
 	terminal       bool
 	needsAttention bool
 }
@@ -97,7 +97,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
 				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, action)
 					entry.auto = true
 				}
 				if state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name {
@@ -249,12 +249,12 @@ func (r *ActionMapping) GetEventTransition(pr pr_db.PatronRequest, eventName str
 	return pr_db.PatronRequestState(*eventConfig.Transition), true, true
 }
 
-func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []proapi.ModelAction {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok || len(stateConfig.autoActions) == 0 {
-		return []pr_db.PatronRequestAction{}
+		return []proapi.ModelAction{}
 	}
-	return append([]pr_db.PatronRequestAction{}, stateConfig.autoActions...)
+	return append([]proapi.ModelAction{}, stateConfig.autoActions...)
 }
 
 // GetInitialState returns the initial state for the given side, as defined in the state model.

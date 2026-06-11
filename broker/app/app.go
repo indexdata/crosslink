@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/holdings"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -181,11 +182,14 @@ func Init(ctx context.Context) (Context, error) {
 	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 	psRepo := ps_db.CreatePsRepo(pool)
 
+	var emailSenderService *sched_service.EmailSenderService
+	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo)
+
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
 	availabilityCreator := holdings.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
-	prActionService := prservice.CreatePatronRequestActionService(prRepo, eventBus, &iso18626Handler, lmsCreator)
+	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService())
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator, CONSORTIUM_SYMBOL)
@@ -198,8 +202,6 @@ func Init(ctx context.Context) (Context, error) {
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
 
-	var emailSenderService *sched_service.EmailSenderService
-	emailSenderService, err = sched_service.NewEmailSenderService(prRepo, illRepo)
 	batchActionService := sched_service.NewBatchActionService(eventBus, prRepo, emailSenderService)
 
 	if err != nil {

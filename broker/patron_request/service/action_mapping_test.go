@@ -19,16 +19,17 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
-		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}},
+		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}, {actionName: BorrowerActionSendNotification, auto: true}},
 		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}},
 		BorrowerStateCheckedOut:       {{actionName: BorrowerActionCheckIn}},
 		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 		BorrowerStateRetryPending:     {{actionName: BorrowerActionAcceptRetry}, {actionName: BorrowerActionRejectRetry}},
+		BorrowerStateUnfilled:         {{actionName: BorrowerActionSendNotification, auto: true}},
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
-		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
+		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}, {actionName: BorrowerActionSendNotification, auto: true}},
 		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionAccepted: {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},

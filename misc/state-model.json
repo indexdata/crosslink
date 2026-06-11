@@ -162,6 +162,28 @@
                             "description": "Target state when the action fails."
                         }
                     }
+                },
+                "params": {
+                    "type": "object",
+                    "description": "Action parameters as arbitrary name/value pairs.",
+                    "additionalProperties": true,
+                    "properties": {
+                        "sendTo": {
+                            "type": "array",
+                            "description": "Notification recipients for this action.",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "patron",
+                                    "staff"
+                                ]
+                            }
+                        },
+                        "templateLabel": {
+                            "type": "string",
+                            "description": "Label of the notification template to be used for this action."
+                        }
+                    }
                 }
             },
             "required": [

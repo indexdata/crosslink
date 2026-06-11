@@ -225,6 +225,16 @@
           "transitions": {
             "success": "RECEIVED"
           }
+        },
+        {
+          "name": "send-notification",
+          "desc": "Send email notification when item is shipped",
+          "trigger": "auto",
+          "params": {
+            "sendTo": [
+              "patron"
+            ]
+          }
         }
       ]
     },
@@ -326,7 +336,19 @@
       "display": "Unfilled",
       "desc": "Unfilled response is received",
       "side": "REQUESTER",
-      "terminal": true
+      "terminal": true,
+      "actions": [
+        {
+          "name": "send-notification",
+          "desc": "Send email notification when item is unfilled",
+          "trigger": "auto",
+          "params": {
+            "sendTo": [
+              "patron"
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "RETRY_ACCEPTED",
@@ -402,6 +424,16 @@
           "desc": "Ask requester to retry with new ISO18626 metadata",
           "transitions": {
             "success": "COMPLETED_WITH_RETRY"
+          }
+        },
+        {
+          "name": "send-notification",
+          "desc": "Send email notification when item is validated",
+          "trigger": "auto",
+          "params": {
+            "sendTo": [
+              "patron"
+            ]
           }
         }
       ],

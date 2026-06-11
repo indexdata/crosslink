@@ -68,6 +68,7 @@ const (
 	BorrowerActionShipReturn      pr_db.PatronRequestAction = "ship-return"
 	BorrowerActionAcceptRetry     pr_db.PatronRequestAction = "accept-retry"
 	BorrowerActionRejectRetry     pr_db.PatronRequestAction = "reject-retry"
+	BorrowerActionSendNotification pr_db.PatronRequestAction = "send-notification"
 	LenderActionValidate          pr_db.PatronRequestAction = "validate"
 	LenderActionWillSupply        pr_db.PatronRequestAction = "will-supply"
 	LenderActionRejectCancel      pr_db.PatronRequestAction = "reject-cancel"
@@ -77,6 +78,7 @@ const (
 	LenderActionMarkReceived      pr_db.PatronRequestAction = "mark-received"
 	LenderActionAcceptCancel      pr_db.PatronRequestAction = "accept-cancel"
 	LenderActionAskRetry          pr_db.PatronRequestAction = "ask-retry"
+	LenderActionSendNotification pr_db.PatronRequestAction = "send-notification"
 
 	TerminateAction pr_db.PatronRequestAction = "terminate"
 )
@@ -187,6 +189,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 			Name:       string(BorrowerActionRejectRetry),
 			Parameters: []string{},
 		},
+		{
+			Name:       string(BorrowerActionSendNotification),
+			Parameters: []string{},
+		},
 	}
 }
 
@@ -234,6 +240,10 @@ func supplierBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(LenderActionAcceptCancel),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(LenderActionSendNotification),
 			Parameters: []string{},
 		},
 		{

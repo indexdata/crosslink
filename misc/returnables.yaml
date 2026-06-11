@@ -150,6 +150,13 @@ states:
         desc: Receive and accept item in local ILS (via NCIP AcceptItem if enabled); send ISO18626 Received
         transitions:
           success: RECEIVED
+      - name: send-notification
+        desc: Send email notification when item is shipped
+        trigger: auto
+        params:
+          sendTo:
+            - patron
+          templateLabel: shipped-notification
 
   - name: RECEIVED
     display: Received
@@ -222,6 +229,14 @@ states:
     desc: Unfilled response is received
     side: REQUESTER
     terminal: true
+    actions:
+      - name: send-notification
+        desc: Send email notification when item is unfilled
+        trigger: auto
+        params:
+          sendTo:
+            - patron
+          templateLabel: unfilled-notification
 
   - name: RETRY_ACCEPTED
     display: Retry Accepted
@@ -279,6 +294,13 @@ states:
         desc: Ask requester to retry with new ISO18626 metadata
         transitions:
           success: COMPLETED_WITH_RETRY
+      - name: send-notification
+        desc: Send email notification when item is validated
+        trigger: auto
+        params:
+          sendTo:
+            - patron
+          templateLabel: validated-notification
     events:
       - name: cancel-request
         desc: Requester sent ISO18626 Cancel

@@ -2,12 +2,12 @@ package sched_service
 
 import (
 	"errors"
-	"net/smtp"
 	"strings"
 	"testing"
 
 	"github.com/indexdata/cql-go/pgcql"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -52,16 +52,21 @@ func (m *mockEmailIllRepo) GetPeerBySymbol(_ common.ExtendedContext, _ string) (
 	return ill_db.Peer{CustomData: directory.Entry{FromEmail: &m.fromEmail}}, nil
 }
 
-// mockMailer records the raw message bytes passed to SendMail.
-type mockMailer struct {
+// mockEmailService records the raw message bytes passed to SendMail.
+type mockEmailService struct {
 	err    error
 	called bool
 	data   []byte
+	ready  bool
 }
 
-func (m *mockMailer) SendMail(_ string, _ smtp.Auth, _ string, _ []string, msg []byte) error {
+func (m *mockEmailService) IsReadyToSend() bool {
+	return m.ready
+}
+
+func (m *mockEmailService) SendEmail(from string, to []string, raw []byte) error {
 	m.called = true
-	m.data = append([]byte(nil), msg...)
+	m.data = append([]byte(nil), raw...)
 	return m.err
 }
 
@@ -102,8 +107,8 @@ func validEmailEvent() events.Event {
 }
 
 // newEmailSvc creates an EmailSenderService wired to the supplied mocks.
-func newEmailSvc(prRepo pr_db.PrRepo, mailer Mailer, pdf psservice.PdfService) *EmailSenderService {
-	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, pdf, true)
+func newEmailSvc(prRepo pr_db.PrRepo, emailService email.EmailService, pdf psservice.PdfService) *EmailSenderService {
+	return EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, emailService, pdf)
 }
 
 // ---------------------------------------------------------------------------
@@ -186,99 +191,18 @@ func TestExtractEmailData_AllOptionalFields(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// joinAddresses
-// ---------------------------------------------------------------------------
-
-func TestJoinAddresses_Empty(t *testing.T) {
-	assert.Equal(t, "", joinAddresses(nil))
-	assert.Equal(t, "", joinAddresses([]string{}))
-}
-
-func TestJoinAddresses_Single(t *testing.T) {
-	assert.Equal(t, "a@b.com", joinAddresses([]string{"a@b.com"}))
-}
-
-func TestJoinAddresses_Multiple(t *testing.T) {
-	assert.Equal(t, "a@b.com, c@d.com, e@f.com",
-		joinAddresses([]string{"a@b.com", "c@d.com", "e@f.com"}))
-}
-
-// ---------------------------------------------------------------------------
-// buildRawMessage
-// ---------------------------------------------------------------------------
-
-func TestBuildRawMessage_PlainTextHeaders(t *testing.T) {
-	data := EmailData{
-		To:      []string{"to@example.com"},
-		Subject: "Hello",
-		Body:    "Plain text body",
-	}
-	raw, err := buildRawMessage("from@example.com", data, nil)
-	assert.NoError(t, err)
-	msg := string(raw)
-	assert.Contains(t, msg, "From: from@example.com")
-	assert.Contains(t, msg, "To: to@example.com")
-	assert.Contains(t, msg, "Subject:")
-	assert.Contains(t, msg, "MIME-Version: 1.0")
-	assert.Contains(t, msg, "text/plain")
-	assert.NotContains(t, msg, "application/pdf")
-}
-
-func TestBuildRawMessage_HTMLBody(t *testing.T) {
-	data := EmailData{
-		To:     []string{"to@example.com"},
-		Body:   "<p>HTML body</p>",
-		IsHTML: true,
-	}
-	raw, err := buildRawMessage("from@example.com", data, nil)
-	assert.NoError(t, err)
-	assert.Contains(t, string(raw), "text/html")
-}
-
-func TestBuildRawMessage_MultipleRecipients(t *testing.T) {
-	data := EmailData{
-		To:   []string{"a@b.com", "c@d.com"},
-		Body: "body",
-	}
-	raw, err := buildRawMessage("from@example.com", data, nil)
-	assert.NoError(t, err)
-	assert.Contains(t, string(raw), "a@b.com, c@d.com")
-}
-
-func TestBuildRawMessage_WithPDFAttachment(t *testing.T) {
-	data := EmailData{
-		To:   []string{"to@example.com"},
-		Body: "body with attachment",
-	}
-	att := &pdfAttach{filename: "pull-slips.pdf", data: []byte("%PDF-1.4 fake")}
-	raw, err := buildRawMessage("from@example.com", data, att)
-	assert.NoError(t, err)
-	msg := string(raw)
-	assert.Contains(t, msg, "application/pdf")
-	assert.Contains(t, msg, `attachment; filename="pull-slips.pdf"`)
-	assert.Contains(t, msg, "Content-Transfer-Encoding: base64")
-}
-
-func TestBuildRawMessage_WithoutAttachment(t *testing.T) {
-	data := EmailData{To: []string{"to@example.com"}, Body: "body"}
-	raw, err := buildRawMessage("from@example.com", data, nil)
-	assert.NoError(t, err)
-	assert.NotContains(t, string(raw), "application/pdf")
-}
-
-// ---------------------------------------------------------------------------
 // generateAndEmailPullslip
 // ---------------------------------------------------------------------------
 
 func TestGenerateAndEmailPullslip_NilBatchActionData(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, events.Event{})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
 }
 
 func TestGenerateAndEmailPullslip_EmptySelector(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -291,7 +215,7 @@ func TestGenerateAndEmailPullslip_EmptySelector(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_InvalidCQL(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -305,7 +229,7 @@ func TestGenerateAndEmailPullslip_InvalidCQL(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_NilCustomData(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -319,7 +243,7 @@ func TestGenerateAndEmailPullslip_NilCustomData(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_EmptyTo(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -336,7 +260,7 @@ func TestGenerateAndEmailPullslip_EmptyTo(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -352,7 +276,7 @@ func TestGenerateAndEmailPullslip_EmptySubject(t *testing.T) {
 }
 
 func TestGenerateAndEmailPullslip_EmptyBody(t *testing.T) {
-	svc := newEmailSvc(&mockEmailPrRepo{}, &mockMailer{}, nil)
+	svc := newEmailSvc(&mockEmailPrRepo{}, &mockEmailService{}, nil)
 	event := events.Event{
 		EventData: events.EventData{
 			CommonEventData: events.CommonEventData{
@@ -369,7 +293,7 @@ func TestGenerateAndEmailPullslip_EmptyBody(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_ListPatronRequestsError(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listErr: errors.New("db down")}
-	svc := newEmailSvc(prRepo, &mockMailer{}, nil)
+	svc := newEmailSvc(prRepo, &mockEmailService{}, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, result)
@@ -377,7 +301,7 @@ func TestGenerateAndEmailPullslip_ListPatronRequestsError(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_SMTPError(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{err: errors.New("SMTP unavailable")}
+	mailer := &mockEmailService{err: errors.New("SMTP unavailable")}
 	svc := newEmailSvc(prRepo, mailer, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusError, status)
@@ -387,7 +311,7 @@ func TestGenerateAndEmailPullslip_SMTPError(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_Success(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
+	mailer := &mockEmailService{}
 	svc := newEmailSvc(prRepo, mailer, nil)
 	status, result := svc.generateAndEmailPullslip(testCtx, validEmailEvent())
 	assert.Equal(t, events.EventStatusSuccess, status)
@@ -399,7 +323,7 @@ func TestGenerateAndEmailPullslip_Success(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_WithPDF_Success(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
+	mailer := &mockEmailService{}
 	pdf := &mockPdfGen{data: []byte("%PDF fake")}
 	svc := newEmailSvc(prRepo, mailer, pdf)
 
@@ -415,7 +339,7 @@ func TestGenerateAndEmailPullslip_WithPDF_Success(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_WithPDF_NilGenerator(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
+	mailer := &mockEmailService{}
 	// pdf generator is nil — IncludePdf=true must return an error, not panic.
 	svc := newEmailSvc(prRepo, mailer, nil)
 
@@ -430,7 +354,7 @@ func TestGenerateAndEmailPullslip_WithPDF_NilGenerator(t *testing.T) {
 
 func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
+	mailer := &mockEmailService{}
 	pdf := &mockPdfGen{err: errors.New("pdf engine failure")}
 	svc := newEmailSvc(prRepo, mailer, pdf)
 
@@ -449,8 +373,8 @@ func TestGenerateAndEmailPullslip_WithPDF_GenerateError(t *testing.T) {
 
 func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)
+	mailer := &mockEmailService{ready: true}
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 
@@ -460,15 +384,15 @@ func TestEmailPullslip_WhenReadyToSend_SendsEmail(t *testing.T) {
 
 func TestEmailPullslip_DoesNotPanic(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, true)
+	mailer := &mockEmailService{ready: false}
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
 
 	// EmailPullslip ignores the ProcessTask error (_, _ = ...); verify no panic.
 	svc.EmailPullslip(testCtx, validEmailEvent())
 }
 
 func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
-	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockMailer{}, nil, true)
+	svc := EmailSenderServiceWithClient(nil, &mockEmailIllRepo{fromEmail: "from@example.com"}, &mockEmailService{}, nil)
 
 	// Event with no BatchActionData → handler returns error status.
 	status, _ := svc.EmailPullslip(testCtx, events.Event{})
@@ -478,8 +402,8 @@ func TestEmailPullslip_InvalidEvent_ErrorStatus(t *testing.T) {
 
 func TestEmailPullslip_SetEventToFailed(t *testing.T) {
 	prRepo := &mockEmailPrRepo{listResult: []pr_db.PatronRequest{}}
-	mailer := &mockMailer{}
-	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil, false)
+	mailer := &mockEmailService{}
+	svc := EmailSenderServiceWithClient(prRepo, &mockEmailIllRepo{fromEmail: "from@example.com"}, mailer, nil)
 
 	status, _ := svc.EmailPullslip(testCtx, validEmailEvent())
 

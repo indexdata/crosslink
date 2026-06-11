@@ -896,6 +896,22 @@ components:
             failure:
               type: string
               description: Target state when the action fails.
+        params:
+          type: object
+          description: Parameters for the action. The presence of parameters indicates that the action requires additional input to be executed.
+          additionalProperties: true
+          properties:
+            sendTo:
+              type: array
+              description: Notification recipients for this action.
+              items:
+                type: string
+                enum:
+                  - patron
+                  - staff
+            templateLabel:
+              type: string
+              description: Template label for this action. The template selector is used to select the appropriate template for generating messages.
       required:
         - name
 
