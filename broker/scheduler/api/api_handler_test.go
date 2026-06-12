@@ -87,7 +87,7 @@ func scheduledTaskFixture(id string) sched_db.ScheduledTask {
 		ActionData: events.EventData{
 			CommonEventData: events.CommonEventData{
 				BatchActionData: &events.BatchActionData{
-					ActionName: string(schedoapi.BatchActionActionNameEmailPullslips),
+					ActionName: string(schedoapi.EmailPullslips),
 					Selector:   "title=test",
 					TaskId:     id,
 					Owner:      testSymbol,
@@ -133,7 +133,7 @@ func TestGetBatchActions_OK(t *testing.T) {
 	assert.Equal(t, int64(2), resp.About.Count)
 	assert.Len(t, resp.Items, 2)
 	assert.Equal(t, "task-1", resp.Items[0].Id)
-	assert.Equal(t, schedoapi.BatchActionActionNameEmailPullslips, resp.Items[0].ActionName)
+	assert.Equal(t, schedoapi.EmailPullslips, resp.Items[0].ActionName)
 	assert.Equal(t, "title=test", resp.Items[0].BatchQuery)
 	assert.True(t, resp.Items[0].Active)
 	assert.NotNil(t, resp.Items[0].NextRun)
@@ -207,7 +207,7 @@ func TestPostBatchActions_OK(t *testing.T) {
 			p.RunAt.Valid && p.RunAt.Time.After(before) &&
 			p.CreatedAt.Valid &&
 			p.ActionData.BatchActionData != nil &&
-			p.ActionData.BatchActionData.ActionName == string(schedoapi.BatchActionActionNameEmailPullslips) &&
+			p.ActionData.BatchActionData.ActionName == string(schedoapi.EmailPullslips) &&
 			p.ActionData.BatchActionData.Selector == "title=test" &&
 			p.ActionData.BatchActionData.TaskId == p.ID &&
 			p.ActionData.BatchActionData.Owner == testSymbol &&

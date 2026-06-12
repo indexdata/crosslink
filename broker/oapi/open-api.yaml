@@ -1086,6 +1086,13 @@ components:
         - owner
         - searchCriteria
 
+    BatchActionName:
+      type: string
+      description: Name of the batch action to run
+      enum:
+        - email-pullslips
+        - request-aging
+
     BatchAction:
       type: object
       title: Batch Action
@@ -1098,16 +1105,16 @@ components:
           type: string
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
+          $ref: '#/components/schemas/BatchActionName'
+        title:
           type: string
-          description: Name of the batch action to run
-          enum:
-            - email-pullslips
+          description: Title of the batch action, for display purposes
         batchQuery:
           type: string
           description: Batch action selection query in CQL format
         actionParams:
           type: object
-          description: Parameters for the batch action
+          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
           additionalProperties: true
         nextRun:
           type: string
@@ -1155,16 +1162,16 @@ components:
           type: string
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
         actionName:
+          $ref: '#/components/schemas/BatchActionName'
+        title:
           type: string
-          description: Name of the batch action to run
-          enum:
-            - email-pullslips
+          description: Title of the batch action, for display purposes
         batchQuery:
           type: string
           description: Batch action selection query in CQL format
         actionParams:
           type: object
-          description: Parameters for the batch action
+          description: Parameters for the batch action. For request-aging, interval is required and must be a Go duration string such as "24h" or "168h". Additional parameters are passed to the generated patron-request background action.
           additionalProperties: true
       required:
         - schedule
@@ -1176,6 +1183,9 @@ components:
       title: Update Batch Action
       description: Request body for updating a batch action
       properties:
+        title:
+          type: string
+          description: Title of the batch action, for display purposes
         schedule:
           type: string
           description: RRULE schedule expression, e.g. "FREQ=WEEKLY;BYDAY=MO;BYHOUR=6;BYMINUTE=0" (every Monday at 06:00)
