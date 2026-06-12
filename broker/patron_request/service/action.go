@@ -96,6 +96,9 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
+	if action == TerminateAction {
+		return a.handleTerminateAction(ctx, actionMapping, pr, action)
+	}
 	if !actionMapping.IsActionSupported(pr, action) {
 		return logActionErrorAndReturnResult(ctx, "state "+string(pr.State)+" does not support action "+string(action), errors.New("invalid action"))
 	}
@@ -112,6 +115,42 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	default:
 		return logActionErrorAndReturnResult(ctx, "side "+string(pr.Side)+" is not supported", errors.New("invalid side"))
+	}
+}
+
+func (a *PatronRequestActionService) handleTerminateAction(ctx common.ExtendedContext, actionMapping *ActionMapping, pr pr_db.PatronRequest, action pr_db.PatronRequestAction) (events.EventStatus, *events.EventResult) {
+	if actionMapping.IsTerminalState(pr) || pr.TerminalState {
+		return logActionErrorAndReturnResult(ctx, "patron request "+pr.ID+" is already terminal", errors.New("invalid action"))
+	}
+	manualCloseState, ok := actionMapping.GetManualCloseState(pr)
+	if !ok {
+		return logActionErrorAndReturnResult(ctx, "state model does not define a manual close target for side "+string(pr.Side), errors.New("invalid state model"))
+	}
+
+	updatedPr := pr
+	updatedPr.State = manualCloseState
+	updatedPr.TerminalState = true
+	updatedPr.LastAction = getDbText(string(action))
+	updatedPr.LastActionOutcome = getDbText(ActionOutcomeSuccess)
+	updatedPr.LastActionResult = getDbText(string(events.EventStatusSuccess))
+	updatedPr.NeedsAttention = false
+	if config, configOk := actionMapping.getStateConfig(updatedPr); configOk {
+		updatedPr.NeedsAttention = config.needsAttention
+	}
+
+	updatedPr, err := a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
+	if err != nil {
+		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
+	}
+
+	toState := string(updatedPr.State)
+	return events.EventStatusSuccess, &events.EventResult{
+		CommonEventData: events.CommonEventData{
+			ActionResult: &events.ActionResult{
+				Outcome: ActionOutcomeSuccess,
+				ToState: &toState,
+			},
+		},
 	}
 }
 

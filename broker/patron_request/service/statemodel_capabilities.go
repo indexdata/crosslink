@@ -36,6 +36,7 @@ const (
 	BorrowerStateCompleted        pr_db.PatronRequestState = "COMPLETED"
 	BorrowerStateCancelled        pr_db.PatronRequestState = "CANCELLED"
 	BorrowerStateUnfilled         pr_db.PatronRequestState = "UNFILLED"
+	BorrowerStateManuallyClosed   pr_db.PatronRequestState = "MANUALLY_CLOSED"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
 	LenderStateWillSupply         pr_db.PatronRequestState = "WILL_SUPPLY"
@@ -48,6 +49,7 @@ const (
 	LenderStateCompleted          pr_db.PatronRequestState = "COMPLETED"
 	LenderStateCancelled          pr_db.PatronRequestState = "CANCELLED"
 	LenderStateUnfilled           pr_db.PatronRequestState = "UNFILLED"
+	LenderStateManuallyClosed     pr_db.PatronRequestState = "MANUALLY_CLOSED"
 )
 
 const (
@@ -69,6 +71,8 @@ const (
 	LenderActionShip         pr_db.PatronRequestAction = "ship"
 	LenderActionMarkReceived pr_db.PatronRequestAction = "mark-received"
 	LenderActionAcceptCancel pr_db.PatronRequestAction = "accept-cancel"
+
+	TerminateAction pr_db.PatronRequestAction = "terminate"
 )
 
 const (
@@ -104,6 +108,7 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateCompleted),
 		string(BorrowerStateCancelled),
 		string(BorrowerStateUnfilled),
+		string(BorrowerStateManuallyClosed),
 	})
 }
 
@@ -121,6 +126,7 @@ func supplierBuiltInStates() []string {
 		string(LenderStateCompleted),
 		string(LenderStateCancelled),
 		string(LenderStateUnfilled),
+		string(LenderStateManuallyClosed),
 	})
 }
 

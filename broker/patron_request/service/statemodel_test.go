@@ -122,6 +122,73 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	assert.Equal(t, "primary action other undefined in state NEW side REQUESTER", err.Error())
 }
 
+func TestValidateStateModelManualCloseTerminal(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateManuallyClosed),
+				Side:        proapi.REQUESTER,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.NoError(t, err)
+}
+
+func TestValidateStateModelManualCloseNonTerminal(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateNew),
+				Side:        proapi.REQUESTER,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be terminal")
+}
+
+func TestValidateStateModelManualCloseDuplicateSide(t *testing.T) {
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:        string(BorrowerStateCancelled),
+				Side:        proapi.REQUESTER,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+			{
+				Name:        string(BorrowerStateManuallyClosed),
+				Side:        proapi.REQUESTER,
+				Terminal:    &tt,
+				ManualClose: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "manualClose state defined multiple times")
+}
+
 func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
