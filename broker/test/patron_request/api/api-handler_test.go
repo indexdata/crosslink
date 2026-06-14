@@ -825,7 +825,7 @@ func TestAcceptRetry(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 
-	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
 	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
@@ -833,7 +833,7 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "RETRY:NOTFOUNDASCITED", r.BibliographicInfo.SupplierUniqueRecordId)
-		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+		assert.Equal(t, id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
 	assert.Equal(t, "validate", *foundPr.LastAction)
@@ -867,6 +867,7 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
@@ -893,7 +894,9 @@ func TestAcceptRetry(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "SUCCESS", pResult.Result)
 
+	// check the original request is updated with retry info and new request is created
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
@@ -901,23 +904,30 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NextReqId, "got pr "+string(respBytes))
+	assert.Nil(t, foundPr.PrevReqId, "got pr "+string(respBytes))
+	assert.Equal(t, "123456789", *foundPr.RetryItemId)
 
 	// accept again - should fail as the request state it terminated
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
 	assert.Contains(t, string(respBytes), "Action accept-retry is not allowed for patron request")
 
-	// send request for the new PR created by accept-retry
+	// check cloned request
 	newId := *foundPr.NextReqId
+	assert.NotEqual(t, newId, id)
+
 	thisPrPath = basePath + "/" + newId
 
-	// check cloned request
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, newId, foundPr.Id)
 	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.Equal(t, id, *foundPr.PrevReqId)
+	assert.Nil(t, foundPr.NextReqId)
+	assert.Nil(t, foundPr.RetryItemId)
 	assert.Equal(t, "123456789", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 
 	action = proapi.ExecuteAction{

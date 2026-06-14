@@ -588,6 +588,9 @@ components:
         prevReqId:
           type: string
           description: ID of the previous patron request in the sequence
+        retryItemId:
+          type: string
+          description: ID of the item to retry the request for when in retrying state
       required:
         - id
         - createdAt

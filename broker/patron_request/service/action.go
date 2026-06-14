@@ -567,6 +567,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	clone.ID = uuid.NewString()
 	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	clone.PrevReqID = getDbTextPtr(&pr.ID)
+	clone.RetryItemID = pgtype.Text{} // clear retry item id to avoid confusion, will be set as SupplierUniqueRecordId in the new request if needed
 	if pr.RetryItemID.Valid {
 		ctx.Logger().Info("AD: setting SupplierUniqueRecordId for retry", "SupplierUniqueRecordId", pr.RetryItemID.String)
 		clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryItemID.String

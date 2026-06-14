@@ -916,6 +916,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		InternalNote:             toString(request.InternalNote),
 		NextReqId:                toString(request.NextReqID),
 		PrevReqId:                toString(request.PrevReqID),
+		RetryItemId:              toString(request.RetryItemID),
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
