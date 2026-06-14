@@ -541,32 +541,30 @@ func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.Patron
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
-func clonePatronRequest(pr pr_db.PatronRequest) (pr_db.PatronRequest, error) {
-	prJSON, err := json.Marshal(pr)
-	if err != nil {
-		return pr_db.PatronRequest{}, err
-	}
-	var clone pr_db.PatronRequest
-	if err = json.Unmarshal(prJSON, &clone); err != nil {
-		return pr_db.PatronRequest{}, err
-	}
-	return clone, nil
-}
-
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
 
-	clone, err := clonePatronRequest(pr)
+	clone := pr_db.PatronRequest{}
+	clone.Side = pr.Side
+	clone.RequesterSymbol = pr.RequesterSymbol
+	clone.SupplierSymbol = pr.SupplierSymbol
+	clone.Patron = pr.Patron
+	clone.Tenant = pr.Tenant
+	var err error
+	clone.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
 	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to clone patron request for retry", err)
+		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	ctx.Logger().Info("cloned patron request for retry", "IllRequest.BibliographicInfo.SupplierUniqueRecordId", clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 	clone.State = pr_db.PatronRequestState("VALIDATED")
 	clone.TerminalState = false
 	clone.ID = uuid.NewString()
+	clone.RequesterReqID = getDbTextPtr(&clone.ID)
 	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	clone.PrevReqID = getDbTextPtr(&pr.ID)
+	clone.Language = pr.Language
+	clone.Items = []pr_db.PrItem{}    // items will be copied when the retry request is sent
 	clone.RetryItemID = pgtype.Text{} // clear retry item id to avoid confusion, will be set as SupplierUniqueRecordId in the new request if needed
 	if pr.RetryItemID.Valid {
 		ctx.Logger().Info("AD: setting SupplierUniqueRecordId for retry", "SupplierUniqueRecordId", pr.RetryItemID.String)
