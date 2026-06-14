@@ -1,0 +1,315 @@
+# yaml-language-server: $schema=state-model.json
+type: StateModel
+name: CrossLink Non-Returnables State Model
+desc: Requester/Supplier workflow for non-returnable document supply over ISO18626.
+version: "1.0.0"
+states:
+  # Requester-side
+  - name: NEW
+    display: New
+    desc: Initial state after a non-returnable Patron Request is created (POST)
+    side: REQUESTER
+    primaryAction: validate
+    actions:
+      - name: validate
+        desc: Validate the request (e.g. check patron via NCIP LookupUser, if enabled)
+        transitions:
+          success: VALIDATED
+        trigger: auto
+      - name: cancel-request
+        desc: Cancel the request before a supplier is contacted
+        transitions:
+          success: CANCELLED
+
+  - name: VALIDATED
+    display: Validated
+    desc: Non-returnable Patron Request is valid
+    side: REQUESTER
+    primaryAction: send-request
+    actions:
+      - name: send-request
+        desc: Send the ISO18626 request to the supplier or broker
+        transitions:
+          success: SENT
+      - name: cancel-request
+        desc: Cancel the request before it is sent to a supplier
+        transitions:
+          success: CANCELLED
+
+  - name: SENT
+    display: Sent
+    desc: Non-returnable request is sent
+    side: REQUESTER
+    primaryAction: cancel-request
+    actions:
+      - name: cancel-request
+        desc: Send ISO18626 Cancel to the supplier
+        transitions:
+          success: CANCEL_PENDING
+    events:
+      - name: expect-to-supply
+        desc: Supplier indicates an intention to supply (ISO18626 ExpectToSupply)
+        transition: SUPPLIER_LOCATED
+      - name: will-supply
+        desc: Supplier will supply without conditions (ISO18626 WillSupply)
+        transition: WILL_SUPPLY
+      - name: will-supply-conditional
+        desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
+        transition: CONDITION_PENDING
+      - name: copy-completed
+        desc: Supplier delivered the document (ISO18626 CopyCompleted)
+        transition: COMPLETED
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
+
+  - name: SUPPLIER_LOCATED
+    display: Supplier Located
+    desc: Supplier indicates that it expects to supply the document
+    side: REQUESTER
+    primaryAction: cancel-request
+    actions:
+      - name: cancel-request
+        desc: Send ISO18626 Cancel to the supplier
+        transitions:
+          success: CANCEL_PENDING
+    events:
+      - name: will-supply
+        desc: Supplier will supply without conditions (ISO18626 WillSupply)
+        transition: WILL_SUPPLY
+      - name: will-supply-conditional
+        desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
+        transition: CONDITION_PENDING
+      - name: copy-completed
+        desc: Supplier delivered the document (ISO18626 CopyCompleted)
+        transition: COMPLETED
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
+
+  - name: CONDITION_PENDING
+    display: Condition Pending
+    desc: Received conditions for supplying the document
+    side: REQUESTER
+    primaryAction: accept-condition
+    needsAttention: true
+    actions:
+      - name: accept-condition
+        desc: Accept supplier conditions (ISO18626 Notification)
+        transitions:
+          success: WILL_SUPPLY
+      - name: reject-condition
+        desc: Reject supplier conditions (ISO18626 Cancel)
+        transitions:
+          success: CANCEL_PENDING
+      - name: cancel-request
+        desc: Cancel the request without accepting the conditions
+        transitions:
+          success: CANCEL_PENDING
+    events:
+      - name: will-supply-conditional
+        desc: Supplier updates or extends the conditions
+        transition: CONDITION_PENDING
+      - name: copy-completed
+        desc: Supplier delivered the document (ISO18626 CopyCompleted)
+        transition: COMPLETED
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
+
+  - name: WILL_SUPPLY
+    display: Will Supply
+    desc: Supplier has committed to supplying the document
+    side: REQUESTER
+    primaryAction: cancel-request
+    actions:
+      - name: cancel-request
+        desc: Send ISO18626 Cancel to the supplier
+        transitions:
+          success: CANCEL_PENDING
+    events:
+      - name: will-supply-conditional
+        desc: Supplier adds conditions before delivering the document
+        transition: CONDITION_PENDING
+      - name: copy-completed
+        desc: Supplier delivered the document (ISO18626 CopyCompleted)
+        transition: COMPLETED
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
+
+  - name: CANCEL_PENDING
+    display: Cancel Pending
+    desc: ISO18626 Cancel is sent to the supplier
+    side: REQUESTER
+    events:
+      - name: cancel-accepted
+        desc: Supplier accepts cancellation
+        transition: CANCELLED
+      - name: cancel-rejected
+        desc: Supplier rejects cancellation and continues supplying
+        transition: WILL_SUPPLY
+      - name: copy-completed
+        desc: Supplier completes delivery before cancellation takes effect
+        transition: COMPLETED
+      - name: unfilled
+        desc: Supplier cannot supply (ISO18626 Unfilled)
+        transition: UNFILLED
+
+  - name: COMPLETED
+    display: Completed
+    desc: Document was delivered (ISO18626 CopyCompleted)
+    side: REQUESTER
+    terminal: true
+
+  - name: CANCELLED
+    display: Cancelled
+    desc: Supplier accepted cancellation or the request was cancelled before sending
+    side: REQUESTER
+    terminal: true
+
+  - name: UNFILLED
+    display: Unfilled
+    desc: Supplier cannot supply the requested document
+    side: REQUESTER
+    terminal: true
+
+  # Supplier-side
+  - name: NEW
+    display: New
+    desc: Non-returnable request is created on the supplier side
+    side: SUPPLIER
+    primaryAction: validate
+    actions:
+      - name: validate
+        desc: Validate the incoming request
+        transitions:
+          success: VALIDATED
+        trigger: auto
+
+  - name: VALIDATED
+    display: Validated
+    desc: Non-returnable request is valid and ready for a supply decision
+    side: SUPPLIER
+    primaryAction: will-supply
+    actions:
+      - name: will-supply
+        desc: Indicate the supplier will provide the document and send ISO18626 WillSupply
+        transitions:
+          success: WILL_SUPPLY
+      - name: cannot-supply
+        desc: Indicate the supplier cannot provide the document and send ISO18626 Unfilled
+        transitions:
+          success: UNFILLED
+      - name: add-condition
+        desc: Offer to supply with conditions and send ISO18626 WillSupply
+        transitions:
+          success: CONDITION_PENDING
+    events:
+      - name: cancel-request
+        desc: Requester sends ISO18626 Cancel
+        transition: CANCEL_REQUESTED
+
+  - name: WILL_SUPPLY
+    display: Will Supply
+    desc: Supplier has agreed to provide the document
+    side: SUPPLIER
+    primaryAction: supply-document
+    actions:
+      - name: supply-document
+        desc: Attach the document URL and send ISO18626 CopyCompleted
+        transitions:
+          success: COMPLETED
+      - name: add-condition
+        desc: Add conditions and notify the requester
+        transitions:
+          success: CONDITION_PENDING
+      - name: cannot-supply
+        desc: Indicate the supplier can no longer provide the document
+        transitions:
+          success: UNFILLED
+    events:
+      - name: cancel-request
+        desc: Requester sends ISO18626 Cancel
+        transition: CANCEL_REQUESTED
+
+  - name: CONDITION_PENDING
+    display: Condition Pending
+    desc: Supplier is waiting for the requester to respond to supply conditions
+    side: SUPPLIER
+    primaryAction: cannot-supply
+    actions:
+      - name: add-condition
+        desc: Update the conditions and notify the requester
+        transitions:
+          success: CONDITION_PENDING
+      - name: cannot-supply
+        desc: Withdraw the conditional offer and send ISO18626 Unfilled
+        transitions:
+          success: UNFILLED
+    events:
+      - name: conditions-accepted
+        desc: Requester accepts the supply conditions
+        transition: CONDITION_ACCEPTED
+      - name: condition-rejected
+        desc: Requester rejects the supply conditions
+        transition: CANCEL_REQUESTED
+      - name: cancel-request
+        desc: Requester sends ISO18626 Cancel
+        transition: CANCEL_REQUESTED
+
+  - name: CONDITION_ACCEPTED
+    display: Condition Accepted
+    desc: Requester accepted the conditions for document supply
+    side: SUPPLIER
+    primaryAction: supply-document
+    actions:
+      - name: supply-document
+        desc: Attach the document URL and send ISO18626 CopyCompleted
+        transitions:
+          success: COMPLETED
+      - name: add-condition
+        desc: Add or revise conditions before supplying the document
+        transitions:
+          success: CONDITION_PENDING
+      - name: cannot-supply
+        desc: Indicate the supplier can no longer provide the document
+        transitions:
+          success: UNFILLED
+    events:
+      - name: cancel-request
+        desc: Requester sends ISO18626 Cancel
+        transition: CANCEL_REQUESTED
+
+  - name: CANCEL_REQUESTED
+    display: Cancel Requested
+    desc: Requester sent ISO18626 Cancel
+    side: SUPPLIER
+    primaryAction: accept-cancel
+    actions:
+      - name: accept-cancel
+        desc: Confirm cancellation
+        transitions:
+          success: CANCELLED
+      - name: reject-cancel
+        desc: Reject cancellation and continue supplying
+        transitions:
+          success: WILL_SUPPLY
+
+  - name: COMPLETED
+    display: Completed
+    desc: Document was supplied and ISO18626 CopyCompleted was sent
+    side: SUPPLIER
+    terminal: true
+
+  - name: CANCELLED
+    display: Cancelled
+    desc: Supplier accepted cancellation
+    side: SUPPLIER
+    terminal: true
+
+  - name: UNFILLED
+    display: Unfilled
+    desc: Supplier cannot supply the requested document
+    side: SUPPLIER
+    terminal: true
