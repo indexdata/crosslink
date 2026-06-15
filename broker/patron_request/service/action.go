@@ -557,7 +557,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	ctx.Logger().Info("cloned patron request for retry", "IllRequest.BibliographicInfo.SupplierUniqueRecordId", clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
-	clone.State = pr_db.PatronRequestState("VALIDATED")
+	clone.State = BorrowerStateValidated
 	clone.TerminalState = false
 	clone.ID = uuid.NewString()
 	clone.RequesterReqID = getDbTextPtr(&clone.ID)
