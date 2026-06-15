@@ -52,7 +52,7 @@ type actionParams struct {
 	Currency       string   `json:"currency,omitempty"`
 	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
 	ReasonRetry    string   `json:"reasonRetry,omitempty"`
-	ItemId         string   `json:"itemId,omitempty"`
+	ItemID         string   `json:"itemId,omitempty"`
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -825,9 +825,9 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 
 func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
 	var deliveryInfo *iso18626.DeliveryInfo
-	if params.ItemId != "" {
+	if params.ItemID != "" {
 		deliveryInfo = &iso18626.DeliveryInfo{
-			ItemId: params.ItemId,
+			ItemId: params.ItemID,
 		}
 	}
 	reasonRetry := string(iso18626.ReasonRetryNotFoundAsCited)
