@@ -930,6 +930,8 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Nil(t, foundPr.RetryItemId)
 	assert.Equal(t, "123456789", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
 
+	// retry 2nd time. The "123456789" item id should be kept as retryItemId
+	// illmock will use scenario unfilled
 	action = proapi.ExecuteAction{
 		Action: "send-request",
 	}
@@ -945,12 +947,14 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Nil(t, pResult.Message)
 
 	test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\"accept-retry\"")
+		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+		foundPr = proapi.PatronRequest{}
+		err = json.Unmarshal(respBytes, &foundPr)
+		return err == nil && foundPr.State == "UNFILLED" && foundPr.TerminalState
 	})
-	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-	// TODO
-	// assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, "UNFILLED", foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

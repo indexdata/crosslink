@@ -291,7 +291,6 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		return statusChangeNotAllowed()
 	}
 	if retryItemId != "" {
-		ctx.Logger().Info("AD: received retry possible status with retry item id", "retryItemId", retryItemId)
 		updatedPr.RetryItemID = pgtype.Text{
 			String: retryItemId,
 			Valid:  true,

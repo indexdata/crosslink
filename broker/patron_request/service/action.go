@@ -567,7 +567,6 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	clone.Items = []pr_db.PrItem{}    // items will be copied when the retry request is sent
 	clone.RetryItemID = pgtype.Text{} // clear retry item id to avoid confusion, will be set as SupplierUniqueRecordId in the new request if needed
 	if pr.RetryItemID.Valid {
-		ctx.Logger().Info("AD: setting SupplierUniqueRecordId for retry", "SupplierUniqueRecordId", pr.RetryItemID.String)
 		clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryItemID.String
 	}
 
@@ -577,7 +576,6 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	pr.NextReqID = getDbTextPtr(&clone.ID)
-	ctx.Logger().Info("AD: created new patron request for retry", "new_pr_id", clone.ID, "prev_pr_id", pr.ID)
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
