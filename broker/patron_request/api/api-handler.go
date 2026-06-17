@@ -935,13 +935,6 @@ func toString(text pgtype.Text) *string {
 	return value
 }
 
-func retryBibInfoToItemId(info *iso18626.BibliographicInfo) *string {
-	if info == nil || info.SupplierUniqueRecordId == "" {
-		return nil
-	}
-	return &info.SupplierUniqueRecordId
-}
-
 func bibInfoToMap(info *iso18626.BibliographicInfo) *map[string]interface{} {
 	if info == nil {
 		return nil
