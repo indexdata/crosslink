@@ -1689,7 +1689,7 @@ func TestHandleSupplyingAgencyNotificationNoAction(t *testing.T) {
 			ReasonForMessage: reason,
 		},
 		StatusInfo: iso18626.StatusInfo{
-			Status:     iso18626.TypeStatusWillSupply,
+			Status:     iso18626.TypeStatusLoaned,
 			LastChange: utils.XSDDateTime{Time: time.Now()},
 		},
 	}
