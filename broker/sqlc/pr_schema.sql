@@ -23,7 +23,7 @@ CREATE TABLE patron_request
     internal_note       TEXT,
     next_req_id         VARCHAR,
     prev_req_id         VARCHAR,
-    retry_item_id       VARCHAR
+    retry_bib_info       JSONB
 );
 
 CREATE OR REPLACE FUNCTION get_next_hrid(prefix VARCHAR) RETURNS VARCHAR AS $$

@@ -1,6 +1,6 @@
 ALTER TABLE patron_request ADD COLUMN next_req_id VARCHAR;
 ALTER TABLE patron_request ADD COLUMN prev_req_id VARCHAR;
-ALTER TABLE patron_request ADD COLUMN retry_item_id VARCHAR;
+ALTER TABLE patron_request ADD COLUMN retry_bib_info JSONB;
 
 DROP VIEW IF EXISTS patron_request_search_view;
 

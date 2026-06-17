@@ -229,7 +229,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	eventName := MessageEvent("")
-	retryItemId := ""
+	retryBibInfo := (*iso18626.BibliographicInfo)(nil)
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
@@ -271,8 +271,11 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	case iso18626.TypeStatusRetryPossible:
 		eventName = SupplierRetryConditional
 		setSupplierMessage(sam, &pr)
-		if sam.DeliveryInfo != nil {
-			retryItemId = sam.DeliveryInfo.ItemId
+		// later, we can use MessageInfo.Note to pass bibliographic hints for the retry request
+		if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+			retryBibInfo = &iso18626.BibliographicInfo{
+				SupplierUniqueRecordId: sam.DeliveryInfo.ItemId,
+			}
 		}
 	}
 
@@ -290,11 +293,8 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	if !eventDefined {
 		return statusChangeNotAllowed()
 	}
-	if retryItemId != "" {
-		updatedPr.RetryItemID = pgtype.Text{
-			String: retryItemId,
-			Valid:  true,
-		}
+	if retryBibInfo != nil {
+		updatedPr.RetryBibInfo = retryBibInfo
 	}
 	return m.updatePatronRequestAndCreateSamResponse(ctx, updatedPr, sam, stateChanged, parentEventID)
 }

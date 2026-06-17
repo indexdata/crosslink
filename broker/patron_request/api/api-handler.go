@@ -916,7 +916,7 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		InternalNote:             toString(request.InternalNote),
 		NextReqId:                toString(request.NextReqID),
 		PrevReqId:                toString(request.PrevReqID),
-		RetryItemId:              toString(request.RetryItemID),
+		RetryBibInfo:             bibInfoToMap(request.RetryBibInfo),
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
@@ -933,6 +933,28 @@ func toString(text pgtype.Text) *string {
 		value = &text.String
 	}
 	return value
+}
+
+func retryBibInfoToItemId(info *iso18626.BibliographicInfo) *string {
+	if info == nil || info.SupplierUniqueRecordId == "" {
+		return nil
+	}
+	return &info.SupplierUniqueRecordId
+}
+
+func bibInfoToMap(info *iso18626.BibliographicInfo) *map[string]interface{} {
+	if info == nil {
+		return nil
+	}
+	b, err := json.Marshal(info)
+	if err != nil {
+		return nil
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil
+	}
+	return &m
 }
 
 func (a *PatronRequestApiHandler) parseAndValidateIllRequest(

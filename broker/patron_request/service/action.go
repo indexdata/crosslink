@@ -563,10 +563,19 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
 	clone.PrevReqID = getDbTextPtr(&pr.ID)
 	clone.Language = pr.Language
-	clone.Items = []pr_db.PrItem{}    // items will be copied when the retry request is sent
-	clone.RetryItemID = pgtype.Text{} // clear retry item id to avoid confusion, will be set as SupplierUniqueRecordId in the new request if needed
-	if pr.RetryItemID.Valid {
-		clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryItemID.String
+	clone.Items = []pr_db.PrItem{} // items will be copied when the retry request is sent
+	clone.RetryBibInfo = nil       // clear retry bib info to avoid confusion
+	if pr.RetryBibInfo != nil {
+		// only take selected fields from retry bib info to allow for corrections without affecting other fields
+		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {
+			clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
+		}
+		if pr.RetryBibInfo.Title != "" {
+			clone.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
+		}
+		if pr.RetryBibInfo.Author != "" {
+			clone.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
+		}
 	}
 
 	_, err = a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(clone))
