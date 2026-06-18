@@ -14,6 +14,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/metadataupdate"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -59,23 +60,11 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 }
 
 func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
-	var holdingsParams holdings.LookupParams
-	bibliographicInfo := illTransactionData.BibliographicInfo
-	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
-	holdingsParams.Title = bibliographicInfo.Title
-	for _, id := range bibliographicInfo.BibliographicItemId {
-		code := id.BibliographicItemIdentifierCode.Text
-		switch code {
-		case "ISBN":
-			holdingsParams.Isbn = id.BibliographicItemIdentifier
-		case "ISSN":
-			holdingsParams.Issn = id.BibliographicItemIdentifier
-		}
-	}
+	var serviceType string
 	if illTransactionData.ServiceInfo != nil {
-		holdingsParams.ServiceType = string(illTransactionData.ServiceInfo.ServiceType)
+		serviceType = string(illTransactionData.ServiceInfo.ServiceType)
 	}
-	return holdingsParams
+	return holdings.LookupParamsFromBibliographicInfo(illTransactionData.BibliographicInfo, serviceType)
 }
 
 // 3 cases to consider for getting the adapter:
@@ -174,6 +163,31 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
 	}
 	holdingsLog["entries"] = holdingsResult
+	firstHolding := holdingsResult[0]
+
+	if requester.Vendor != string(directory.CrossLink) {
+		holdingsConfigSource := requester.CustomData
+		if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.HoldingsConfig != nil {
+			holdingsConfigSource = consortiumPeers[0].CustomData
+		}
+		metadataSettings := holdings.GetMetadataSettings(holdingsConfigSource)
+		lookupHint := holdings.LookupHintFromParams(holdingsParams)
+		resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
+		if resolvedMode != directory.None {
+			if !metadataupdate.SupportsFormat(metadataSettings.Format) {
+				return events.LogErrorAndReturnResult(ctx, "unsupported metadata format for metadata update", fmt.Errorf("unsupported metadata format: %s", metadataSettings.Format))
+			}
+			illTrans.IllTransactionData.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
+				illTrans.IllTransactionData.BibliographicInfo,
+				metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
+				resolvedMode,
+			)
+			_, err = s.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+			if err != nil {
+				return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
+			}
+		}
+	}
 
 	holdingsSymbols := make([]string, 0, len(holdingsResult))
 	symbolToLocalId := make(map[string]string, len(holdingsResult))
@@ -290,7 +304,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	}
 
 	return events.EventStatusSuccess, &events.EventResult{
-		CustomData: map[string]any{"suppliers": locatedSuppliers, "holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo},
+		CustomData: map[string]any{
+			"suppliers":   locatedSuppliers,
+			"holdings":    holdingsLog,
+			"directory":   directoryLog,
+			ROTA_INFO_KEY: rotaInfo,
+		},
 	}
 }
 

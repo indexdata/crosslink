@@ -15,7 +15,9 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/metadataupdate"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -760,9 +762,23 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 
 func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = iso18626.NewISO18626Message()
+	metadataSettings := holdings.GetMetadataSettings(trCtx.requester.CustomData)
+	lookupHint := holdings.LookupHintFromParams(holdings.LookupParamsFromBibliographicInfo(
+		trCtx.transaction.IllTransactionData.BibliographicInfo,
+		"",
+	))
+	resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
+	bibliographicInfo := trCtx.transaction.IllTransactionData.BibliographicInfo
+	if resolvedMode != directory.None {
+		bibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
+			bibliographicInfo,
+			metadataupdate.MetadataFields{LocalIdentifier: trCtx.selectedSupplier.LocalID.String},
+			resolvedMode,
+		)
+	}
 	message.Request = &iso18626.Request{
 		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedSupplierPeer.BrokerMode),
-		BibliographicInfo:     trCtx.transaction.IllTransactionData.BibliographicInfo,
+		BibliographicInfo:     bibliographicInfo,
 		PublicationInfo:       trCtx.transaction.IllTransactionData.PublicationInfo,
 		ServiceInfo:           trCtx.transaction.IllTransactionData.ServiceInfo,
 		SupplierInfo:          trCtx.transaction.IllTransactionData.SupplierInfo,
@@ -771,7 +787,6 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 		BillingInfo:           trCtx.transaction.IllTransactionData.BillingInfo,
 		RequestingAgencyInfo:  trCtx.transaction.IllTransactionData.RequestingAgencyInfo,
 	}
-	message.Request.BibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	requesterName, _, deliveryAddress, email := getPeerInfo(trCtx.requester, trCtx.transaction.RequesterSymbol.String)
 	if appendRequestingAgencyInfo {
 		populateRequesterInfo(message, requesterName, deliveryAddress, email)

@@ -797,7 +797,7 @@ func TestCreateRequestMessage(t *testing.T) {
 	assert.Equal(t, iso18626.TypeAction(ill_db.RequestAction), action)
 	assert.Equal(t, "sup1", message.Request.Header.SupplyingAgencyId.AgencyIdValue)
 	assert.Equal(t, "REQ", message.Request.Header.RequestingAgencyId.AgencyIdValue)
-	assert.Equal(t, "id1", message.Request.BibliographicInfo.SupplierUniqueRecordId)
+	assert.Equal(t, "", message.Request.BibliographicInfo.SupplierUniqueRecordId)
 	assert.Equal(t, "#RETURN_TO#\nisil:sup1 (isil:sup1)\n#RT_END#\n", message.Request.SupplierInfo[0].SupplierDescription)
 	assert.Equal(t, "Requester (ISIL:REQ)", message.Request.RequestingAgencyInfo.Name)
 }

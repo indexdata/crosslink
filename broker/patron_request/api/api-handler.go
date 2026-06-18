@@ -17,11 +17,15 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/holdings"
+	"github.com/indexdata/crosslink/broker/ill_db"
+	"github.com/indexdata/crosslink/broker/metadataupdate"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
 	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -41,6 +45,8 @@ var errInvalidPatronRequest = errors.New("invalid patron request")
 type PatronRequestApiHandler struct {
 	limitDefault         int32
 	prRepo               pr_db.PrRepo
+	illRepo              ill_db.IllRepo
+	availabilityCreator  holdings.AvailabilityCreator
 	eventBus             events.EventBus
 	eventRepo            events.EventRepo
 	actionMappingService prservice.ActionMappingService
@@ -69,6 +75,14 @@ func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice
 
 func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
 	a.actionTaskProcessor = actionTaskProcessor
+}
+
+func (a *PatronRequestApiHandler) SetIllRepo(illRepo ill_db.IllRepo) {
+	a.illRepo = illRepo
+}
+
+func (a *PatronRequestApiHandler) SetAvailabilityCreator(availabilityCreator holdings.AvailabilityCreator) {
+	a.availabilityCreator = availabilityCreator
 }
 
 func decodeRequiredBody[T any](r *http.Request, dst *T) error {
@@ -294,6 +308,46 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		}
 		api.AddInternalError(ctx, w, err)
 		return
+	}
+	if a.illRepo != nil {
+		requesterPeer, peerErr := a.illRepo.GetPeerBySymbol(ctx, symbol)
+		if peerErr != nil {
+			api.AddInternalError(ctx, w, peerErr)
+			return
+		}
+		if requesterPeer.Vendor == string(directory.CrossLink) {
+			settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
+			if settings.Mode != directory.None {
+				if !metadataupdate.SupportsFormat(settings.Format) {
+					api.AddBadRequestError(ctx, w, fmt.Errorf("unsupported metadata format: %s", settings.Format))
+					return
+				}
+				params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, "")
+				if a.availabilityCreator != nil {
+					lookupAdapter, adapterErr := a.availabilityCreator.GetAdapter(requesterPeer)
+					if adapterErr != nil {
+						api.AddInternalError(ctx, w, adapterErr)
+						return
+					}
+					if lookupAdapter != nil {
+						holdingsResult, _, lookupErr := lookupAdapter.Lookup(params)
+						if lookupErr != nil {
+							api.AddInternalError(ctx, w, lookupErr)
+							return
+						}
+						if len(holdingsResult) > 0 {
+							resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
+							firstHolding := holdingsResult[0]
+							illRequest.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
+								illRequest.BibliographicInfo,
+								metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
+								resolvedMode,
+							)
+						}
+					}
+				}
+			}
+		}
 	}
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))

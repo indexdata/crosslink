@@ -23,6 +23,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -154,6 +155,7 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
+
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
@@ -250,6 +252,10 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 func TestMessageSkipped(t *testing.T) {
 	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mode := directory.Replace
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
+	})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
@@ -373,7 +379,10 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
+	mode := directory.Replace
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
+	})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(string(data), "{index}", "0")
@@ -420,7 +429,10 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
+	mode := directory.Replace
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
+	})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-3"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "3"), "BROKER", "SUP1")
@@ -474,7 +486,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 25, false, formatEvent))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 27, false, formatEvent))
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
@@ -829,13 +841,16 @@ func getPgText(value string) pgtype.Text {
 
 func formatEvent(e events.Event) string {
 	if e.EventName == "message-supplier" {
-		if e.ResultData.OutgoingMessage.RequestingAgencyMessage != nil {
+		if e.ResultData.OutgoingMessage != nil && e.ResultData.OutgoingMessage.RequestingAgencyMessage != nil {
 			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.RequestingAgencyMessage.Action)
 		} else {
 			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, "Request")
 		}
 	}
 	if e.EventName == "message-requester" {
+		if e.ResultData.OutgoingMessage == nil || e.ResultData.OutgoingMessage.SupplyingAgencyMessage == nil {
+			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		}
 		return fmt.Sprintf(apptest.EventRecordFormat+", reason=%v, %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 	}
 	if e.EventName == "supplier-msg-received" {
