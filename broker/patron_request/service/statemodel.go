@@ -86,6 +86,7 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		proapi.REQUESTER: {},
 		proapi.SUPPLIER:  {},
 	}
+	manualCloseStates := map[proapi.ModelStateSide]string{}
 	// Pass 1: validate all states and collect the state set defined in this model.
 	for _, state := range stateModel.States {
 		var builtInStates []string
@@ -105,6 +106,15 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 			return fmt.Errorf("state %s is defined multiple times for side %s", state.Name, state.Side)
 		}
 		sideStates[state.Name] = struct{}{}
+		if state.ManualClose != nil && *state.ManualClose {
+			if state.Terminal == nil || !*state.Terminal {
+				return fmt.Errorf("manualClose state %s side %s must be terminal", state.Name, state.Side)
+			}
+			if existing, exists := manualCloseStates[state.Side]; exists {
+				return fmt.Errorf("manualClose state defined multiple times for side %s: %s and %s", state.Side, existing, state.Name)
+			}
+			manualCloseStates[state.Side] = state.Name
+		}
 	}
 
 	// Pass 2: validate actions/events and their transitions.
