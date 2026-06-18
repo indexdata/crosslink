@@ -252,10 +252,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 func TestMessageSkipped(t *testing.T) {
 	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	mode := directory.Replace
-	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
-	})
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
@@ -379,10 +376,7 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	mode := directory.Replace
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
-	})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(string(data), "{index}", "0")
@@ -429,10 +423,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	mode := directory.Replace
-	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{
-		HoldingsConfig: &directory.HoldingsConfig{MetadataUpdateMode: &mode},
-	})
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-3"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "3"), "BROKER", "SUP1")

@@ -769,7 +769,10 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 	))
 	resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
 	bibliographicInfo := trCtx.transaction.IllTransactionData.BibliographicInfo
-	if resolvedMode != directory.None {
+	if resolvedMode == directory.None {
+		// Backward compatibility: preserve historical request-message behavior when metadata updates are disabled.
+		bibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
+	} else {
 		bibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
 			bibliographicInfo,
 			metadataupdate.MetadataFields{LocalIdentifier: trCtx.selectedSupplier.LocalID.String},
