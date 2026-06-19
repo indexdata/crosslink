@@ -31,9 +31,10 @@ type PatronRequestActionService struct {
 }
 
 type actionExecutionResult struct {
-	status events.EventStatus
-	result *events.EventResult
-	pr     pr_db.PatronRequest
+	status  events.EventStatus
+	result  *events.EventResult
+	pr      pr_db.PatronRequest
+	retryPr pr_db.PatronRequest
 }
 
 type autoActionFailure struct {
@@ -188,9 +189,23 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		stateChanged = true
 	}
 
+	if execResult.retryPr.ID != "" {
+		retryPr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
+		if err != nil {
+			return logActionErrorAndReturnResult(ctx, "failed to create patron request for retry", err)
+		}
+		err = a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
+		if err != nil {
+			return logActionErrorAndReturnResult(ctx, "failed to run auto actions on state entry", err)
+		}
+	}
 	var err error
 	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 	if err != nil {
+		// not the smartest approach but if the update fails we should clean up the retry request to avoid orphaned retries that the user can't do anything about
+		if execResult.retryPr.ID != "" {
+			a.prRepo.DeletePatronRequest(ctx, execResult.retryPr.ID)
+		}
 		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
 
@@ -595,7 +610,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	clone.State = BorrowerStateValidated
+	clone.State = BorrowerStateNew
 	clone.TerminalState = false
 	clone.ID = uuid.NewString()
 	clone.RequesterReqID = getDbTextPtr(&clone.ID)
@@ -616,14 +631,8 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 			clone.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
 		}
 	}
-
-	_, err = a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(clone))
-	if err != nil {
-		status, result := logActionErrorAndReturnResult(ctx, "failed to create patron request for retry", err)
-		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
 	pr.NextReqID = getDbTextPtr(&clone.ID)
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr, retryPr: clone}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
