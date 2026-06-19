@@ -90,7 +90,7 @@ func StartPGContainer() (context.Context, *postgres.PostgresContainer, string, e
 		postgres.WithPassword("crosslink"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
 	)
 	if err != nil {
 		return ctx, pgContainer, "", fmt.Errorf("failed to start db container: %w", err)
