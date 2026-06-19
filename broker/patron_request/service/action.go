@@ -189,29 +189,31 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		stateChanged = true
 	}
 
-	if execResult.retryPr.ID != "" {
-		retryPr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
-		if err != nil {
-			return logActionErrorAndReturnResult(ctx, "failed to create patron request for retry", err)
+	var createdRetryPr *pr_db.PatronRequest
+	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		if execResult.retryPr.ID != "" {
+			retryPr, err := repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
+			if err != nil {
+				return fmt.Errorf("create retry patron request: %w", err)
+			}
+			createdRetryPr = &retryPr
 		}
-		err = a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
+		var err error
+		updatedPr, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
+		if err != nil {
+			return fmt.Errorf("update patron request: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return logActionErrorAndReturnResult(ctx, "failed to persist patron request", err)
+	}
+	if createdRetryPr != nil {
+		err := a.RunAutoActionsOnStateEntry(ctx, *createdRetryPr, &event.ID, event.EventData.User)
 		if err != nil {
 			return logActionErrorAndReturnResult(ctx, "failed to run auto actions on state entry", err)
 		}
 	}
-	var err error
-	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
-	if err != nil {
-		// not the smartest approach but if the update fails we should clean up the retry request to avoid orphaned retries that the user can't do anything about
-		if execResult.retryPr.ID != "" {
-			err := a.prRepo.DeletePatronRequest(ctx, execResult.retryPr.ID)
-			if err != nil {
-				ctx.Logger().Error("failed to delete retry patron request after update failure", "retry_pr_id", execResult.retryPr.ID, "error", err)
-			}
-		}
-		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
-	}
-
 	if stateChanged {
 		err := a.RunAutoActionsOnStateEntry(ctx, updatedPr, &event.ID, event.EventData.User)
 		if err != nil {
