@@ -836,6 +836,9 @@ components:
         terminal:
           type: boolean
           description: Indicates if the state is terminal (meaning no actions or events are allowed in this state)
+        manualClose:
+          type: boolean
+          description: Indicates that this terminal state is the target for manual termination
         needsAttention:
           type: boolean
           description: Indicates that this state requires user attention (e.g. displayed as a flag in the UI)
@@ -1741,6 +1744,47 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: There was internal server error looking up patron request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /patron_requests/{id}/terminate:
+    post:
+      summary: Manually terminate a patron request
+      tags:
+        - patron-requests-api
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: ID of the patron request
+        - $ref: '#/components/parameters/Tenant'
+        - $ref: '#/components/parameters/Side'
+        - $ref: '#/components/parameters/Symbol'
+      responses:
+        '200':
+          description: Termination action result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Patron request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: There was internal server error terminating patron request
           content:
             application/json:
               schema:

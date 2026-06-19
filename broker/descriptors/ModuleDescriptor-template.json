@@ -133,6 +133,15 @@
           ]
         },
         {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/patron_requests/{id}/terminate",
+          "permissionsRequired": [
+            "broker.patron_requests.item.terminate.post"
+          ]
+        },
+        {
           "methods" : [
             "GET"
           ],
@@ -361,6 +370,11 @@
       "permissionName": "broker.patron_requests.item.action.post"
     },
     {
+      "description": "Manually close a patron request",
+      "displayName": "Broker - manually close patron request",
+      "permissionName": "broker.patron_requests.item.terminate.post"
+    },
+    {
       "description": "Read events for a patron request",
       "displayName": "Broker - read patron request events",
       "permissionName": "broker.patron_requests.item.events.get"
@@ -498,6 +512,7 @@
         "broker.patron_requests.post",
         "broker.patron_requests.item.delete",
         "broker.patron_requests.item.action.post",
+        "broker.patron_requests.item.terminate.post",
         "broker.patron_requests.item.notifications.post",
         "broker.patron_requests.item.notifications.item.receipt.put",
         "broker.patron_requests.item.internal_note.put",
@@ -540,6 +555,7 @@
         "broker.patron_requests.item.actions.get",
         "broker.patron_requests.item.events.get",
         "broker.patron_requests.item.action.post",
+        "broker.patron_requests.item.terminate.post",
         "broker.state_model.item.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",

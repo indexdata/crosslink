@@ -200,6 +200,13 @@ states:
     side: REQUESTER
     terminal: true
 
+  - name: MANUALLY_CLOSED
+    display: Manually closed
+    desc: Closed manually by staff
+    side: REQUESTER
+    terminal: true
+    manualClose: true
+
   # Supplier-side
   - name: NEW
     display: New
@@ -369,3 +376,10 @@ states:
     desc: After manual cannot-supply or automatically if auto-responder is on
     side: SUPPLIER
     terminal: true
+
+  - name: MANUALLY_CLOSED
+    display: Manually closed
+    desc: Closed manually by staff
+    side: SUPPLIER
+    terminal: true
+    manualClose: true

@@ -558,6 +558,54 @@ func TestPostPatronRequestsIdActionReturnsExclusiveTaskError(t *testing.T) {
 	}
 }
 
+func TestPostPatronRequestsIdActionRejectsTerminate(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	reqBody := `{"action":"` + string(prservice.TerminateAction) + `"}`
+	req, _ := http.NewRequest("POST", "/", strings.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdAction(rr, req, "3", proapi.PostPatronRequestsIdActionParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Action terminate is not allowed")
+}
+
+func TestPostPatronRequestsIdTerminateStoresTenantUserAndActionInInvokeTask(t *testing.T) {
+	tenantResolver := tenant.NewResolver().WithTenantToSymbol("ISIL:DK-{tenant}")
+	eventBus := new(MockEventBusCapture)
+	handler := NewPrApiHandler(new(PrRepoOkapiOwner), eventBus, mockEventRepo, tenantResolver, nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req, _ := http.NewRequest("POST", "/broker/patron_requests/3/terminate", nil)
+	req.Header.Set("X-Okapi-Tenant", "tenant1")
+	req.Header.Set("X-Okapi-User-Id", "okapi-user-1")
+	req.Header.Set("X-Okapi-Token", "header.eyJzdWIiOiJva2FwaS1zdWJqZWN0IiwidXNlcl9pZCI6Im9rYXBpLXVzZXItMSJ9.signature")
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdTerminate(rr, req, "3", proapi.PostPatronRequestsIdTerminateParams{Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, events.EventNameInvokeAction, eventBus.lastEventName)
+	assert.NotNil(t, eventBus.lastData.Action)
+	assert.Equal(t, prservice.TerminateAction, *eventBus.lastData.Action)
+	assert.Equal(t, "okapi-subject", eventBus.lastData.User)
+}
+
+func TestPostPatronRequestsIdTerminateRejectsTerminal(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoTerminal), new(MockEventBusCapture), mockEventRepo, tenant.NewResolver(), nil, 10)
+	handler.SetActionTaskProcessor(&MockActionTaskProcessor{})
+
+	req, _ := http.NewRequest("POST", "/", nil)
+	rr := httptest.NewRecorder()
+
+	handler.PostPatronRequestsIdTerminate(rr, req, "3", proapi.PostPatronRequestsIdTerminateParams{Symbol: &symbol, Side: &proapiBorrowingSide})
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "already terminal")
+}
+
 func TestGetPatronRequestsIdEventsNoSymbol(t *testing.T) {
 	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, mockEventRepo, tenant.NewResolver(), nil, 10)
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -927,9 +975,20 @@ type PrRepoOkapiOwner struct {
 	PrRepoError
 }
 
+type PrRepoTerminal struct {
+	PrRepoError
+}
+
 func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
 		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateValidated, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
+	}
+	return r.PrRepoError.GetPatronRequestById(ctx, id)
+}
+
+func (r *PrRepoTerminal) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
+	if id == "3" {
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateCompleted, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: symbol, Valid: true}, TerminalState: true}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
@@ -1073,10 +1132,12 @@ func (h *MockEventBus) CreateTask(id string, eventName events.EventName, data ev
 
 type MockEventBusCapture struct {
 	MockEventBus
-	lastData events.EventData
+	lastEventName events.EventName
+	lastData      events.EventData
 }
 
 func (h *MockEventBusCapture) CreateTask(id string, eventName events.EventName, data events.EventData, eventDomain events.EventDomain, parentId *string, target events.SignalTarget) (string, error) {
+	h.lastEventName = eventName
 	h.lastData = data
 	return uuid.NewString(), nil
 }
