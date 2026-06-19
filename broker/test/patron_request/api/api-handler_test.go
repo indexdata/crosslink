@@ -737,10 +737,10 @@ func TestRejectRetry(t *testing.T) {
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	// Wait until we can see possible action reject-retry
-	test.WaitForPredicateToBeTrue(func() bool {
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 		return strings.Contains(string(respBytes), "\"name\":\"reject-retry\"")
-	})
+	}), "reject-retry action did not appear in time")
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 	assert.Contains(t, string(respBytes), "\"name\":\"reject-retry\"")
 
@@ -876,10 +876,10 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	// Wait until we can see possible action accept-retry
-	test.WaitForPredicateToBeTrue(func() bool {
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 		return strings.Contains(string(respBytes), "\"name\":\"accept-retry\"")
-	})
+	}), "accept-retry action did not appear in time")
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 	assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
 
@@ -946,12 +946,12 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, "SENT", *pResult.ToState)
 	assert.Nil(t, pResult.Message)
 
-	test.WaitForPredicateToBeTrue(func() bool {
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 		foundPr = proapi.PatronRequest{}
 		err = json.Unmarshal(respBytes, &foundPr)
 		return err == nil && foundPr.State == "UNFILLED" && foundPr.TerminalState
-	})
+	}), "patron request did not reach UNFILLED state in time")
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, "UNFILLED", foundPr.State)
 	assert.True(t, foundPr.TerminalState)
