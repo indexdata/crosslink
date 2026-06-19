@@ -189,16 +189,15 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		stateChanged = true
 	}
 
-	var createdRetryPr *pr_db.PatronRequest
+	var retryPr pr_db.PatronRequest
 	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		var err error
 		if execResult.retryPr.ID != "" {
-			retryPr, err := repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
+			retryPr, err = repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
 			if err != nil {
 				return fmt.Errorf("create retry patron request: %w", err)
 			}
-			createdRetryPr = &retryPr
 		}
-		var err error
 		updatedPr, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
 		if err != nil {
 			return fmt.Errorf("update patron request: %w", err)
@@ -208,8 +207,8 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to persist patron request", err)
 	}
-	if createdRetryPr != nil {
-		err := a.RunAutoActionsOnStateEntry(ctx, *createdRetryPr, &event.ID, event.EventData.User)
+	if retryPr.ID != "" {
+		err := a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
 		if err != nil {
 			return logActionErrorAndReturnResult(ctx, "failed to run auto actions on state entry", err)
 		}
