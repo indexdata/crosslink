@@ -602,43 +602,43 @@ func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.Patron
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	result := events.EventResult{}
 
-	clone := pr_db.PatronRequest{}
-	clone.Side = pr.Side
-	clone.RequesterSymbol = pr.RequesterSymbol
-	clone.SupplierSymbol = pr.SupplierSymbol
-	clone.Patron = pr.Patron
-	clone.Tenant = pr.Tenant
+	retryPr := pr_db.PatronRequest{}
+	retryPr.Side = pr.Side
+	retryPr.RequesterSymbol = pr.RequesterSymbol
+	retryPr.SupplierSymbol = pr.SupplierSymbol
+	retryPr.Patron = pr.Patron
+	retryPr.Tenant = pr.Tenant
 	var err error
-	clone.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
+	retryPr.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
 	if err != nil {
 		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	clone.State = BorrowerStateNew
-	clone.TerminalState = false
-	clone.ID = uuid.NewString()
-	clone.RequesterReqID = getDbTextPtr(&clone.ID)
-	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
-	clone.IllRequest.Header.RequestingAgencyRequestId = clone.ID
-	clone.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: clone.CreatedAt.Time}
-	clone.PrevReqID = getDbTextPtr(&pr.ID)
-	clone.Language = pr.Language
-	clone.Items = []pr_db.PrItem{} // items will be copied when the retry request is sent
-	clone.RetryBibInfo = nil       // clear retry bib info to avoid confusion
+	retryPr.State = BorrowerStateNew
+	retryPr.TerminalState = false
+	retryPr.ID = uuid.NewString()
+	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
+	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	retryPr.IllRequest.Header.RequestingAgencyRequestId = retryPr.ID
+	retryPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: retryPr.CreatedAt.Time}
+	retryPr.PrevReqID = getDbTextPtr(&pr.ID)
+	retryPr.Language = pr.Language
+	retryPr.Items = []pr_db.PrItem{} // items will be copied when the retry request is sent
+	retryPr.RetryBibInfo = nil       // clear retry bib info to avoid confusion
 	if pr.RetryBibInfo != nil {
 		// only take selected fields from retry bib info to allow for corrections without affecting other fields
 		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {
-			clone.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
+			retryPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
 		}
 		if pr.RetryBibInfo.Title != "" {
-			clone.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
+			retryPr.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
 		}
 		if pr.RetryBibInfo.Author != "" {
-			clone.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
+			retryPr.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
 		}
 	}
-	pr.NextReqID = getDbTextPtr(&clone.ID)
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr, retryPr: clone}
+	pr.NextReqID = getDbTextPtr(&retryPr.ID)
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr, retryPr: retryPr}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
