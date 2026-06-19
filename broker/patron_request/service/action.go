@@ -619,6 +619,8 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	clone.ID = uuid.NewString()
 	clone.RequesterReqID = getDbTextPtr(&clone.ID)
 	clone.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	clone.IllRequest.Header.RequestingAgencyRequestId = clone.ID
+	clone.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: clone.CreatedAt.Time}
 	clone.PrevReqID = getDbTextPtr(&pr.ID)
 	clone.Language = pr.Language
 	clone.Items = []pr_db.PrItem{} // items will be copied when the retry request is sent
