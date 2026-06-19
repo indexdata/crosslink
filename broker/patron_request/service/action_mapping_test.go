@@ -28,7 +28,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
 		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
-		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
+		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionAccepted: {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
 		LenderStateShippedReturn:     {{actionName: LenderActionMarkReceived}},
@@ -41,9 +41,9 @@ func TestNewReturnableActionMapping(t *testing.T) {
 
 	assert.NotNil(t, returnableActionMapping)
 
-	mapCompare(t, returnableActionMapping.borrowerStateActionMapping, borrowerStateActionMapping)
+	mapCompare(t, borrowerStateActionMapping, returnableActionMapping.borrowerStateActionMapping)
 
-	mapCompare(t, returnableActionMapping.lenderStateActionMapping, lenderStateActionMapping)
+	mapCompare(t, lenderStateActionMapping, returnableActionMapping.lenderStateActionMapping)
 }
 
 var actionMappingService = ActionMappingService{}
@@ -94,7 +94,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
 
 	// Lender
-	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip, LenderActionAskRetry}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending}))
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
@@ -145,6 +145,7 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}},
 		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt},
 		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}},
+		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}},
 	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
 }
 

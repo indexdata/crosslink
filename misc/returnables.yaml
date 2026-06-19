@@ -300,6 +300,10 @@ states:
         desc: Indicate cannot supply
         transitions:
           success: UNFILLED
+      - name: ask-retry
+        desc: Ask requester to retry with new ISO18626 metadata
+        transitions:
+          success: COMPLETED_WITH_RETRY
     events:
       - name: cancel-request
         desc: Requester sends ISO Cancel

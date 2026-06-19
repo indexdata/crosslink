@@ -438,6 +438,13 @@
           "transitions": {
             "success": "UNFILLED"
           }
+        },
+        {
+          "name": "ask-retry",
+          "desc": "Ask requester to retry with new ISO18626 metadata",
+          "transitions": {
+            "success": "COMPLETED_WITH_RETRY"
+          }
         }
       ],
       "events": [
