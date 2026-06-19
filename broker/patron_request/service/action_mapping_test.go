@@ -61,12 +61,14 @@ func TestIsActionAvailable(t *testing.T) {
 	// Borrower
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionValidate))
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNew}, BorrowerActionReceive))
+	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, TerminateAction))
 
 	// Lender
 	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, LenderActionShip))
 	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending}, LenderActionAddCondition))
 	assert.True(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted}, LenderActionAddCondition))
 	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, BorrowerActionRejectCondition))
+	assert.False(t, mapping.IsActionAvailable(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, TerminateAction))
 }
 
 func TestGetActionsForPatronRequest(t *testing.T) {
@@ -96,6 +98,37 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionPending}))
 	listCompare(t, []pr_db.PatronRequestAction{LenderActionAddCondition, LenderActionCannotSupply, LenderActionShip}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateConditionAccepted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateShipped}))
+}
+
+func TestGetManualCloseState(t *testing.T) {
+	mapping := mustActionMapping(t)
+
+	state, ok := mapping.GetManualCloseState(pr_db.PatronRequest{Side: SideBorrowing})
+	assert.True(t, ok)
+	assert.Equal(t, BorrowerStateManuallyClosed, state)
+
+	state, ok = mapping.GetManualCloseState(pr_db.PatronRequest{Side: SideLending})
+	assert.True(t, ok)
+	assert.Equal(t, LenderStateManuallyClosed, state)
+}
+
+func TestGetManualCloseStateMissing(t *testing.T) {
+	tt := true
+	mapping := NewActionMapping(&proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:     string(BorrowerStateCompleted),
+				Side:     proapi.REQUESTER,
+				Terminal: &tt,
+			},
+		},
+	})
+
+	_, ok := mapping.GetManualCloseState(pr_db.PatronRequest{Side: SideBorrowing})
+	assert.False(t, ok)
 }
 
 func TestGetAllowedActionsForPatronRequest1(t *testing.T) {

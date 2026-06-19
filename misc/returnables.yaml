@@ -234,6 +234,13 @@ states:
     side: REQUESTER
     terminal: true
 
+  - name: MANUALLY_CLOSED
+    display: Manually closed
+    desc: Closed manually by staff
+    side: REQUESTER
+    terminal: true
+    manualClose: true
+
   # Supplier-side
   - name: NEW
     display: New
@@ -413,3 +420,10 @@ states:
     desc: After sending retry to requester
     side: SUPPLIER
     terminal: true
+
+  - name: MANUALLY_CLOSED
+    display: Manually closed
+    desc: Closed manually by staff
+    side: SUPPLIER
+    terminal: true
+    manualClose: true

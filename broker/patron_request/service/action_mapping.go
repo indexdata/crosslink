@@ -50,6 +50,8 @@ type ActionMapping struct {
 	lenderStateActionMapping   map[pr_db.PatronRequestState][]PatronRequestAction
 	borrowerStateConfig        map[pr_db.PatronRequestState]stateConfig
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
+	borrowerManualCloseState   *pr_db.PatronRequestState
+	lenderManualCloseState     *pr_db.PatronRequestState
 }
 
 type stateConfig struct {
@@ -111,9 +113,17 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 		case proapi.REQUESTER:
 			borrowerMap[stateName] = actionEntries
 			borrowerConfig[stateName] = currentStateConfig
+			if state.ManualClose != nil && *state.ManualClose {
+				manualCloseState := stateName
+				r.borrowerManualCloseState = &manualCloseState
+			}
 		case proapi.SUPPLIER:
 			lenderMap[stateName] = actionEntries
 			lenderConfig[stateName] = currentStateConfig
+			if state.ManualClose != nil && *state.ManualClose {
+				manualCloseState := stateName
+				r.lenderManualCloseState = &manualCloseState
+			}
 		}
 	}
 
@@ -234,6 +244,24 @@ func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []pr_db.P
 		return []pr_db.PatronRequestAction{}
 	}
 	return append([]pr_db.PatronRequestAction{}, stateConfig.autoActions...)
+}
+
+func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.PatronRequestState, bool) {
+	if pr.Side == SideBorrowing {
+		if r.borrowerManualCloseState == nil {
+			return "", false
+		}
+		return *r.borrowerManualCloseState, true
+	}
+	if r.lenderManualCloseState == nil {
+		return "", false
+	}
+	return *r.lenderManualCloseState, true
+}
+
+func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
+	stateConfig, ok := r.getStateConfig(pr)
+	return ok && stateConfig.terminal
 }
 
 func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, bool) {

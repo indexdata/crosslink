@@ -342,6 +342,14 @@
       "terminal": true
     },
     {
+      "name": "MANUALLY_CLOSED",
+      "display": "Manually closed",
+      "desc": "Closed manually by staff",
+      "side": "REQUESTER",
+      "terminal": true,
+      "manualClose": true
+    },
+    {
       "name": "NEW",
       "display": "New",
       "desc": "Item is created on the supplier side for local fulfillment",
@@ -609,6 +617,14 @@
       "desc": "After sending retry to requester",
       "side": "SUPPLIER",
       "terminal": true
+    },
+    {
+      "name": "MANUALLY_CLOSED",
+      "display": "Manually closed",
+      "desc": "Closed manually by staff",
+      "side": "SUPPLIER",
+      "terminal": true,
+      "manualClose": true
     }
   ]
 }
