@@ -69,7 +69,7 @@ func TestParseEnv(t *testing.T) {
 	assert.NoError(t, err, "failed to set env")
 	var app MockApp
 	err = app.parseEnv()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, "8082", app.httpPort)
 	assert.Equal(t, "ABC", app.agencyType)
 	assert.Equal(t, "S1", app.requester.supplyingAgencyId)
@@ -112,7 +112,7 @@ func TestAppBadMOCK_DIRECTORY_ENTRIES(t *testing.T) {
 
 func TestGetMessageDelay(t *testing.T) {
 	dur, err := getMessageDelay("3ms")
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 3*time.Millisecond, dur)
 
 	_, err = getMessageDelay("x")
@@ -125,7 +125,7 @@ func TestGetMessageDelay(t *testing.T) {
 func TestAppShutdown(t *testing.T) {
 	var app MockApp
 	err := app.Shutdown() // no server running
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestSendReceiveUrlEmpty(t *testing.T) {
@@ -142,7 +142,7 @@ func TestSendReceiveUnmarshalFailed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		output := []byte("<")
 		_, err := w.Write(output)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 	})
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -199,14 +199,14 @@ func TestWriteResponseNil(t *testing.T) {
 	msg := createPatronRequest()
 	buf := utils.Must(xml.Marshal(msg))
 	resp, err := http.Post(server.URL, "text/xml", bytes.NewReader(buf))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 500, resp.StatusCode)
 	defer func() {
 		dErr := resp.Body.Close()
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Contains(t, string(buf), "marshal failed")
 }
 
@@ -236,19 +236,19 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.ISO1
 	msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
 	msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
 	buf, err := xml.Marshal(msg)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 	defer func() {
 		dErr := resp.Body.Close()
 		assert.NoError(t, dErr)
 	}()
 	buf, err = io.ReadAll(resp.Body)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	var response iso18626.ISO18626Message
 	err = xml.Unmarshal(buf, &response)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	assert.NotNil(t, response.RequestConfirmation)
 	assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	assert.Nil(t, response.RequestConfirmation.ErrorData)
@@ -257,7 +257,7 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.ISO1
 	for tries := 0; tries < 5; tries++ {
 		time.Sleep(400 * time.Millisecond)
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId + "&role=requester")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		defer func() {
@@ -265,10 +265,10 @@ func runScenario2(t *testing.T, isoUrl string, apiUrl string, msg *iso18626.ISO1
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var flowR flows.Flows
 		err = xml.Unmarshal(buf, &flowR)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.True(t, len(flowR.Flows) > 0)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request)
 		assert.NotNil(t, flowR.Flows[0].Message[0].Message.Request.ServiceInfo)
@@ -340,87 +340,87 @@ func TestService(t *testing.T) {
 
 	t.Run("notfound", func(t *testing.T) {
 		resp, err := http.Get(url + "/foo")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 404, resp.StatusCode)
 	})
 
 	t.Run("health: ok", func(t *testing.T) {
 		resp, err := http.Get(healthUrl)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("health: method", func(t *testing.T) {
 		resp, err := http.Post(healthUrl, "text/plain", strings.NewReader("Hello"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
 	t.Run("400 handler", func(t *testing.T) {
 		resp, err := http.Get(url + "/iso18626/error400")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
 	t.Run("500 handler", func(t *testing.T) {
 		resp, err := http.Get(url + "/iso18626/error500")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("flows handler: ok", func(t *testing.T) {
 		resp, err := http.Get(apiUrl)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Contains(t, string(buf), "<flows")
 	})
 
 	t.Run("flows handler: Bad method", func(t *testing.T) {
 		resp, err := http.Post(apiUrl, "text/plain", strings.NewReader("hello"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 
 	t.Run("sru handler: ok", func(t *testing.T) {
 		resp, err := http.Get(sruUrl)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Contains(t, string(buf), "<explainResponse")
 	})
 
 	t.Run("iso18626 handler: Bad method", func(t *testing.T) {
 		resp, err := http.Get(isoUrl)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 405, resp.StatusCode)
 	})
 	t.Run("iso18626 handler: Bad content type", func(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/plain", strings.NewReader("hello"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 415, resp.StatusCode)
 	})
 
 	t.Run("iso18626 handler: Read fail", func(t *testing.T) {
 		conn, err := net.Dial("tcp", "localhost:"+dynPort)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := conn.Close()
 			assert.NoError(t, dErr)
 		}()
 		// Bad chunked stream
 		n, err := conn.Write([]byte("POST /iso18626 HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Type: text/xml\r\n\r\n2\r\n"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Greater(t, n, 20)
 	})
 
 	t.Run("iso18626 handler: Bad XML", func(t *testing.T) {
 		resp, err := http.Post(isoUrl, "text/xml", strings.NewReader("<badxml"))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
@@ -429,7 +429,7 @@ func TestService(t *testing.T) {
 		msg.SupplyingAgencyMessageConfirmation = &iso18626.SupplyingAgencyMessageConfirmation{}
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 	})
 
@@ -439,17 +439,17 @@ func TestService(t *testing.T) {
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
@@ -461,26 +461,26 @@ func TestService(t *testing.T) {
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = requesterId
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, "SupplyingAgencyId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
 
 		resp, err = http.Get(apiUrl + "?requester=" + requesterId)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, httpclient.ContentTypeApplicationXml, resp.Header.Get("Content-Type"))
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Contains(t, string(buf), ">"+msg.Request.Header.RequestingAgencyRequestId+"<")
 		assert.Contains(t, string(buf), "id=\""+msg.Request.Header.RequestingAgencyRequestId)
 	})
@@ -491,17 +491,17 @@ func TestService(t *testing.T) {
 		msg.Request.Header.SupplyingAgencyId.AgencyIdValue = "S1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, "RequestingAgencyId cannot be empty", response.RequestConfirmation.ErrorData.ErrorValue)
 	})
@@ -513,17 +513,17 @@ func TestService(t *testing.T) {
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 
 		msg = createRequest()
@@ -532,16 +532,16 @@ func TestService(t *testing.T) {
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf = utils.Must(xml.Marshal(msg))
 		resp2, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp2.StatusCode)
 		defer func() {
 			dErr := resp2.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp2.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 
 		msg = createRequest()
@@ -550,16 +550,16 @@ func TestService(t *testing.T) {
 		msg.Request.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf = utils.Must(xml.Marshal(msg))
 		resp3, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp3.StatusCode)
 		defer func() {
 			dErr := resp3.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp3.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.RequestConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "RequestingAgencyRequestId already exists", response.RequestConfirmation.ErrorData.ErrorValue)
@@ -573,17 +573,17 @@ func TestService(t *testing.T) {
 		msg.Request.ServiceInfo = &iso18626.ServiceInfo{}
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	})
 
@@ -593,17 +593,17 @@ func TestService(t *testing.T) {
 		msg.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Nil(t, response.RequestConfirmation)
 		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -616,17 +616,17 @@ func TestService(t *testing.T) {
 		msg.RequestingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Nil(t, response.RequestConfirmation)
 		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -639,17 +639,17 @@ func TestService(t *testing.T) {
 		msg.RequestingAgencyMessage.Header.SupplyingAgencyId.AgencyIdValue = "S1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Nil(t, response.RequestConfirmation)
 		assert.NotNil(t, response.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
@@ -660,17 +660,17 @@ func TestService(t *testing.T) {
 		msg := createSupplyingAgencyMessage()
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "RequestingAgencyRequestId cannot be empty", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
@@ -683,17 +683,17 @@ func TestService(t *testing.T) {
 		msg.SupplyingAgencyMessage.Header.RequestingAgencyId.AgencyIdValue = "R1"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.SupplyingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeErrorTypeUnrecognisedDataValue, response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorType)
 		assert.Equal(t, "non-existing RequestingAgencyRequestId", response.SupplyingAgencyMessageConfirmation.ErrorData.ErrorValue)
@@ -704,19 +704,19 @@ func TestService(t *testing.T) {
 		msg := createPatronRequest()
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
 		buf, err := xml.Marshal(msg)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
@@ -730,19 +730,19 @@ func TestService(t *testing.T) {
 			msg := createPatronRequest()
 			msg.Request.BibliographicInfo.SupplierUniqueRecordId = scenario
 			buf, err := xml.Marshal(msg)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.Equal(t, 200, resp.StatusCode)
 			defer func() {
 				dErr := resp.Body.Close()
 				assert.NoError(t, dErr)
 			}()
 			buf, err = io.ReadAll(resp.Body)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			var response iso18626.ISO18626Message
 			err = xml.Unmarshal(buf, &response)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 			assert.NotNil(t, response.RequestConfirmation)
 			assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 			assert.NotNil(t, response.RequestConfirmation.ErrorData)
@@ -1261,17 +1261,17 @@ func TestService(t *testing.T) {
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusERROR, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 		assert.NotNil(t, response.RequestConfirmation.ErrorData)
@@ -1291,17 +1291,17 @@ func TestService(t *testing.T) {
 
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, response.RequestConfirmation.ConfirmationHeader.MessageStatus)
 	})
@@ -1319,7 +1319,7 @@ func TestService(t *testing.T) {
 			}
 			output, _ := xml.Marshal(response)
 			_, err := w.Write(output)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		})
 		server := httptest.NewServer(handler)
 		defer server.Close()
@@ -1332,17 +1332,17 @@ func TestService(t *testing.T) {
 		msg.Request.BibliographicInfo.SupplierUniqueRecordId = "WILLSUPPLY_LOANED"
 		buf := utils.Must(xml.Marshal(msg))
 		resp, err := http.Post(isoUrl, "text/xml", bytes.NewReader(buf))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		buf, err = io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		var response iso18626.ISO18626Message
 		err = xml.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, response.RequestConfirmation)
 		// Generated RequestingAgencyRequestId should be in response
 		assert.NotEqual(t, "", response.RequestConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
@@ -1362,7 +1362,7 @@ func TestService(t *testing.T) {
 		msg.RequestingAgencyMessage.Action = iso18626.TypeActionShippedReturn
 
 		responseMsg, err := app.sendReceive(app.peerUrl, msg, "requester", header)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotNil(t, responseMsg.RequestingAgencyMessageConfirmation)
 		assert.Equal(t, iso18626.TypeMessageStatusOK, responseMsg.RequestingAgencyMessageConfirmation.ConfirmationHeader.MessageStatus)
 		assert.Nil(t, responseMsg.RequestingAgencyMessageConfirmation.ErrorData)
@@ -1376,18 +1376,18 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Len(t, response.Items, 63)
 		assert.Equal(t, 63, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Albury City Libraries", response.Items[0].Name)
@@ -1395,18 +1395,18 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries cql=ISIL:AU-NWOOL", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Len(t, response.Items, 2)
 		assert.Equal(t, 2, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
@@ -1415,18 +1415,18 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries cql=ISIL:AU-NWOOL ok peerUrl", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL&peer_url=http%3A%2F%2Flocalhost%3A1234")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Len(t, response.Items, 2)
 		assert.Equal(t, 2, *response.ResultInfo.TotalRecords)
 		assert.Equal(t, "Woollahra Library and Information Service", response.Items[0].Name)
@@ -1436,12 +1436,12 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries cql=ISIL:AU-NWOOL bad peerUrl", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=symbol%3DISIL%3AAU-NWOOL&peer_url=foo")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		assert.Equal(t, 400, resp.StatusCode)
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
@@ -1451,29 +1451,29 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries cql any sym3", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=symbol%20any%20sym3")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
 		}()
 		var response directory.EntriesResponse
 		err = json.Unmarshal(buf, &response)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Len(t, response.Items, 0)
 		assert.Equal(t, 0, *response.ResultInfo.TotalRecords)
 	})
 
 	t.Run("directory entries cql serverChoice sym2 sym3", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=sym1%20sym2")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
@@ -1483,11 +1483,11 @@ func TestService(t *testing.T) {
 
 	t.Run("directory entries cql empty", func(t *testing.T) {
 		resp, err := http.Get(directoryUrl + "?cql=")
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 400, resp.StatusCode)
 		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
 		buf, err := io.ReadAll(resp.Body)
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		defer func() {
 			dErr := resp.Body.Close()
 			assert.NoError(t, dErr)
@@ -1498,7 +1498,7 @@ func TestService(t *testing.T) {
 	err = os.Unsetenv("HTTP_HEADERS")
 	assert.NoError(t, err, "failed to set env")
 	err = app.Shutdown()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 }
 
 func TestSendRequestingAgencyNoKey(t *testing.T) {
@@ -1668,4 +1668,49 @@ func TestSendRetryRequest(t *testing.T) {
 	app.flowsApi = flows.CreateFlowsApi()
 	msg := createRequest()
 	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{}, "x", "y")
+}
+
+func TestHandleSupplyingAgencyNotificationNoAction(t *testing.T) {
+	var app MockApp
+	app.flowsApi = flows.CreateFlowsApi()
+
+	header := &iso18626.Header{
+		SupplyingAgencyId:         iso18626.TypeAgencyId{AgencyIdValue: "S1"},
+		RequestingAgencyId:        iso18626.TypeAgencyId{AgencyIdValue: "R1"},
+		RequestingAgencyRequestId: "test-req-notification",
+	}
+	info := &requesterInfo{supplierUrl: "http://nowhere"}
+	app.requester.store(header, info)
+
+	reason := iso18626.TypeReasonForMessageNotification
+	sam := &iso18626.SupplyingAgencyMessage{
+		Header: *header,
+		MessageInfo: iso18626.MessageInfo{
+			ReasonForMessage: reason,
+		},
+		StatusInfo: iso18626.StatusInfo{
+			Status:     iso18626.TypeStatusLoaned,
+			LastChange: utils.XSDDateTime{Time: time.Now()},
+		},
+	}
+	illMsg := iso18626.NewISO18626Message()
+	illMsg.SupplyingAgencyMessage = sam
+
+	w := httptest.NewRecorder()
+	app.handleIso18626SupplyingAgencyMessage(illMsg, w)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response iso18626.ISO18626Message
+	err := xml.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	conf := response.SupplyingAgencyMessageConfirmation
+	assert.NotNil(t, conf)
+	assert.Equal(t, iso18626.TypeMessageStatusOK, conf.ConfirmationHeader.MessageStatus)
+	assert.Equal(t, iso18626.TypeReasonForMessageNotification, *conf.ReasonForMessage)
+
+	// State must still exist — notification must not trigger any side-effect
+	assert.NotNil(t, app.requester.load(header))
+	// Loaned branch must not have been entered
+	assert.False(t, info.received)
 }
