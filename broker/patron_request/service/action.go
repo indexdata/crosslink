@@ -623,8 +623,8 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: retryPr.CreatedAt.Time}
 	retryPr.PrevReqID = getDbTextPtr(&pr.ID)
 	retryPr.Language = pr.Language
-	retryPr.Items = []pr_db.PrItem{} // items will be copied when the retry request is sent
-	retryPr.RetryBibInfo = nil       // clear retry bib info to avoid confusion
+	retryPr.Items = []pr_db.PrItem{}
+	retryPr.RetryBibInfo = nil
 	if pr.RetryBibInfo != nil {
 		// only take selected fields from retry bib info to allow for corrections without affecting other fields
 		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {

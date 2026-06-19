@@ -229,7 +229,7 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 	}
 
 	eventName := MessageEvent("")
-	retryBibInfo := (*iso18626.BibliographicInfo)(nil)
+	var retryBibInfo *iso18626.BibliographicInfo
 	switch sam.StatusInfo.Status {
 	case iso18626.TypeStatusExpectToSupply:
 		eventName = SupplierExpectToSupply
