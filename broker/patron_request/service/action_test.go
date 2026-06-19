@@ -1199,6 +1199,46 @@ func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
 	}
 }
 
+func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.createTaskErr = errors.New("event bus error")
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(createLmsAdapterMockLog(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	initialPR := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           BorrowerStateRetryPending,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+	}
+
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil)
+	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(initialPR, nil).Once()
+
+	action := BorrowerActionAcceptRetry
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              "invoke-accept-retry",
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Equal(t, "event bus error", *resultData.ActionResult.ChildActionError)
+	}
+	// The original PR (not the retry PR) should be marked as a chain failure.
+	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionValidate), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+}
+
 func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)

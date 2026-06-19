@@ -210,7 +210,15 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if retryPr.ID != "" {
 		err := a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
 		if err != nil {
-			return logActionErrorAndReturnResult(ctx, "failed to run auto actions on state entry", err)
+			failedAction := action
+			var autoErr *autoActionFailure
+			if errors.As(err, &autoErr) {
+				failedAction = autoErr.action
+			}
+			a.markActionChainFailure(ctx, updatedPr.ID, failedAction)
+			autoActionErr := err.Error()
+			execResult.result.ActionResult.ChildActionError = &autoActionErr
+			return execResult.status, execResult.result
 		}
 	}
 	if stateChanged {
