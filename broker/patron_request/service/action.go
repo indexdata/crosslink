@@ -204,7 +204,10 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 	if err != nil {
 		// not the smartest approach but if the update fails we should clean up the retry request to avoid orphaned retries that the user can't do anything about
 		if execResult.retryPr.ID != "" {
-			a.prRepo.DeletePatronRequest(ctx, execResult.retryPr.ID)
+			err := a.prRepo.DeletePatronRequest(ctx, execResult.retryPr.ID)
+			if err != nil {
+				ctx.Logger().Error("failed to delete retry patron request after update failure", "retry_pr_id", execResult.retryPr.ID, "error", err)
+			}
 		}
 		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
 	}
