@@ -905,7 +905,7 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NextReqId, "got pr "+string(respBytes))
 	assert.Nil(t, foundPr.PrevReqId, "got pr "+string(respBytes))
-	assert.Equal(t, "123456789", (*foundPr.RetryBibInfo)["supplierUniqueRecordId"])
+	assert.Equal(t, "123456789", foundPr.RetryBibInfo.SupplierUniqueRecordId)
 
 	// accept again - should fail as the request state it terminated
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
