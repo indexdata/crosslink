@@ -28,6 +28,7 @@ type PatronRequestActionService struct {
 	eventBus             events.EventBus
 	lmsCreator           lms.LmsCreator
 	actionMappingService ActionMappingService
+	supplierRelocator    SupplierRelocator
 }
 
 type actionExecutionResult struct {
@@ -56,13 +57,14 @@ type actionParams struct {
 	ItemID         string   `json:"itemId,omitempty"`
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, supplierRelocator SupplierRelocator) *PatronRequestActionService {
 	return &PatronRequestActionService{
 		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: logActionErrorAndReturnResult},
 		prRepo:                     prRepo,
 		eventBus:                   eventBus,
 		lmsCreator:                 lmsCreator,
 		actionMappingService:       ActionMappingService{SMService: &StateModelService{}},
+		supplierRelocator:          supplierRelocator,
 	}
 }
 
@@ -111,7 +113,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:
-		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest, &event.ID)
+		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	case SideLending:
 		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
@@ -300,7 +302,7 @@ func autoActionErrorSuffix(event events.Event) string {
 	return ""
 }
 
-func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, eventID *string) actionExecutionResult {
+func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionCustomData map[string]any, eventID *string) actionExecutionResult {
 	if !pr.RequesterSymbol.Valid {
 		status, result := logActionErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -324,6 +326,11 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
 	})
+	var params actionParams
+	if parseErr := common.MapToStruct(actionCustomData, &params); parseErr != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", parseErr)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	switch action {
 	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr, lmsAdapter)
@@ -347,6 +354,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.rejectRetryBorrowingRequest(pr)
 	case BorrowerActionAcceptRetry:
 		return a.acceptRetryBorrowingRequest(ctx, pr)
+	case BorrowerActionLocateForRetry:
+		return a.locateForRetry(ctx, pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -607,6 +616,23 @@ func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.Patron
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
+// locateForRetry runs a synchronous locate+select cycle for the parent ILL transaction
+// and, on success, transitions the retry PR to VALIDATED so the normal request flow takes over.
+func (a *PatronRequestActionService) locateForRetry(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	if !pr.PrevReqID.Valid {
+		status, r := logActionErrorAndReturnResult(ctx, "locate-for-retry: missing PrevReqID", errors.New("missing PrevReqID"))
+		return actionExecutionResult{status: status, result: r, pr: pr}
+	}
+	if err := a.supplierRelocator.RelocateSuppliers(ctx, pr.PrevReqID.String); err != nil {
+		status, r := logActionErrorAndReturnResult(ctx, "locate-for-retry: failed to relocate suppliers", err)
+		return actionExecutionResult{status: status, result: r, pr: pr}
+	}
+	// Clear bib info now that it has been applied to IllRequest and location is complete.
+	pr.RetryBibInfo = nil
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
@@ -620,8 +646,6 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	retryPr.State = BorrowerStateNew
-	retryPr.TerminalState = false
 	retryPr.ID = uuid.NewString()
 	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
 	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
@@ -630,9 +654,11 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	retryPr.PrevReqID = getDbTextPtr(&pr.ID)
 	retryPr.Language = pr.Language
 	retryPr.Items = []pr_db.PrItem{}
-	retryPr.RetryBibInfo = nil
+	retryPr.TerminalState = false
+
 	if pr.RetryBibInfo != nil {
-		// only take selected fields from retry bib info to allow for corrections without affecting other fields
+		// Supplier provided updated bib info via RetryPossible: apply it to IllRequest
+		// and start in RETRY_LOCATING so locate-for-retry finds a fresh supplier.
 		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {
 			retryPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
 		}
@@ -642,7 +668,12 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		if pr.RetryBibInfo.Author != "" {
 			retryPr.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
 		}
+		retryPr.RetryBibInfo = pr.RetryBibInfo
+		retryPr.State = BorrowerStateRetryLocating
+	} else {
+		retryPr.State = BorrowerStateNew
 	}
+
 	pr.NextReqID = getDbTextPtr(&retryPr.ID)
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, retryPr: retryPr}
 }

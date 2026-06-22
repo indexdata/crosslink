@@ -186,7 +186,10 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		if err != nil {
 			return ErrRetryNotPossible
 		}
-		if selSup.LastStatus.String != string(iso18626.TypeStatusRetryPossible) {
+		// Allow retry if the supplier previously signalled RetryPossible, or if the
+		// selected supplier is freshly located (blank LastStatus) following a relocation
+		// triggered by an accept-retry with updated bibliographic information.
+		if selSup.LastStatus.Valid && selSup.LastStatus.String != string(iso18626.TypeStatusRetryPossible) {
 			return ErrRetryNotPossible
 		}
 		requesterRequestId := createPgText(request.Header.RequestingAgencyRequestId)

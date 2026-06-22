@@ -911,18 +911,21 @@ func TestAcceptRetry(t *testing.T) {
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
 	assert.Contains(t, string(respBytes), "Action accept-retry is not allowed for patron request")
 
-	// check cloned request
+	// check cloned request — RetryBibInfo triggers RETRY_LOCATING which auto-transitions to VALIDATED
 	newId := *foundPr.NextReqId
 	assert.NotEqual(t, newId, id)
 
 	thisPrPath = basePath + "/" + newId
 
-	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
-	foundPr = proapi.PatronRequest{}
-	err = json.Unmarshal(respBytes, &foundPr)
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+		foundPr = proapi.PatronRequest{}
+		err = json.Unmarshal(respBytes, &foundPr)
+		return err == nil && foundPr.State == "VALIDATED"
+	}), "retry PR did not reach VALIDATED state in time")
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, newId, foundPr.Id)
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "locate-for-retry", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.Equal(t, id, *foundPr.PrevReqId)

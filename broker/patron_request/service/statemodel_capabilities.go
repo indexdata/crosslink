@@ -39,6 +39,8 @@ const (
 	BorrowerStateRetryPending     pr_db.PatronRequestState = "RETRY_PENDING"
 	BorrowerStateRetryAccepted    pr_db.PatronRequestState = "RETRY_ACCEPTED"
 	BorrowerStateRetryRejected    pr_db.PatronRequestState = "RETRY_REJECTED"
+	BorrowerStateRetryLocating    pr_db.PatronRequestState = "RETRY_LOCATING"
+	BorrowerStateRetryLocateError pr_db.PatronRequestState = "RETRY_LOCATE_ERROR"
 	BorrowerStateManuallyClosed   pr_db.PatronRequestState = "MANUALLY_CLOSED"
 	LenderStateNew                pr_db.PatronRequestState = "NEW"
 	LenderStateValidated          pr_db.PatronRequestState = "VALIDATED"
@@ -68,6 +70,7 @@ const (
 	BorrowerActionShipReturn      pr_db.PatronRequestAction = "ship-return"
 	BorrowerActionAcceptRetry     pr_db.PatronRequestAction = "accept-retry"
 	BorrowerActionRejectRetry     pr_db.PatronRequestAction = "reject-retry"
+	BorrowerActionLocateForRetry  pr_db.PatronRequestAction = "locate-for-retry"
 	LenderActionValidate          pr_db.PatronRequestAction = "validate"
 	LenderActionWillSupply        pr_db.PatronRequestAction = "will-supply"
 	LenderActionRejectCancel      pr_db.PatronRequestAction = "reject-cancel"
@@ -118,6 +121,8 @@ func requesterBuiltInStates() []string {
 		string(BorrowerStateRetryAccepted),
 		string(BorrowerStateRetryRejected),
 		string(BorrowerStateRetryPending),
+		string(BorrowerStateRetryLocating),
+		string(BorrowerStateRetryLocateError),
 		string(BorrowerStateManuallyClosed),
 	})
 }
@@ -185,6 +190,10 @@ func requesterBuiltInActions() []proapi.ActionCapability {
 		},
 		{
 			Name:       string(BorrowerActionRejectRetry),
+			Parameters: []string{},
+		},
+		{
+			Name:       string(BorrowerActionLocateForRetry),
 			Parameters: []string{},
 		},
 	}

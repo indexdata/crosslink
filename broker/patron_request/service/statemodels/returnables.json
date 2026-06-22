@@ -179,6 +179,30 @@
       ]
     },
     {
+      "name": "RETRY_LOCATING",
+      "display": "Retry Locating",
+      "desc": "Locating a new supplier for a retry request with updated bibliographic info",
+      "side": "REQUESTER",
+      "actions": [
+        {
+          "name": "locate-for-retry",
+          "desc": "Locate new suppliers using updated bibliographic info from the retry",
+          "trigger": "auto",
+          "transitions": {
+            "success": "VALIDATED",
+            "failure": "RETRY_LOCATE_ERROR"
+          }
+        }
+      ]
+    },
+    {
+      "name": "RETRY_LOCATE_ERROR",
+      "display": "Retry Locate Error",
+      "desc": "Supplier location failed for a retry request with updated bibliographic info",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
       "name": "WILL_SUPPLY",
       "display": "Will Supply",
       "desc": "Received ISO18626 WillSupply (without condition)",

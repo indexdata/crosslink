@@ -58,6 +58,33 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
+// RelocateSuppliers synchronously runs locate-suppliers then select-supplier for the
+// ILL transaction identified by the given requesterRequestID. It is used by the
+// locate-for-retry action to find a new supplier when a retry request carries updated
+// bibliographic information.
+func (s *SupplierLocator) RelocateSuppliers(ctx common.ExtendedContext, requesterRequestID string) error {
+	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(COMP))
+	key := pgtype.Text{String: requesterRequestID, Valid: true}
+	illTrans, err := s.illRepo.GetIllTransactionByRequesterRequestId(ctx, key)
+	if err != nil {
+		return fmt.Errorf("RelocateSuppliers: ILL transaction not found for requester request %s: %w", requesterRequestID, err)
+	}
+	stub := events.Event{IllTransactionID: illTrans.ID}
+	// Clear existing located suppliers so the new locate starts with clean ordinals.
+	if err := s.illRepo.DeleteLocatedSupplierByIllTransaction(ctx, illTrans.ID); err != nil {
+		return fmt.Errorf("RelocateSuppliers: failed to clear located suppliers for ILL transaction %s: %w", illTrans.ID, err)
+	}
+	status, _ := s.locateSuppliers(ctx, stub)
+	if status != events.EventStatusSuccess {
+		return fmt.Errorf("RelocateSuppliers: locate-suppliers failed for ILL transaction %s", illTrans.ID)
+	}
+	status, _ = s.selectSupplier(ctx, stub)
+	if status != events.EventStatusSuccess {
+		return fmt.Errorf("RelocateSuppliers: select-supplier failed for ILL transaction %s", illTrans.ID)
+	}
+	return nil
+}
+
 func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
 	var holdingsParams holdings.LookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
