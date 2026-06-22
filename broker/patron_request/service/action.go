@@ -608,8 +608,6 @@ func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.Patron
 }
 
 func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
-	result := events.EventResult{}
-
 	retryPr := pr_db.PatronRequest{}
 	retryPr.Side = pr.Side
 	retryPr.RequesterSymbol = pr.RequesterSymbol
@@ -646,7 +644,7 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		}
 	}
 	pr.NextReqID = getDbTextPtr(&retryPr.ID)
-	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr, retryPr: retryPr}
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, retryPr: retryPr}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
