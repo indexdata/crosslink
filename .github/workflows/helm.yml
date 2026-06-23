@@ -34,7 +34,7 @@ jobs:
             chart_path: ./illmock/chart
             md_path: ./illmock/descriptors/ModuleDescriptor-template.json
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # For workflow_run, package charts from the exact commit that published images.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
