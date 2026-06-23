@@ -590,8 +590,6 @@ components:
           description: ID of the previous patron request in the sequence
         retryBibInfo:
           $ref: '#/components/schemas/BibliographicInfo'
-          description: Bibliographic information for the item to retry the request for when in retrying state
-          additionalProperties: true
       required:
         - id
         - createdAt
