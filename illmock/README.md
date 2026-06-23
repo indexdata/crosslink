@@ -109,6 +109,8 @@ The following values are recognized:
   * `#RETRYKEEPID` the requester uses existing RequestingAgencyRequestId when sending a retry request. If not
   given, a new RequestingAgencyRequestId is created (thus being different from RequestingAgencyPreviousRequestId)
 
+  * `#RETRYBIBID#` if given and non-empty, is the SupplierUniqueRecordId when sending Retry Request.
+
 # ILL flows
 
 History of ILL messages can be retrieved at the `/api/flows` endpoint.

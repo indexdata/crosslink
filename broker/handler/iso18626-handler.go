@@ -215,17 +215,6 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		illTrans.Timestamp = timestamp
 
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
-		if err != nil {
-			return err
-		}
-
-		// Keep the selected supplier's LocalID in sync with the updated SupplierUniqueRecordId.
-		// createRequestMessage overwrites BibliographicInfo.SupplierUniqueRecordId with LocalID, so
-		// without this update the stale LocalID from the original holdings lookup would be sent.
-		if newLocalId := request.BibliographicInfo.SupplierUniqueRecordId; newLocalId != "" {
-			selSup.LocalID = pgtype.Text{String: newLocalId, Valid: true}
-			_, err = repo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(selSup))
-		}
 		return err
 	})
 	return id, err
@@ -259,7 +248,7 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	}
 	switch requestType {
 	case iso18626.TypeRequestTypeRetry:
-		event = events.EventNameRequesterMsgReceived
+		event = events.EventNameRequestReceived
 		id, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
 		event = events.EventNameRequestReceived

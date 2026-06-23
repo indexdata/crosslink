@@ -94,6 +94,7 @@ func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consorti
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
+	ctx.Logger().Info("AD: locating suppliers for ILL transaction", "illTransactionId", event.IllTransactionID)
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
@@ -267,8 +268,14 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
+	// Start ordinal from the count of existing suppliers to avoid conflicts with
+	// the unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
+	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
+	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	i := 0
+	i := len(existingSuppliers)
 	for pass := 1; pass <= 2; pass++ {
 		for _, sup := range potentialSuppliers {
 			matchPass := 1

@@ -1686,7 +1686,7 @@ func TestSendRetryRequest(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi()
 	msg := createRequest()
-	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{}, "x", "y")
+	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{}, "x", "y", "")
 }
 
 func TestHandleSupplyingAgencyNotificationNoAction(t *testing.T) {
