@@ -94,7 +94,6 @@ func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consorti
 }
 
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
-	ctx.Logger().Info("AD: locating suppliers for ILL transaction", "illTransactionId", event.IllTransactionID)
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
