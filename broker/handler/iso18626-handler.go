@@ -240,7 +240,6 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 
 	var err error
 	var id string
-	var event events.EventName
 
 	requestType := iso18626.TypeRequestTypeNew
 	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil {
@@ -248,10 +247,8 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	}
 	switch requestType {
 	case iso18626.TypeRequestTypeRetry:
-		event = events.EventNameRequestReceived
 		id, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
-		event = events.EventNameRequestReceived
 		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
 	default:
 		handleRequestError(ctx, w, request, iso18626.TypeErrorTypeUnrecognisedDataValue, UnsupportedRequestType)
@@ -280,6 +277,7 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 			ORIGINAL_INCOMING_MESSAGE: illMessage,
 		},
 	}
+	event := events.EventNameRequestReceived
 	if _, err = createNotice(ctx, eventBus, id, event, eventData, events.EventStatusSuccess); err != nil {
 		http.Error(w, PublicFailedToProcessReqMsg, http.StatusInternalServerError)
 		return
