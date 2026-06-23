@@ -591,6 +591,7 @@ components:
         retryBibInfo:
           $ref: '#/components/schemas/BibliographicInfo'
           description: Bibliographic information for the item to retry the request for when in retrying state
+          additionalProperties: true
       required:
         - id
         - createdAt
