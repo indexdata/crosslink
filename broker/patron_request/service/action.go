@@ -31,9 +31,10 @@ type PatronRequestActionService struct {
 }
 
 type actionExecutionResult struct {
-	status events.EventStatus
-	result *events.EventResult
-	pr     pr_db.PatronRequest
+	status  events.EventStatus
+	result  *events.EventResult
+	pr      pr_db.PatronRequest
+	retryPr pr_db.PatronRequest
 }
 
 type autoActionFailure struct {
@@ -51,6 +52,8 @@ type actionParams struct {
 	Cost           *float64 `json:"cost,omitempty"`
 	Currency       string   `json:"currency,omitempty"`
 	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
+	ReasonRetry    string   `json:"reasonRetry,omitempty"`
+	ItemID         string   `json:"itemId,omitempty"`
 }
 
 func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
@@ -186,12 +189,38 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 		stateChanged = true
 	}
 
-	var err error
-	updatedPr, err = a.prRepo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
+	var retryPr pr_db.PatronRequest
+	err := a.prRepo.WithTxFunc(ctx, func(repo pr_db.PrRepo) error {
+		var err error
+		if execResult.retryPr.ID != "" {
+			retryPr, err = repo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(execResult.retryPr))
+			if err != nil {
+				return fmt.Errorf("create retry patron request: %w", err)
+			}
+		}
+		updatedPr, err = repo.UpdatePatronRequest(ctx, pr_db.UpdatePatronRequestParams(updatedPr))
+		if err != nil {
+			return fmt.Errorf("update patron request: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return logActionErrorAndReturnResult(ctx, "failed to update patron request", err)
+		return logActionErrorAndReturnResult(ctx, "failed to persist patron request", err)
 	}
-
+	if retryPr.ID != "" {
+		err := a.RunAutoActionsOnStateEntry(ctx, retryPr, &event.ID, event.EventData.User)
+		if err != nil {
+			failedAction := action
+			var autoErr *autoActionFailure
+			if errors.As(err, &autoErr) {
+				failedAction = autoErr.action
+			}
+			a.markActionChainFailure(ctx, updatedPr.ID, failedAction)
+			autoActionErr := err.Error()
+			execResult.result.ActionResult.ChildActionError = &autoActionErr
+			return execResult.status, execResult.result
+		}
+	}
 	if stateChanged {
 		err := a.RunAutoActionsOnStateEntry(ctx, updatedPr, &event.ID, event.EventData.User)
 		if err != nil {
@@ -314,6 +343,10 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.acceptConditionBorrowingRequest(ctx, pr)
 	case BorrowerActionRejectCondition:
 		return a.rejectConditionBorrowingRequest(ctx, pr)
+	case BorrowerActionRejectRetry:
+		return a.rejectRetryBorrowingRequest(pr)
+	case BorrowerActionAcceptRetry:
+		return a.acceptRetryBorrowingRequest(ctx, pr)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -368,6 +401,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.markReceivedLenderRequest(ctx, pr, lms)
 	case LenderActionAcceptCancel:
 		return a.acceptCancelLenderRequest(ctx, pr)
+	case LenderActionAskRetry:
+		return a.askRetryLenderRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -565,6 +600,51 @@ func (a *PatronRequestActionService) rejectConditionBorrowingRequest(ctx common.
 		ctx.Logger().Error("failed to mark condition notifications rejected", "pr_id", pr.ID, "error", err)
 	}
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) rejectRetryBorrowingRequest(pr pr_db.PatronRequest) actionExecutionResult {
+	result := events.EventResult{}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest) actionExecutionResult {
+	retryPr := pr_db.PatronRequest{}
+	retryPr.Side = pr.Side
+	retryPr.RequesterSymbol = pr.RequesterSymbol
+	retryPr.SupplierSymbol = pr.SupplierSymbol
+	retryPr.Patron = pr.Patron
+	retryPr.Tenant = pr.Tenant
+	var err error
+	retryPr.IllRequest, err = deepCopyISO18626Request(pr.IllRequest)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	retryPr.State = BorrowerStateNew
+	retryPr.TerminalState = false
+	retryPr.ID = uuid.NewString()
+	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
+	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}
+	retryPr.IllRequest.Header.RequestingAgencyRequestId = retryPr.ID
+	retryPr.IllRequest.Header.Timestamp = utils.XSDDateTime{Time: retryPr.CreatedAt.Time}
+	retryPr.PrevReqID = getDbTextPtr(&pr.ID)
+	retryPr.Language = pr.Language
+	retryPr.Items = []pr_db.PrItem{}
+	retryPr.RetryBibInfo = nil
+	if pr.RetryBibInfo != nil {
+		// only take selected fields from retry bib info to allow for corrections without affecting other fields
+		if pr.RetryBibInfo.SupplierUniqueRecordId != "" {
+			retryPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId = pr.RetryBibInfo.SupplierUniqueRecordId
+		}
+		if pr.RetryBibInfo.Title != "" {
+			retryPr.IllRequest.BibliographicInfo.Title = pr.RetryBibInfo.Title
+		}
+		if pr.RetryBibInfo.Author != "" {
+			retryPr.IllRequest.BibliographicInfo.Author = pr.RetryBibInfo.Author
+		}
+	}
+	pr.NextReqID = getDbTextPtr(&retryPr.ID)
+	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, retryPr: retryPr}
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
@@ -808,6 +888,32 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 		},
 		iso18626.StatusInfo{Status: iso18626.TypeStatusCancelled},
 		nil)
+	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	var deliveryInfo *iso18626.DeliveryInfo
+	if params.ItemID != "" {
+		deliveryInfo = &iso18626.DeliveryInfo{
+			ItemId: params.ItemID,
+		}
+	}
+	reasonRetry := string(iso18626.ReasonRetryNotFoundAsCited)
+	if params.ReasonRetry != "" {
+		reasonRetry = params.ReasonRetry
+	}
+	result := events.EventResult{}
+	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
+		iso18626.MessageInfo{
+			ReasonRetry:      &iso18626.TypeSchemeValuePair{Text: reasonRetry},
+			ReasonForMessage: iso18626.TypeReasonForMessageStatusChange,
+			Note:             params.Note,
+		},
+		iso18626.StatusInfo{Status: iso18626.TypeStatusRetryPossible},
+		deliveryInfo)
+	if result.OutgoingMessage.SupplyingAgencyMessage != nil {
+		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
+	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
 }
 

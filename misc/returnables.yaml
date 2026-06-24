@@ -48,6 +48,9 @@ states:
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
         transition: UNFILLED
+      - name: retry-conditional
+        desc: Received retry from supplier
+        transition: RETRY_PENDING
 
   - name: SUPPLIER_LOCATED
     display: Supplier Located
@@ -66,6 +69,9 @@ states:
       - name: will-supply-conditional
         desc: Supplier will supply with conditions (ISO18626 WillSupply with conditions)
         transition: CONDITION_PENDING
+      - name: retry-conditional
+        desc: Received retry from supplier
+        transition: RETRY_PENDING
       - name: loaned
         desc: Supplier shipped the item (ISO18626 Loaned)
         transition: SHIPPED
@@ -95,6 +101,22 @@ states:
       - name: unfilled
         desc: Supplier cannot supply (ISO18626 Unfilled)
         transition: UNFILLED
+
+  - name: RETRY_PENDING
+    display: Retry Pending
+    desc: Received ISO18626 RetryPossible from supplier (may include updated metadata/conditions)
+    side: REQUESTER
+    primaryAction: accept-retry
+    needsAttention: true
+    actions:
+      - name: accept-retry
+        desc: Requester accepts supplier retry request
+        transitions:
+          success: RETRY_ACCEPTED
+      - name: reject-retry
+        desc: Requester rejects supplier retry request
+        transitions:
+          success: RETRY_REJECTED
 
   - name: WILL_SUPPLY
     display: Will Supply
@@ -200,6 +222,18 @@ states:
     side: REQUESTER
     terminal: true
 
+  - name: RETRY_ACCEPTED
+    display: Retry Accepted
+    desc: Requester accepted supplier retry request with new metadata
+    side: REQUESTER
+    terminal: true
+
+  - name: RETRY_REJECTED
+    display: Retry Rejected
+    desc: Requester rejected supplier retry request
+    side: REQUESTER
+    terminal: true
+
   - name: MANUALLY_CLOSED
     display: Manually closed
     desc: Closed manually by staff
@@ -239,6 +273,10 @@ states:
         desc: Indicate will supply with conditions and send ISO18626 WillSupply
         transitions:
           success: CONDITION_PENDING
+      - name: ask-retry
+        desc: Ask requester to retry with new ISO18626 metadata
+        transitions:
+          success: COMPLETED_WITH_RETRY
     events:
       - name: cancel-request
         desc: Requester sent ISO18626 Cancel
@@ -262,6 +300,10 @@ states:
         desc: Indicate cannot supply
         transitions:
           success: UNFILLED
+      - name: ask-retry
+        desc: Ask requester to retry with new ISO18626 metadata
+        transitions:
+          success: COMPLETED_WITH_RETRY
     events:
       - name: cancel-request
         desc: Requester sends ISO Cancel
@@ -374,6 +416,12 @@ states:
   - name: UNFILLED
     display: Unfilled
     desc: After manual cannot-supply or automatically if auto-responder is on
+    side: SUPPLIER
+    terminal: true
+
+  - name: COMPLETED_WITH_RETRY
+    display: Completed with Retry
+    desc: After sending retry to requester
     side: SUPPLIER
     terminal: true
 

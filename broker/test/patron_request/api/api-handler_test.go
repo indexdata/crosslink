@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 		postgres.WithPassword("crosslink"),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).WithStartupTimeout(5*time.Second)),
+				WithOccurrence(2).WithStartupTimeout(30*time.Second)),
 	)
 	test.Expect(err, "failed to start db container")
 
@@ -636,6 +636,325 @@ func TestActionsToCompleteState(t *testing.T) {
 	assert.NoError(t, err, "failed to unmarshal patron request events")
 	assert.True(t, len(events.Items) > 5)
 	assert.Equal(t, int64(len(events.Items)), events.About.Count)
+}
+
+func TestRejectRetry(t *testing.T) {
+	requesterSymbol := "localISIL:REQ" + uuid.NewString()
+	supplierSymbol := "ISIL:SUP" + uuid.NewString()
+
+	lmsConfig := &directory.LmsConfig{
+		FromAgency: "from-agency",
+		Address:    ncipMockUrl,
+	}
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
+		directory.Entry{
+			LmsConfig: lmsConfig,
+		})
+	assert.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
+	assert.NotNil(t, supPeer)
+
+	// POST
+	patron := "p1"
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "RETRY:NOTFOUNDASCITED",
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceLevel: &iso18626.TypeSchemeValuePair{
+				Text: "Copy",
+			},
+			ServiceType: iso18626.TypeServiceTypeCopy,
+		},
+	}
+	id := "REQ-" + strings.ToUpper(uuid.NewString())
+	newPr := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err, "failed to marshal patron request")
+
+	hres, respBytes := httpRequest2(t, "POST", basePath, newPrBytes, 201)
+	// Check Location header
+	location := hres.Header.Get("Location")
+	assert.NotEmpty(t, location, "Location header should be set")
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+id, location)
+
+	var foundPr proapi.PatronRequest
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.True(t, foundPr.State != "")
+	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
+	assert.Nil(t, foundPr.SupplierSymbol)
+	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "RETRY:NOTFOUNDASCITED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
+		assert.False(t, r.Header.Timestamp.IsZero())
+	})
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NotificationsLink)
+
+	// GET list
+	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
+	respBytes = httpRequest(t, "GET", basePath+queryParams, []byte{}, 200)
+	var foundPrs proapi.PatronRequests
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	thisPrPath := basePath + "/" + *newPr.Id
+
+	// POST execute action
+	action := proapi.ExecuteAction{
+		Action: "send-request",
+	}
+	actionBytes, err := json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	var pResult proapi.ActionResult
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	assert.Equal(t, "success", pResult.Outcome)
+	assert.Equal(t, "VALIDATED", pResult.FromState)
+	assert.Equal(t, "SENT", *pResult.ToState)
+	assert.Nil(t, pResult.Message)
+
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+
+	// Wait until we can see possible action reject-retry
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+		return strings.Contains(string(respBytes), "\"name\":\"reject-retry\"")
+	}), "reject-retry action did not appear in time")
+	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+	assert.Contains(t, string(respBytes), "\"name\":\"reject-retry\"")
+
+	// POST blocking action
+	action = proapi.ExecuteAction{
+		Action: "reject-retry",
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "reject-retry", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+
+	// reject again - should fail as the request state it terminated
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
+	assert.Contains(t, string(respBytes), "Action reject-retry is not allowed for patron request")
+}
+
+func TestAcceptRetry(t *testing.T) {
+	requesterSymbol := "localISIL:REQ" + uuid.NewString()
+	supplierSymbol := "ISIL:SUP" + uuid.NewString()
+
+	lmsConfig := &directory.LmsConfig{
+		FromAgency: "from-agency",
+		Address:    ncipMockUrl,
+	}
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
+		directory.Entry{
+			LmsConfig: lmsConfig,
+		})
+	assert.NotNil(t, reqPeer)
+	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
+	assert.NotNil(t, supPeer)
+
+	// POST
+	patron := "p1"
+	request := iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			SupplierUniqueRecordId: "RETRY:NOTFOUNDASCITED",
+			BibliographicItemId: []iso18626.BibliographicItemId{
+				{
+					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{
+						Text: "ISBN",
+					},
+					BibliographicItemIdentifier: "1234567890",
+				},
+			},
+		},
+		ServiceInfo: &iso18626.ServiceInfo{
+			ServiceLevel: &iso18626.TypeSchemeValuePair{
+				Text: "Copy",
+			},
+			ServiceType: iso18626.TypeServiceTypeCopy,
+		},
+	}
+	id := "REQ-" + strings.ToUpper(uuid.NewString())
+	newPr := proapi.CreatePatronRequest{
+		Id:              &id,
+		RequesterSymbol: &requesterSymbol,
+		Patron:          &patron,
+		IllRequest:      request,
+	}
+	newPrBytes, err := json.Marshal(newPr)
+	assert.NoError(t, err, "failed to marshal patron request")
+
+	hres, respBytes := httpRequest2(t, "POST", basePath, newPrBytes, 201)
+	// Check Location header
+	location := hres.Header.Get("Location")
+	assert.NotEmpty(t, location, "Location header should be set")
+	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+id, location)
+
+	var foundPr proapi.PatronRequest
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	assert.Equal(t, id, foundPr.Id)
+	assert.True(t, foundPr.State != "")
+	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
+	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
+	assert.Nil(t, foundPr.SupplierSymbol)
+	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
+		assert.Equal(t, "RETRY:NOTFOUNDASCITED", r.BibliographicInfo.SupplierUniqueRecordId)
+		assert.Equal(t, id, r.Header.RequestingAgencyRequestId)
+		assert.False(t, r.Header.Timestamp.IsZero())
+	})
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NotificationsLink)
+
+	// GET list
+	queryParams := "?side=borrowing&symbol=" + *foundPr.RequesterSymbol
+	respBytes = httpRequest(t, "GET", basePath+queryParams, []byte{}, 200)
+	var foundPrs proapi.PatronRequests
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+
+	thisPrPath := basePath + "/" + *newPr.Id
+
+	// POST execute action
+	action := proapi.ExecuteAction{
+		Action: "send-request",
+	}
+	actionBytes, err := json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	var pResult proapi.ActionResult
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	assert.Equal(t, "success", pResult.Outcome)
+	assert.Equal(t, "VALIDATED", pResult.FromState)
+	assert.Equal(t, "SENT", *pResult.ToState)
+	assert.Nil(t, pResult.Message)
+
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+
+	// Wait until we can see possible action accept-retry
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+		return strings.Contains(string(respBytes), "\"name\":\"accept-retry\"")
+	}), "accept-retry action did not appear in time")
+	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
+	assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
+
+	// POST blocking action
+	action = proapi.ExecuteAction{
+		Action: "accept-retry",
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+
+	// check the original request is updated with retry info and new request is created
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, *newPr.Id, foundPr.Id)
+	assert.Equal(t, "accept-retry", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.NotNil(t, foundPr.NextReqId, "got pr "+string(respBytes))
+	assert.Nil(t, foundPr.PrevReqId, "got pr "+string(respBytes))
+	assert.Equal(t, "123456789", foundPr.RetryBibInfo.SupplierUniqueRecordId)
+
+	// accept again - should fail as the request state it terminated
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
+	assert.Contains(t, string(respBytes), "Action accept-retry is not allowed for patron request")
+
+	// check cloned request
+	newId := *foundPr.NextReqId
+	assert.NotEqual(t, newId, id)
+
+	thisPrPath = basePath + "/" + newId
+
+	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+	foundPr = proapi.PatronRequest{}
+	err = json.Unmarshal(respBytes, &foundPr)
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, newId, foundPr.Id)
+	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	assert.Equal(t, id, *foundPr.PrevReqId)
+	assert.Nil(t, foundPr.NextReqId)
+	assert.Nil(t, foundPr.RetryBibInfo)
+	assert.Equal(t, "123456789", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
+
+	// retry 2nd time. The "123456789" item id should be kept as retryItemId
+	// illmock will use scenario unfilled
+	action = proapi.ExecuteAction{
+		Action: "send-request",
+	}
+	actionBytes, err = json.Marshal(action)
+	assert.NoError(t, err, "failed to marshal patron request action")
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	err = json.Unmarshal(respBytes, &pResult)
+	assert.NoError(t, err, "failed to unmarshal patron request action result")
+	assert.Equal(t, "SUCCESS", pResult.Result)
+	assert.Equal(t, "success", pResult.Outcome)
+	assert.Equal(t, "VALIDATED", pResult.FromState)
+	assert.Equal(t, "SENT", *pResult.ToState)
+	assert.Nil(t, pResult.Message)
+
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+		foundPr = proapi.PatronRequest{}
+		err = json.Unmarshal(respBytes, &foundPr)
+		return err == nil && foundPr.State == "UNFILLED" && foundPr.TerminalState
+	}), "patron request did not reach UNFILLED state in time")
+	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, "UNFILLED", foundPr.State)
+	assert.True(t, foundPr.TerminalState)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

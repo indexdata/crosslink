@@ -1370,6 +1370,25 @@ func TestService(t *testing.T) {
 		assert.Equal(t, iso18626.TypeActionShippedReturn, *responseMsg.RequestingAgencyMessageConfirmation.Action)
 	})
 
+	t.Run("Patron request not found as cited", func(t *testing.T) {
+		msg := createPatronRequest()
+		ret := runScenario(t, isoUrl, apiUrl, msg, "RETRY:NOTFOUNDASCITED", 8)
+
+		m := ret[1].Message
+		rid := m.Request.Header.RequestingAgencyRequestId
+
+		m = ret[len(ret)-2].Message
+		assert.NotNil(t, m.SupplyingAgencyMessage)
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, m.SupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryNotFoundAsCited), m.SupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, "123456789", m.SupplyingAgencyMessage.DeliveryInfo.ItemId)
+
+		m = ret[len(ret)-1].Message
+		assert.NotNil(t, m.SupplyingAgencyMessageConfirmation)
+		assert.Equal(t, rid, m.SupplyingAgencyMessageConfirmation.ConfirmationHeader.RequestingAgencyRequestId)
+		assert.Equal(t, iso18626.TypeReasonForMessageRequestResponse, *m.SupplyingAgencyMessageConfirmation.ReasonForMessage)
+	})
+
 	t.Run("tenant ID set", func(t *testing.T) {
 		assert.Equal(t, "T1", app.client.Headers.Get("X-Okapi-Tenant"))
 	})
@@ -1667,7 +1686,7 @@ func TestSendRetryRequest(t *testing.T) {
 	var app MockApp
 	app.flowsApi = flows.CreateFlowsApi()
 	msg := createRequest()
-	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{}, "x", "y")
+	app.sendRetryRequest(msg.Request, "xx", &iso18626.MessageInfo{}, "x", "y", "")
 }
 
 func TestHandleSupplyingAgencyNotificationNoAction(t *testing.T) {

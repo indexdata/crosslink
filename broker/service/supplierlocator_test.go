@@ -572,7 +572,9 @@ func (r *MockIllRepoLocateSuppliers) GetExclusiveBranchSymbolsByPeerId(ctx commo
 }
 
 func (r *MockIllRepoLocateSuppliers) SaveLocatedSupplier(ctx common.ExtendedContext, params ill_db.SaveLocatedSupplierParams) (ill_db.LocatedSupplier, error) {
-	r.savedLocatedSuppliers = append(r.savedLocatedSuppliers, params)
+	if params.SupplierStatus != ill_db.SupplierStateSkippedPg {
+		r.savedLocatedSuppliers = append(r.savedLocatedSuppliers, params)
+	}
 	return ill_db.LocatedSupplier(params), nil
 }
 

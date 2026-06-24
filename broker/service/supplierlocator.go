@@ -58,7 +58,7 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func createHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
+func CreateHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
 	var holdingsParams holdings.LookupParams
 	bibliographicInfo := illTransactionData.BibliographicInfo
 	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
@@ -98,7 +98,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
 	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
 			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
@@ -267,8 +267,25 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no located suppliers match",
 			map[string]any{"holdings": holdingsLog, "directory": directoryLog, ROTA_INFO_KEY: rotaInfo})
 	}
+	// Start ordinal from the count of existing suppliers to avoid conflicts with
+	// the unique constraint on (ill_transaction_id, ordinal) when re-locating on retry.
+	existingSuppliers, _, err := s.illRepo.GetLocatedSuppliersByIllTransaction(ctx, illTrans.ID)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
+	}
+	// mark all existing suppliers as skipped
+	for _, existing := range existingSuppliers {
+		if existing.SupplierStatus == ill_db.SupplierStateSkippedPg {
+			continue
+		}
+		existing.SupplierStatus = ill_db.SupplierStateSkippedPg
+		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(existing))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
+		}
+	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
-	i := 0
+	i := len(existingSuppliers)
 	for pass := 1; pass <= 2; pass++ {
 		for _, sup := range potentialSuppliers {
 			matchPass := 1
@@ -346,7 +363,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := createHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
 	holdingsParams.Identifier = sup.LocalID.String
 	results, _, err := aa.Lookup(holdingsParams)
 	if err != nil {

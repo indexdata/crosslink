@@ -138,6 +138,10 @@ func (app *MockApp) handleSupplierRequest(illRequest *iso18626.Request, w http.R
 		status = append(status, iso18626.TypeStatusRetryPossible)
 		x := iso18626.ReasonRetryLoanCondition
 		reasonRetry = &x
+	case "RETRY:NOTFOUNDASCITED":
+		status = append(status, iso18626.TypeStatusRetryPossible)
+		x := iso18626.ReasonRetryNotFoundAsCited
+		reasonRetry = &x
 	case "COMPLETED":
 		if illRequest.ServiceInfo != nil && illRequest.ServiceInfo.ServiceType == iso18626.TypeServiceTypeCopy {
 			status = append(status, iso18626.TypeStatusCopyCompleted)
@@ -289,6 +293,10 @@ func (app *MockApp) sendSupplyingAgencyLater(header *iso18626.Header, statusList
 		case iso18626.ReasonRetryLoanCondition:
 			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{}
 			msg.SupplyingAgencyMessage.DeliveryInfo.LoanCondition = &iso18626.TypeSchemeValuePair{Text: "NoReproduction"}
+		case iso18626.ReasonRetryNotFoundAsCited:
+			msg.SupplyingAgencyMessage.DeliveryInfo = &iso18626.DeliveryInfo{
+				ItemId: "123456789",
+			}
 		}
 	}
 	if state.presentResponse {

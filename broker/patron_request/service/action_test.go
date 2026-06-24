@@ -1139,6 +1139,106 @@ func TestHandleInvokeLenderActionAddConditionOK(t *testing.T) {
 	}
 }
 
+func TestHandleInvokeLenderActionAskRetryMinimal(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionAskRetry
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData:      map[string]any{},
+	}})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateCompletedWithRetry, mockPrRepo.savedPr.State)
+
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, string(iso18626.ReasonRetryNotFoundAsCited), mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, "", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
+		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts)
+		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo)
+	}
+}
+
+func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
+	action := LenderActionAskRetry
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{
+		CommonEventData: events.CommonEventData{Action: &action},
+		CustomData: map[string]any{
+			"note":        "isbn",
+			"itemId":      "0201896834",
+			"reasonRetry": "Transfer",
+		},
+	}})
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, LenderStateCompletedWithRetry, mockPrRepo.savedPr.State)
+
+	if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage) {
+		assert.Equal(t, iso18626.TypeStatusRetryPossible, mockIso18626Handler.lastSupplyingAgencyMessage.StatusInfo.Status)
+		assert.Equal(t, "Transfer", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.ReasonRetry.Text)
+		assert.Equal(t, "isbn", mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.Note)
+		assert.Nil(t, mockIso18626Handler.lastSupplyingAgencyMessage.MessageInfo.OfferedCosts)
+		if assert.NotNil(t, mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo) {
+			assert.Equal(t, "0201896834", mockIso18626Handler.lastSupplyingAgencyMessage.DeliveryInfo.ItemId)
+		}
+	}
+}
+
+func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	mockEventBus := new(MockEventBus)
+	mockEventBus.createTaskErr = errors.New("event bus error")
+	lmsCreator := new(MockLmsCreator)
+	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(createLmsAdapterMockLog(), nil)
+	mockIso18626Handler := new(MockIso18626Handler)
+	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, mockIso18626Handler, lmsCreator)
+	illRequest := iso18626.Request{}
+	initialPR := pr_db.PatronRequest{
+		ID:              patronRequestId,
+		IllRequest:      illRequest,
+		State:           BorrowerStateRetryPending,
+		Side:            SideBorrowing,
+		RequesterSymbol: getDbText("ISIL:REQ1"),
+		SupplierSymbol:  getDbText("ISIL:SUP1"),
+	}
+
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil)
+	mockPrRepo.On("GetPatronRequestByIdForUpdate", patronRequestId).Return(initialPR, nil).Once()
+
+	action := BorrowerActionAcceptRetry
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{
+		ID:              "invoke-accept-retry",
+		PatronRequestID: patronRequestId,
+		EventData:       events.EventData{CommonEventData: events.CommonEventData{Action: &action}},
+	})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	if assert.NotNil(t, resultData.ActionResult) && assert.NotNil(t, resultData.ActionResult.ChildActionError) {
+		assert.Equal(t, "event bus error", *resultData.ActionResult.ChildActionError)
+	}
+	// The original PR (not the retry PR) should be marked as a chain failure.
+	assert.Equal(t, patronRequestId, mockPrRepo.savedPr.ID)
+	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
+	assert.Equal(t, string(BorrowerActionValidate), mockPrRepo.savedPr.LastAction.String)
+	assert.Equal(t, ActionOutcomeFailure, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(events.EventStatusError), mockPrRepo.savedPr.LastActionResult.String)
+}
+
 func TestHandleInvokeLenderActionAddConditionMissingConditionAndCost(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)

@@ -582,6 +582,14 @@ components:
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers
+        nextReqId:
+          type: string
+          description: ID of the next patron request in the sequence
+        prevReqId:
+          type: string
+          description: ID of the previous patron request in the sequence
+        retryBibInfo:
+          $ref: '#/components/schemas/BibliographicInfo'
       required:
         - id
         - createdAt
@@ -1210,6 +1218,10 @@ components:
         cql:
           description: CQL search for patron requests to create pull slips for
           type: string
+
+    BibliographicInfo:
+      type: object
+      description: Bibliographic information for an ILL request item, as defined in ISO18626
 
 paths:
   /:
