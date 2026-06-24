@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/shim"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -172,11 +173,12 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 	return id, err
 }
 
-func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, error) {
+func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, repo ill_db.IllRepo) (string, bool, error) {
 	// ServiceInfo already nil checked in handleIso18626Request
 	prevReqId := createPgText(request.ServiceInfo.RequestingAgencyPreviousRequestId)
 
 	var id string
+	var retryLookupChanged bool
 	err := repo.WithTxFunc(ctx, func(repo ill_db.IllRepo) error {
 		illTrans, err := repo.GetIllTransactionByRequesterRequestIdForUpdate(ctx, prevReqId)
 		if err != nil {
@@ -196,6 +198,8 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
+		oldParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+
 		illTransactionData := ill_db.IllTransactionData{
 			BibliographicInfo:     request.BibliographicInfo,
 			PublicationInfo:       request.PublicationInfo,
@@ -208,6 +212,9 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		}
 		illTrans.IllTransactionData = illTransactionData
 
+		newParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		retryLookupChanged = oldParams != newParams
+
 		timestamp := pgtype.Timestamp{
 			Time:  request.Header.Timestamp.Time,
 			Valid: true,
@@ -217,7 +224,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
 		return err
 	})
-	return id, err
+	return id, retryLookupChanged, err
 }
 
 func (h *Iso18626Handler) HandleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
@@ -245,9 +252,10 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 	if request.ServiceInfo != nil && request.ServiceInfo.RequestType != nil {
 		requestType = *request.ServiceInfo.RequestType
 	}
+	mustLocate := true
 	switch requestType {
 	case iso18626.TypeRequestTypeRetry:
-		id, err = handleRetryRequest(ctx, request, repo)
+		id, mustLocate, err = handleRetryRequest(ctx, request, repo)
 	case iso18626.TypeRequestTypeNew:
 		id, err = handleNewRequest(ctx, request, repo, requesterSymbol, peers)
 	default:
@@ -275,6 +283,7 @@ func handleRequest(ctx common.ExtendedContext, illMessage *iso18626.ISO18626Mess
 		},
 		CustomData: map[string]any{
 			ORIGINAL_INCOMING_MESSAGE: illMessage,
+			events.MUST_LOCATE:        mustLocate,
 		},
 	}
 	event := events.EventNameRequestReceived

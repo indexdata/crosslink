@@ -718,10 +718,6 @@ func TestRequestRETRY_COST(t *testing.T) {
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
@@ -759,10 +755,6 @@ func TestRequestRETRY_COST_LOANED(t *testing.T) {
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +
@@ -812,10 +804,6 @@ func TestRequestRETRY_ONLOAN_LOANED(t *testing.T) {
 		"TASK, message-requester = SUCCESS\n" +
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = SUCCESS\n" +
-		"TASK, select-supplier = SUCCESS\n" +
-		"TASK, check-availability = SUCCESS\n" +
-		"TASK, message-requester = SUCCESS\n" +
 		"TASK, message-supplier = SUCCESS\n" +
 		"NOTICE, supplier-msg-received = SUCCESS\n" +
 		"TASK, message-requester = SUCCESS\n" +

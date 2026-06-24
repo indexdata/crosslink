@@ -39,7 +39,12 @@ func CreateWorkflowManager(eventBus events.EventBus, illRepo ill_db.IllRepo, con
 func (w *WorkflowManager) RequestReceived(ctx common.ExtendedContext, event events.Event) {
 	ctx = ctx.WithArgs(ctx.LoggerArgs().WithComponent(WF_COMP))
 	common.Must(ctx, func() (string, error) {
-		return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		if event.EventData.CustomData[events.MUST_LOCATE] == true {
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameLocateSuppliers, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		} else {
+			// call message supplier directly, skipping locate suppliers step
+			return w.eventBus.CreateTask(event.IllTransactionID, events.EventNameMessageSupplier, events.EventData{}, events.EventDomainIllTransaction, &event.ID, events.SignalConsumers)
+		}
 	}, "")
 }
 
