@@ -44,7 +44,7 @@ jobs:
         modules: [broker, illmock]
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Load tool versions
       run: cat .github/tool-versions.env >> "$GITHUB_ENV"
