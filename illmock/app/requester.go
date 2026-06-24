@@ -77,10 +77,7 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.ISO18626Message, w 
 	header := &msg.Request.Header
 
 	// ServiceInfo != nil already
-	note := ""
-	if illRequest.ServiceInfo != nil {
-		note = illRequest.ServiceInfo.Note
-	}
+	note := illRequest.ServiceInfo.Note
 	cancel := note == "#CANCEL#"
 	renew := note == "#RENEW#"
 	retryKeepId := strings.Contains(note, "#RETRYKEEPID#")
