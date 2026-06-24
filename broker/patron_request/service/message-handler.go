@@ -272,7 +272,8 @@ func (m *PatronRequestMessageHandler) handleSupplyingAgencyMessageWithParent(ctx
 		eventName = SupplierRetryConditional
 		setSupplierMessage(sam, &pr)
 		// later, we can use MessageInfo.Note to pass bibliographic hints for the retry request
-		if sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
+		if sam.MessageInfo.ReasonRetry != nil && (*sam.MessageInfo.ReasonRetry).Text == string(iso18626.ReasonRetryNotFoundAsCited) &&
+			sam.DeliveryInfo != nil && sam.DeliveryInfo.ItemId != "" {
 			retryBibInfo = &iso18626.BibliographicInfo{
 				SupplierUniqueRecordId: sam.DeliveryInfo.ItemId,
 			}
