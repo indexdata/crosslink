@@ -273,6 +273,17 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to count existing located suppliers", err)
 	}
+	// mark all existing suppliers as skipped
+	for _, existing := range existingSuppliers {
+		if existing.SupplierStatus == ill_db.SupplierStateSkippedPg {
+			continue
+		}
+		existing.SupplierStatus = ill_db.SupplierStateSkippedPg
+		_, err = s.illRepo.SaveLocatedSupplier(ctx, ill_db.SaveLocatedSupplierParams(existing))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to update existing located supplier status", err)
+		}
+	}
 	var locatedSuppliers []*ill_db.LocatedSupplier
 	i := len(existingSuppliers)
 	for pass := 1; pass <= 2; pass++ {
