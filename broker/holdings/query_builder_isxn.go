@@ -37,7 +37,11 @@ func (s *QueryBuilderIsxn) Build(params LookupParams) (cql []string, pqf []strin
 		comps = append(comps, cql)
 	}
 	if len(comps) == 0 {
-		return nil, nil, errors.New("no search parameters provided for SRU lookup")
+		allowedLookupIdentifiers := []string{"identifier (supplierUniqueRecordId)"}
+		if s.isxn {
+			allowedLookupIdentifiers = append(allowedLookupIdentifiers, "isbn", "issn")
+		}
+		return nil, nil, errors.New("missing SRU lookup parameters. Provide at least one of: " + strings.Join(allowedLookupIdentifiers, ", "))
 	}
 	// combine components with OR. Just one query returned since we want to search for all provided identifiers at once
 	return []string{strings.Join(comps, " or ")}, nil, nil
