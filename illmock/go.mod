@@ -24,8 +24,8 @@ replace (
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/indexdata/cql-go v1.0.1-0.20260428173300-66724413770c
-	github.com/indexdata/go-utils v0.0.0-20260408192455-6845257a8bcb
+	github.com/indexdata/cql-go v1.0.1
+	github.com/indexdata/go-utils v1.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
