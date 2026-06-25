@@ -154,12 +154,18 @@ func handleNewRequest(ctx common.ExtendedContext, request *iso18626.Request, rep
 		BillingInfo:           request.BillingInfo,
 	}
 
+	_, err := service.CreateHoldingsParams(illTransactionData)
+	if err != nil {
+		return "", err
+	}
+	ctx.Logger().Info("AD: holdings lookup params OK")
+
 	id := uuid.New().String()
 	timestamp := pgtype.Timestamp{
 		Time:  request.Header.Timestamp.Time,
 		Valid: true,
 	}
-	_, err := repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
+	_, err = repo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams{
 		ID:                  id,
 		Timestamp:           timestamp,
 		RequesterSymbol:     requesterSymbol,
@@ -198,7 +204,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
-		oldParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		oldParams, _ := service.CreateHoldingsParams(illTrans.IllTransactionData)
 
 		illTransactionData := ill_db.IllTransactionData{
 			BibliographicInfo:     request.BibliographicInfo,
@@ -212,7 +218,10 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		}
 		illTrans.IllTransactionData = illTransactionData
 
-		newParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		newParams, err := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		if err != nil {
+			return err
+		}
 		retryLookupChanged = oldParams != newParams
 
 		timestamp := pgtype.Timestamp{

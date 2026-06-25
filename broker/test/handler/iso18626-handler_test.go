@@ -363,6 +363,19 @@ func TestIso18626PostSupplyingMessageIncorrectSupplier(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), errorValue)
 }
 
+func TestIso18626PostSupplyingMessageMissingBibInfo(t *testing.T) {
+	data, _ := os.ReadFile("../testdata/request-missing-bib-lookup.xml")
+	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
+	req.Header.Add("Content-Type", "application/xml")
+	rr := httptest.NewRecorder()
+	handler.Iso18626PostHandler(new(MockRepositoryOtherSupplier), eventBussSuccess, dirAdapter, app.MAX_MESSAGE_SIZE)(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	msgError := "<messageStatus>ERROR</messageStatus>"
+	assert.Contains(t, rr.Body.String(), msgError)
+	errorValue := "<errorValue>missing bibliographic info in request</errorValue>"
+	assert.Contains(t, rr.Body.String(), errorValue)
+}
+
 func TestIso18626PostSupplyingMessageErrorFindingSupplier(t *testing.T) {
 	data, _ := os.ReadFile("../testdata/supmsg-ok.xml")
 	req, _ := http.NewRequest("POST", "/", bytes.NewReader(data))
