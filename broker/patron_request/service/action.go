@@ -892,14 +892,11 @@ func (a *PatronRequestActionService) acceptCancelLenderRequest(ctx common.Extend
 }
 
 func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
-	if params.ReasonRetry == "" {
+	var deliveryInfo *iso18626.DeliveryInfo
+	switch params.ReasonRetry {
+	case "":
 		status, result := logActionErrorAndReturnResult(ctx, "missing reasonRetry for ask-retry action", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
-	}
-	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}
-	var deliveryInfo *iso18626.DeliveryInfo
-
-	switch params.ReasonRetry {
 	case string(iso18626.ReasonRetryNotFoundAsCited):
 		if params.ItemID == "" {
 			status, result := logActionErrorAndReturnResult(ctx, "missing itemId for ask-retry action when reasonRetry is NotFoundAsCited", nil)
@@ -912,6 +909,7 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		status, result := logActionErrorAndReturnResult(ctx, "unsupported reasonRetry for ask-retry action", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
+	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}
 	result := events.EventResult{}
 	status, eventResult, httpStatus := a.sendSupplyingAgencyMessage(ctx, pr, &result,
 		iso18626.MessageInfo{
