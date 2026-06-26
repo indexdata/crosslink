@@ -410,6 +410,7 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,
+		NeedsAttention:  true,
 	})
 	if err != nil {
 		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
