@@ -72,7 +72,7 @@ func TestHandleInvokeActionNoPRSide(t *testing.T) {
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
 
 	assert.Equal(t, events.EventStatusError, status)
-	assert.Equal(t, "side helper is not supported", resultData.EventError.Message)
+	assert.Equal(t, "state NEW does not support action validate", resultData.EventError.Message)
 }
 
 func TestHandleInvokeActionWhichIsNotAllowed(t *testing.T) {

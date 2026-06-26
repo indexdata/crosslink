@@ -265,10 +265,13 @@ func (r *ActionMapping) GetInitialState(side pr_db.PatronRequestSide) (pr_db.Pat
 		}
 		return *r.borrowerInitialState, true
 	}
-	if r.lenderInitialState == nil {
-		return "", false
+	if side == SideLending {
+		if r.lenderInitialState == nil {
+			return "", false
+		}
+		return *r.lenderInitialState, true
 	}
-	return *r.lenderInitialState, true
+	return "", false
 }
 
 func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.PatronRequestState, bool) {
@@ -278,10 +281,13 @@ func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.Patro
 		}
 		return *r.borrowerManualCloseState, true
 	}
-	if r.lenderManualCloseState == nil {
-		return "", false
+	if pr.Side == SideLending {
+		if r.lenderManualCloseState == nil {
+			return "", false
+		}
+		return *r.lenderManualCloseState, true
 	}
-	return *r.lenderManualCloseState, true
+	return "", false
 }
 
 func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
@@ -294,6 +300,9 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 		cfg, ok := r.borrowerStateConfig[pr.State]
 		return cfg, ok
 	}
-	cfg, ok := r.lenderStateConfig[pr.State]
-	return cfg, ok
+	if pr.Side == SideLending {
+		cfg, ok := r.lenderStateConfig[pr.State]
+		return cfg, ok
+	}
+	return stateConfig{}, false
 }
