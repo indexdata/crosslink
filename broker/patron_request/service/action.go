@@ -906,7 +906,7 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 			ItemId: params.ItemID,
 		}
 	default:
-		status, result := logActionErrorAndReturnResult(ctx, "unsupported reasonRetry for ask-retry action", nil)
+		status, result := logActionErrorAndReturnResult(ctx, fmt.Sprintf("unsupported reasonRetry %q for ask-retry action (supported: %q)", params.ReasonRetry, iso18626.ReasonRetryNotFoundAsCited), nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
 	reasonRetry := iso18626.TypeSchemeValuePair{Text: params.ReasonRetry}
