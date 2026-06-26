@@ -1180,7 +1180,7 @@ func TestHandleInvokeLenderActionAskRetryCost(t *testing.T) {
 	}})
 	assert.Equal(t, events.EventStatusError, status)
 	assert.NotNil(t, resultData)
-	assert.Equal(t, "unsupported reasonRetry for ask-retry action", resultData.EventError.Message)
+	assert.Equal(t, "unsupported reasonRetry \"CostExceedsMaxCost\" for ask-retry action (supported: \"NotFoundAsCited\")", resultData.EventError.Message)
 }
 
 func TestHandleInvokeLenderActionAskRetryMissingReasonRetry(t *testing.T) {
