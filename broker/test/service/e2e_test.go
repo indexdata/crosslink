@@ -890,21 +890,19 @@ func TestMetadataUpdateReplace(t *testing.T) {
 		},
 	})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f390"
-	data, _ := os.ReadFile("../testdata/request-metadata-update.xml")
+	data, err := os.ReadFile("../testdata/request-metadata-update.xml")
+	assert.NoError(t, err, "failed to read test data file")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(data),
 		"{reqid}", reqId),
 		"{requester}", "META-REP"),
 		"{supplierid}", "return-ISIL:META-REP-SUP::WILLSUPPLY")
-	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock: %s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v", res.StatusCode, http.StatusOK)
-	}
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
@@ -932,7 +930,8 @@ func TestMetadataUpdateMerge(t *testing.T) {
 		},
 	})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f391"
-	data, _ := os.ReadFile("../testdata/request-metadata-update.xml")
+	data, err := os.ReadFile("../testdata/request-metadata-update.xml")
+	assert.NoError(t, err, "failed to read test data file")
 	// The outgoing SupplierUniqueRecordId after merge will still be "return-ISIL:META-MRG-SUP::WILLSUPPLY"
 	// (original preserved), which doesn't match a known supplier scenario, so the mock supplier
 	// responds with Unfilled. We wait for that terminal state before asserting the DB value.
@@ -940,16 +939,14 @@ func TestMetadataUpdateMerge(t *testing.T) {
 		"{reqid}", reqId),
 		"{requester}", "META-MRG"),
 		"{supplierid}", "return-ISIL:META-MRG-SUP::WILLSUPPLY")
-	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	assert.NoError(t, err, "failed to create request")
 	req.Header.Add("Content-Type", "application/xml")
 	client := &http.Client{}
 	res, err := client.Do(req)
-	if err != nil {
-		t.Errorf("failed to send request to mock: %s", err)
-	}
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v", res.StatusCode, http.StatusOK)
-	}
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
+
 	var illTrans ill_db.IllTransaction
 	test.WaitForPredicateToBeTrue(func() bool {
 		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
