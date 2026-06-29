@@ -1118,6 +1118,7 @@ func buildDbPatronRequest(
 		Language:        pr_db.LANGUAGE,
 		Items:           []pr_db.PrItem{},
 		TerminalState:   false,
+		NeedsAttention:  true,
 		// LastAction, LastActionOutcome and LastActionResult are not set on creation
 		// they will be updated when the first action is executed.
 	}
