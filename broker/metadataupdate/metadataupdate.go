@@ -92,8 +92,8 @@ func hasCrosslinkCode(existing []iso18626.BibliographicRecordId, code string) bo
 }
 
 func isCrosslinkMetadataCode(code string) bool {
-	switch strings.TrimSpace(code) {
-	case "location", "shelvingLocation", "callNumber", "itemId":
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "location", "shelvinglocation", "callnumber", "itemid":
 		return true
 	default:
 		return false
