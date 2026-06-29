@@ -106,7 +106,7 @@ func GetMetadataSettings(entry directory.Entry) MetadataSettings {
 }
 
 func ResolveMetadataUpdateMode(mode string, hint string) directory.MetadataUpdateMode {
-	resolved := directory.None
+	var resolved directory.MetadataUpdateMode
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case string(directory.Replace):
 		resolved = directory.Replace
