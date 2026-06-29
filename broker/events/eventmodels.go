@@ -154,3 +154,5 @@ func NewProblemResult(kind string, details string) (EventStatus, *EventResult) {
 		},
 	}
 }
+
+const MUST_LOCATE = "mustLocate"

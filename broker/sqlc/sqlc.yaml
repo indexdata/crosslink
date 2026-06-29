@@ -104,6 +104,16 @@ sql:
           - column: "patron_request_search_view.items"
             go_type:
               type: "[]PrItem"
+          - column: "patron_request.retry_bib_info"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "BibliographicInfo"
+              pointer: true
+          - column: "patron_request_search_view.retry_bib_info"
+            go_type:
+              import: "github.com/indexdata/crosslink/iso18626"
+              type: "BibliographicInfo"
+              pointer: true
           - column: "notification.side"
             go_type:
               type: "PatronRequestSide"

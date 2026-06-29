@@ -14,13 +14,14 @@ import (
 )
 
 type requesterInfo struct {
-	cancel      bool
-	renew       bool
-	retryKeepId bool
-	received    bool
-	recall      bool
-	supplierUrl string
-	request     *iso18626.Request
+	cancel               bool
+	renew                bool
+	retryKeepId          bool
+	retryBibliographicId string
+	received             bool
+	recall               bool
+	supplierUrl          string
+	request              *iso18626.Request
 }
 
 type Requester struct {
@@ -76,10 +77,12 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.ISO18626Message, w 
 	header := &msg.Request.Header
 
 	// ServiceInfo != nil already
-	cancel := illRequest.ServiceInfo.Note == "#CANCEL#"
-	renew := illRequest.ServiceInfo.Note == "#RENEW#"
-	retryKeepId := illRequest.ServiceInfo.Note == "#RETRYKEEPID#"
-	recall := illRequest.ServiceInfo.Note == "#RECALL#"
+	note := illRequest.ServiceInfo.Note
+	cancel := note == "#CANCEL#"
+	renew := note == "#RENEW#"
+	retryKeepId := strings.Contains(note, "#RETRYKEEPID#")
+	retryBibliographicId := extractNoteValue(note, "RETRYBIBID")
+	recall := note == "#RECALL#"
 
 	// patron may omit RequestingAgencyRequestId
 	if header.RequestingAgencyRequestId == "" {
@@ -102,12 +105,13 @@ func (app *MockApp) handlePatronRequest(illMessage *iso18626.ISO18626Message, w 
 	app.logIncomingReq(role.Requester, header, illMessage)
 
 	requesterInfo := &requesterInfo{
-		supplierUrl: app.peerUrl,
-		cancel:      cancel,
-		recall:      recall,
-		renew:       renew,
-		retryKeepId: retryKeepId,
-		request:     msg.Request,
+		supplierUrl:          app.peerUrl,
+		cancel:               cancel,
+		recall:               recall,
+		renew:                renew,
+		retryKeepId:          retryKeepId,
+		retryBibliographicId: retryBibliographicId,
+		request:              msg.Request,
 	}
 	for _, supplierInfo := range illRequest.SupplierInfo {
 		description := supplierInfo.SupplierDescription
@@ -206,7 +210,7 @@ func createRequestingAgencyMessage() *iso18626.ISO18626Message {
 	return msg
 }
 
-func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo, prevId string, newId string) {
+func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl string, messageInfo *iso18626.MessageInfo, prevId string, newId string, retryBibliographicId string) {
 	msg := &iso18626.ISO18626Message{}
 	msg.Request = &iso18626.Request{}
 	*msg.Request = *illRequest
@@ -224,11 +228,30 @@ func (app *MockApp) sendRetryRequest(illRequest *iso18626.Request, supplierUrl s
 		msg.Request.BillingInfo = &iso18626.BillingInfo{}
 		msg.Request.BillingInfo.MaximumCosts = &offered
 	}
+	if retryBibliographicId != "" {
+		msg.Request.BibliographicInfo.SupplierUniqueRecordId = retryBibliographicId
+	}
 	time.Sleep(app.messageDelay / 10)
 	_, err := app.sendReceive(supplierUrl, msg, role.Requester, &msg.Request.Header)
 	if err != nil {
 		log.Warn("sendRetryRequest", "url", supplierUrl, "error", err.Error())
 	}
+}
+
+// extractNoteValue extracts the value from a #KEY:VALUE# marker in the note string.
+// Returns an empty string if the marker is not found.
+func extractNoteValue(note, key string) string {
+	marker := "#" + key + ":"
+	idx := strings.Index(note, marker)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(marker)
+	end := strings.Index(note[start:], "#")
+	if end < 0 {
+		return ""
+	}
+	return note[start : start+end]
 }
 
 func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.ISO18626Message, w http.ResponseWriter) {
@@ -277,9 +300,7 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.IS
 	case iso18626.TypeStatusLoanCompleted:
 		requester.delete(header)
 	case iso18626.TypeStatusUnfilled:
-		if supplyingAgencyMessage.MessageInfo.ReasonForMessage != iso18626.TypeReasonForMessageNotification {
-			requester.delete(header)
-		}
+		requester.delete(header)
 	case iso18626.TypeStatusCancelled:
 		if supplyingAgencyMessage.MessageInfo.AnswerYesNo != nil {
 			if *supplyingAgencyMessage.MessageInfo.AnswerYesNo == iso18626.TypeYesNoY {
@@ -298,6 +319,6 @@ func (app *MockApp) handleIso18626SupplyingAgencyMessage(illMessage *iso18626.IS
 			header.RequestingAgencyRequestId = newId
 			requester.store(&header, state)
 		}
-		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo, prevId, newId)
+		go app.sendRetryRequest(state.request, state.supplierUrl, &supplyingAgencyMessage.MessageInfo, prevId, newId, state.retryBibliographicId)
 	}
 }

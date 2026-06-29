@@ -88,6 +88,10 @@
                 "needsAttention": {
                     "type": "boolean",
                     "description": "Indicates that this state requires user attention (e.g. displayed as a flag in the UI)"
+                },
+                "manualClose": {
+                    "type": "boolean",
+                    "description": "Indicates that this state allows manual closing of the request by the user"
                 }
             },
             "oneOf": [

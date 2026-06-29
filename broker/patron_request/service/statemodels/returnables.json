@@ -67,6 +67,11 @@
           "name": "unfilled",
           "desc": "Supplier cannot supply (ISO18626 Unfilled)",
           "transition": "UNFILLED"
+        },
+        {
+          "name": "retry-conditional",
+          "desc": "Received retry from supplier",
+          "transition": "RETRY_PENDING"
         }
       ]
     },
@@ -95,6 +100,11 @@
           "name": "will-supply-conditional",
           "desc": "Supplier will supply with conditions (ISO18626 WillSupply with conditions)",
           "transition": "CONDITION_PENDING"
+        },
+        {
+          "name": "retry-conditional",
+          "desc": "Received retry from supplier",
+          "transition": "RETRY_PENDING"
         },
         {
           "name": "loaned",
@@ -141,6 +151,30 @@
           "name": "unfilled",
           "desc": "Supplier cannot supply (ISO18626 Unfilled)",
           "transition": "UNFILLED"
+        }
+      ]
+    },
+    {
+      "name": "RETRY_PENDING",
+      "display": "Retry Pending",
+      "desc": "Received ISO18626 RetryPossible from supplier (may include updated metadata/conditions)",
+      "side": "REQUESTER",
+      "primaryAction": "accept-retry",
+      "needsAttention": true,
+      "actions": [
+        {
+          "name": "accept-retry",
+          "desc": "Requester accepts supplier retry request",
+          "transitions": {
+            "success": "RETRY_ACCEPTED"
+          }
+        },
+        {
+          "name": "reject-retry",
+          "desc": "Requester rejects supplier retry request",
+          "transitions": {
+            "success": "RETRY_REJECTED"
+          }
         }
       ]
     },
@@ -294,6 +328,28 @@
       "terminal": true
     },
     {
+      "name": "RETRY_ACCEPTED",
+      "display": "Retry Accepted",
+      "desc": "Requester accepted supplier retry request with new metadata",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "RETRY_REJECTED",
+      "display": "Retry Rejected",
+      "desc": "Requester rejected supplier retry request",
+      "side": "REQUESTER",
+      "terminal": true
+    },
+    {
+      "name": "MANUALLY_CLOSED",
+      "display": "Manually closed",
+      "desc": "Closed manually by staff",
+      "side": "REQUESTER",
+      "terminal": true,
+      "manualClose": true
+    },
+    {
       "name": "NEW",
       "display": "New",
       "desc": "Item is created on the supplier side for local fulfillment",
@@ -338,6 +394,13 @@
           "transitions": {
             "success": "CONDITION_PENDING"
           }
+        },
+        {
+          "name": "ask-retry",
+          "desc": "Ask requester to retry with new ISO18626 metadata",
+          "transitions": {
+            "success": "COMPLETED_WITH_RETRY"
+          }
         }
       ],
       "events": [
@@ -374,6 +437,13 @@
           "desc": "Indicate cannot supply",
           "transitions": {
             "success": "UNFILLED"
+          }
+        },
+        {
+          "name": "ask-retry",
+          "desc": "Ask requester to retry with new ISO18626 metadata",
+          "transitions": {
+            "success": "COMPLETED_WITH_RETRY"
           }
         }
       ],
@@ -547,6 +617,21 @@
       "desc": "After manual cannot-supply or automatically if auto-responder is on",
       "side": "SUPPLIER",
       "terminal": true
+    },
+    {
+      "name": "COMPLETED_WITH_RETRY",
+      "display": "Completed with Retry",
+      "desc": "After sending retry to requester",
+      "side": "SUPPLIER",
+      "terminal": true
+    },
+    {
+      "name": "MANUALLY_CLOSED",
+      "display": "Manually closed",
+      "desc": "Closed manually by staff",
+      "side": "SUPPLIER",
+      "terminal": true,
+      "manualClose": true
     }
   ]
 }

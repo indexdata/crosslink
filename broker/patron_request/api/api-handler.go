@@ -613,25 +613,75 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 	eventAction := pr_db.PatronRequestAction(action.Action)
-	data := events.EventData{CommonEventData: events.CommonEventData{
-		Action: &eventAction,
-		User:   tenant.GetUser(),
-	}}
+	data := invokeActionData(eventAction, tenant.GetUser())
 	if action.ActionParams != nil {
 		data.CustomData = *action.ActionParams
 	}
+	a.invokeActionAndWriteResponse(w, ctx, pr.ID, fromState, data)
+}
+
+func (a *PatronRequestApiHandler) PostPatronRequestsIdTerminate(w http.ResponseWriter, r *http.Request, id string, params proapi.PostPatronRequestsIdTerminateParams) {
+	logParams := map[string]string{"method": "PostPatronRequestsIdTerminate", "id": id}
+	if params.Side != nil {
+		logParams["side"] = *params.Side
+	}
+	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+
+	tenant, err := a.tenantResolver.Resolve(ctx, r, params.Symbol)
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	symbol, err := tenant.GetRequestSymbol()
+	if err != nil {
+		api.AddBadRequestError(ctx, w, err)
+		return
+	}
+	logParams["symbol"] = symbol
+	ctx = common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
+	pr := a.getOwnedPatronRequest(w, ctx, id, params.Side, tenant)
+	if pr == nil {
+		return
+	}
+
+	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	if actionMapping.IsTerminalState(*pr) || pr.TerminalState {
+		api.AddBadRequestError(ctx, w, errors.New("patron request "+id+" is already terminal"))
+		return
+	}
+	if _, ok := actionMapping.GetManualCloseState(*pr); !ok {
+		api.AddInternalError(ctx, w, errors.New("state model does not define a manual close target for side "+string(pr.Side)))
+		return
+	}
+
+	data := invokeActionData(prservice.TerminateAction, tenant.GetUser())
+	a.invokeActionAndWriteResponse(w, ctx, pr.ID, string(pr.State), data)
+}
+
+func invokeActionData(action pr_db.PatronRequestAction, user string) events.EventData {
+	return events.EventData{CommonEventData: events.CommonEventData{
+		Action: &action,
+		User:   user,
+	}}
+}
+
+func (a *PatronRequestApiHandler) invokeActionAndWriteResponse(w http.ResponseWriter, ctx common.ExtendedContext, prID string, fromState string, data events.EventData) {
 	if a.actionTaskProcessor == nil {
 		api.AddInternalError(ctx, w, errors.New("action task processor not configured"))
 		return
 	}
-	eventId, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
+	eventId, err := a.eventBus.CreateTask(prID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, nil, events.SignalConsumers)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
 	}
 	completedEvent, err := a.actionTaskProcessor.ProcessInvokeActionTask(ctx, events.Event{
 		ID:              eventId,
-		PatronRequestID: pr.ID,
+		PatronRequestID: prID,
 		EventData:       data,
 	})
 	// Manual invoke-action requests are handled inline and return the completed task result.
@@ -968,6 +1018,9 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		EventsLink:               eventsLink,
 		TerminalState:            request.TerminalState,
 		InternalNote:             toString(request.InternalNote),
+		NextReqId:                toString(request.NextReqID),
+		PrevReqId:                toString(request.PrevReqID),
+		RetryBibInfo:             request.RetryBibInfo,
 	}
 	if request.UpdatedAt.Valid {
 		pr.UpdatedAt = &request.UpdatedAt.Time
