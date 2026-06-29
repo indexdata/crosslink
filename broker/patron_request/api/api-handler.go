@@ -349,7 +349,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			}
 		}
 	}
-	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest)
+	actionMapping, err := a.actionMappingService.GetActionMapping(illRequest)
+	if err != nil {
+		api.AddInternalError(ctx, w, err)
+		return
+	}
+	borrowerInitialState, ok := actionMapping.GetInitialState(prservice.SideBorrowing)
+	if !ok {
+		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
+		return
+	}
+	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState)
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -563,7 +573,7 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 	if pr == nil {
 		return
 	}
-	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -602,7 +612,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdAction(w http.ResponseWrit
 		return
 	}
 
-	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -644,7 +654,7 @@ func (a *PatronRequestApiHandler) PostPatronRequestsIdTerminate(w http.ResponseW
 		return
 	}
 
-	actionMapping, err := a.actionMappingService.GetActionMapping(*pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		api.AddInternalError(ctx, w, err)
 		return
@@ -1145,11 +1155,12 @@ func buildDbPatronRequest(
 	creationTime pgtype.Timestamp,
 	requesterReqId string,
 	illRequest iso18626.Request,
+	initialState pr_db.PatronRequestState,
 ) pr_db.PatronRequest {
 	return pr_db.PatronRequest{
 		ID:              requesterReqId,
 		CreatedAt:       creationTime,
-		State:           prservice.BorrowerStateNew,
+		State:           initialState,
 		Side:            prservice.SideBorrowing,
 		Patron:          getDbText(request.Patron),
 		RequesterSymbol: getDbText(request.RequesterSymbol),

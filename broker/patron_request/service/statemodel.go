@@ -87,7 +87,9 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		proapi.SUPPLIER:  {},
 	}
 	manualCloseStates := map[proapi.ModelStateSide]string{}
+	initialStates := map[proapi.ModelStateSide]string{}
 	// Pass 1: validate all states and collect the state set defined in this model.
+
 	for _, state := range stateModel.States {
 		var builtInStates []string
 		switch state.Side {
@@ -97,6 +99,12 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 			builtInStates = c.SupplierStates
 		default:
 			return fmt.Errorf("state %s has unsupported side %s", state.Name, state.Side)
+		}
+		if initial, ok := initialStates[state.Side]; ok && state.Initial != nil && *state.Initial {
+			return fmt.Errorf("initial state defined multiple times for side %s: %s and %s", state.Side, initial, state.Name)
+		}
+		if state.Initial != nil && *state.Initial {
+			initialStates[state.Side] = state.Name
 		}
 		if !slices.Contains(builtInStates, state.Name) {
 			return fmt.Errorf("state %s is not a built-in %s state", state.Name, strings.ToLower(string(state.Side)))
@@ -117,7 +125,16 @@ func ValidateStateModel(stateModel *proapi.StateModel) error {
 		}
 	}
 
-	// Pass 2: validate actions/events and their transitions.
+	// Pass 2: check that each side has an initial state defined if it has any states defined.
+	for side, sideStates := range definedStates {
+		if len(sideStates) > 0 {
+			if initial, ok := initialStates[side]; !ok || initial == "" {
+				return fmt.Errorf("initial state not defined for side %s", side)
+			}
+		}
+	}
+
+	// Pass 3: validate actions/events and their transitions.
 	for _, state := range stateModel.States {
 		var allowedActions []proapi.ActionCapability
 		var allowedEvents []string

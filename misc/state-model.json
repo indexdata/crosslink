@@ -63,6 +63,11 @@
                         "SUPPLIER"
                     ]
                 },
+                "initial": {
+                    "type": "boolean",
+                    "description": "Indicates if the state is the initial state of the request",
+                    "default": false
+                },
                 "primaryAction": {
                     "type": "string",
                     "description": "Indicates the primary action for the state, i.e., the most common or recommended action to be performed when in the state. The value must match the name of one of the actions defined for the state."
