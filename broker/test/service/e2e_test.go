@@ -876,6 +876,94 @@ func TestRequestRETRY_CHANGED_BIBINFO(t *testing.T) {
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
+// TestMetadataUpdateReplace verifies that when metadataUpdateMode=replace, the ILL transaction's
+// SupplierUniqueRecordId is overwritten with the LocalIdentifier returned by the holdings lookup.
+// The input XML carries "return-ISIL:META-REP-SUP::WILLSUPPLY" as the SupplierUniqueRecordId;
+// the mock holdings adapter strips the "return-" prefix and returns LocalIdentifier="WILLSUPPLY",
+// which replace mode writes back to the transaction in the DB.
+func TestMetadataUpdateReplace(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	replaceMode := directory.Replace
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:META-REP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{
+			MetadataUpdateMode: &replaceMode,
+		},
+	})
+	reqId := "5636c993-c41c-48f4-a285-470545f6f390"
+	data, _ := os.ReadFile("../testdata/request-metadata-update.xml")
+	stringData := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(data),
+		"{reqid}", reqId),
+		"{requester}", "META-REP"),
+		"{supplierid}", "return-ISIL:META-REP-SUP::WILLSUPPLY")
+	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock: %s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v", res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	// SupplierUniqueRecordId must have been replaced with the holdings LocalIdentifier "WILLSUPPLY",
+	// not left as the original "return-ISIL:META-REP-SUP::WILLSUPPLY" from the incoming request.
+	assert.Equal(t, "WILLSUPPLY", illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId)
+}
+
+// TestMetadataUpdateMerge verifies that when metadataUpdateMode=merge, an already-set
+// SupplierUniqueRecordId is preserved and not overwritten by the holdings lookup result.
+// The input XML carries "return-ISIL:META-MRG-SUP::WILLSUPPLY" as the SupplierUniqueRecordId;
+// the mock returns LocalIdentifier="WILLSUPPLY", but merge mode keeps the original value intact.
+func TestMetadataUpdateMerge(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mergeMode := directory.Merge
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:META-MRG", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{
+			MetadataUpdateMode: &mergeMode,
+		},
+	})
+	reqId := "5636c993-c41c-48f4-a285-470545f6f391"
+	data, _ := os.ReadFile("../testdata/request-metadata-update.xml")
+	// The outgoing SupplierUniqueRecordId after merge will still be "return-ISIL:META-MRG-SUP::WILLSUPPLY"
+	// (original preserved), which doesn't match a known supplier scenario, so the mock supplier
+	// responds with Unfilled. We wait for that terminal state before asserting the DB value.
+	stringData := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(data),
+		"{reqid}", reqId),
+		"{requester}", "META-MRG"),
+		"{supplierid}", "return-ISIL:META-MRG-SUP::WILLSUPPLY")
+	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		t.Errorf("failed to send request to mock: %s", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v", res.StatusCode, http.StatusOK)
+	}
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	// SupplierUniqueRecordId must be the original value from the request, not "WILLSUPPLY"
+	// from the holdings lookup, because merge preserves non-empty existing values.
+	assert.Equal(t, "return-ISIL:META-MRG-SUP::WILLSUPPLY", illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId)
+}
+
 func getPgText(value string) pgtype.Text {
 	return pgtype.Text{
 		String: value,
