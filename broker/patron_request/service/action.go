@@ -54,13 +54,13 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
-	Note           string   `json:"note,omitempty"`
-	LoanCondition  string   `json:"loanCondition,omitempty"`
-	Cost           *float64 `json:"cost,omitempty"`
-	Currency       string   `json:"currency,omitempty"`
-	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
-	ReasonRetry    string   `json:"reasonRetry,omitempty"`
-	ItemID         string   `json:"itemId,omitempty"`
+	Note             string                     `json:"note,omitempty"`
+	LoanCondition    string                     `json:"loanCondition,omitempty"`
+	Cost             *float64                   `json:"cost,omitempty"`
+	Currency         string                     `json:"currency,omitempty"`
+	ReasonUnfilled   string                     `json:"reasonUnfilled,omitempty"`
+	ReasonRetry      string                     `json:"reasonRetry,omitempty"`
+	ItemID           string                     `json:"itemId,omitempty"`
 	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
 }
 

@@ -103,7 +103,7 @@ func TestHandleInvokeActionNoLms(t *testing.T) {
 
 func TestHandleInvokeActionTerminateOKNoLms(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock))
 	action := TerminateAction
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
 		ID:            patronRequestId,
@@ -128,7 +128,7 @@ func TestHandleInvokeActionTerminateOKNoLms(t *testing.T) {
 
 func TestHandleInvokeActionTerminateRejectsTerminal(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), new(handler.Iso18626Handler), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), new(handler.Iso18626Handler), nil, new(EmailSenderMock))
 	action := TerminateAction
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{
 		ID:            patronRequestId,
@@ -1147,7 +1147,7 @@ func TestHandleInvokeLenderActionAskRetryMissingItemId(t *testing.T) {
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	action := LenderActionAskRetry
@@ -1169,7 +1169,7 @@ func TestHandleInvokeLenderActionAskRetryCost(t *testing.T) {
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	action := LenderActionAskRetry
@@ -1191,7 +1191,7 @@ func TestHandleInvokeLenderActionAskRetryMissingReasonRetry(t *testing.T) {
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	action := LenderActionAskRetry
@@ -1213,7 +1213,7 @@ func TestHandleInvokeLenderActionAskRetryFull(t *testing.T) {
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:SUP1").Return(lms.CreateLmsAdapterMockOK(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, *new(events.EventBus), mockIso18626Handler, lmsCreator)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), *new(events.EventBus), mockIso18626Handler, lmsCreator, new(EmailSenderMock))
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: getDbText("ISIL:SUP1"), RequesterSymbol: getDbText("ISIL:REQ1")}, nil)
 	action := LenderActionAskRetry
@@ -1248,7 +1248,7 @@ func TestHandleInvokeBorrowerActionAcceptRetryAutoActionCreateTaskError(t *testi
 	lmsCreator := new(MockLmsCreator)
 	lmsCreator.On("GetAdapter", "ISIL:REQ1").Return(createLmsAdapterMockLog(), nil)
 	mockIso18626Handler := new(MockIso18626Handler)
-	prAction := CreatePatronRequestActionService(mockPrRepo, mockEventBus, mockIso18626Handler, lmsCreator)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(MockIllRepo), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock))
 	illRequest := iso18626.Request{}
 	initialPR := pr_db.PatronRequest{
 		ID:              patronRequestId,

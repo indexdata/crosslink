@@ -233,7 +233,8 @@
           "params": {
             "sendTo": [
               "patron"
-            ]
+            ],
+            "templateLabel": "shipped-notification"
           }
         }
       ]
@@ -345,7 +346,8 @@
           "params": {
             "sendTo": [
               "patron"
-            ]
+            ],
+            "templateLabel": "unfilled-notification"
           }
         }
       ]
@@ -433,7 +435,8 @@
           "params": {
             "sendTo": [
               "patron"
-            ]
+            ],
+            "templateLabel": "validated-notification"
           }
         }
       ],
