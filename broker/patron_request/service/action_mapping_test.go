@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 )
@@ -50,7 +51,7 @@ var actionMappingService = ActionMappingService{}
 
 func mustActionMapping(t *testing.T) *ActionMapping {
 	t.Helper()
-	mapping, err := actionMappingService.GetActionMapping(pr_db.PatronRequest{})
+	mapping, err := actionMappingService.GetActionMapping(iso18626.Request{})
 	assert.NoError(t, err)
 	assert.NotNil(t, mapping)
 	return mapping

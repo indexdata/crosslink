@@ -35,7 +35,7 @@ func TestBuiltInStateModelCapabilities(t *testing.T) {
 	assert.True(t, slices.Contains(c.SupplierMessageEvents, string(SupplierCancelRejected)))
 }
 
-func TestValidateStateModelWithPrimaryAction(t *testing.T) {
+func TestValidateStateModelMissingInitial(t *testing.T) {
 	s := "validate"
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
@@ -45,6 +45,62 @@ func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 			{
 				Name: "NEW",
 				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "initial state not defined for side REQUESTER", err.Error())
+}
+
+func TestValidateStateModelDoubleInitial(t *testing.T) {
+	s := "validate"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name: "NEW",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+				Initial: &tt,
+			},
+			{
+				Name: "OTHER",
+				Side: proapi.REQUESTER,
+				Actions: &[]proapi.ModelAction{
+					{Name: s},
+				},
+				Initial: &tt,
+			},
+		},
+	}
+
+	err := ValidateStateModel(model)
+	assert.Error(t, err)
+	assert.Equal(t, "initial state defined multiple times for side REQUESTER: NEW and OTHER", err.Error())
+}
+
+func TestValidateStateModelWithPrimaryAction(t *testing.T) {
+	s := "validate"
+	tt := true
+	model := &proapi.StateModel{
+		Type:    proapi.StateModelTypeStateModel,
+		Name:    "test",
+		Version: "1.0.0",
+		States: []proapi.ModelState{
+			{
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: s},
 				},
@@ -59,14 +115,16 @@ func TestValidateStateModelWithPrimaryAction(t *testing.T) {
 
 func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
 	s := "validate"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: s},
 				},
@@ -80,14 +138,16 @@ func TestValidateStateModelWithoutPrimaryAction(t *testing.T) {
 
 func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
 	s := "other"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: "validate"},
 				},
@@ -103,6 +163,7 @@ func TestValidateStateModelPrimaryActionUndefined(t *testing.T) {
 
 func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 	s := "other"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
@@ -111,6 +172,7 @@ func TestValidateStateModelPrimaryActionNoActionsDefined(t *testing.T) {
 			{
 				Name:          "NEW",
 				Side:          proapi.REQUESTER,
+				Initial:       &tt,
 				Actions:       nil,
 				PrimaryAction: &s,
 			},
@@ -132,6 +194,7 @@ func TestValidateStateModelManualCloseTerminal(t *testing.T) {
 			{
 				Name:        string(BorrowerStateManuallyClosed),
 				Side:        proapi.REQUESTER,
+				Initial:     &tt,
 				Terminal:    &tt,
 				ManualClose: &tt,
 			},
@@ -152,6 +215,7 @@ func TestValidateStateModelManualCloseNonTerminal(t *testing.T) {
 			{
 				Name:        string(BorrowerStateNew),
 				Side:        proapi.REQUESTER,
+				Initial:     &tt,
 				ManualClose: &tt,
 			},
 		},
@@ -190,14 +254,16 @@ func TestValidateStateModelManualCloseDuplicateSide(t *testing.T) {
 }
 
 func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{Name: "not-an-action"},
 				},
@@ -211,14 +277,16 @@ func TestValidateStateModelInvalidRequesterAction(t *testing.T) {
 }
 
 func TestValidateStateModelInvalidMessageEvent(t *testing.T) {
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "SENT",
-				Side: proapi.REQUESTER,
+				Name:    "SENT",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{Name: "not-an-event"},
 				},
@@ -251,14 +319,16 @@ func TestValidateStateModelUnsupportedSide(t *testing.T) {
 
 func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "NEW",
-				Side: proapi.REQUESTER,
+				Name:    "NEW",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
 						Name: string(BorrowerActionValidate),
@@ -281,14 +351,16 @@ func TestValidateStateModelInvalidActionSuccessTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "VALIDATED",
-				Side: proapi.REQUESTER,
+				Name:    "VALIDATED",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
 						Name: string(BorrowerActionSendRequest),
@@ -311,14 +383,16 @@ func TestValidateStateModelInvalidActionFailureTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 	invalidTarget := "DOES_NOT_EXIST"
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: "SENT",
-				Side: proapi.REQUESTER,
+				Name:    "SENT",
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{
 						Name:       string(SupplierWillSupply),
@@ -336,14 +410,16 @@ func TestValidateStateModelInvalidEventTransitionTarget(t *testing.T) {
 
 func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *testing.T) {
 	transition := string(BorrowerStateValidated)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateNew),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateNew),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
 						Name: string(BorrowerActionValidate),
@@ -366,14 +442,16 @@ func TestValidateStateModelActionTransitionTargetMustExistInModelForSameSide(t *
 
 func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 	transition := string(BorrowerStateValidated)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateNew),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateNew),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Actions: &[]proapi.ModelAction{
 					{
 						Name: string(BorrowerActionValidate),
@@ -387,8 +465,9 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 				},
 			},
 			{
-				Name: string(LenderStateValidated),
-				Side: proapi.SUPPLIER,
+				Name:    string(LenderStateValidated),
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
 			},
 		},
 	}
@@ -400,14 +479,16 @@ func TestValidateStateModelActionTransitionCannotCrossSides(t *testing.T) {
 
 func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 	transition := string(BorrowerStateShipped)
+	tt := true
 	model := &proapi.StateModel{
 		Type:    proapi.StateModelTypeStateModel,
 		Name:    "test",
 		Version: "1.0.0",
 		States: []proapi.ModelState{
 			{
-				Name: string(BorrowerStateSent),
-				Side: proapi.REQUESTER,
+				Name:    string(BorrowerStateSent),
+				Side:    proapi.REQUESTER,
+				Initial: &tt,
 				Events: &[]proapi.ModelEvent{
 					{
 						Name:       string(SupplierLoaned),
@@ -416,8 +497,9 @@ func TestValidateStateModelEventTransitionCannotCrossSides(t *testing.T) {
 				},
 			},
 			{
-				Name: string(LenderStateShipped),
-				Side: proapi.SUPPLIER,
+				Name:    string(LenderStateShipped),
+				Side:    proapi.SUPPLIER,
+				Initial: &tt,
 			},
 		},
 	}

@@ -827,6 +827,10 @@ components:
           enum:
             - REQUESTER
             - SUPPLIER
+        initial:
+          type: boolean
+          description: Indicates if the state is the initial state of the request
+          default: false
         primaryAction:
           type: string
           description: Name of the primary action for this state.
