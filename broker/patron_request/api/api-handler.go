@@ -319,7 +319,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
 			if settings.Mode != directory.None {
 				if !metadataupdate.SupportsFormat(settings.Format) {
-					api.AddBadRequestError(ctx, w, fmt.Errorf("unsupported metadata format: %s", settings.Format))
+					api.AddInternalError(ctx, w, fmt.Errorf("unsupported metadata format: %s", settings.Format))
 					return
 				}
 				params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, "")
