@@ -62,8 +62,9 @@ func appendCrosslinkMetadata(existing []iso18626.BibliographicRecordId, metadata
 		if mergeOnly && hasCrosslinkCode(existing, code) {
 			continue
 		}
+		scheme := "crosslink"
 		existing = append(existing, iso18626.BibliographicRecordId{
-			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: code, Scheme: new("crosslink")},
+			BibliographicRecordIdentifierCode: iso18626.TypeSchemeValuePair{Text: code, Scheme: &scheme},
 			BibliographicRecordIdentifier:     trimmed,
 		})
 	}
