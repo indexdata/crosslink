@@ -9,6 +9,7 @@
       "display": "New",
       "desc": "Initial state after Patron Request is created (POST)",
       "side": "REQUESTER",
+      "initial": true,
       "primaryAction": "validate",
       "actions": [
         {
@@ -354,6 +355,7 @@
       "display": "New",
       "desc": "Item is created on the supplier side for local fulfillment",
       "side": "SUPPLIER",
+      "initial": true,
       "primaryAction": "validate",
       "actions": [
         {

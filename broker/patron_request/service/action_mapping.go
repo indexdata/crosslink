@@ -7,6 +7,7 @@ import (
 	"github.com/indexdata/crosslink/broker/events"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
+	"github.com/indexdata/crosslink/iso18626"
 )
 
 type ActionMappingService struct {
@@ -19,8 +20,8 @@ func (r *ActionMappingService) NewActionMappingService() *ActionMappingService {
 	}
 }
 
-func (r *ActionMappingService) GetActionMapping(pr pr_db.PatronRequest) (*ActionMapping, error) {
-	//TODO: check the PatronRequest loan type to decide what kind of state model/mapping to return
+func (r *ActionMappingService) GetActionMapping(request iso18626.Request) (*ActionMapping, error) {
+	//TODO: check the ISO18626Request to decide what kind of state model/mapping to return
 	stateModel, err := r.getStateModelService().GetStateModel("returnables")
 	if err != nil {
 		return nil, err
@@ -52,6 +53,8 @@ type ActionMapping struct {
 	lenderStateConfig          map[pr_db.PatronRequestState]stateConfig
 	borrowerManualCloseState   *pr_db.PatronRequestState
 	lenderManualCloseState     *pr_db.PatronRequestState
+	borrowerInitialState       *pr_db.PatronRequestState
+	lenderInitialState         *pr_db.PatronRequestState
 }
 
 type stateConfig struct {
@@ -117,12 +120,20 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 				manualCloseState := stateName
 				r.borrowerManualCloseState = &manualCloseState
 			}
+			if state.Initial != nil && *state.Initial {
+				initialState := stateName
+				r.borrowerInitialState = &initialState
+			}
 		case proapi.SUPPLIER:
 			lenderMap[stateName] = actionEntries
 			lenderConfig[stateName] = currentStateConfig
 			if state.ManualClose != nil && *state.ManualClose {
 				manualCloseState := stateName
 				r.lenderManualCloseState = &manualCloseState
+			}
+			if state.Initial != nil && *state.Initial {
+				initialState := stateName
+				r.lenderInitialState = &initialState
 			}
 		}
 	}
@@ -246,6 +257,23 @@ func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []pr_db.P
 	return append([]pr_db.PatronRequestAction{}, stateConfig.autoActions...)
 }
 
+// GetInitialState returns the initial state for the given side, as defined in the state model.
+func (r *ActionMapping) GetInitialState(side pr_db.PatronRequestSide) (pr_db.PatronRequestState, bool) {
+	if side == SideBorrowing {
+		if r.borrowerInitialState == nil {
+			return "", false
+		}
+		return *r.borrowerInitialState, true
+	}
+	if side == SideLending {
+		if r.lenderInitialState == nil {
+			return "", false
+		}
+		return *r.lenderInitialState, true
+	}
+	return "", false
+}
+
 func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.PatronRequestState, bool) {
 	if pr.Side == SideBorrowing {
 		if r.borrowerManualCloseState == nil {
@@ -253,10 +281,13 @@ func (r *ActionMapping) GetManualCloseState(pr pr_db.PatronRequest) (pr_db.Patro
 		}
 		return *r.borrowerManualCloseState, true
 	}
-	if r.lenderManualCloseState == nil {
-		return "", false
+	if pr.Side == SideLending {
+		if r.lenderManualCloseState == nil {
+			return "", false
+		}
+		return *r.lenderManualCloseState, true
 	}
-	return *r.lenderManualCloseState, true
+	return "", false
 }
 
 func (r *ActionMapping) IsTerminalState(pr pr_db.PatronRequest) bool {
@@ -269,6 +300,9 @@ func (r *ActionMapping) getStateConfig(pr pr_db.PatronRequest) (stateConfig, boo
 		cfg, ok := r.borrowerStateConfig[pr.State]
 		return cfg, ok
 	}
-	cfg, ok := r.lenderStateConfig[pr.State]
-	return cfg, ok
+	if pr.Side == SideLending {
+		cfg, ok := r.lenderStateConfig[pr.State]
+		return cfg, ok
+	}
+	return stateConfig{}, false
 }

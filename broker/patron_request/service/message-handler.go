@@ -62,7 +62,7 @@ func (m *PatronRequestMessageHandler) runAutoActionsOnStateEntry(ctx common.Exte
 }
 
 func (m *PatronRequestMessageHandler) applyEventTransition(pr pr_db.PatronRequest, eventName MessageEvent) (pr_db.PatronRequest, bool, bool, error) {
-	actionMapping, err := m.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := m.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		return pr, false, false, err
 	}
@@ -397,10 +397,27 @@ func (m *PatronRequestMessageHandler) handleRequestMessage(ctx common.ExtendedCo
 			})
 		return status, response, existingPr, handleErr
 	}
+	actionMapping, err := m.actionMappingService.GetActionMapping(request)
+	if err != nil {
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: err.Error(),
+		}, err)
+		return status, response, pr_db.PatronRequest{}, handleErr
+	}
+	lenderInitialState, ok := actionMapping.GetInitialState(SideLending)
+	if !ok {
+		internalErr := fmt.Errorf("no initial state defined for lender side")
+		status, response, handleErr := createRequestResponse(request, iso18626.TypeMessageStatusERROR, &iso18626.ErrorData{
+			ErrorType:  iso18626.TypeErrorTypeUnrecognisedDataValue,
+			ErrorValue: internalErr.Error(),
+		}, internalErr)
+		return status, response, pr_db.PatronRequest{}, handleErr
+	}
 	pr, err := m.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams{
 		ID:              uuid.NewString(),
 		CreatedAt:       pgtype.Timestamp{Valid: true, Time: time.Now()},
-		State:           LenderStateNew,
+		State:           lenderInitialState,
 		Side:            SideLending,
 		Patron:          getDbText(fmt.Sprintf(SUPPLIER_PATRON_PATTERN, request.Header.SupplyingAgencyId.AgencyIdValue)),
 		RequesterSymbol: getDbText(requesterSymbol),

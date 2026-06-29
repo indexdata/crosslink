@@ -95,7 +95,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to read patron request", err)
 	}
-	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		return logActionErrorAndReturnResult(ctx, "failed to load state model", err)
 	}
@@ -240,7 +240,7 @@ func (a *PatronRequestActionService) finalizeActionExecution(ctx common.Extended
 }
 
 func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.ExtendedContext, pr pr_db.PatronRequest, parentEventID *string, user string) error {
-	actionMapping, err := a.actionMappingService.GetActionMapping(pr)
+	actionMapping, err := a.actionMappingService.GetActionMapping(pr.IllRequest)
 	if err != nil {
 		return err
 	}
@@ -620,8 +620,18 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 		status, result := logActionErrorAndReturnResult(ctx, "failed to clone IllRequest for retry", err)
 		return actionExecutionResult{status: status, result: result, pr: pr}
 	}
-	retryPr.State = BorrowerStateNew
-	retryPr.TerminalState = false
+	actionMapping, err := a.actionMappingService.GetActionMapping(retryPr.IllRequest)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to load state model for retry", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	borrowerInitialState, ok := actionMapping.GetInitialState(SideBorrowing)
+	if !ok {
+		status, result := logActionErrorAndReturnResult(ctx, "no initial state defined for borrower side", errors.New("invalid state model"))
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
+	retryPr.State = borrowerInitialState
+	retryPr.TerminalState = actionMapping.IsTerminalState(retryPr)
 	retryPr.ID = uuid.NewString()
 	retryPr.RequesterReqID = getDbTextPtr(&retryPr.ID)
 	retryPr.CreatedAt = pgtype.Timestamp{Valid: true, Time: time.Now()}

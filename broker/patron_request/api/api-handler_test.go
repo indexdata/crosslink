@@ -756,7 +756,7 @@ func TestParseAndValidateIllRequestAndBuildDbPatronRequest(t *testing.T) {
 	illRequest, requesterReqID, err := handler.parseAndValidateIllRequest(ctx, reqWithID, creationTime)
 	assert.NoError(t, err)
 	assert.Equal(t, id, requesterReqID)
-	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest)
+	pr := buildDbPatronRequest(reqWithID, nil, pgtype.Timestamp{Valid: true, Time: creationTime}, requesterReqID, illRequest, prservice.BorrowerStateNew)
 	assert.Equal(t, id, pr.ID)
 	assert.True(t, pr.CreatedAt.Valid)
 	assert.True(t, pr.RequesterReqID.Valid)
