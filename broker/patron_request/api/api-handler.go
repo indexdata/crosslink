@@ -286,6 +286,10 @@ func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *is
 		serviceType = string(illRequest.ServiceInfo.ServiceType)
 	}
 	params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, serviceType)
+	resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
+	if resolvedMode == directory.None {
+		return nil
+	}
 	lookupAdapter, adapterErr := a.availabilityCreator.GetAdapter(requesterPeer)
 	if adapterErr != nil {
 		return fmt.Errorf("failed to get availability adapter: %w", adapterErr)
@@ -297,15 +301,15 @@ func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *is
 	if lookupErr != nil {
 		return fmt.Errorf("failed to lookup holdings: %w", lookupErr)
 	}
-	if len(holdingsResult) > 0 {
-		resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
-		firstHolding := holdingsResult[0]
-		illRequest.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
-			illRequest.BibliographicInfo,
-			metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
-			resolvedMode,
-		)
+	if len(holdingsResult) == 0 {
+		return nil
 	}
+	firstHolding := holdingsResult[0]
+	illRequest.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
+		illRequest.BibliographicInfo,
+		metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
+		resolvedMode,
+	)
 	return nil
 }
 
