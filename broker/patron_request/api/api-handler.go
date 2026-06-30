@@ -273,6 +273,42 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
+func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest iso18626.Request, requesterPeer ill_db.Peer) error {
+	settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
+	if settings.Mode == directory.None || a.availabilityCreator == nil {
+		return nil
+	}
+	if !metadataupdate.SupportsFormat(settings.Format) {
+		return fmt.Errorf("unsupported metadata format: %s", settings.Format)
+	}
+	var serviceType string
+	if illRequest.ServiceInfo != nil {
+		serviceType = string(illRequest.ServiceInfo.ServiceType)
+	}
+	params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, serviceType)
+	lookupAdapter, adapterErr := a.availabilityCreator.GetAdapter(requesterPeer)
+	if adapterErr != nil {
+		return fmt.Errorf("failed to get availability adapter: %w", adapterErr)
+	}
+	if lookupAdapter == nil {
+		return nil
+	}
+	holdingsResult, _, lookupErr := lookupAdapter.Lookup(params)
+	if lookupErr != nil {
+		return fmt.Errorf("failed to lookup holdings: %w", lookupErr)
+	}
+	if len(holdingsResult) > 0 {
+		resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
+		firstHolding := holdingsResult[0]
+		illRequest.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
+			illRequest.BibliographicInfo,
+			metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
+			resolvedMode,
+		)
+	}
+	return nil
+}
+
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
 	logParams := map[string]string{"method": "PostPatronRequests"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -316,36 +352,10 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 		if requesterPeer.Vendor == string(directory.CrossLink) {
-			settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
-			if settings.Mode != directory.None {
-				if !metadataupdate.SupportsFormat(settings.Format) {
-					api.AddInternalError(ctx, w, fmt.Errorf("unsupported metadata format: %s", settings.Format))
-					return
-				}
-				params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, "")
-				if a.availabilityCreator != nil {
-					lookupAdapter, adapterErr := a.availabilityCreator.GetAdapter(requesterPeer)
-					if adapterErr != nil {
-						api.AddInternalError(ctx, w, adapterErr)
-						return
-					}
-					if lookupAdapter != nil {
-						holdingsResult, _, lookupErr := lookupAdapter.Lookup(params)
-						if lookupErr != nil {
-							api.AddInternalError(ctx, w, lookupErr)
-							return
-						}
-						if len(holdingsResult) > 0 {
-							resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
-							firstHolding := holdingsResult[0]
-							illRequest.BibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
-								illRequest.BibliographicInfo,
-								metadataupdate.MetadataFields{LocalIdentifier: firstHolding.LocalIdentifier, Location: firstHolding.Location, ShelvingLocation: firstHolding.ShelvingLocation, CallNumber: firstHolding.CallNumber, ItemId: firstHolding.ItemId},
-								resolvedMode,
-							)
-						}
-					}
-				}
+			err := a.applyMetadataUpdateFromHoldings(illRequest, requesterPeer)
+			if err != nil {
+				api.AddInternalError(ctx, w, err)
+				return
 			}
 		}
 	}
