@@ -273,7 +273,7 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
-func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest iso18626.Request, requesterPeer ill_db.Peer) error {
+func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
 	settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
 	if settings.Mode == directory.None || a.availabilityCreator == nil {
 		return nil
@@ -352,7 +352,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 		if requesterPeer.Vendor == string(directory.CrossLink) {
-			err := a.applyMetadataUpdateFromHoldings(illRequest, requesterPeer)
+			err := a.applyMetadataUpdateFromHoldings(&illRequest, requesterPeer)
 			if err != nil {
 				api.AddInternalError(ctx, w, err)
 				return
