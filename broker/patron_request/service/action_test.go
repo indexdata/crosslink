@@ -2141,6 +2141,41 @@ func TestSendEmailNotification(t *testing.T) {
 			wantNote:   "staff email sent successfully",
 		},
 		{
+			name:   "SendTo staff – multiple semicolon-separated addresses all sent",
+			pr:     pr_db.PatronRequest{},
+			symbol: testSymbol,
+			params: autoParams(testTemplate, proapi.Staff),
+			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "a@example.com; b@example.com"), nil)
+				emailSvc.On("SendEmail", testFrom).Return(nil)
+			},
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "staff email sent successfully",
+		},
+		{
+			name:   "SendTo staff – trailing semicolon is ignored, email sent",
+			pr:     pr_db.PatronRequest{},
+			symbol: testSymbol,
+			params: autoParams(testTemplate, proapi.Staff),
+			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo+";"), nil)
+				emailSvc.On("SendEmail", testFrom).Return(nil)
+			},
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "staff email sent successfully",
+		},
+		{
+			name:   "SendTo staff – whitespace-only address yields no recipients",
+			pr:     pr_db.PatronRequest{},
+			symbol: testSymbol,
+			params: autoParams(testTemplate, proapi.Staff),
+			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "  ; ; "), nil)
+			},
+			wantStatus: events.EventStatusSuccess,
+			wantNote:   "no recipients found for staff",
+		},
+		{
 			name:   "SendTo staff – SendEmail fails – error result",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
@@ -2150,7 +2185,7 @@ func TestSendEmailNotification(t *testing.T) {
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
 			wantStatus: events.EventStatusError,
-			wantErr:    "error sending email to patron",
+			wantErr:    "error sending email to staff",
 		},
 		{
 			name:   "SendTo patron and staff – both emails sent – staff note wins",
@@ -2210,8 +2245,8 @@ func TestHandleInvokeActionBorrowerActionSendNotification(t *testing.T) {
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:REC1").Return(ill_db.Peer{
 		CustomData: directory.Entry{
-			Email:     new("staff@mail.com"),
-			FromEmail: new("from@mail.com"),
+			Email:     ptr("staff@mail.com"),
+			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, illMock, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, emailMock)
@@ -2222,7 +2257,7 @@ func TestHandleInvokeActionBorrowerActionSendNotification(t *testing.T) {
 	action := BorrowerActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
-		TemplateLabel: new("shipped-template"),
+		TemplateLabel: ptr("shipped-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
@@ -2246,7 +2281,7 @@ func TestHandleInvokeActionBorrowerActionSendNotification_emailServiceNotReady(t
 	action := BorrowerActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
-		TemplateLabel: new("shipped-template"),
+		TemplateLabel: ptr("shipped-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
@@ -2266,8 +2301,8 @@ func TestHandleInvokeActionLenderActionSendNotification(t *testing.T) {
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:SUP1").Return(ill_db.Peer{
 		CustomData: directory.Entry{
-			Email:     new("staff@mail.com"),
-			FromEmail: new("from@mail.com"),
+			Email:     ptr("staff@mail.com"),
+			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, illMock, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, emailMock)
@@ -2278,7 +2313,7 @@ func TestHandleInvokeActionLenderActionSendNotification(t *testing.T) {
 	action := LenderActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
-		TemplateLabel: new("validated-template"),
+		TemplateLabel: ptr("validated-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 
@@ -2296,8 +2331,8 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 	illMock := new(IllRepoMock)
 	illMock.On("GetPeerBySymbol", "ISIL:SUP1").Return(ill_db.Peer{
 		CustomData: directory.Entry{
-			Email:     new("staff@mail.com"),
-			FromEmail: new("from@mail.com"),
+			Email:     ptr("staff@mail.com"),
+			FromEmail: ptr("from@mail.com"),
 		},
 	}, nil)
 	prAction := CreatePatronRequestActionService(mockPrRepo, illMock, *new(events.EventBus), new(handler.Iso18626Handler), lmsCreator, emailMock)
@@ -2308,7 +2343,7 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 	action := LenderActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
 		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
-		TemplateLabel: new("validated-template"),
+		TemplateLabel: ptr("validated-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
 

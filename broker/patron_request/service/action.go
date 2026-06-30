@@ -1001,7 +1001,12 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			}
 		}
 		if slices.Contains(*params.AutoActionParams.SendTo, proapi.Staff) {
-			recipients := strings.Split(*to, ";")
+			var recipients []string
+			for _, r := range strings.Split(*to, ";") {
+				if trimmed := strings.TrimSpace(r); trimmed != "" {
+					recipients = append(recipients, trimmed)
+				}
+			}
 			if len(recipients) == 0 {
 				if result.Note != "" {
 					result.Note += "; "
@@ -1010,7 +1015,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 			} else {
 				sendErr := a.createAndSendEmail(from, recipients, *params.AutoActionParams.TemplateLabel)
 				if sendErr != nil {
-					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to patron", sendErr)
+					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to staff", sendErr)
 				}
 				result.Note = "staff email sent successfully"
 			}
@@ -1022,8 +1027,8 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 func (a *PatronRequestActionService) createAndSendEmail(from string, recipients []string, template string) error {
 	emailData := email.EmailData{
 		To:         recipients,
-		Subject:    "Request changed state TODO " + template,
-		Body:       "Request changed state TODO " + template,
+		Subject:    "Request changed state, ILLDEV-354-" + template,
+		Body:       "Request changed state, ILLDEV-354-" + template,
 		IsHTML:     true,
 		IncludePdf: false,
 	}

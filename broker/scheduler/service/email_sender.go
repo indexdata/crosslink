@@ -1,6 +1,7 @@
 package sched_service
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,12 +32,17 @@ type EmailSenderService struct {
 }
 
 func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo) (*EmailSenderService, error) {
+	emailService := email.NewEmailService()
+	var err error
+	if !emailService.IsReadyToSend() {
+		err = errors.New("email: SMTP_HOST environment variable is required")
+	}
 	return &EmailSenderService{
 		prRepo:       prRepo,
 		illRepo:      illRepo,
 		pdf:          psservice.NewPdfService(prRepo),
 		emailService: email.NewEmailService(),
-	}, nil
+	}, err
 }
 
 // EmailSenderServiceWithClient constructs an EmailSenderService with injected
