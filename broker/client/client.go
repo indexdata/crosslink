@@ -15,9 +15,7 @@ import (
 
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
-	"github.com/indexdata/crosslink/broker/metadataupdate"
 	"github.com/indexdata/crosslink/httpclient"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -762,20 +760,9 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 
 func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = iso18626.NewISO18626Message()
-	metadataSettings := holdings.GetMetadataSettings(trCtx.requester.CustomData)
-	lookupHint := holdings.LookupHintFromParams(holdings.CreateHoldingsParams(trCtx.transaction.IllTransactionData))
-	resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
 	bibliographicInfo := trCtx.transaction.IllTransactionData.BibliographicInfo
-	if resolvedMode == directory.None {
-		// Backward compatibility: preserve historical request-message behavior when metadata updates are disabled.
-		bibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
-	} else {
-		bibliographicInfo = metadataupdate.ApplyBibliographicUpdate(
-			bibliographicInfo,
-			metadataupdate.MetadataFields{LocalIdentifier: trCtx.selectedSupplier.LocalID.String},
-			resolvedMode,
-		)
-	}
+
+	bibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	message.Request = &iso18626.Request{
 		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedSupplierPeer.BrokerMode),
 		BibliographicInfo:     bibliographicInfo,
