@@ -31,30 +31,31 @@ func getSymbolAuthority() string {
 
 func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	var (
-		id              uuid.UUID
-		name            string
-		description     *string
-		contactName     *string
-		organizationId  *string
-		email           *string
-		phoneNumber     *string
-		lmsLocationCode *string
-		lmsConfigJSON   []byte
-		hrid            *string
-		timeZone        *string
-		entryType       *string
-		parent          *uuid.UUID
-		symbolsJSON     [][]byte
-		endpointsJSON   [][]byte
-		addressesJSON   [][]byte
-		tiersJSON       [][]byte
-		networksJSON    [][]byte
-		closuresJSON    [][]byte
-		totalCount      int
+		id                 uuid.UUID
+		name               string
+		description        *string
+		contactName        *string
+		organizationId     *string
+		email              *string
+		phoneNumber        *string
+		lmsLocationCode    *string
+		lenderOfLastResort *string
+		lmsConfigJSON      []byte
+		hrid               *string
+		timeZone           *string
+		entryType          *string
+		parent             *uuid.UUID
+		symbolsJSON        [][]byte
+		endpointsJSON      [][]byte
+		addressesJSON      [][]byte
+		tiersJSON          [][]byte
+		networksJSON       [][]byte
+		closuresJSON       [][]byte
+		totalCount         int
 	)
 
 	if err := rows.Scan(&id, &name, &description, &organizationId, &contactName, &email, &phoneNumber,
-		&lmsLocationCode, &lmsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
+		&lmsLocationCode, &lenderOfLastResort, &lmsConfigJSON, &hrid, &timeZone, &entryType, &parent, &symbolsJSON, &endpointsJSON,
 		&addressesJSON, &tiersJSON, &networksJSON, &closuresJSON, &totalCount); err != nil {
 		return Entry{}, 0, err
 	}
@@ -130,25 +131,26 @@ func scanEntryRow(rows pgx.Rows) (Entry, int, error) {
 	typeValue := EntryType(*entryType)
 
 	return Entry{
-		Id:              &id,
-		Name:            name,
-		Type:            &typeValue,
-		OrganizationId:  organizationId,
-		Description:     description,
-		ContactName:     contactName,
-		Email:           email,
-		Hrid:            hrid,
-		LmsLocationCode: lmsLocationCode,
-		PhoneNumber:     phoneNumber,
-		Parent:          parent,
-		Symbols:         symbolsPtr,
-		Endpoints:       endpointsPtr,
-		Addresses:       addressesPtr,
-		Closures:        closuresPtr,
-		LmsConfig:       lmsConfigPtr,
-		Tiers:           tiersPtr,
-		Networks:        networksPtr,
-		TimeZone:        timeZone,
+		Id:                 &id,
+		Name:               name,
+		Type:               &typeValue,
+		OrganizationId:     organizationId,
+		Description:        description,
+		ContactName:        contactName,
+		Email:              email,
+		Hrid:               hrid,
+		LmsLocationCode:    lmsLocationCode,
+		LenderOfLastResort: lenderOfLastResort,
+		PhoneNumber:        phoneNumber,
+		Parent:             parent,
+		Symbols:            symbolsPtr,
+		Endpoints:          endpointsPtr,
+		Addresses:          addressesPtr,
+		Closures:           closuresPtr,
+		LmsConfig:          lmsConfigPtr,
+		Tiers:              tiersPtr,
+		Networks:           networksPtr,
+		TimeZone:           timeZone,
 	}, totalCount, nil
 }
 
@@ -188,6 +190,7 @@ func buildEntrySQL(whereClause string) string {
 		e.email,
 		e.phone_number,
 		e.lms_location_code,
+		e.lender_of_last_resort,
 		(
 		SELECT 
 			json_build_object(
@@ -236,7 +239,10 @@ func buildEntrySQL(whereClause string) string {
 			SELECT json_build_object(
 				'id', tiers.id,
 				'consortium', tiers.consortium,
-				'name', tiers.name
+				'name', tiers.name,
+				'level', tiers.level,
+				'type', tiers.type,
+				'cost', tiers.cost
 			) from entry_tiers INNER JOIN tiers ON tiers.id = entry_tiers.tier
 			WHERE entry_tiers.entry = e.id
 			ORDER BY tiers.id
@@ -245,7 +251,8 @@ func buildEntrySQL(whereClause string) string {
 			SELECT json_build_object(
 				'id', networks.id,
 				'consortium', networks.consortium,
-				'name', networks.name
+				'name', networks.name,
+				'priority', networks.priority
 			) from entry_networks INNER JOIN networks ON networks.id = entry_networks.network
 			WHERE entry_networks.entry = e.id
 			ORDER BY networks.id
@@ -469,15 +476,16 @@ func (a ApiImpl) AddEntry(ctx context.Context, request AddEntryRequestObject) (A
 	qtx := a.queries.WithTx(tx)
 
 	toInsert := db.CreateEntryParams{
-		Name:            request.Body.Name,
-		ContactName:     request.Body.ContactName,
-		Email:           request.Body.Email,
-		PhoneNumber:     request.Body.PhoneNumber,
-		TimeZone:        request.Body.TimeZone,
-		OrganizationID:  request.Body.OrganizationId,
-		Type:            string(derefOrDefault(request.Body.Type, "Institution")),
-		Parent:          request.Body.Parent,
-		LmsLocationCode: request.Body.LmsLocationCode,
+		Name:               request.Body.Name,
+		ContactName:        request.Body.ContactName,
+		Email:              request.Body.Email,
+		PhoneNumber:        request.Body.PhoneNumber,
+		TimeZone:           request.Body.TimeZone,
+		OrganizationID:     request.Body.OrganizationId,
+		Type:               string(derefOrDefault(request.Body.Type, "Institution")),
+		Parent:             request.Body.Parent,
+		LmsLocationCode:    request.Body.LmsLocationCode,
+		LenderOfLastResort: request.Body.LenderOfLastResort,
 	}
 	insertedEntry, err := qtx.CreateEntry(ctx, toInsert)
 	if err != nil {
@@ -644,18 +652,19 @@ func (a ApiImpl) UpdateEntry(ctx context.Context, request UpdateEntryRequestObje
 	origTypeEntryPatch := EntryPatchType(orig.Type)
 
 	err = qtx.UpdateEntry(ctx, db.UpdateEntryParams{
-		Name:            derefOrDefault(request.Body.Name, orig.Name),
-		Description:     maybeUpdateCol(orig.Description, request.Body.Description),
-		ContactName:     maybeUpdateCol(orig.ContactName, request.Body.ContactName),
-		Email:           maybeUpdateCol(orig.Email, request.Body.Email),
-		PhoneNumber:     maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
-		Parent:          maybeUpdateCol(orig.Parent, request.Body.Parent),
-		LmsLocationCode: maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
-		Hrid:            maybeUpdateCol(orig.Hrid, request.Body.Hrid),
-		Type:            string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type)),
-		TimeZone:        maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
-		OrganizationID:  maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
-		ID:              orig.ID,
+		Name:               derefOrDefault(request.Body.Name, orig.Name),
+		Description:        maybeUpdateCol(orig.Description, request.Body.Description),
+		ContactName:        maybeUpdateCol(orig.ContactName, request.Body.ContactName),
+		Email:              maybeUpdateCol(orig.Email, request.Body.Email),
+		PhoneNumber:        maybeUpdateCol(orig.PhoneNumber, request.Body.PhoneNumber),
+		Parent:             maybeUpdateCol(orig.Parent, request.Body.Parent),
+		LmsLocationCode:    maybeUpdateCol(orig.LmsLocationCode, request.Body.LmsLocationCode),
+		LenderOfLastResort: maybeUpdateCol(orig.LenderOfLastResort, request.Body.LenderOfLastResort),
+		Hrid:               maybeUpdateCol(orig.Hrid, request.Body.Hrid),
+		Type:               string(*maybeUpdateCol(&origTypeEntryPatch, request.Body.Type)),
+		TimeZone:           maybeUpdateCol(orig.TimeZone, request.Body.TimeZone),
+		OrganizationID:     maybeUpdateCol(orig.OrganizationID, request.Body.OrganizationId),
+		ID:                 orig.ID,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to update entry", "error", err, "id", orig.ID)

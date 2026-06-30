@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS entries (
 	email varchar(255),
 	phone_number varchar(255),
 	lms_location_code varchar(255),
+	lender_of_last_resort varchar(255),
 	hrid varchar(255) UNIQUE,
 	time_zone varchar(128)
 );
@@ -56,7 +57,10 @@ CREATE TABLE IF NOT EXISTS closures (
 CREATE TABLE IF NOT EXISTS tiers (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
-	name varchar(255)
+	name varchar(255),
+	level varchar(32) NOT NULL DEFAULT 'standard' CHECK (level IN ('express', 'normal', 'rush', 'secondarymail', 'standard', 'urgent')),
+	type varchar(32) NOT NULL DEFAULT 'loan' CHECK (type IN ('loan', 'copy')),
+	cost double precision NOT NULL DEFAULT 0.0
 );
 
 CREATE INDEX tiers_consortium_idx ON tiers (consortium);
@@ -64,7 +68,8 @@ CREATE INDEX tiers_consortium_idx ON tiers (consortium);
 CREATE TABLE IF NOT EXISTS networks (
 	id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
 	consortium uuid NOT NULL REFERENCES entries (id) ON DELETE CASCADE,
-	name varchar(255)
+	name varchar(255),
+	priority double precision NOT NULL DEFAULT 0.0
 );
 
 CREATE INDEX networks_consortium_idx ON networks (consortium);

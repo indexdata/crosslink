@@ -48,7 +48,7 @@ func TestTierCases(t *testing.T) {
 			method:      http.MethodPost,
 			endpoint:    "/tiers",
 			status:      http.StatusBadRequest,
-			body:        `{"name":"No Consortium Tier"}`,
+			body:        `{"name":"No Consortium Tier","level":"standard","type":"loan"}`,
 			addlHeaders: consortiumPermissionHeaders,
 		},
 		{
@@ -56,7 +56,7 @@ func TestTierCases(t *testing.T) {
 			method:      http.MethodPost,
 			endpoint:    "/tiers",
 			status:      http.StatusBadRequest,
-			body:        `{"name":"Institution Tier","consortium":"00000000-0000-0000-0000-000000000002"}`,
+			body:        `{"name":"Institution Tier","consortium":"00000000-0000-0000-0000-000000000002","level":"standard","type":"loan"}`,
 			addlHeaders: consortiumPermissionHeaders,
 		},
 		{

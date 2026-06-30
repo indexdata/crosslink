@@ -1450,6 +1450,8 @@ components:
           type: string
         lmsLocationCode:
           type: string
+        lenderOfLastResort:
+          type: string
         hrid:
           type: string
         timeZone:
@@ -1515,6 +1517,9 @@ components:
           type: string
           nullable: true
         lmsLocationCode:
+          type: string
+          nullable: true
+        lenderOfLastResort:
           type: string
           nullable: true
         hrid:
@@ -1830,6 +1835,7 @@ components:
       required:
         - id
         - consortium
+        - priority
       properties:
         id:
           readOnly: true
@@ -1841,12 +1847,19 @@ components:
           format: uuid
         name:
           type: string
+        priority:
+          type: number
+          format: double
+          default: 0.0
 
     Tier:
       type: object
       required:
         - id
         - consortium
+        - level
+        - type
+        - cost
       properties:
         id:
           readOnly: true
@@ -1858,6 +1871,26 @@ components:
           format: uuid
         name:
           type: string
+        level:
+          type: string
+          enum:
+            - express
+            - normal
+            - rush
+            - secondarymail
+            - standard
+            - urgent
+          default: standard
+        type:
+          type: string
+          enum:
+            - loan
+            - copy
+          default: loan
+        cost:
+          type: number
+          format: double
+          default: 0.0
     
     EntryNetwork:
       type: object

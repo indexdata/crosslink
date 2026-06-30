@@ -436,3 +436,40 @@ func TestEntryCases(t *testing.T) {
 	}
 	testCases(t, cases)
 }
+
+func TestPatchEntryLenderOfLastResortToNull(t *testing.T) {
+	resetDb()
+
+	headers := map[string]string{
+		"X-Okapi-Tenant":      "ANINST",
+		"X-Okapi-Permissions": `["directory.institution.all"]`,
+	}
+
+	_, err := dbpool.Exec(
+		context.Background(),
+		"UPDATE entries SET lender_of_last_resort = $1 WHERE id = $2",
+		"PATCHED-LOR",
+		"00000000-0000-0000-0000-000000000002",
+	)
+	if err != nil {
+		t.Fatalf("failed to seed lender_of_last_resort: %v", err)
+	}
+
+	res, data := jsonReq(t, http.MethodPatch, "/entries/by-id/00000000-0000-0000-0000-000000000002", `{"lenderOfLastResort":null}`, headers)
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("expected PATCH response status of %d, got %d and body of %s", http.StatusNoContent, res.StatusCode, data)
+	}
+
+	var lenderOfLastResort *string
+	err = dbpool.QueryRow(
+		context.Background(),
+		"SELECT lender_of_last_resort FROM entries WHERE id = $1",
+		"00000000-0000-0000-0000-000000000002",
+	).Scan(&lenderOfLastResort)
+	if err != nil {
+		t.Fatalf("failed to fetch lender_of_last_resort: %v", err)
+	}
+	if lenderOfLastResort != nil {
+		t.Fatalf("expected lender_of_last_resort to be null, got %q", *lenderOfLastResort)
+	}
+}

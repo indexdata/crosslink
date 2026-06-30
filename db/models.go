@@ -32,18 +32,19 @@ type Closure struct {
 }
 
 type Entry struct {
-	ID              uuid.UUID
-	Parent          *uuid.UUID
-	Name            string
-	Type            string
-	Description     *string
-	OrganizationID  *string
-	ContactName     *string
-	Email           *string
-	PhoneNumber     *string
-	LmsLocationCode *string
-	Hrid            *string
-	TimeZone        *string
+	ID                 uuid.UUID
+	Parent             *uuid.UUID
+	Name               string
+	Type               string
+	Description        *string
+	OrganizationID     *string
+	ContactName        *string
+	Email              *string
+	PhoneNumber        *string
+	LmsLocationCode    *string
+	LenderOfLastResort *string
+	Hrid               *string
+	TimeZone           *string
 }
 
 type EntryNetwork struct {
@@ -83,6 +84,7 @@ type Network struct {
 	ID         uuid.UUID
 	Consortium uuid.UUID
 	Name       *string
+	Priority   float64
 }
 
 type ServiceEndpoint struct {
@@ -104,4 +106,7 @@ type Tier struct {
 	ID         uuid.UUID
 	Consortium uuid.UUID
 	Name       *string
+	Level      string
+	Type       string
+	Cost       float64
 }

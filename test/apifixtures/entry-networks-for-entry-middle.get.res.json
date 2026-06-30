@@ -2,7 +2,7 @@
   "items": [
     {
       "id":"20000000-0000-0000-0000-000000000002","consortium":"00000000-0000-0000-0000-000000000004",
-      "name":"The Not-Quite-As-Ultimate Network"
+      "name":"The Not-Quite-As-Ultimate Network","priority":0.0
     }
   ],
   "about": {

@@ -47,9 +47,31 @@ func (a ApiImpl) AddTier(ctx context.Context, request AddTierRequestObject) (Add
 
 	qtx := a.queries.WithTx(tx)
 
+	level := request.Body.Level
+	if level == "" {
+		level = Standard
+	}
+	switch level {
+	case Express, Normal, Rush, Secondarymail, Standard, Urgent:
+	default:
+		return AddTier400TextResponse("Invalid tier level"), nil
+	}
+
+	tierType := request.Body.Type
+	if tierType == "" {
+		tierType = Loan
+	}
+	switch tierType {
+	case Loan, Copy:
+	default:
+		return AddTier400TextResponse("Invalid tier type"), nil
+	}
 	insertedTier, err := qtx.CreateTier(ctx, db.CreateTierParams{
 		Name:       request.Body.Name,
 		Consortium: request.Body.Consortium,
+		Level:      string(level),
+		Type:       string(tierType),
+		Cost:       request.Body.Cost,
 	})
 
 	if err != nil {
@@ -95,6 +117,9 @@ func (a ApiImpl) GetTier(ctx context.Context, request GetTierRequestObject) (Get
 		Id:         &tier.ID,
 		Consortium: tier.Consortium,
 		Name:       tier.Name,
+		Level:      TierLevel(tier.Level),
+		Type:       TierType(tier.Type),
+		Cost:       tier.Cost,
 	}
 
 	return GetTier200JSONResponse(tierResponse), nil
@@ -127,6 +152,9 @@ func (a ApiImpl) GetTiers(ctx context.Context, request GetTiersRequestObject) (G
 			Id:         &row.ID,
 			Consortium: row.Consortium,
 			Name:       row.Name,
+			Level:      TierLevel(row.Level),
+			Type:       TierType(row.Type),
+			Cost:       row.Cost,
 		}
 		tierList = append(tierList, tier)
 	}

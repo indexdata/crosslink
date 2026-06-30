@@ -1,6 +1,7 @@
 {
   "name":"New Institution",
   "type":"Institution",
+  "lenderOfLastResort":"NEW-LOR",
   "symbols": [
     {"authority":"TEST", "symbol":"NWINST"},
     {"authority":"TEST", "symbol":"NWINSTTOO"}

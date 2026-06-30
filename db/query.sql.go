@@ -88,24 +88,25 @@ func (q *Queries) CreateClosure(ctx context.Context, arg CreateClosureParams) (C
 
 const createEntry = `-- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code 
+  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone
+RETURNING id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone
 `
 
 type CreateEntryParams struct {
-	Name            string
-	Description     *string
-	ContactName     *string
-	Email           *string
-	PhoneNumber     *string
-	TimeZone        *string
-	OrganizationID  *string
-	Type            string
-	Parent          *uuid.UUID
-	LmsLocationCode *string
+	Name               string
+	Description        *string
+	ContactName        *string
+	Email              *string
+	PhoneNumber        *string
+	TimeZone           *string
+	OrganizationID     *string
+	Type               string
+	Parent             *uuid.UUID
+	LmsLocationCode    *string
+	LenderOfLastResort *string
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry, error) {
@@ -120,6 +121,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		arg.Type,
 		arg.Parent,
 		arg.LmsLocationCode,
+		arg.LenderOfLastResort,
 	)
 	var i Entry
 	err := row.Scan(
@@ -133,6 +135,7 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 		&i.Email,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
 	)
@@ -185,43 +188,65 @@ func (q *Queries) CreateEntryTier(ctx context.Context, arg CreateEntryTierParams
 
 const createNetwork = `-- name: CreateNetwork :one
 INSERT INTO networks (
-  name, consortium
+  name, consortium, priority
 ) VALUES (
-  $1, $2
+  $1, $2, $3
 )
-RETURNING id, consortium, name
+RETURNING id, consortium, name, priority
 `
 
 type CreateNetworkParams struct {
 	Name       *string
 	Consortium uuid.UUID
+	Priority   float64
 }
 
 func (q *Queries) CreateNetwork(ctx context.Context, arg CreateNetworkParams) (Network, error) {
-	row := q.db.QueryRow(ctx, createNetwork, arg.Name, arg.Consortium)
+	row := q.db.QueryRow(ctx, createNetwork, arg.Name, arg.Consortium, arg.Priority)
 	var i Network
-	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Consortium,
+		&i.Name,
+		&i.Priority,
+	)
 	return i, err
 }
 
 const createTier = `-- name: CreateTier :one
 INSERT INTO tiers (
-  name, consortium
+  name, consortium, level, type, cost
 ) VALUES (
-  $1, $2
+  $1, $2, $3, $4, $5
 )
-RETURNING id, consortium, name
+RETURNING id, consortium, name, level, type, cost
 `
 
 type CreateTierParams struct {
 	Name       *string
 	Consortium uuid.UUID
+	Level      string
+	Type       string
+	Cost       float64
 }
 
 func (q *Queries) CreateTier(ctx context.Context, arg CreateTierParams) (Tier, error) {
-	row := q.db.QueryRow(ctx, createTier, arg.Name, arg.Consortium)
+	row := q.db.QueryRow(ctx, createTier,
+		arg.Name,
+		arg.Consortium,
+		arg.Level,
+		arg.Type,
+		arg.Cost,
+	)
 	var i Tier
-	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Consortium,
+		&i.Name,
+		&i.Level,
+		&i.Type,
+		&i.Cost,
+	)
 	return i, err
 }
 
@@ -375,7 +400,7 @@ func (q *Queries) DeleteTierById(ctx context.Context, id uuid.UUID) error {
 }
 
 const entryById = `-- name: EntryById :one
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -392,6 +417,7 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 		&i.Email,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
 	)
@@ -399,7 +425,7 @@ func (q *Queries) EntryById(ctx context.Context, id uuid.UUID) (Entry, error) {
 }
 
 const entryByIdForUpdate = `-- name: EntryByIdForUpdate :one
-SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
+SELECT id, parent, name, type, description, organization_id, contact_name, email, phone_number, lms_location_code, lender_of_last_resort, hrid, time_zone FROM entries WHERE id = $1 LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, error) {
@@ -416,6 +442,7 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 		&i.Email,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
 	)
@@ -423,7 +450,7 @@ func (q *Queries) EntryByIdForUpdate(ctx context.Context, id uuid.UUID) (Entry, 
 }
 
 const entryBySymbol = `-- name: EntryBySymbol :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1
 `
 
 type EntryBySymbolParams struct {
@@ -445,6 +472,7 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 		&i.Email,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
 	)
@@ -452,7 +480,7 @@ func (q *Queries) EntryBySymbol(ctx context.Context, arg EntryBySymbolParams) (E
 }
 
 const entryBySymbolForUpdate = `-- name: EntryBySymbolForUpdate :one
-SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
+SELECT e.id, e.parent, e.name, e.type, e.description, e.organization_id, e.contact_name, e.email, e.phone_number, e.lms_location_code, e.lender_of_last_resort, e.hrid, e.time_zone FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = $1 AND s.symbol = $2 LIMIT 1 FOR UPDATE OF e
 `
 
 type EntryBySymbolForUpdateParams struct {
@@ -474,6 +502,7 @@ func (q *Queries) EntryBySymbolForUpdate(ctx context.Context, arg EntryBySymbolF
 		&i.Email,
 		&i.PhoneNumber,
 		&i.LmsLocationCode,
+		&i.LenderOfLastResort,
 		&i.Hrid,
 		&i.TimeZone,
 	)
@@ -600,24 +629,36 @@ func (q *Queries) GetLMSConfigByEntry(ctx context.Context, entry uuid.UUID) (Lms
 }
 
 const getNetworkById = `-- name: GetNetworkById :one
-SELECT id, consortium, name FROM networks WHERE id = $1 LIMIT 1
+SELECT id, consortium, name, priority FROM networks WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetNetworkById(ctx context.Context, id uuid.UUID) (Network, error) {
 	row := q.db.QueryRow(ctx, getNetworkById, id)
 	var i Network
-	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Consortium,
+		&i.Name,
+		&i.Priority,
+	)
 	return i, err
 }
 
 const getTierById = `-- name: GetTierById :one
-SELECT id, consortium, name FROM tiers WHERE id = $1 LIMIT 1
+SELECT id, consortium, name, level, type, cost FROM tiers WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetTierById(ctx context.Context, id uuid.UUID) (Tier, error) {
 	row := q.db.QueryRow(ctx, getTierById, id)
 	var i Tier
-	err := row.Scan(&i.ID, &i.Consortium, &i.Name)
+	err := row.Scan(
+		&i.ID,
+		&i.Consortium,
+		&i.Name,
+		&i.Level,
+		&i.Type,
+		&i.Cost,
+	)
 	return i, err
 }
 
@@ -753,7 +794,7 @@ func (q *Queries) ListEntryTiers(ctx context.Context, arg ListEntryTiersParams) 
 }
 
 const listNetworks = `-- name: ListNetworks :many
-SELECT id, consortium, name FROM networks
+SELECT id, consortium, name, priority FROM networks
   LIMIT $2
   OFFSET $1
 `
@@ -772,7 +813,12 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 	var items []Network
 	for rows.Next() {
 		var i Network
-		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Consortium,
+			&i.Name,
+			&i.Priority,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -784,7 +830,7 @@ func (q *Queries) ListNetworks(ctx context.Context, arg ListNetworksParams) ([]N
 }
 
 const listNetworksForConsortium = `-- name: ListNetworksForConsortium :many
-SELECT id, consortium, name FROM networks
+SELECT id, consortium, name, priority FROM networks
 WHERE consortium = $1
 `
 
@@ -797,7 +843,12 @@ func (q *Queries) ListNetworksForConsortium(ctx context.Context, consortium uuid
 	var items []Network
 	for rows.Next() {
 		var i Network
-		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Consortium,
+			&i.Name,
+			&i.Priority,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -809,7 +860,7 @@ func (q *Queries) ListNetworksForConsortium(ctx context.Context, consortium uuid
 }
 
 const listNetworksForEntry = `-- name: ListNetworksForEntry :many
-SELECT n.id, consortium, name, en.id, entry, network FROM networks n
+SELECT n.id, consortium, name, priority, en.id, entry, network FROM networks n
 JOIN entry_networks en ON n.id = en.network
 WHERE en.entry = $1
 `
@@ -818,6 +869,7 @@ type ListNetworksForEntryRow struct {
 	ID         uuid.UUID
 	Consortium uuid.UUID
 	Name       *string
+	Priority   float64
 	ID_2       uuid.UUID
 	Entry      uuid.UUID
 	Network    uuid.UUID
@@ -836,6 +888,7 @@ func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]
 			&i.ID,
 			&i.Consortium,
 			&i.Name,
+			&i.Priority,
 			&i.ID_2,
 			&i.Entry,
 			&i.Network,
@@ -851,7 +904,7 @@ func (q *Queries) ListNetworksForEntry(ctx context.Context, entry uuid.UUID) ([]
 }
 
 const listTiers = `-- name: ListTiers :many
-SELECT id, consortium, name FROM tiers
+SELECT id, consortium, name, level, type, cost FROM tiers
   LIMIT $2
   OFFSET $1
 `
@@ -870,7 +923,14 @@ func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, e
 	var items []Tier
 	for rows.Next() {
 		var i Tier
-		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Consortium,
+			&i.Name,
+			&i.Level,
+			&i.Type,
+			&i.Cost,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -882,7 +942,7 @@ func (q *Queries) ListTiers(ctx context.Context, arg ListTiersParams) ([]Tier, e
 }
 
 const listTiersForConsortium = `-- name: ListTiersForConsortium :many
-SELECT id, consortium, name FROM tiers
+SELECT id, consortium, name, level, type, cost FROM tiers
 WHERE consortium = $1
 `
 
@@ -895,7 +955,14 @@ func (q *Queries) ListTiersForConsortium(ctx context.Context, consortium uuid.UU
 	var items []Tier
 	for rows.Next() {
 		var i Tier
-		if err := rows.Scan(&i.ID, &i.Consortium, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Consortium,
+			&i.Name,
+			&i.Level,
+			&i.Type,
+			&i.Cost,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -907,7 +974,7 @@ func (q *Queries) ListTiersForConsortium(ctx context.Context, consortium uuid.UU
 }
 
 const listTiersForEntry = `-- name: ListTiersForEntry :many
-SELECT t.id, consortium, name, et.id, entry, tier FROM tiers t
+SELECT t.id, consortium, name, level, type, cost, et.id, entry, tier FROM tiers t
 JOIN entry_tiers et ON t.id = et.tier
 WHERE et.entry = $1
 `
@@ -916,6 +983,9 @@ type ListTiersForEntryRow struct {
 	ID         uuid.UUID
 	Consortium uuid.UUID
 	Name       *string
+	Level      string
+	Type       string
+	Cost       float64
 	ID_2       uuid.UUID
 	Entry      uuid.UUID
 	Tier       uuid.UUID
@@ -934,6 +1004,9 @@ func (q *Queries) ListTiersForEntry(ctx context.Context, entry uuid.UUID) ([]Lis
 			&i.ID,
 			&i.Consortium,
 			&i.Name,
+			&i.Level,
+			&i.Type,
+			&i.Cost,
 			&i.ID_2,
 			&i.Entry,
 			&i.Tier,
@@ -987,24 +1060,26 @@ SET
   type = $8,
   parent = $9,
   lms_location_code = $10,
-  hrid = $11
+  lender_of_last_resort = $11,
+  hrid = $12
 
-WHERE id = $12
+WHERE id = $13
 `
 
 type UpdateEntryParams struct {
-	Name            string
-	Description     *string
-	ContactName     *string
-	Email           *string
-	PhoneNumber     *string
-	TimeZone        *string
-	OrganizationID  *string
-	Type            string
-	Parent          *uuid.UUID
-	LmsLocationCode *string
-	Hrid            *string
-	ID              uuid.UUID
+	Name               string
+	Description        *string
+	ContactName        *string
+	Email              *string
+	PhoneNumber        *string
+	TimeZone           *string
+	OrganizationID     *string
+	Type               string
+	Parent             *uuid.UUID
+	LmsLocationCode    *string
+	LenderOfLastResort *string
+	Hrid               *string
+	ID                 uuid.UUID
 }
 
 func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
@@ -1019,6 +1094,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.Type,
 		arg.Parent,
 		arg.LmsLocationCode,
+		arg.LenderOfLastResort,
 		arg.Hrid,
 		arg.ID,
 	)

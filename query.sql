@@ -12,9 +12,9 @@ SELECT e.* FROM entries e, symbols s WHERE e.id = s.owner AND s.authority = @aut
 
 -- name: CreateEntry :one
 INSERT INTO entries (
-  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code 
+  name, description, contact_name, email, phone_number, time_zone, organization_id, type, parent, lms_location_code, lender_of_last_resort
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
@@ -31,6 +31,7 @@ SET
   type = @type,
   parent = @parent,
   lms_location_code = @lms_location_code,
+  lender_of_last_resort = @lender_of_last_resort,
   hrid = @hrid
 
 WHERE id = @id;
@@ -129,17 +130,17 @@ DELETE FROM address_components WHERE address = @address;
 
 -- name: CreateTier :one
 INSERT INTO tiers (
-  name, consortium
+  name, consortium, level, type, cost
 ) VALUES (
-  @name, @consortium
+  @name, @consortium, @level, @type, @cost
 )
 RETURNING *;
 
 -- name: CreateNetwork :one
 INSERT INTO networks (
-  name, consortium
+  name, consortium, priority
 ) VALUES (
-  @name, @consortium
+  @name, @consortium, @priority
 )
 RETURNING *;
 

@@ -50,6 +50,7 @@ func (a ApiImpl) AddNetwork(ctx context.Context, request AddNetworkRequestObject
 	insertedNetwork, err := qtx.CreateNetwork(ctx, db.CreateNetworkParams{
 		Name:       request.Body.Name,
 		Consortium: request.Body.Consortium,
+		Priority:   request.Body.Priority,
 	})
 
 	if err != nil {
@@ -95,6 +96,7 @@ func (a ApiImpl) GetNetwork(ctx context.Context, request GetNetworkRequestObject
 		Id:         &network.ID,
 		Consortium: network.Consortium,
 		Name:       network.Name,
+		Priority:   network.Priority,
 	}
 
 	return GetNetwork200JSONResponse(networkResponse), nil
@@ -127,6 +129,7 @@ func (a ApiImpl) GetNetworks(ctx context.Context, request GetNetworksRequestObje
 			Id:         &row.ID,
 			Consortium: row.Consortium,
 			Name:       row.Name,
+			Priority:   row.Priority,
 		}
 		networkList = append(networkList, network)
 	}

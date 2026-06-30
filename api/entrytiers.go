@@ -258,6 +258,9 @@ func (a ApiImpl) GetTiersForEntry(ctx context.Context, request GetTiersForEntryR
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
+				Level:      TierLevel(row.Level),
+				Type:       TierType(row.Type),
+				Cost:       row.Cost,
 			}
 			tierList = append(tierList, tier)
 		}
@@ -273,6 +276,9 @@ func (a ApiImpl) GetTiersForEntry(ctx context.Context, request GetTiersForEntryR
 				Id:         &row.ID,
 				Consortium: row.Consortium,
 				Name:       row.Name,
+				Level:      TierLevel(row.Level),
+				Type:       TierType(row.Type),
+				Cost:       row.Cost,
 			}
 			tierList = append(tierList, tier)
 		}
