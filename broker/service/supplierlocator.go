@@ -59,14 +59,6 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func CreateHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
-	var serviceType string
-	if illTransactionData.ServiceInfo != nil {
-		serviceType = string(illTransactionData.ServiceInfo.ServiceType)
-	}
-	return holdings.LookupParamsFromBibliographicInfo(illTransactionData.BibliographicInfo, serviceType)
-}
-
 // 3 cases to consider for getting the adapter:
 // 1. If holdingsAdapter is set from the start (for example for testing), use it directly
 // 2. If consortiumPeers are present, lookup the peer for the consortium and use its holdings adapter
@@ -87,7 +79,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams := holdings.CreateHoldingsParams(illTrans.IllTransactionData)
 	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
 			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
@@ -382,7 +374,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
+	holdingsParams := holdings.CreateHoldingsParams(illTrans.IllTransactionData)
 	holdingsParams.Identifier = sup.LocalID.String
 	results, _, err := aa.Lookup(holdingsParams)
 	if err != nil {

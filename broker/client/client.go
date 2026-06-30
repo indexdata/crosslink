@@ -763,10 +763,7 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = iso18626.NewISO18626Message()
 	metadataSettings := holdings.GetMetadataSettings(trCtx.requester.CustomData)
-	lookupHint := holdings.LookupHintFromParams(holdings.LookupParamsFromBibliographicInfo(
-		trCtx.transaction.IllTransactionData.BibliographicInfo,
-		"",
-	))
+	lookupHint := holdings.LookupHintFromParams(holdings.CreateHoldingsParams(trCtx.transaction.IllTransactionData))
 	resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
 	bibliographicInfo := trCtx.transaction.IllTransactionData.BibliographicInfo
 	if resolvedMode == directory.None {

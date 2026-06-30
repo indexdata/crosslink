@@ -150,7 +150,15 @@ func LookupHintFromParams(params LookupParams) string {
 	return ""
 }
 
-func LookupParamsFromBibliographicInfo(info iso18626.BibliographicInfo, serviceType string) LookupParams {
+func CreateHoldingsParams(illTransactionData ill_db.IllTransactionData) LookupParams {
+	return LookupParamsFromBibliographicInfo(illTransactionData.BibliographicInfo, illTransactionData.ServiceInfo)
+}
+
+func LookupParamsFromBibliographicInfo(info iso18626.BibliographicInfo, serviceInfo *iso18626.ServiceInfo) LookupParams {
+	var serviceType string
+	if serviceInfo != nil {
+		serviceType = string(serviceInfo.ServiceType)
+	}
 	params := LookupParams{
 		Identifier:  info.SupplierUniqueRecordId,
 		Title:       info.Title,

@@ -281,11 +281,7 @@ func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *is
 	if !metadataupdate.SupportsFormat(settings.Format) {
 		return fmt.Errorf("unsupported metadata format: %s", settings.Format)
 	}
-	var serviceType string
-	if illRequest.ServiceInfo != nil {
-		serviceType = string(illRequest.ServiceInfo.ServiceType)
-	}
-	params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, serviceType)
+	params := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
 	resolvedMode := holdings.ResolveMetadataUpdateMode(string(settings.Mode), holdings.LookupHintFromParams(params))
 	if resolvedMode == directory.None {
 		return nil
