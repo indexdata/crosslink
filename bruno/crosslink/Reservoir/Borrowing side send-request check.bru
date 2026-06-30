@@ -27,7 +27,8 @@ auth:basic {
 script:post-response {
   test("for send-request", function() {
     const pr = res.getBody();
-    expect(pr.lastAction).to.equal("send-request")
+    // Automatic action is triggered when request goes in UNFILLED state
+    expect(pr.lastAction).to.equal("send-notification")
     expect(pr.lastActionResult).to.equal("SUCCESS")
   });
 }

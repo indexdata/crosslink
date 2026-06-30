@@ -147,7 +147,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	info := r.GetAllowedActionsForPatronRequest(pr)
+	info := r.GetAllowedActionsForPatronRequest(pr, true)
 	actions := make([]pr_db.PatronRequestAction, 0, len(info.Actions))
 	for _, action := range info.Actions {
 		actions = append(actions, pr_db.PatronRequestAction(action.Name))
@@ -155,7 +155,7 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	return actions
 }
 
-func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest) proapi.AllowedActions {
+func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest, available bool) proapi.AllowedActions {
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
@@ -192,6 +192,7 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 						Name:       capability.Name,
 						Parameters: capability.Parameters,
 						Primary:    primary,
+						Available:  available,
 					})
 			}
 		}

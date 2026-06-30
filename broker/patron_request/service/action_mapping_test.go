@@ -137,18 +137,18 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 	mapping := mustActionMapping(t)
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}}, mapping.GetAllowedActionsForPatronRequest(
 		pr_db.PatronRequest{
-			Side: SideBorrowing, State: BorrowerStateNew}))
+			Side: SideBorrowing, State: BorrowerStateNew}, true))
 
 	tt := true
-	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt}}},
-		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt, Available: false}}},
+		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, false))
 
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
-		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}},
-		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt},
-		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}},
-		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}},
-	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}, Available: true},
+		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt, Available: true},
+		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}, Available: true},
+		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}, Available: true},
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, true))
 }
 
 func TestGetActionTransitionMissingCases(t *testing.T) {

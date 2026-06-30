@@ -278,7 +278,7 @@ func TestCrud(t *testing.T) {
 		return strings.Contains(string(respBytes), "\"name\":\"send-request\"")
 	})
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-	assert.Equal(t, "{\"actions\":[{\"name\":\"send-request\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"send-request\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
 
 	// POST execute action
 	action := proapi.ExecuteAction{
@@ -307,7 +307,15 @@ func TestCrud(t *testing.T) {
 	// Wait till requester response processed
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\"receive\"")
+		var allowedActions proapi.AllowedActions
+		err = json.Unmarshal(respBytes, &allowedActions)
+		assert.NoError(t, err, "failed to unmarshal allowed actions")
+		for _, a := range allowedActions.Actions {
+			if a.Name == string(prservice.BorrowerActionReceive) && a.Available {
+				return true
+			}
+		}
+		return false
 	})
 
 	// POST blocking action

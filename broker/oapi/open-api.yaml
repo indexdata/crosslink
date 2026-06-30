@@ -668,9 +668,13 @@ components:
         primary:
           type: boolean
           description: Indicates if this action is primary action for the state
+        available:
+          type: boolean
+          description: Indicates if this action is available for execution in the current state
       required:
         - name
         - parameters
+        - available
 
     AllowedActions:
       type: object

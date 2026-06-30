@@ -41,7 +41,7 @@ func NewEmailSenderService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo) (*EmailS
 		prRepo:       prRepo,
 		illRepo:      illRepo,
 		pdf:          psservice.NewPdfService(prRepo),
-		emailService: email.NewEmailService(),
+		emailService: emailService,
 	}, err
 }
 
