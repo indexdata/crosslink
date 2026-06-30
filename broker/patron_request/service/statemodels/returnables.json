@@ -581,6 +581,7 @@
       "display": "Cancel Requested",
       "desc": "After receiving ISO18626 Cancel from requester",
       "side": "SUPPLIER",
+      "needsAttention": true,
       "primaryAction": "accept-cancel",
       "actions": [
         {
