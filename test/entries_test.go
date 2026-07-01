@@ -124,6 +124,14 @@ func TestEntryCases(t *testing.T) {
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{
+			name:        "GET entries with CQL query by parent",
+			method:      http.MethodGet,
+			endpoint:    "/entries?q=parent%3D00000000-0000-0000-0000-000000000004",
+			status:      http.StatusOK,
+			resFile:     "entries-cql-parent.get.res.json",
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
 			name:        "GET entries with CQL wildcard query by description",
 			method:      http.MethodGet,
 			endpoint:    "/entries?q=description%3D%2Aparticular%2A",
@@ -136,6 +144,14 @@ func TestEntryCases(t *testing.T) {
 			method:      http.MethodGet,
 			endpoint:    "/entries?q=invalid%28%28%28",
 			status:      http.StatusBadRequest,
+			addlHeaders: institutionPermissionHeaders,
+		},
+		{
+			name:        "GET entries with CQL query by type",
+			method:      http.MethodGet,
+			endpoint:    "/entries?q=type%3DConsortium",
+			status:      http.StatusOK,
+			resFile:     "entries-cql-type.get.res.json",
 			addlHeaders: institutionPermissionHeaders,
 		},
 		{

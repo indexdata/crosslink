@@ -169,6 +169,14 @@ func handleEntryCQL(cqlString string, noBaseArgs int) (pgcql.Query, error) {
 	f.SetColumn("e.description")
 	def.AddField("description", f)
 
+	f = pgcql.NewFieldString().WithLikeOps()
+	f.SetColumn("e.type")
+	def.AddField("type", f)
+
+	f = pgcql.NewFieldString().WithExact()
+	f.SetColumn("e.parent")
+	def.AddField("parent", f)
+
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
 	if err != nil {
