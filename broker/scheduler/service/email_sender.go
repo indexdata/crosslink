@@ -20,10 +20,6 @@ var (
 	MAX_RECORDS_PER_EMAIL = int32(utils.Must(utils.GetEnvInt("BATCH_PULLSLIP_MAX_COUNT", 100)))
 )
 
-type EmailSender interface {
-	SendEmail(from string, to []string, raw []byte) error
-}
-
 type EmailSenderService struct {
 	prRepo       pr_db.PrRepo
 	illRepo      ill_db.IllRepo
