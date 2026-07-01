@@ -197,6 +197,7 @@ func Init(ctx context.Context) (Context, error) {
 	prApiHandler.SetAvailabilityCreator(availabilityCreator)
 	prApiHandler.SetAutoActionRunner(prActionService)
 	prApiHandler.SetActionTaskProcessor(prActionService)
+	prApiHandler.SetDirectoryLookupAdapter(dirAdapter)
 	sseBroker := api.NewSseBroker(appCtx, tenantResolver)
 	psApiHandler := psapi.NewPsApiHandler(psRepo, prRepo, tenantResolver)
 

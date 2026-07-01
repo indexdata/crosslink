@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cqlbuilder"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
@@ -43,17 +44,18 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
-	limitDefault         int32
-	prRepo               pr_db.PrRepo
-	illRepo              ill_db.IllRepo
-	availabilityCreator  holdings.AvailabilityCreator
-	eventBus             events.EventBus
-	eventRepo            events.EventRepo
-	actionMappingService prservice.ActionMappingService
-	autoActionRunner     prservice.AutoActionRunner
-	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       *tenant.TenantResolver
-	notificationSender   prservice.PatronRequestNotificationService
+	limitDefault           int32
+	prRepo                 pr_db.PrRepo
+	illRepo                ill_db.IllRepo
+	availabilityCreator    holdings.AvailabilityCreator
+	eventBus               events.EventBus
+	eventRepo              events.EventRepo
+	actionMappingService   prservice.ActionMappingService
+	autoActionRunner       prservice.AutoActionRunner
+	actionTaskProcessor    ActionTaskProcessor
+	tenantResolver         *tenant.TenantResolver
+	notificationSender     prservice.PatronRequestNotificationService
+	directoryLookupAdapter adapter.DirectoryLookupAdapter
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -83,6 +85,10 @@ func (a *PatronRequestApiHandler) SetIllRepo(illRepo ill_db.IllRepo) {
 
 func (a *PatronRequestApiHandler) SetAvailabilityCreator(availabilityCreator holdings.AvailabilityCreator) {
 	a.availabilityCreator = availabilityCreator
+}
+
+func (a *PatronRequestApiHandler) SetDirectoryLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) {
+	a.directoryLookupAdapter = directoryLookupAdapter
 }
 
 func decodeRequiredBody[T any](r *http.Request, dst *T) error {
@@ -345,12 +351,17 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	if a.illRepo != nil {
-		requesterPeer, peerErr := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	if a.illRepo != nil && a.directoryLookupAdapter != nil {
+		peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, a.directoryLookupAdapter)
 		if peerErr != nil {
 			api.AddInternalError(ctx, w, peerErr)
 			return
 		}
+		if len(peers) == 0 {
+			api.AddBadRequestError(ctx, w, errors.New("no cached peers found"))
+			return
+		}
+		requesterPeer := peers[0]
 		if requesterPeer.Vendor == string(directory.CrossLink) {
 			err := a.applyMetadataUpdateFromHoldings(&illRequest, requesterPeer)
 			if err != nil {
