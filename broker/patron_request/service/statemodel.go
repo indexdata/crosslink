@@ -1,11 +1,10 @@
 package prservice
 
 import (
-	"embed"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"slices"
 	"strings"
 	"sync"
@@ -13,9 +12,16 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
+var errNotFound = fmt.Errorf("state model not found")
+
 type StateModelService struct {
 	stateMap map[string]*proapi.StateModel
 	mu       sync.RWMutex
+}
+
+type StateModelsConfig struct {
+	StateModels         map[string]proapi.StateModel `json:"stateModels"`
+	BatchActionDefaults []proapi.CreateBatchAction   `json:"batchActionDefaults"`
 }
 
 func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -43,7 +49,7 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 
 	stateModel, err := LoadStateModelByName(modelName)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, errNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -52,29 +58,25 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 	return stateModel, nil
 }
 
-//go:embed statemodels
-var modelFS embed.FS
+//go:embed statemodels/state-models.json
+var stateModelsFile []byte
+var stateModelsConfig StateModelsConfig
 
 func LoadStateModelByName(modelName string) (*proapi.StateModel, error) {
-	path := "statemodels/" + modelName + ".json"
-	stateModel, err := loadStateModel(path)
-	if err != nil {
+	stateModel, ok := stateModelsConfig.StateModels[modelName]
+	if !ok {
+		return nil, errNotFound
+	}
+	if err := ValidateStateModel(&stateModel); err != nil {
 		return nil, err
 	}
-	if err = ValidateStateModel(stateModel); err != nil {
-		return nil, err
-	}
-	return stateModel, nil
+	return &stateModel, nil
 }
 
-func loadStateModel(path string) (*proapi.StateModel, error) {
-	data, err := modelFS.ReadFile(path)
-	if err != nil {
-		return nil, err
+func init() {
+	if err := json.Unmarshal(stateModelsFile, &stateModelsConfig); err != nil {
+		panic("failed to parse state-models.json: " + err.Error())
 	}
-	var stateModel proapi.StateModel
-	err = json.Unmarshal(data, &stateModel)
-	return &stateModel, err
 }
 
 func ValidateStateModel(stateModel *proapi.StateModel) error {
@@ -216,4 +218,8 @@ func validateEventTransition(event proapi.ModelEvent, stateName string, allowedT
 func hasTransitionTarget(allowedTransitionTargets map[string]struct{}, name string) bool {
 	_, ok := allowedTransitionTargets[name]
 	return ok
+}
+
+func GetStateModelBatchActionDefaults() []proapi.CreateBatchAction {
+	return stateModelsConfig.BatchActionDefaults
 }

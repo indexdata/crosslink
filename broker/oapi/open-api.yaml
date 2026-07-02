@@ -2172,6 +2172,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /state_model/batch_actions:
+    get:
+      summary: Retrieve batch actions defaults for built-in state models
+      tags:
+        - patron-requests-api
+      parameters:
+        - $ref: '#/components/parameters/Tenant'
+      responses:
+        '200':
+          description: Successful retrieval of batch actions defaults
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreateBatchAction'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /batch_actions:
     get:
       summary: List all batch actions
