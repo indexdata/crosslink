@@ -25,6 +25,7 @@ import (
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	brokerservice "github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
@@ -47,7 +48,7 @@ type PatronRequestApiHandler struct {
 	limitDefault           int32
 	prRepo                 pr_db.PrRepo
 	illRepo                ill_db.IllRepo
-	availabilityCreator    holdings.AvailabilityCreator
+	holdingsAdapterFactory *brokerservice.HoldingsAdapterFactory
 	eventBus               events.EventBus
 	eventRepo              events.EventRepo
 	actionMappingService   prservice.ActionMappingService
@@ -83,8 +84,8 @@ func (a *PatronRequestApiHandler) SetIllRepo(illRepo ill_db.IllRepo) {
 	a.illRepo = illRepo
 }
 
-func (a *PatronRequestApiHandler) SetAvailabilityCreator(availabilityCreator holdings.AvailabilityCreator) {
-	a.availabilityCreator = availabilityCreator
+func (a *PatronRequestApiHandler) SetHoldingsAdapterFactory(factory *brokerservice.HoldingsAdapterFactory) {
+	a.holdingsAdapterFactory = factory
 }
 
 func (a *PatronRequestApiHandler) SetDirectoryLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) {
@@ -279,9 +280,16 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
-func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
-	settings := holdings.GetMetadataSettings(requesterPeer.CustomData)
-	if settings.Mode == directory.None || a.availabilityCreator == nil {
+func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
+	if a.holdingsAdapterFactory == nil {
+		return nil
+	}
+	configEntry, err := a.holdingsAdapterFactory.GetConfigEntry(ctx, requesterPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get config entry: %w", err)
+	}
+	settings := holdings.GetMetadataSettings(configEntry)
+	if settings.Mode == directory.None {
 		return nil
 	}
 	if !metadataupdate.SupportsFormat(settings.Format) {
@@ -292,7 +300,7 @@ func (a *PatronRequestApiHandler) applyMetadataUpdateFromHoldings(illRequest *is
 	if resolvedMode == directory.None {
 		return nil
 	}
-	lookupAdapter, adapterErr := a.availabilityCreator.GetAdapter(requesterPeer)
+	lookupAdapter, adapterErr := a.holdingsAdapterFactory.GetLookupAdapter(ctx, requesterPeer)
 	if adapterErr != nil {
 		return fmt.Errorf("failed to get availability adapter: %w", adapterErr)
 	}
@@ -363,7 +371,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		}
 		requesterPeer := peers[0]
 		if requesterPeer.Vendor == string(directory.CrossLink) {
-			err := a.applyMetadataUpdateFromHoldings(&illRequest, requesterPeer)
+			err := a.applyMetadataUpdateFromHoldings(ctx, &illRequest, requesterPeer)
 			if err != nil {
 				api.AddInternalError(ctx, w, err)
 				return

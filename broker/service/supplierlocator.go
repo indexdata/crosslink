@@ -25,22 +25,18 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
-	eventBus            events.EventBus
-	illRepo             ill_db.IllRepo
-	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     holdings.LookupAdapter
-	availabilityCreator holdings.AvailabilityCreator
-	consortiumSymbol    string
+	eventBus          events.EventBus
+	illRepo           ill_db.IllRepo
+	dirAdapter        adapter.DirectoryLookupAdapter
+	consortiumAdapter *HoldingsAdapterFactory
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator, consortiumSymbol string) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, consortiumAdapter *HoldingsAdapterFactory) SupplierLocator {
 	return SupplierLocator{
-		eventBus:            eventBus,
-		illRepo:             illRepo,
-		dirAdapter:          dirAdapter,
-		holdingsAdapter:     holdingsAdapter,
-		availabilityCreator: availabilityCreator,
-		consortiumSymbol:    consortiumSymbol,
+		eventBus:          eventBus,
+		illRepo:           illRepo,
+		dirAdapter:        dirAdapter,
+		consortiumAdapter: consortiumAdapter,
 	}
 }
 
@@ -59,21 +55,6 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-// 3 cases to consider for getting the adapter:
-// 1. If holdingsAdapter is set from the start (for example for testing), use it directly
-// 2. If consortiumPeers are present, lookup the peer for the consortium and use its holdings adapter
-// 3. Otherwise, use the holdings adapter for the requesting peer
-func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consortiumPeers []ill_db.Peer) (holdings.LookupAdapter, error) {
-	lookupAdapter := s.holdingsAdapter
-	if lookupAdapter != nil {
-		return lookupAdapter, nil
-	}
-	if len(consortiumPeers) > 0 {
-		return s.availabilityCreator.GetAdapter(consortiumPeers[0])
-	}
-	return s.availabilityCreator.GetAdapter(requestPeer)
-}
-
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
@@ -90,22 +71,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
 
-	// get consortium peer if configured
-	var consortiumPeers []ill_db.Peer
-	if s.consortiumSymbol != "" {
-		consortiumPeers, _, err = s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to lookup consortium peer", err)
-		}
-		if len(consortiumPeers) == 0 {
-			return events.LogErrorAndReturnResult(ctx, "no peer found for consortium symbol", fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol))
-		}
-		if len(consortiumPeers) > 1 {
-			ctx.Logger().Warn("multiple peers found for consortium symbol, using first peer", "consortiumSymbol", s.consortiumSymbol, "peerCount", len(consortiumPeers))
-		}
-	}
-
-	lookupAdapter, err := s.getConsortialAdapter(requester, consortiumPeers)
+	lookupAdapter, err := s.consortiumAdapter.GetLookupAdapter(ctx, requester)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
 	}
@@ -128,13 +94,16 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		lookupSymbols = append(lookupSymbols, holding.Symbol)
 	}
 
+	configEntry, err := s.consortiumAdapter.GetConfigEntry(ctx, requester)
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to get config entry for locating suppliers", err)
+	}
+
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lenderLastResort []directory.Symbol
-	if requester.CustomData.LenderOfLastResort != nil {
-		lenderLastResort = *requester.CustomData.LenderOfLastResort
-	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
-		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
+	if configEntry.LenderOfLastResort != nil {
+		lenderLastResort = *configEntry.LenderOfLastResort
 	}
 	if holdingsParams.Identifier != "" {
 		for _, sym := range lenderLastResort {
@@ -158,10 +127,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	firstHolding := holdingsResult[0]
 
 	if requester.Vendor != string(directory.CrossLink) {
-		holdingsConfigSource := requester.CustomData
-		if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.HoldingsConfig != nil {
-			holdingsConfigSource = consortiumPeers[0].CustomData
-		}
+		holdingsConfigSource := configEntry
 		metadataSettings := holdings.GetMetadataSettings(holdingsConfigSource)
 		lookupHint := holdings.LookupHintFromParams(holdingsParams)
 		resolvedMode := holdings.ResolveMetadataUpdateMode(string(metadataSettings.Mode), lookupHint)
@@ -361,7 +327,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	aa, err := s.availabilityCreator.GetAdapter(peer)
+	aa, err := s.consortiumAdapter.GetAdapterSupplier(ctx, peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}
