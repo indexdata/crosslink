@@ -5,15 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/indexdata/crosslink/broker/common"
+	"github.com/indexdata/crosslink/broker/email"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/lms"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
+	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	"github.com/indexdata/crosslink/broker/shim"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
@@ -25,9 +30,11 @@ const COMP = "pr_action_service"
 type PatronRequestActionService struct {
 	PatronRequestMessageSender
 	prRepo               pr_db.PrRepo
+	illRepo              ill_db.IllRepo
 	eventBus             events.EventBus
 	lmsCreator           lms.LmsCreator
 	actionMappingService ActionMappingService
+	emailService         email.EmailService
 }
 
 type actionExecutionResult struct {
@@ -47,22 +54,25 @@ func (e *autoActionFailure) Error() string {
 }
 
 type actionParams struct {
-	Note           string   `json:"note,omitempty"`
-	LoanCondition  string   `json:"loanCondition,omitempty"`
-	Cost           *float64 `json:"cost,omitempty"`
-	Currency       string   `json:"currency,omitempty"`
-	ReasonUnfilled string   `json:"reasonUnfilled,omitempty"`
-	ReasonRetry    string   `json:"reasonRetry,omitempty"`
-	ItemID         string   `json:"itemId,omitempty"`
+	Note             string                     `json:"note,omitempty"`
+	LoanCondition    string                     `json:"loanCondition,omitempty"`
+	Cost             *float64                   `json:"cost,omitempty"`
+	Currency         string                     `json:"currency,omitempty"`
+	ReasonUnfilled   string                     `json:"reasonUnfilled,omitempty"`
+	ReasonRetry      string                     `json:"reasonRetry,omitempty"`
+	ItemID           string                     `json:"itemId,omitempty"`
+	AutoActionParams *proapi.ModelAction_Params `json:"autoActionParams,omitempty"`
 }
 
-func CreatePatronRequestActionService(prRepo pr_db.PrRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator) *PatronRequestActionService {
+func CreatePatronRequestActionService(prRepo pr_db.PrRepo, illRepo ill_db.IllRepo, eventBus events.EventBus, iso18626Handler handler.Iso18626HandlerInterface, lmsCreator lms.LmsCreator, emailService email.EmailService) *PatronRequestActionService {
 	return &PatronRequestActionService{
 		PatronRequestMessageSender: PatronRequestMessageSender{iso18626Handler: iso18626Handler, logErrorAndReturnResult: logActionErrorAndReturnResult},
 		prRepo:                     prRepo,
+		illRepo:                    illRepo,
 		eventBus:                   eventBus,
 		lmsCreator:                 lmsCreator,
 		actionMappingService:       ActionMappingService{SMService: &StateModelService{}},
+		emailService:               emailService,
 	}
 }
 
@@ -111,7 +121,7 @@ func (a *PatronRequestActionService) handleInvokeAction(ctx common.ExtendedConte
 	illRequest := pr.IllRequest
 	switch pr.Side {
 	case SideBorrowing:
-		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest, &event.ID)
+		execResult := a.handleBorrowingAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
 		return a.finalizeActionExecution(ctx, event, actionMapping, action, pr, execResult)
 	case SideLending:
 		execResult := a.handleLenderAction(ctx, action, pr, illRequest, event.EventData.CustomData, &event.ID)
@@ -251,10 +261,14 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 
 	currentState := pr.State
 	for _, action := range autoActions {
-		data := events.EventData{CommonEventData: events.CommonEventData{Action: &action, User: user}}
+		actionName := pr_db.PatronRequestAction(action.Name)
+		data := events.EventData{CommonEventData: events.CommonEventData{Action: &actionName, User: user}}
+		if action.Params != nil {
+			data.CustomData = map[string]any{"autoActionParams": action.Params}
+		}
 		eventID, err := a.eventBus.CreateTask(pr.ID, events.EventNameInvokeAction, data, events.EventDomainPatronRequest, parentEventID, events.SignalConsumers)
 		if err != nil {
-			return &autoActionFailure{action: action, msg: err.Error()}
+			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
 
 		autoEvent := events.Event{
@@ -265,21 +279,21 @@ func (a *PatronRequestActionService) RunAutoActionsOnStateEntry(ctx common.Exten
 		// Auto actions execute inline here to preserve synchronous state-transition semantics.
 		completedEvent, err := a.processInvokeActionTask(ctx, autoEvent)
 		if err != nil {
-			return &autoActionFailure{action: action, msg: err.Error()}
+			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
 		if completedEvent.EventStatus != events.EventStatusSuccess {
 			return &autoActionFailure{
-				action: action,
-				msg:    fmt.Sprintf("auto action %s failed with status %s%s", action, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
+				action: actionName,
+				msg:    fmt.Sprintf("auto action %s failed with status %s%s", actionName, completedEvent.EventStatus, autoActionErrorSuffix(completedEvent)),
 			}
 		}
 		if completedEvent.ResultData.ActionResult != nil && completedEvent.ResultData.ActionResult.ChildActionError != nil {
-			return &autoActionFailure{action: action, msg: *completedEvent.ResultData.ActionResult.ChildActionError}
+			return &autoActionFailure{action: actionName, msg: *completedEvent.ResultData.ActionResult.ChildActionError}
 		}
 
 		updatedPr, err := a.prRepo.GetPatronRequestById(ctx, pr.ID)
 		if err != nil {
-			return &autoActionFailure{action: action, msg: err.Error()}
+			return &autoActionFailure{action: actionName, msg: err.Error()}
 		}
 		stateChanged := updatedPr.State != currentState
 		if stateChanged {
@@ -300,7 +314,7 @@ func autoActionErrorSuffix(event events.Event) string {
 	return ""
 }
 
-func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, eventID *string) actionExecutionResult {
+func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedContext, action pr_db.PatronRequestAction, pr pr_db.PatronRequest, illRequest iso18626.Request, actionCustomData map[string]any, eventID *string) actionExecutionResult {
 	if !pr.RequesterSymbol.Valid {
 		status, result := logActionErrorAndReturnResult(ctx, "missing requester symbol", nil)
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -324,6 +338,12 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 			ctx.Logger().Error("failed to create LMS log event", "error", createErr)
 		}
 	})
+	var params actionParams
+	err = common.MapToStruct(actionCustomData, &params)
+	if err != nil {
+		status, result := logActionErrorAndReturnResult(ctx, "failed to unmarshal action parameters", err)
+		return actionExecutionResult{status: status, result: result, pr: pr}
+	}
 	switch action {
 	case BorrowerActionValidate:
 		return a.validateBorrowingRequest(ctx, pr, lmsAdapter)
@@ -347,6 +367,8 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 		return a.rejectRetryBorrowingRequest(pr)
 	case BorrowerActionAcceptRetry:
 		return a.acceptRetryBorrowingRequest(ctx, pr)
+	case BorrowerActionSendNotification:
+		return a.sendNotificationBorrowingRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "borrower action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -403,6 +425,8 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 		return a.acceptCancelLenderRequest(ctx, pr)
 	case LenderActionAskRetry:
 		return a.askRetryLenderRequest(ctx, pr, params)
+	case LenderActionSendNotification:
+		return a.sendNotificationLenderRequest(ctx, pr, params)
 	default:
 		status, result := logActionErrorAndReturnResult(ctx, "lender action "+string(action)+" is not implemented yet", errors.New("invalid action"))
 		return actionExecutionResult{status: status, result: result, pr: pr}
@@ -655,6 +679,13 @@ func (a *PatronRequestActionService) acceptRetryBorrowingRequest(ctx common.Exte
 	}
 	pr.NextReqID = getDbTextPtr(&retryPr.ID)
 	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr, retryPr: retryPr}
+}
+
+func (a *PatronRequestActionService) sendNotificationBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	if !a.emailService.IsReadyToSend() {
+		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+	}
+	return a.sendEmailNotification(ctx, pr, params, pr.RequesterSymbol.String)
 }
 
 func (a *PatronRequestActionService) validateLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lms lms.LmsAdapter) actionExecutionResult {
@@ -933,6 +964,122 @@ func (a *PatronRequestActionService) askRetryLenderRequest(ctx common.ExtendedCo
 		setSupplierMessage(*result.OutgoingMessage.SupplyingAgencyMessage, &pr)
 	}
 	return a.checkSupplyingResponse(status, eventResult, &result, httpStatus, pr)
+}
+
+func (a *PatronRequestActionService) sendNotificationLenderRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams) actionExecutionResult {
+	if !a.emailService.IsReadyToSend() {
+		return actionExecutionResult{status: events.EventStatusSuccess, result: &events.EventResult{CommonEventData: events.CommonEventData{Note: "email service is not ready to send"}}, pr: pr}
+	}
+	return a.sendEmailNotification(ctx, pr, params, pr.SupplierSymbol.String)
+}
+
+func logErrorAndReturnActionExecutionResult(ctx common.ExtendedContext, pr pr_db.PatronRequest, msg string, err error) actionExecutionResult {
+	status, result := logActionErrorAndReturnResult(ctx, msg, err)
+	return actionExecutionResult{status: status, result: result, pr: pr}
+}
+
+func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedContext, pr pr_db.PatronRequest, params actionParams, symbol string) actionExecutionResult {
+	result := events.EventResult{}
+	if params.AutoActionParams != nil && params.AutoActionParams.SendTo != nil && len(*params.AutoActionParams.SendTo) > 0 {
+		if params.AutoActionParams.TemplateLabel == nil {
+			return logErrorAndReturnActionExecutionResult(ctx, pr, "template label is not set", nil)
+		}
+		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.Staff))
+		if err != nil {
+			return logErrorAndReturnActionExecutionResult(ctx, pr, "error getting directory email data", err)
+		}
+		if slices.Contains(*params.AutoActionParams.SendTo, proapi.Patron) {
+			recipients := patronEmail(pr)
+			if len(recipients) == 0 {
+				result.Note = "no recipients found for patron"
+			} else {
+				sendErr := a.createAndSendEmail(from, recipients, *params.AutoActionParams.TemplateLabel)
+				if sendErr != nil {
+					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to patron", sendErr)
+				}
+				result.Note = "patron email sent successfully"
+			}
+		}
+		if slices.Contains(*params.AutoActionParams.SendTo, proapi.Staff) {
+			var recipients []string
+			for _, r := range strings.Split(*to, ";") {
+				if trimmed := strings.TrimSpace(r); trimmed != "" {
+					recipients = append(recipients, trimmed)
+				}
+			}
+			if len(recipients) == 0 {
+				if result.Note != "" {
+					result.Note += "; "
+				}
+				result.Note += "no recipients found for staff"
+			} else {
+				sendErr := a.createAndSendEmail(from, recipients, *params.AutoActionParams.TemplateLabel)
+				if sendErr != nil {
+					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to staff", sendErr)
+				}
+				result.Note = "staff email sent successfully"
+			}
+		}
+	}
+	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
+}
+
+func (a *PatronRequestActionService) createAndSendEmail(from string, recipients []string, template string) error {
+	emailData := email.EmailData{
+		To:         recipients,
+		Subject:    "Request changed state, ILLDEV-354-" + template,
+		Body:       "Request changed state, ILLDEV-354-" + template,
+		IsHTML:     true,
+		IncludePdf: false,
+	}
+	raw, messageErr := email.BuildRawMessage(from, emailData, nil)
+	if messageErr != nil {
+		return messageErr
+	}
+	sendErr := a.emailService.SendEmail(from, recipients, raw)
+	if sendErr != nil {
+		return sendErr
+	}
+	return nil
+}
+
+func patronEmail(pr pr_db.PatronRequest) []string {
+	var addresses []string
+	if pr.IllRequest.PatronInfo == nil {
+		return addresses
+	}
+
+	for _, address := range pr.IllRequest.PatronInfo.Address {
+		if address.ElectronicAddress == nil {
+			continue
+		}
+
+		email := address.ElectronicAddress
+		if email.ElectronicAddressData == "" {
+			continue
+		}
+
+		if email.ElectronicAddressType.Text == string(iso18626.ElectronicAddressTypeEmail) {
+			addresses = append(addresses, email.ElectronicAddressData)
+		}
+	}
+
+	return addresses
+}
+
+func (a *PatronRequestActionService) getDirectoryEmailData(ctx common.ExtendedContext, symbol string, toNeeded bool) (string, *string, error) {
+	dir, err := a.illRepo.GetPeerBySymbol(ctx, symbol)
+	toEmail := ""
+	if err != nil {
+		return "", &toEmail, err
+	}
+	if dir.CustomData.FromEmail == nil || *dir.CustomData.FromEmail == "" {
+		return "", &toEmail, errors.New("from email is not configured")
+	}
+	if toNeeded && (dir.CustomData.Email == nil || *dir.CustomData.Email == "") {
+		return "", &toEmail, errors.New("email is not configured")
+	}
+	return *dir.CustomData.FromEmail, dir.CustomData.Email, nil
 }
 
 func (a *PatronRequestActionService) checkSupplyingResponse(status events.EventStatus, eventResult *events.EventResult, result *events.EventResult, httpStatus *int, pr pr_db.PatronRequest) actionExecutionResult {

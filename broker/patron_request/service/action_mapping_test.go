@@ -19,16 +19,17 @@ func TestNewReturnableActionMapping(t *testing.T) {
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
-		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}},
+		BorrowerStateShipped:          {{actionName: BorrowerActionReceive}, {actionName: BorrowerActionSendNotification, auto: true}},
 		BorrowerStateReceived:         {{actionName: BorrowerActionCheckOut}},
 		BorrowerStateCheckedOut:       {{actionName: BorrowerActionCheckIn}},
 		BorrowerStateCheckedIn:        {{actionName: BorrowerActionShipReturn}},
 		BorrowerStateRetryPending:     {{actionName: BorrowerActionAcceptRetry}, {actionName: BorrowerActionRejectRetry}},
+		BorrowerStateUnfilled:         {{actionName: BorrowerActionSendNotification, auto: true}},
 	}
 
 	lenderStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		LenderStateNew:               {{actionName: LenderActionValidate, auto: true}},
-		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}},
+		LenderStateValidated:         {{actionName: LenderActionWillSupply, auto: true}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAddCondition}, {actionName: LenderActionAskRetry}, {actionName: LenderActionSendNotification, auto: true}},
 		LenderStateWillSupply:        {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}, {actionName: LenderActionAskRetry}},
 		LenderStateConditionPending:  {{actionName: LenderActionAddCondition}, {actionName: LenderActionCannotSupply}},
 		LenderStateConditionAccepted: {{actionName: LenderActionAddCondition}, {actionName: LenderActionShip}, {actionName: LenderActionCannotSupply}},
@@ -136,18 +137,18 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 	mapping := mustActionMapping(t)
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}}, mapping.GetAllowedActionsForPatronRequest(
 		pr_db.PatronRequest{
-			Side: SideBorrowing, State: BorrowerStateNew}))
+			Side: SideBorrowing, State: BorrowerStateNew}, true))
 
 	tt := true
-	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt}}},
-		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt, Available: false}}},
+		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, false))
 
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{
-		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}},
-		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt},
-		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}},
-		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}},
-	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}))
+		{Name: string(LenderActionAddCondition), Parameters: []string{"note", "loanCondition", "cost", "currency"}, Available: true},
+		{Name: string(LenderActionShip), Parameters: []string{"note"}, Primary: &tt, Available: true},
+		{Name: string(LenderActionCannotSupply), Parameters: []string{"note", "reasonUnfilled"}, Available: true},
+		{Name: string(LenderActionAskRetry), Parameters: []string{"note", "reasonRetry", "itemId"}, Available: true},
+	}}, mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideLending, State: LenderStateWillSupply}, true))
 }
 
 func TestGetActionTransitionMissingCases(t *testing.T) {

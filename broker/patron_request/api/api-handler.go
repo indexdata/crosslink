@@ -524,7 +524,20 @@ func (a *PatronRequestApiHandler) GetPatronRequestsIdActions(w http.ResponseWrit
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	actions := actionMapping.GetAllowedActionsForPatronRequest(*pr)
+	_, err = a.eventRepo.GetOlderIncompleteEvent(ctx, events.Event{
+		ID: uuid.NewString(),
+		Timestamp: pgtype.Timestamp{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		EventType:        events.EventTypeTask,
+		EventName:        events.EventNameInvokeAction,
+		EventStatus:      events.EventStatusNew,
+		PatronRequestID:  pr.ID,
+		IllTransactionID: events.DEFAULT_ILL_TRANSACTION_ID,
+	})
+	available := err != nil && errors.Is(err, pgx.ErrNoRows)
+	actions := actionMapping.GetAllowedActionsForPatronRequest(*pr, available)
 	api.WriteJsonResponse(w, actions)
 }
 

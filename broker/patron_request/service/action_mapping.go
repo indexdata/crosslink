@@ -60,7 +60,7 @@ type ActionMapping struct {
 type stateConfig struct {
 	actions        map[pr_db.PatronRequestAction]proapi.ModelAction
 	events         map[string]proapi.ModelEvent
-	autoActions    []pr_db.PatronRequestAction
+	autoActions    []proapi.ModelAction
 	terminal       bool
 	needsAttention bool
 }
@@ -97,7 +97,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 				entry := PatronRequestAction{actionName: pr_db.PatronRequestAction(action.Name)}
 				currentStateConfig.actions[entry.actionName] = action
 				if action.Trigger != nil && strings.EqualFold(string(*action.Trigger), string(proapi.Auto)) {
-					currentStateConfig.autoActions = append(currentStateConfig.autoActions, entry.actionName)
+					currentStateConfig.autoActions = append(currentStateConfig.autoActions, action)
 					entry.auto = true
 				}
 				if state.PrimaryAction != nil && string(*state.PrimaryAction) == action.Name {
@@ -147,7 +147,7 @@ func NewActionMapping(stateModel *proapi.StateModel) *ActionMapping {
 }
 
 func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
-	info := r.GetAllowedActionsForPatronRequest(pr)
+	info := r.GetAllowedActionsForPatronRequest(pr, true)
 	actions := make([]pr_db.PatronRequestAction, 0, len(info.Actions))
 	for _, action := range info.Actions {
 		actions = append(actions, pr_db.PatronRequestAction(action.Name))
@@ -155,7 +155,7 @@ func (r *ActionMapping) GetActionsForPatronRequest(pr pr_db.PatronRequest) []pr_
 	return actions
 }
 
-func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest) proapi.AllowedActions {
+func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest, available bool) proapi.AllowedActions {
 	prLastActionFailed := strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusError)) ||
 		strings.EqualFold(pr.LastActionResult.String, string(events.EventStatusProblem))
 	hasFailed := false
@@ -192,6 +192,7 @@ func (r *ActionMapping) GetAllowedActionsForPatronRequest(pr pr_db.PatronRequest
 						Name:       capability.Name,
 						Parameters: capability.Parameters,
 						Primary:    primary,
+						Available:  available,
 					})
 			}
 		}
@@ -249,12 +250,12 @@ func (r *ActionMapping) GetEventTransition(pr pr_db.PatronRequest, eventName str
 	return pr_db.PatronRequestState(*eventConfig.Transition), true, true
 }
 
-func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []pr_db.PatronRequestAction {
+func (r *ActionMapping) GetAutoActionsForState(pr pr_db.PatronRequest) []proapi.ModelAction {
 	stateConfig, ok := r.getStateConfig(pr)
 	if !ok || len(stateConfig.autoActions) == 0 {
-		return []pr_db.PatronRequestAction{}
+		return []proapi.ModelAction{}
 	}
-	return append([]pr_db.PatronRequestAction{}, stateConfig.autoActions...)
+	return append([]proapi.ModelAction{}, stateConfig.autoActions...)
 }
 
 // GetInitialState returns the initial state for the given side, as defined in the state model.
