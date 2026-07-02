@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
+
+var errNotFound = fmt.Errorf("state model not found")
 
 type StateModelService struct {
 	stateMap map[string]*proapi.StateModel
@@ -48,7 +49,7 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 
 	stateModel, err := LoadStateModelByName(modelName)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, errNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -64,7 +65,7 @@ var stateModelsConfig StateModelsConfig
 func LoadStateModelByName(modelName string) (*proapi.StateModel, error) {
 	stateModel, ok := stateModelsConfig.StateModels[modelName]
 	if !ok {
-		return nil, fmt.Errorf("state model %s not found", modelName)
+		return nil, errNotFound
 	}
 	if err := ValidateStateModel(&stateModel); err != nil {
 		return nil, err
