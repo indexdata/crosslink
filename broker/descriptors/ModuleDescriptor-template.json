@@ -151,6 +151,24 @@
           ]
         },
         {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/capabilities",
+          "permissionsRequired" : [
+            "broker.state_model.capabilities.get"
+          ]
+        },
+        {
+          "methods" : [
+            "GET"
+          ],
+          "pathPattern": "/broker/state_model/batch_actions",
+          "permissionsRequired" : [
+            "broker.state_model.batch_actions.get"
+          ]
+        },
+        {
           "methods": [
             "GET"
           ],
@@ -536,6 +554,18 @@
       "visible": true
     },
     {
+      "description": "Read state model capabilities",
+      "displayName": "Broker - state model capabilities: read",
+      "permissionName": "broker.state_model.capabilities.get",
+      "visible": true
+    },
+    {
+      "description": "Read state model batch actions defaults",
+      "displayName": "Broker - state model batch actions defaults: read",
+      "permissionName": "broker.state_model.batch_actions.get",
+      "visible": true
+    },
+    {
       "description": "All broker permissions (read and write)",
       "displayName": "Broker - all permissions",
       "permissionName": "broker.all",
@@ -557,6 +587,8 @@
         "broker.patron_requests.item.action.post",
         "broker.patron_requests.item.terminate.post",
         "broker.state_model.item.get",
+        "broker.state_model.capabilities.get",
+        "broker.state_model.batch_actions.get",
         "broker.patron_requests.item.items.get",
         "broker.patron_requests.item.notifications.get",
         "broker.patron_requests.item.notifications.post",
