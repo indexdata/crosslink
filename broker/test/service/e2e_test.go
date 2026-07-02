@@ -23,6 +23,7 @@ import (
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -154,6 +155,7 @@ func TestRequestUNFILLED(t *testing.T) {
 		"TASK, confirm-supplier-msg = SUCCESS\n" +
 		"TASK, select-supplier = PROBLEM, problem=no-suppliers\n" +
 		"TASK, message-requester = SUCCESS\n"
+
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 
 	data, err = os.ReadFile("../testdata/request-retry-after-unfilled.xml")
@@ -250,6 +252,7 @@ func TestMessageAfterUNFILLED(t *testing.T) {
 func TestMessageSkipped(t *testing.T) {
 	adapter.DEFAULT_BROKER_MODE = common.BrokerModeTransparent
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f362"
 	data, _ := os.ReadFile("../testdata/request-unfilled-willsupply.xml")
 	req, _ := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader(data))
@@ -373,7 +376,7 @@ func TestRequestWILLSUPPLY_LOANED(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque))
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-0", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-0"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(string(data), "{index}", "0")
@@ -420,7 +423,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeOpaque_Broker(t *testing.T) {
 
 func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
-	requester := apptest.CreatePeerWithMode(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent))
+	requester := apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:REQ-CANCEL-3", adapter.MOCK_PEER_URL, string(common.BrokerModeTransparent), directory.ReShare, directory.Entry{})
 	reqId := "5636c993-c41c-48f4-a285-470545f6f345-3"
 	data, _ := os.ReadFile("../testdata/request-willsupply-loaned-cancel.xml")
 	stringData := strings.ReplaceAll(strings.ReplaceAll(string(data), "{index}", "3"), "BROKER", "SUP1")
@@ -474,7 +477,7 @@ func TestRequestWILLSUPPLY_LOANED_Cancel_BrokerModeTransparent_Supplier(t *testi
 		"NOTICE, supplier-msg-received = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, message-requester = SUCCESS, reason=StatusChange, LoanCompleted\n"+
 		"TASK, confirm-supplier-msg = SUCCESS\n",
-		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 25, false, formatEvent))
+		apptest.EventsToCompareStringFunc(appCtx, eventRepo, t, illTrans.ID, 27, false, formatEvent))
 }
 
 func TestRequestUNFILLED_LOANED(t *testing.T) {
@@ -873,6 +876,91 @@ func TestRequestRETRY_CHANGED_BIBINFO(t *testing.T) {
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }
 
+// TestMetadataUpdateReplace verifies that when metadataUpdateMode=replace, the ILL transaction's
+// SupplierUniqueRecordId is overwritten with the LocalIdentifier returned by the holdings lookup.
+// The input XML carries "return-ISIL:META-REP-SUP::WILLSUPPLY" as the SupplierUniqueRecordId;
+// the mock holdings adapter strips the "return-" prefix and returns LocalIdentifier="WILLSUPPLY",
+// which replace mode writes back to the transaction in the DB.
+func TestMetadataUpdateReplace(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	replaceMode := directory.Replace
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:META-REP", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{
+			MetadataUpdateMode: &replaceMode,
+		},
+	})
+	reqId := "5636c993-c41c-48f4-a285-470545f6f390"
+	data, err := os.ReadFile("../testdata/request-metadata-update.xml")
+	assert.NoError(t, err, "failed to read test data file")
+	stringData := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(data),
+		"{reqid}", reqId),
+		"{requester}", "META-REP"),
+		"{supplierid}", "return-ISIL:META-REP-SUP::WILLSUPPLY")
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	assert.NoError(t, err, "failed to create request")
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusWillSupply) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	// SupplierUniqueRecordId must have been replaced with the holdings LocalIdentifier "WILLSUPPLY",
+	// not left as the original "return-ISIL:META-REP-SUP::WILLSUPPLY" from the incoming request.
+	assert.Equal(t, "WILLSUPPLY", illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId)
+}
+
+// TestMetadataUpdateMerge verifies that when metadataUpdateMode=merge, an already-set
+// SupplierUniqueRecordId is preserved and not overwritten by the holdings lookup result.
+// The input XML carries "return-ISIL:META-MRG-SUP::WILLSUPPLY" as the SupplierUniqueRecordId;
+// the mock returns LocalIdentifier="WILLSUPPLY", but merge mode keeps the original value intact.
+func TestMetadataUpdateMerge(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	mergeMode := directory.Merge
+	_ = apptest.CreatePeerWithModeAndVendor(t, illRepo, "ISIL:META-MRG", adapter.MOCK_PEER_URL, string(common.BrokerModeOpaque), directory.ReShare, directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{
+			MetadataUpdateMode: &mergeMode,
+		},
+	})
+	reqId := "5636c993-c41c-48f4-a285-470545f6f391"
+	data, err := os.ReadFile("../testdata/request-metadata-update.xml")
+	assert.NoError(t, err, "failed to read test data file")
+	// The outgoing SupplierUniqueRecordId after merge will still be "return-ISIL:META-MRG-SUP::WILLSUPPLY"
+	// (original preserved), which doesn't match a known supplier scenario, so the mock supplier
+	// responds with Unfilled. We wait for that terminal state before asserting the DB value.
+	stringData := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(string(data),
+		"{reqid}", reqId),
+		"{requester}", "META-MRG"),
+		"{supplierid}", "return-ISIL:META-MRG-SUP::WILLSUPPLY")
+	req, err := http.NewRequest("POST", adapter.MOCK_PEER_URL, bytes.NewReader([]byte(stringData)))
+	assert.NoError(t, err, "failed to create request")
+	req.Header.Add("Content-Type", "application/xml")
+	client := &http.Client{}
+	res, err := client.Do(req)
+	assert.NoError(t, err, "failed to send request to mock")
+	assert.Equal(t, http.StatusOK, res.StatusCode, "handler returned wrong status code")
+
+	var illTrans ill_db.IllTransaction
+	test.WaitForPredicateToBeTrue(func() bool {
+		illTrans, err = illRepo.GetIllTransactionByRequesterRequestId(appCtx, getPgText(reqId))
+		if err != nil {
+			t.Errorf("failed to find ill transaction by requester request id %v", reqId)
+		}
+		return illTrans.LastSupplierStatus.String == string(iso18626.TypeStatusUnfilled) &&
+			illTrans.LastRequesterAction.String == "Request"
+	})
+	// SupplierUniqueRecordId must be the original value from the request, not "WILLSUPPLY"
+	// from the holdings lookup, because merge preserves non-empty existing values.
+	assert.Equal(t, "return-ISIL:META-MRG-SUP::WILLSUPPLY", illTrans.IllTransactionData.BibliographicInfo.SupplierUniqueRecordId)
+}
+
 func getPgText(value string) pgtype.Text {
 	return pgtype.Text{
 		String: value,
@@ -882,13 +970,16 @@ func getPgText(value string) pgtype.Text {
 
 func formatEvent(e events.Event) string {
 	if e.EventName == "message-supplier" {
-		if e.ResultData.OutgoingMessage.RequestingAgencyMessage != nil {
+		if e.ResultData.OutgoingMessage != nil && e.ResultData.OutgoingMessage.RequestingAgencyMessage != nil {
 			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.RequestingAgencyMessage.Action)
 		} else {
 			return fmt.Sprintf(apptest.EventRecordFormat+", %v", e.EventType, e.EventName, e.EventStatus, "Request")
 		}
 	}
 	if e.EventName == "message-requester" {
+		if e.ResultData.OutgoingMessage == nil || e.ResultData.OutgoingMessage.SupplyingAgencyMessage == nil {
+			return fmt.Sprintf(apptest.EventRecordFormat, e.EventType, e.EventName, e.EventStatus)
+		}
 		return fmt.Sprintf(apptest.EventRecordFormat+", reason=%v, %v", e.EventType, e.EventName, e.EventStatus, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.MessageInfo.ReasonForMessage, e.ResultData.OutgoingMessage.SupplyingAgencyMessage.StatusInfo.Status)
 	}
 	if e.EventName == "supplier-msg-received" {

@@ -760,9 +760,12 @@ func (c *Iso18626Client) createAndSendRequestOrRequestingAgencyMessage(ctx commo
 
 func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, iso18626.TypeAction) {
 	var message = iso18626.NewISO18626Message()
+	bibliographicInfo := trCtx.transaction.IllTransactionData.BibliographicInfo
+
+	bibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	message.Request = &iso18626.Request{
 		Header:                createMessageHeader(*trCtx.transaction, trCtx.selectedSupplier, true, trCtx.selectedSupplierPeer.BrokerMode),
-		BibliographicInfo:     trCtx.transaction.IllTransactionData.BibliographicInfo,
+		BibliographicInfo:     bibliographicInfo,
 		PublicationInfo:       trCtx.transaction.IllTransactionData.PublicationInfo,
 		ServiceInfo:           trCtx.transaction.IllTransactionData.ServiceInfo,
 		SupplierInfo:          trCtx.transaction.IllTransactionData.SupplierInfo,
@@ -771,7 +774,6 @@ func createRequestMessage(trCtx transactionContext) (*iso18626.ISO18626Message, 
 		BillingInfo:           trCtx.transaction.IllTransactionData.BillingInfo,
 		RequestingAgencyInfo:  trCtx.transaction.IllTransactionData.RequestingAgencyInfo,
 	}
-	message.Request.BibliographicInfo.SupplierUniqueRecordId = trCtx.selectedSupplier.LocalID.String
 	requesterName, _, deliveryAddress, email := getPeerInfo(trCtx.requester, trCtx.transaction.RequesterSymbol.String)
 	if appendRequestingAgencyInfo {
 		populateRequesterInfo(message, requesterName, deliveryAddress, email)

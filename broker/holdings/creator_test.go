@@ -185,3 +185,36 @@ func TestGetAdapterSRU(t *testing.T) {
 	assert.NoError(t, err)
 	assert.IsType(t, &SruHoldingsLookupAdapter{}, aa)
 }
+
+func TestGetMetadataSettingsDefaults(t *testing.T) {
+	settings := GetMetadataSettings(directory.Entry{})
+	assert.Equal(t, directory.None, settings.Mode)
+	assert.Equal(t, directory.Marc21, settings.Format)
+}
+
+func TestGetMetadataSettingsConfigured(t *testing.T) {
+	mode := directory.Auto
+	format := directory.Marc21
+	settings := GetMetadataSettings(directory.Entry{
+		HoldingsConfig: &directory.HoldingsConfig{
+			MetadataUpdateMode: &mode,
+			MetadataFormat:     &format,
+		},
+	})
+	assert.Equal(t, directory.Auto, settings.Mode)
+	assert.Equal(t, directory.Marc21, settings.Format)
+}
+
+func TestResolveMetadataUpdateMode(t *testing.T) {
+	assert.Equal(t, directory.None, ResolveMetadataUpdateMode("", ""))
+	assert.Equal(t, directory.Replace, ResolveMetadataUpdateMode("replace", ""))
+	assert.Equal(t, directory.Merge, ResolveMetadataUpdateMode("merge", ""))
+	assert.Equal(t, directory.Replace, ResolveMetadataUpdateMode("auto", LookupHintIdentifier))
+	assert.Equal(t, directory.Merge, ResolveMetadataUpdateMode("auto", LookupHintIsxn))
+}
+
+func TestResolveMetadataFormat(t *testing.T) {
+	assert.Equal(t, directory.Marc21, ResolveMetadataFormat(""))
+	assert.Equal(t, directory.Marc21, ResolveMetadataFormat("marc21"))
+	assert.Equal(t, directory.MetadataFormat("opac"), ResolveMetadataFormat("opac"))
+}

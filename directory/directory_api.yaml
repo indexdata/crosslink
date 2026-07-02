@@ -278,7 +278,26 @@ components:
           $ref: '#/components/schemas/QueryConfig'
         parserConfig:
           $ref: '#/components/schemas/ParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataFormat'
       additionalProperties: false
+
+    MetadataUpdateMode:
+      type: string
+      description: Determines how lookup metadata updates the outgoing ILL request metadata.
+      enum:
+        - replace
+        - merge
+        - none
+        - auto
+
+    MetadataFormat:
+      type: string
+      description: Metadata format used when mapping lookup metadata to ILL request fields.
+      enum:
+        - marc21
 
     SruConfig:
       type: object
