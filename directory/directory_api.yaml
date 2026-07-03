@@ -349,7 +349,7 @@ components:
     MetadataParserConfig:
       type: object
       properties:
-        marc:
+        marc21:
           $ref: '#/components/schemas/MarcMetadataParserConfig'
       additionalProperties: false
 
@@ -367,7 +367,16 @@ components:
           description: Subfield code to use for ISSN (for example, "022$a")
         title:
           type: string
-          description: Subfield code to use for title (for example, "245$a")
+          description: Subfield code to use for title (for example, "245$a$n$p")
+        subtitle:
+          type: string
+          description: Subfield code to use for subtitle (for example, "245$b")
+        author:
+          type: string
+          description: Subfield code to use for author (for example, "100$a/100$?/110$a/110$?/111$a/111$?/245$c")
+        edition:
+          type: string
+          description: Subfield code to use for edition (for example, "250$a")
       additionalProperties: false
 
     ParserConfig:

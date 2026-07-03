@@ -38,6 +38,9 @@ type MetadataParser interface {
 type Metadata struct {
 	Identifier string
 	Title      string
+	Subtitle   string
+	Author     string
+	Edition    string
 	Isbn       string
 	Issn       string
 }

@@ -29,8 +29,8 @@ func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, 
 	if config == nil {
 		return nil, nil
 	}
-	if config.Marc != nil {
-		return NewMetadataParserMarc(*config.Marc), nil
+	if config.Marc21 != nil {
+		return NewMetadataParserMarc(*config.Marc21), nil
 	}
 	return nil, fmt.Errorf("availabilityConfig.metadataFormat only marc supported for now")
 }
