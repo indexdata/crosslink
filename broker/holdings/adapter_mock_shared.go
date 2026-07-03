@@ -53,5 +53,6 @@ func (m *MockHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holdi
 
 func (m *MockHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
 	var metadata Metadata
+	metadata.Identifier = params.Identifier
 	return metadata, nil
 }
