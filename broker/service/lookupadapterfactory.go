@@ -38,6 +38,7 @@ func (s *LookupAdapterFactory) resolveConfigPeer(ctx common.ExtendedContext, req
 		return ill_db.Peer{}, fmt.Errorf("lookup adapter factory misconfigured: consortiumSymbol set but illRepo/dirAdapter is nil")
 	}
 	consortiumPeers, _, err := s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
+	if err != nil {
 		return ill_db.Peer{}, fmt.Errorf("failed to lookup consortium peer: %w", err)
 	}
 	if len(consortiumPeers) == 0 {
