@@ -40,18 +40,20 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder Lookup
 	return a, nil
 }
 
-func (a *ZoomAvailabilityAdapter) searchRetrieve(params LookupParams, conn *zoom.Connection, query *zoom.Query) ([]Holding, error) {
+// searchRetrieve executes a Z39.50 search and iterates over the result records,
+// calling processRecord for each XML buffer. processRecord should return true to
+// continue iterating and false to stop early (e.g. after the first metadata hit).
+func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Query, processRecord func([]byte) (bool, error)) error {
 	set, err := conn.Search(query)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer set.Close()
-	var avail []Holding
 	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
 	for i := 0; i < limit; i++ {
 		rec, err := set.GetRecord(i)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if rec == nil {
 			continue
@@ -61,61 +63,89 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(params LookupParams, conn *zoom
 		if xmlBuffer == nil {
 			continue
 		}
-		holdings, err := a.holdingsParser.Parse(xmlBuffer, params)
+		cont, err := processRecord(xmlBuffer)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+			return err
 		}
-		avail = append(avail, holdings...)
+		if !cont {
+			break
+		}
 	}
-	return avail, nil
+	return nil
 }
 
-func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
+// iterateQueries drives the PQF-then-CQL query loop, calling searchRetrieve for
+// each query with processRecord. After each query it calls shouldContinueQuery; if
+// shouldContinueQuery returns false the loop stops and the current query string is
+// returned. Both HoldingsLookup and MetadataLookup use this to share the iteration
+// logic while differing only in their per-record gathering and stop condition.
+func (a *ZoomAvailabilityAdapter) iterateQueries(
+	params LookupParams,
+	processRecord func([]byte) (bool, error),
+	shouldContinueQuery func() bool,
+) (string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
-	err := conn.Connect(a.zurl)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to connect to Z39.50 server: %w", err)
+	var pqfList []string
+	var cqlList []string
+	if err := conn.Connect(a.zurl); err != nil {
+		return "", fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
 	cqlList, pqfList, err := a.queryBuilder.Build(params)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to build query: %w", err)
+		return "", fmt.Errorf("failed to build query: %w", err)
 	}
+
 	if len(pqfList) == 0 && len(cqlList) == 0 {
-		return nil, "", fmt.Errorf("no valid query parameters provided")
+		return "", fmt.Errorf("no valid query parameters provided")
 	}
 	for _, pqf := range pqfList {
 		query, err := zoom.NewPqfQuery(pqf)
 		if err != nil {
-			return nil, pqf, fmt.Errorf("failed to create PQF query: %w", err)
+			return pqf, fmt.Errorf("failed to create PQF query: %w", err)
 		}
-		avail, err := a.searchRetrieve(params, conn, query)
+		err = a.searchRetrieve(conn, query, processRecord)
 		query.Close()
 		if err != nil {
-			return nil, pqf, fmt.Errorf("failed to search server with PQF: %s err %w", pqf, err)
+			return pqf, fmt.Errorf("failed to search server with PQF: %s err %w", pqf, err)
 		}
-		if len(avail) > 0 {
-			return avail, pqf, nil
+		if !shouldContinueQuery() {
+			return pqf, nil
 		}
 	}
 	for _, cql := range cqlList {
 		query, err := zoom.NewCqlQuery(cql)
 		if err != nil {
-			return nil, cql, fmt.Errorf("failed to create CQL query: %w", err)
+			return cql, fmt.Errorf("failed to create CQL query: %w", err)
 		}
-		avail, err := a.searchRetrieve(params, conn, query)
+		err = a.searchRetrieve(conn, query, processRecord)
 		query.Close()
 		if err != nil {
-			return nil, cql, fmt.Errorf("failed to search server with CQL: %s err %w", cql, err)
+			return cql, fmt.Errorf("failed to search server with CQL: %s err %w", cql, err)
 		}
-		if len(avail) > 0 {
-			return avail, cql, nil
+		if !shouldContinueQuery() {
+			return cql, nil
 		}
 	}
 	if len(pqfList) > 0 {
-		return nil, pqfList[0], nil
+		return pqfList[0], nil
 	}
-	return nil, cqlList[0], nil
+	return cqlList[0], nil
+}
+
+func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
+	var avail []Holding
+	usedQuery, err := a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
+		h, err := a.holdingsParser.Parse(xmlBuffer, params)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+		}
+		avail = append(avail, h...)
+		return true, nil
+	}, func() bool {
+		return len(avail) == 0
+	})
+	return avail, usedQuery, err
 }
 
 func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
@@ -123,54 +153,17 @@ func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata,
 	if a.metadataParser == nil {
 		return metadata, fmt.Errorf("metadata parser not configured")
 	}
-	conn := zoom.NewConnection(a.options)
-	defer conn.Close()
-	err := conn.Connect(a.zurl)
-	if err != nil {
-		return metadata, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
-	}
-	cqlList, pqfList, err := a.queryBuilder.Build(params)
-	if err != nil {
-		return metadata, fmt.Errorf("failed to build query: %w", err)
-	}
-	var query *zoom.Query
-	if len(pqfList) > 0 {
-		query, err = zoom.NewPqfQuery(pqfList[0])
+	found := false
+	_, err := a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
+		parsed, err := a.metadataParser.Parse(xmlBuffer)
 		if err != nil {
-			return metadata, fmt.Errorf("failed to create PQF query: %w", err)
+			return false, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
 		}
-	} else if len(cqlList) > 0 {
-		query, err = zoom.NewCqlQuery(cqlList[0])
-		if err != nil {
-			return metadata, fmt.Errorf("failed to create CQL query: %w", err)
-		}
-	} else {
-		return metadata, fmt.Errorf("no valid query parameters provided")
-	}
-	set, err := conn.Search(query)
-	if err != nil {
-		return metadata, err
-	}
-	defer set.Close()
-	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
-	for i := 0; i < limit; i++ {
-		rec, err := set.GetRecord(i)
-		if err != nil {
-			return metadata, err
-		}
-		if rec == nil {
-			continue
-		}
-		xmlBuffer := rec.Data("xml;charset=utf-8")
-		rec.Close()
-		if xmlBuffer == nil {
-			continue
-		}
-		metadata, err = a.metadataParser.Parse(xmlBuffer)
-		if err != nil {
-			return metadata, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
-		}
-		return metadata, nil
-	}
-	return metadata, nil
+		metadata = parsed
+		found = true
+		return false, nil // stop after first record
+	}, func() bool {
+		return !found
+	})
+	return metadata, err
 }
