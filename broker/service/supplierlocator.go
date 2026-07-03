@@ -70,6 +70,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
 
+	if s.lookupAdapterFactory == nil {
+		return events.LogErrorAndReturnResult(ctx, "lookup adapter factory not configured", fmt.Errorf("lookup adapter factory is nil"))
+	}
+
 	lookupAdapter, err := s.lookupAdapterFactory.GetLookupAdapter(ctx, requester)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
