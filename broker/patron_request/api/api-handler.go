@@ -370,7 +370,7 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 		if len(peers) == 0 {
-			api.AddBadRequestError(ctx, w, errors.New("no cached peers found"))
+			api.AddInternalError(ctx, w, errors.New("no cached peers found"))
 			return
 		}
 		requesterPeer := peers[0]
