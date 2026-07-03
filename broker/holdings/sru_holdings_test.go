@@ -34,7 +34,7 @@ func TestSru500(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "500")
 }
@@ -51,7 +51,7 @@ func TestSruBadXml(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unexpected EOF")
 }
@@ -85,7 +85,7 @@ func TestSruBadDiagnostics(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "General system error: Something went wrong")
 }
@@ -110,7 +110,7 @@ func TestSruMarcxmlNoHits(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdingsList, query, err := ad.Lookup(p)
+	holdingsList, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
 	assert.Len(t, holdingsList, 0)
@@ -148,7 +148,7 @@ func TestSruMarcxmlStringEncoding(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unsupported RecordXMLEscaping: string")
 }
@@ -185,7 +185,7 @@ func TestSruMarcxmlUnsupportedSchema(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "unsupported RecordSchema: info:srw/schema/1/dc-v1.1")
 }
@@ -222,7 +222,7 @@ func TestSruMarcxmlBadSurrogateDiagnostic(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "decoding surrogate diagnostic failed:")
 }
@@ -265,7 +265,7 @@ func TestSruMarcxmlOkSurrogateDiagnostic(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "surrogate diagnostic: General system error: Something went wrong")
 }
@@ -304,7 +304,7 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	_, query, err := ad.Lookup(p)
+	_, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.ErrorContains(t, err, "decoding marcxml failed")
 }
@@ -375,7 +375,7 @@ func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdings, query, err := ad.Lookup(p)
+	holdings, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
@@ -453,7 +453,7 @@ func TestSruMarcxmlWithHoldingsDoesNotUseFallback(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdings, query, err := ad.Lookup(p)
+	holdings, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
@@ -516,7 +516,7 @@ func TestSruMarcxmlLeavesSchemedSymbolUnchanged(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdings, query, err := ad.Lookup(p)
+	holdings, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
@@ -590,7 +590,7 @@ func TestSruMarcxmlUsesFallbackWhenPrimaryFieldHasNoUsableHolding(t *testing.T) 
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdings, query, err := ad.Lookup(p)
+	holdings, query, err := ad.HoldingsLookup(p)
 	assert.NotEmpty(t, query)
 	assert.NoError(t, err)
 	assert.Len(t, holdings, 1)
@@ -696,7 +696,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	p := LookupParams{
 		Identifier: "123",
 	}
-	holdingsList, query, err := ad.Lookup(p)
+	holdingsList, query, err := ad.HoldingsLookup(p)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
 	assert.Equal(t, "rec.id = 123", receivedQuery)
@@ -714,7 +714,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 		Isbn:       "99-222",
 		Issn:       "99-333",
 	}
-	holdingsList, query, err = ad.Lookup(p)
+	holdingsList, query, err = ad.HoldingsLookup(p)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
 	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
@@ -737,7 +737,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	p = LookupParams{
 		Isbn: "99-222",
 	}
-	_, _, err = ad.Lookup(p)
+	_, _, err = ad.HoldingsLookup(p)
 	assert.Error(t, err)
 	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId)", err.Error())
 
@@ -745,7 +745,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	p = LookupParams{
 		Title: "some",
 	}
-	_, _, err = ad.Lookup(p)
+	_, _, err = ad.HoldingsLookup(p)
 	assert.Error(t, err)
 	assert.Equal(t, "missing SRU lookup parameters. Provide at least one of: identifier (supplierUniqueRecordId), isbn, issn", err.Error())
 }

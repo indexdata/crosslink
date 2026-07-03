@@ -17,8 +17,8 @@ func NewMetaproxyAvailabilityAdapter(config directory.ZoomConfig, metaproxyUrl s
 	return a, nil
 }
 
-func (a *MetaproxyAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
-	return a.holdingsLookupAdapter.Lookup(params)
+func (a *MetaproxyAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
+	return a.holdingsLookupAdapter.HoldingsLookup(params)
 }
 
 func (a *MetaproxyAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {

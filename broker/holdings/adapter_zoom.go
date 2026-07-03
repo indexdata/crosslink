@@ -70,7 +70,7 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(params LookupParams, conn *zoom
 	return avail, nil
 }
 
-func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
+func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)

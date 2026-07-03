@@ -1,7 +1,7 @@
 package holdings
 
 type LookupAdapter interface {
-	Lookup(params LookupParams) ([]Holding, string, error)
+	HoldingsLookup(params LookupParams) ([]Holding, string, error)
 	MetadataLookup(params LookupParams) (Metadata, error)
 }
 

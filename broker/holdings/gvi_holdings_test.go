@@ -425,7 +425,7 @@ func TestGviHoldings(t *testing.T) {
 			ServiceType: "Loan",
 			Identifier:  "(DE-627)1795329181",
 		}
-		holdingsList, _, err := aa.Lookup(params)
+		holdingsList, _, err := aa.HoldingsLookup(params)
 		assert.NoError(t, err)
 		assert.NotNil(t, holdingsList)
 		assert.Len(t, holdingsList, 1)

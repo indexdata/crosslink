@@ -131,7 +131,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if lookupAdapter == nil {
 		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
-	holdingsResult, query, err := lookupAdapter.Lookup(holdingsParams)
+	holdingsResult, query, err := lookupAdapter.HoldingsLookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
 	}
@@ -365,7 +365,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
 	holdingsParams.Identifier = sup.LocalID.String
-	results, _, err := aa.Lookup(holdingsParams)
+	results, _, err := aa.HoldingsLookup(holdingsParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}

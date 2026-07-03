@@ -11,7 +11,7 @@ type MockHoldingsLookupAdapter struct {
 }
 
 // the original mock holdings adapter that we used for shared index testing
-func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
+func (m *MockHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
 	ids := strings.Split(params.Identifier, ";")
 	i := 1
 	var holdings []Holding

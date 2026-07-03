@@ -39,7 +39,7 @@ func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter,
 	return &MockAvailabilityAdapter{}, nil
 }
 
-func (a *MockAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
+func (a *MockAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
 	if a.Err != nil {
 		return nil, "", a.Err
 	}

@@ -135,7 +135,7 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParam
 	return holdings, queryParams, nil
 }
 
-func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
+func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
 	var holdings []Holding
 	logQuery := ""
 	for _, sruUrl := range s.sruUrl {
