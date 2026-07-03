@@ -150,6 +150,5 @@ func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holdin
 }
 
 func (s *SruHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
-	var metadata Metadata
-	return metadata, nil
+	return Metadata{}, fmt.Errorf("MetadataLookup not implemented for SRU holdings adapter")
 }
