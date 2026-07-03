@@ -67,56 +67,64 @@ func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
 		if *e.configField == "" {
 			return Metadata{}, fmt.Errorf("empty config field for %s", e.name)
 		}
-	}
-
-	for _, field := range marcRecord.Controlfield {
-		for _, e := range entries {
-			if e.configField == nil {
-				continue
-			}
-			altSplit := strings.Split(*e.configField, "/")
-			for _, alt := range altSplit {
-				splitField := strings.Split(alt, "$")
-				if len(splitField) == 1 {
-					if field.Tag == splitField[0] {
-						*e.store = strings.TrimSpace(string(field.Text))
-					}
-				}
-				if *e.store != "" {
-					break
-				}
-			}
-		}
-	}
-
-	for _, field := range marcRecord.Datafield {
-		for _, e := range entries {
-			if e.configField == nil || *e.store != "" {
-				continue
-			}
-			altSplit := strings.Split(*e.configField, "/")
-			for _, alt := range altSplit {
-				splitField := strings.Split(alt, "$")
-				if len(splitField) < 2 {
-					continue
-				}
-				if field.Tag != splitField[0] {
-					continue
-				}
-				var values []string
-				for _, subfield := range field.Subfield {
-					for i := 1; i < len(splitField); i++ {
-						if splitField[i] == subfield.Code || splitField[i] == "?" {
-							values = append(values, strings.TrimSpace(string(subfield.Text)))
-						}
-					}
-				}
-				if len(values) > 0 {
-					*e.store = strings.Join(values, " ")
-					break
-				}
+		altSplit := strings.Split(*e.configField, "/")
+		for _, alt := range altSplit {
+			*e.store = find(marcRecord, alt)
+			if *e.store != "" {
+				break
 			}
 		}
 	}
 	return metadata, nil
+}
+
+func find(marcRecord marcxml.Record, spec string) string {
+	splitSpec := strings.Split(spec, "$")
+	var matchField string
+	var ind1 string
+	var ind2 string
+	if len(splitSpec[0]) == 3 {
+		matchField = splitSpec[0]
+	} else if len(splitSpec[0]) == 5 {
+		matchField = splitSpec[0][:3]
+		ind1 = splitSpec[0][3:4]
+		ind2 = splitSpec[0][4:5]
+	}
+	if len(splitSpec) == 1 {
+		for _, field := range marcRecord.Controlfield {
+			if field.Tag != matchField {
+				continue
+			}
+			return strings.TrimSpace(string(field.Text))
+		}
+	}
+	for _, field := range marcRecord.Datafield {
+		if field.Tag != matchField {
+			continue
+		}
+		if ind1 != "" && field.Ind1 != ind1 {
+			continue
+		}
+		if ind2 != "" && field.Ind2 != ind2 {
+			continue
+		}
+		var values []string
+		if len(splitSpec) < 2 {
+			for _, subfield := range field.Subfield {
+				values = append(values, strings.TrimSpace(string(subfield.Text)))
+			}
+		} else {
+			for i := 1; i < len(splitSpec); i++ {
+				for _, subfield := range field.Subfield {
+					if splitSpec[i] == subfield.Code || splitSpec[i] == "?" {
+						values = append(values, strings.TrimSpace(string(subfield.Text)))
+					}
+				}
+			}
+		}
+		if len(values) > 0 {
+			return strings.Join(values, " ")
+		}
+	}
+	return ""
 }

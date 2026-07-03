@@ -54,7 +54,7 @@ func TestMetadataParserMarcOverride(t *testing.T) {
 		Issn:       NewString("022$a"),
 		Subtitle:   NewString("245$b"),
 		Author:     NewString("100$a/100$?/245$c/110$a/110$?/111$a/111$?"),
-		Edition:    NewString("250$b"),
+		Edition:    NewString("250"),
 	})
 
 	marcXML := []byte(`
@@ -88,7 +88,7 @@ func TestMetadataParserMarcOverride(t *testing.T) {
 	assert.Equal(t, "978-3-16-148410-0", metadata.Isbn)
 	assert.Equal(t, "8732", metadata.Issn)
 	assert.Equal(t, "The Title", metadata.Title)
-	assert.Equal(t, "John Doe", metadata.Author)
+	assert.Equal(t, "John W Doe", metadata.Author)
 	assert.Equal(t, "The Subtitle", metadata.Subtitle)
 	assert.Equal(t, "2nd edition", metadata.Edition)
 }
