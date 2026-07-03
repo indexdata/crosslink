@@ -193,7 +193,7 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
 	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, holdingsAdapter, availabilityCreator)
-	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, holdingsAdapter, availabilityCreator, CONSORTIUM_SYMBOL)
+	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, lookupAdapterFactory)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)
 	apiHandler := api.NewApiHandler(eventRepo, illRepo, tenantResolver, API_PAGE_SIZE)

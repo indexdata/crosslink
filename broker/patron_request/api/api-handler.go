@@ -18,6 +18,7 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
@@ -278,6 +279,41 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
+func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
+	if a.lookupAdapterFactory == nil {
+		return nil
+	}
+	lookupAdapter, err := a.lookupAdapterFactory.GetLookupAdapter(ctx, requesterPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get lookup adapter: %w", err)
+	}
+	if lookupAdapter == nil {
+		return nil
+	}
+	configPeer, err := a.lookupAdapterFactory.GetConfigEntry(ctx, requesterPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get config entry: %w", err)
+	}
+	mode := directory.None
+	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	}
+	if mode == directory.None {
+		return nil
+	}
+	lookupParams := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+	metadata, err := lookupAdapter.MetadataLookup(lookupParams)
+	if err != nil {
+		return fmt.Errorf("failed to lookup metadata: %w", err)
+	}
+	if mode == directory.Auto && lookupParams.Identifier != "" {
+		mode = directory.Replace
+	} else {
+		mode = directory.Merge
+	}
+	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, mode)
+}
+
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
 	logParams := map[string]string{"method": "PostPatronRequests"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -336,8 +372,8 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			return
 		}
 		requesterPeer := peers[0]
-		if requesterPeer.Vendor == string(directory.CrossLink) && a.lookupAdapterFactory != nil {
-			err := a.lookupAdapterFactory.MetadataUpdate(ctx, &illRequest, requesterPeer)
+		if requesterPeer.Vendor == string(directory.CrossLink) {
+			err := a.metadataUpdate(ctx, &illRequest, requesterPeer)
 			if err != nil {
 				api.AddInternalError(ctx, w, err)
 				return
