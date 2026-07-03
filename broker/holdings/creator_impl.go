@@ -34,7 +34,7 @@ func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, 
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
 	}
-	return nil, fmt.Errorf("holdingsConfig.metadataFormat only marc supported for now")
+	return nil, fmt.Errorf("holdingsConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
 }
 
 func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
