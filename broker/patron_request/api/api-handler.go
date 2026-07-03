@@ -373,6 +373,9 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 			api.AddInternalError(ctx, w, fmt.Errorf("no peer found for requester symbol %q", symbol))
 			return
 		}
+		if len(peers) > 1 {
+			ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", symbol, "peerCount", len(peers))
+		}
 		requesterPeer := peers[0]
 		if requesterPeer.Vendor == string(directory.CrossLink) {
 			err := a.metadataUpdate(ctx, &illRequest, requesterPeer)
