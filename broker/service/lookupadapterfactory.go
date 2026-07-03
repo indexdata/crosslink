@@ -74,5 +74,8 @@ func (s *LookupAdapterFactory) GetConfigEntry(ctx common.ExtendedContext, reques
 }
 
 func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, supplier ill_db.Peer) (holdings.LookupAdapter, error) {
+	if s.availabilityCreator == nil {
+		return nil, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
+	}
 	return s.availabilityCreator.GetAdapter(supplier)
 }
