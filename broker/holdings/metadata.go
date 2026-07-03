@@ -26,10 +26,18 @@ func fixupBibliographicItem(info *[]iso18626.BibliographicItemId, code string, v
 func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, mode directory.MetadataUpdateMode) error {
 	switch mode {
 	case directory.Replace:
-		illRequest.Title = metadata.Title
-		illRequest.Subtitle = metadata.Subtitle
-		illRequest.Author = metadata.Author
-		illRequest.SupplierUniqueRecordId = metadata.Identifier
+		if metadata.Title != "" {
+			illRequest.Title = metadata.Title
+		}
+		if metadata.Subtitle != "" {
+			illRequest.Subtitle = metadata.Subtitle
+		}
+		if metadata.Author != "" {
+			illRequest.Author = metadata.Author
+		}
+		if metadata.Identifier != "" {
+			illRequest.SupplierUniqueRecordId = metadata.Identifier
+		}
 		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, true)
 		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, true)
 	case directory.Merge:
