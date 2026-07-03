@@ -42,7 +42,7 @@ func WaitForPredicateToBeTrue(predicate func() bool) bool {
 
 func Expect(err error, message string) {
 	if err != nil {
-		panic(fmt.Sprintf(message+" Errror : %s", err))
+		panic(fmt.Sprintf(message+" Error : %s", err))
 	}
 }
 
