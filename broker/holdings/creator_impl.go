@@ -29,7 +29,7 @@ func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreato
 
 func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, error) {
 	if config == nil {
-		return nil, nil
+		return NewMetadataParserMarc(directory.MarcMetadataParserConfig{}), nil
 	}
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
