@@ -86,6 +86,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
 		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
 	}
+	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
 	if mode != directory.None && requester.Vendor != string(directory.CrossLink) {
 		metadata, err := lookupAdapter.MetadataLookup(lookupParams)
 		if err != nil {
