@@ -76,8 +76,8 @@ func TestLookupFoundMarc(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, metadata.Identifier, "11224466")
 	assert.Contains(t, metadata.Title, "How to program a computer")
-	assert.Contains(t, metadata.Isbn, "")
-	assert.Contains(t, metadata.Issn, "")
+	assert.Equal(t, "", metadata.Isbn)
+	assert.Equal(t, "", metadata.Issn)
 }
 
 func TestLookupFoundOpac(t *testing.T) {
