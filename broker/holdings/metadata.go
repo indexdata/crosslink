@@ -23,38 +23,23 @@ func fixupBibliographicItem(info *[]iso18626.BibliographicItemId, code string, v
 	})
 }
 
-func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, mode directory.MetadataUpdateMode) error {
-	switch mode {
-	case directory.Replace:
-		if metadata.Title != "" {
-			illRequest.Title = metadata.Title
-		}
-		if metadata.Subtitle != "" {
-			illRequest.Subtitle = metadata.Subtitle
-		}
-		if metadata.Author != "" {
-			illRequest.Author = metadata.Author
-		}
-		if metadata.Identifier != "" {
-			illRequest.SupplierUniqueRecordId = metadata.Identifier
-		}
-		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, true)
-		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, true)
-	case directory.Merge:
-		if illRequest.Title == "" {
-			illRequest.Title = metadata.Title
-		}
-		if illRequest.Subtitle == "" {
-			illRequest.Subtitle = metadata.Subtitle
-		}
-		if illRequest.Author == "" {
-			illRequest.Author = metadata.Author
-		}
-		if illRequest.SupplierUniqueRecordId == "" {
-			illRequest.SupplierUniqueRecordId = metadata.Identifier
-		}
-		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, false)
-		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, false)
+func fixupString(src string, dst *string, replace bool) {
+	if src == "" {
+		return
 	}
+	if replace || *dst == "" {
+		*dst = src
+	}
+}
+
+func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, mode directory.MetadataUpdateMode) error {
+	replace := mode == directory.Replace
+	fixupString(metadata.Title, &illRequest.Title, replace)
+	fixupString(metadata.Subtitle, &illRequest.Subtitle, replace)
+	fixupString(metadata.Author, &illRequest.Author, replace)
+	fixupString(metadata.Identifier, &illRequest.SupplierUniqueRecordId, replace)
+	fixupString(metadata.Edition, &illRequest.Edition, replace)
+	fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, replace)
+	fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, replace)
 	return nil
 }
