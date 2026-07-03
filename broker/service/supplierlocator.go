@@ -62,8 +62,7 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 	if lookupParams.Identifier == "" && lookupParams.Isbn == "" && lookupParams.Issn == "" {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
-			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
-	}
+			"ILL transaction missing bibliographic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
