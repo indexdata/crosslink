@@ -14,6 +14,9 @@ func fixupBibliograhpicItem(info *[]iso18626.BibliographicItemId, code string, v
 			return
 		}
 	}
+	if value == "" {
+		return
+	}
 	*info = append(*info, iso18626.BibliographicItemId{
 		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: code},
 		BibliographicItemIdentifier:     value,
