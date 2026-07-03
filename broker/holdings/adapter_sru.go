@@ -39,7 +39,7 @@ func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQu
 	return CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, metadataParser, recordSchema), nil
 }
 
-func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, params LookupParams, holdings *[]Holding) error {
+func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, params LookupParams, processRecord func([]byte) error) error {
 	if record.RecordXMLEscaping != nil && *record.RecordXMLEscaping != sru.RecordXMLEscapingDefinitionXml {
 		return fmt.Errorf("unsupported RecordXMLEscaping: %s", *record.RecordXMLEscaping)
 	}
@@ -59,12 +59,7 @@ func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, par
 		return fmt.Errorf("unsupported RecordSchema: %s", record.RecordSchema)
 	}
 
-	ret, err := s.holdingsParser.Parse(record.RecordData.XMLContent, params)
-	if err != nil {
-		return fmt.Errorf("parsing holdings failed: %s", err.Error())
-	}
-	*holdings = append(*holdings, ret...)
-	return nil
+	return processRecord(record.RecordData.XMLContent)
 }
 
 func encodeCqlSearchClause(field string, value string) (string, error) {
@@ -75,7 +70,7 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 	return cqlQuery.String(), nil
 }
 
-func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, query string) ([]Holding, string, error) {
+func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, query string, processRecord func([]byte) error, shouldContinueQuery func() bool) (string, error) {
 	var sruResponse sru.SearchRetrieveResponse
 	query = "?maximumRecords=1000&recordSchema=" + url.QueryEscape(s.recordSchema) + "&" + query
 	if s.xTarget != "" {
@@ -84,71 +79,101 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, qu
 	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	// notice: returning query even in case of error, to allow logging the query that caused the error
 	if err != nil {
-		return nil, query, err
+		return query, err
 	}
 	if sruResponse.Diagnostics != nil {
 		// non-surrogate diagnostics
 		diags := sruResponse.Diagnostics.Diagnostic
 		if len(diags) > 0 {
-			return nil, query, errors.New(diags[0].Message + ": " + diags[0].Details)
+			return query, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
-	var holdings []Holding
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
-			err := s.parseRecord(&record, params, &holdings)
+			err := s.parseRecord(&record, params, processRecord)
 			if err != nil {
-				return nil, query, err
+				return query, err
+			}
+			if !shouldContinueQuery() {
+				return query, nil
 			}
 		}
 	}
-	return holdings, query, nil
+	return query, nil
 }
 
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParams) ([]Holding, string, error) {
-	var holdings []Holding
+func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParams, processRecord func([]byte) error, shouldContinueQuery func() bool) (string, error) {
 	cqlList, pqfList, err := s.queryBuilder.Build(params)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	var queryParams string
 	for _, cql := range cqlList {
 		sruQuery := "query=" + url.QueryEscape(cql)
-		holdings, queryParams, err = s.search(sruUrl, params, sruQuery)
+		queryParams, err = s.search(sruUrl, params, sruQuery, processRecord, shouldContinueQuery)
 		if err != nil {
-			return nil, queryParams, err
+			return queryParams, err
 		}
-		if len(holdings) > 0 {
-			return holdings, queryParams, nil
+		if !shouldContinueQuery() {
+			return queryParams, nil
 		}
 	}
 	for _, pqf := range pqfList {
 		sruQuery := "x-pquery=" + url.QueryEscape(pqf)
-		holdings, queryParams, err = s.search(sruUrl, params, sruQuery)
+		queryParams, err = s.search(sruUrl, params, sruQuery, processRecord, shouldContinueQuery)
 		if err != nil {
-			return nil, queryParams, err
+			return queryParams, err
 		}
-		if len(holdings) > 0 {
-			return holdings, queryParams, nil
+		if !shouldContinueQuery() {
+			return queryParams, nil
 		}
 	}
-	return holdings, queryParams, nil
+	return queryParams, nil
 }
 
 func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
 	var holdings []Holding
 	logQuery := ""
 	for _, sruUrl := range s.sruUrl {
-		h, query, err := s.getHoldings(sruUrl, params)
+		query, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) error {
+			h, err := s.holdingsParser.Parse(xmlBuffer, params)
+			if err != nil {
+				return fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+			}
+			holdings = append(holdings, h...)
+			return nil
+		}, func() bool {
+			return true
+		})
 		if err != nil {
 			return nil, query, err
 		}
-		holdings = append(holdings, h...)
 		logQuery = query
 	}
 	return holdings, logQuery, nil
 }
 
 func (s *SruHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
-	return Metadata{}, fmt.Errorf("MetadataLookup not implemented for SRU holdings adapter")
+	var metadata Metadata
+	cont := true
+	for _, sruUrl := range s.sruUrl {
+		_, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) error {
+			m, err := s.metadataParser.Parse(xmlBuffer)
+			if err != nil {
+				return fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
+			}
+			metadata = m
+			cont = false
+			return nil
+		}, func() bool {
+			return cont
+		})
+		if err != nil {
+			return Metadata{}, fmt.Errorf("failed to get metadata from SRU holdings: %w", err)
+		}
+		if !cont {
+			break
+		}
+	}
+	return metadata, nil
 }
