@@ -138,7 +138,7 @@ func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holdin
 		query, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) error {
 			h, err := s.holdingsParser.Parse(xmlBuffer, params)
 			if err != nil {
-				return fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+				return fmt.Errorf("failed to parse holdings from SRU record: %w", err)
 			}
 			holdings = append(holdings, h...)
 			return nil
