@@ -71,6 +71,13 @@ func TestLookupFoundMarc(t *testing.T) {
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].Location, "11224466")
 	assert.Equal(t, "@attr 1=1016 \"Computer\"", pqf)
+
+	metadata, err := aa.MetadataLookup(params)
+	assert.NoError(t, err)
+	assert.Contains(t, metadata.Identifier, "11224466")
+	assert.Contains(t, metadata.Title, "How to program a computer")
+	assert.Contains(t, metadata.Isbn, "")
+	assert.Contains(t, metadata.Issn, "")
 }
 
 func TestLookupFoundOpac(t *testing.T) {
@@ -105,6 +112,11 @@ func TestLookupFoundOpac(t *testing.T) {
 	assert.Contains(t, results[0].ItemId, "test__000000001_")
 	assert.Contains(t, results[1].ItemId, "test__000000002_")
 	assert.Equal(t, "title = \"Computer\"", cql)
+
+	metadata, err := aa.MetadataLookup(params)
+	assert.NoError(t, err)
+	assert.Contains(t, metadata.Identifier, "11224466")
+	assert.Contains(t, metadata.Title, "How to program a computer")
 }
 
 func TestLookupDiagnosticPQF(t *testing.T) {

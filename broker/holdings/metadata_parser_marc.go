@@ -29,9 +29,17 @@ func NewMetadataParserMarc(config directory.MarcMetadataParserConfig) MetadataPa
 func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
 	var marcRecord marcxml.Record
 	err := xml.Unmarshal(record, &marcRecord)
-	// TODO : consider OPAC record as well
 	if err != nil {
-		return Metadata{}, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
+		var opacRecord marcxml.OpacRecord
+		opacErr := xml.Unmarshal(record, &opacRecord)
+		if opacErr != nil {
+			return Metadata{}, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
+		}
+		content := opacRecord.BibliographicRecord.XMLContent
+		err := xml.Unmarshal([]byte(content), &marcRecord)
+		if err != nil {
+			return Metadata{}, fmt.Errorf("failed to unmarshal MARC XML embedded in OPAC record: %w", err)
+		}
 	}
 
 	var metadata Metadata
