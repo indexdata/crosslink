@@ -5,7 +5,10 @@ import (
 	"github.com/indexdata/crosslink/iso18626"
 )
 
-func fixupBibliograhpicItem(info *[]iso18626.BibliographicItemId, code string, value string, replace bool) {
+func fixupBibliographicItem(info *[]iso18626.BibliographicItemId, code string, value string, replace bool) {
+	if value == "" {
+		return
+	}
 	for i, id := range *info {
 		if id.BibliographicItemIdentifierCode.Text == code {
 			if replace {
@@ -13,9 +16,6 @@ func fixupBibliograhpicItem(info *[]iso18626.BibliographicItemId, code string, v
 			}
 			return
 		}
-	}
-	if value == "" {
-		return
 	}
 	*info = append(*info, iso18626.BibliographicItemId{
 		BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: code},
@@ -30,8 +30,8 @@ func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Meta
 		illRequest.Subtitle = metadata.Subtitle
 		illRequest.Author = metadata.Author
 		illRequest.SupplierUniqueRecordId = metadata.Identifier
-		fixupBibliograhpicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, true)
-		fixupBibliograhpicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, true)
+		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, true)
+		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, true)
 	case directory.Merge:
 		if illRequest.Title == "" {
 			illRequest.Title = metadata.Title
@@ -45,8 +45,8 @@ func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Meta
 		if illRequest.SupplierUniqueRecordId == "" {
 			illRequest.SupplierUniqueRecordId = metadata.Identifier
 		}
-		fixupBibliograhpicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, false)
-		fixupBibliograhpicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, false)
+		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISBN", metadata.Isbn, false)
+		fixupBibliographicItem(&illRequest.BibliographicItemId, "ISSN", metadata.Issn, false)
 	}
 	return nil
 }
