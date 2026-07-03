@@ -58,6 +58,9 @@ func (s *LookupAdapterFactory) GetLookupAdapter(ctx common.ExtendedContext, requ
 	if err != nil {
 		return nil, err
 	}
+	if s.availabilityCreator == nil {
+		return nil, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
+	}
 	adapter, err := s.availabilityCreator.GetAdapter(peer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get adapter for peer: %w", err)
