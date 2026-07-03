@@ -88,10 +88,6 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 			}
 			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser, metadataParser)
 		case AvailabilityAdapterZoom:
-			metadataParser, err := getMetadataParser(config.MetadataFormat)
-			if err != nil {
-				return nil, err
-			}
 			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser, metadataParser)
 		default:
 			return nil, fmt.Errorf("unsupported holdings adapter type: %s", c.mode)
