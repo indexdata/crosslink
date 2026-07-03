@@ -119,10 +119,13 @@ func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding
 }
 
 func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+	var metadata Metadata
+	if a.metadataParser == nil {
+		return metadata, fmt.Errorf("metadata parser not configured")
+	}
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
 	err := conn.Connect(a.zurl)
-	var metadata Metadata
 	if err != nil {
 		return metadata, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
 	}
