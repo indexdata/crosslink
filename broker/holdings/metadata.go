@@ -11,7 +11,7 @@ func fixupBibliographicItem(info *[]iso18626.BibliographicItemId, code string, v
 	}
 	for i, id := range *info {
 		if id.BibliographicItemIdentifierCode.Text == code {
-			if replace {
+			if replace || (*info)[i].BibliographicItemIdentifier == "" {
 				(*info)[i].BibliographicItemIdentifier = value
 			}
 			return
