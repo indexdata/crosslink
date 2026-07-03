@@ -154,13 +154,16 @@ func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holdin
 }
 
 func (s *SruHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+	if s.metadataParser == nil {
+		return Metadata{}, fmt.Errorf("metadata parser not configured")
+	}
 	var metadata Metadata
 	cont := true
 	for _, sruUrl := range s.sruUrl {
 		_, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) error {
 			m, err := s.metadataParser.Parse(xmlBuffer)
 			if err != nil {
-				return fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
+				return fmt.Errorf("failed to parse metadata from SRU record: %w", err)
 			}
 			metadata = m
 			cont = false
