@@ -25,7 +25,17 @@ func NewAvailabilityCreator(mode string, metaproxyUrl string) AvailabilityCreato
 	}
 }
 
-func getParser(config *directory.ParserConfig) (HoldingsParser, error) {
+func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, error) {
+	if config == nil {
+		return nil, nil
+	}
+	if config.Marc != nil {
+		return NewMetadataParserMarc(*config.Marc), nil
+	}
+	return nil, fmt.Errorf("availabilityConfig.metadataFormat only marc supported for now")
+}
+
+func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
 	if config == nil {
 		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
 	}
@@ -53,7 +63,11 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)
 	}
-	holdingsParser, err := getParser(config.ParserConfig)
+	holdingsParser, err := getHoldingsParser(config.ParserConfig)
+	if err != nil {
+		return nil, err
+	}
+	metadataParser, err := getMetadataParser(config.MetadataFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +76,7 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 		return nil, err
 	}
 	if config.Sru != nil {
-		return NewSruAvailabilityAdapter(*config.Sru, queryBuilder, holdingsParser)
+		return NewSruAvailabilityAdapter(*config.Sru, queryBuilder, holdingsParser, metadataParser)
 	}
 	if config.Zoom != nil {
 		switch c.mode {
@@ -70,9 +84,13 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s holdings adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser)
+			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser, metadataParser)
 		case AvailabilityAdapterZoom:
-			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser)
+			metadataParser, err := getMetadataParser(config.MetadataFormat)
+			if err != nil {
+				return nil, err
+			}
+			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser, metadataParser)
 		default:
 			return nil, fmt.Errorf("unsupported holdings adapter type: %s", c.mode)
 		}

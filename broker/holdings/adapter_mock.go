@@ -10,6 +10,7 @@ import (
 type MockAvailabilityAdapter struct {
 	Err      error
 	Holdings []Holding
+	Metadata Metadata
 }
 
 func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter, error) {
@@ -43,4 +44,11 @@ func (a *MockAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string
 		return nil, "", a.Err
 	}
 	return a.Holdings, "", nil
+}
+
+func (a *MockAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+	if a.Err != nil {
+		return Metadata{}, a.Err
+	}
+	return a.Metadata, nil
 }

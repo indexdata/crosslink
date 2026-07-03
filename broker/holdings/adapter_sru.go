@@ -18,16 +18,17 @@ type SruHoldingsLookupAdapter struct {
 	sruUrl         []string
 	client         *http.Client
 	holdingsParser HoldingsParser
+	metadataParser MetadataParser
 	queryBuilder   LookupQueryBuilder
 	xTarget        string
 	recordSchema   string
 }
 
-func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, recordSchema string) LookupAdapter {
-	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, xTarget: xTarget, recordSchema: recordSchema}
+func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
+	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, metadataParser: metadataParser, xTarget: xTarget, recordSchema: recordSchema}
 }
 
-func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
+func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	var recordSchema string
 	if config.RecordSchema != nil {
 		recordSchema = *config.RecordSchema
@@ -35,7 +36,7 @@ func NewSruAvailabilityAdapter(config directory.SruConfig, queryBuilder LookupQu
 	if recordSchema == "" {
 		recordSchema = "marcxml" // default to marcxml if not specified
 	}
-	return CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, recordSchema), nil
+	return CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{config.Address}, "", queryBuilder, holdingsParser, metadataParser, recordSchema), nil
 }
 
 func (s *SruHoldingsLookupAdapter) parseRecord(record *sru.RecordDefinition, params LookupParams, holdings *[]Holding) error {
@@ -146,4 +147,9 @@ func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) ([]Holding, strin
 		logQuery = query
 	}
 	return holdings, logQuery, nil
+}
+
+func (s *SruHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+	var metadata Metadata
+	return metadata, nil
 }

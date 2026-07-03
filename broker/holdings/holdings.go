@@ -2,6 +2,7 @@ package holdings
 
 type LookupAdapter interface {
 	Lookup(params LookupParams) ([]Holding, string, error)
+	MetadataLookup(params LookupParams) (Metadata, error)
 }
 
 type LookupParams struct {
@@ -28,4 +29,15 @@ type HoldingsParser interface {
 type LookupQueryBuilder interface {
 	// Build should return the query strategy
 	Build(params LookupParams) (cql []string, pqf []string, err error)
+}
+
+type MetadataParser interface {
+	Parse(record []byte) (Metadata, error)
+}
+
+type Metadata struct {
+	Identifier string
+	Title      string
+	Isbn       string
+	Issn       string
 }

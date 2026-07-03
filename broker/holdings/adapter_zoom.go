@@ -15,10 +15,11 @@ type ZoomAvailabilityAdapter struct {
 	zurl           string
 	options        zoom.Options
 	holdingsParser HoldingsParser
+	metadataParser MetadataParser
 	queryBuilder   LookupQueryBuilder
 }
 
-func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
+func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{
@@ -28,6 +29,7 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder Lookup
 		},
 		zurl:           config.Address,
 		holdingsParser: holdingsParser,
+		metadataParser: metadataParser,
 		queryBuilder:   queryBuilder,
 	}
 	if config.Options != nil {
@@ -114,4 +116,58 @@ func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string
 		return nil, pqfList[0], nil
 	}
 	return nil, cqlList[0], nil
+}
+
+func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+	conn := zoom.NewConnection(a.options)
+	defer conn.Close()
+	err := conn.Connect(a.zurl)
+	var metadata Metadata
+	if err != nil {
+		return metadata, fmt.Errorf("failed to connect to Z39.50 server: %w", err)
+	}
+	cqlList, pqfList, err := a.queryBuilder.Build(params)
+	if err != nil {
+		return metadata, fmt.Errorf("failed to build query: %w", err)
+	}
+	var query *zoom.Query
+	if len(pqfList) > 0 {
+		query, err = zoom.NewPqfQuery(pqfList[0])
+		if err != nil {
+			return metadata, fmt.Errorf("failed to create PQF query: %w", err)
+		}
+	} else if len(cqlList) > 0 {
+		query, err = zoom.NewCqlQuery(cqlList[0])
+		if err != nil {
+			return metadata, fmt.Errorf("failed to create CQL query: %w", err)
+		}
+	} else {
+		return metadata, fmt.Errorf("no valid query parameters provided")
+	}
+	set, err := conn.Search(query)
+	if err != nil {
+		return metadata, err
+	}
+	defer set.Close()
+	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
+	for i := 0; i < limit; i++ {
+		rec, err := set.GetRecord(i)
+		if err != nil {
+			return metadata, err
+		}
+		if rec == nil {
+			continue
+		}
+		xmlBuffer := rec.Data("xml;charset=utf-8")
+		rec.Close()
+		if xmlBuffer == nil {
+			continue
+		}
+		metadata, err = a.metadataParser.Parse(xmlBuffer)
+		if err != nil {
+			return metadata, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
+		}
+		return metadata, nil
+	}
+	return metadata, nil
 }

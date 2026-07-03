@@ -46,6 +46,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(config)
+	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -56,6 +57,7 @@ func TestLookupFoundMarc(t *testing.T) {
 		},
 		queryBuilder,
 		holdingsParser,
+		metadataParser,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
@@ -78,6 +80,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	holdingsParser := NewOpacHoldingsParser(directory.OpacParserConfig{})
+	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -87,6 +90,7 @@ func TestLookupFoundOpac(t *testing.T) {
 		},
 		queryBuilder,
 		holdingsParser,
+		metadataParser,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, containerHost+":"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
@@ -107,6 +111,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -116,6 +121,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 		},
 		queryBuilder,
 		holdingsParser,
+		metadataParser,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
@@ -136,6 +142,7 @@ func TestLookupDiagnosticCql(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
@@ -145,6 +152,7 @@ func TestLookupDiagnosticCql(t *testing.T) {
 		},
 		queryBuilder,
 		holdingsParser,
+		metadataParser,
 	)
 	assert.NoError(t, err)
 	assert.Equal(t, "localhost:"+mappedPort+"/marc", aa.(*ZoomAvailabilityAdapter).zurl)
@@ -162,12 +170,14 @@ func TestConnectFailure(t *testing.T) {
 	queryBuilder, err := NewQueryBuilderGen(nil)
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcParserConfig{})
+	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	aa, err := NewZoomAvailabilityAdapter(
 		directory.ZoomConfig{
 			Address: "",
 		},
 		queryBuilder,
 		holdingsParser,
+		metadataParser,
 	)
 	assert.NoError(t, err)
 	params := LookupParams{}
