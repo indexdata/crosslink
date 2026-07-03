@@ -91,10 +91,12 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to lookup metadata for locating suppliers", err)
 		}
-		if mode == directory.Auto && lookupParams.Identifier != "" {
-			mode = directory.Replace
-		} else {
-			mode = directory.Merge
+		if mode == directory.Auto {
+			if lookupParams.Identifier != "" {
+				mode = directory.Replace
+			} else {
+				mode = directory.Merge
+			}
 		}
 		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, mode)
 		if err != nil {
