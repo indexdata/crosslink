@@ -34,7 +34,7 @@ func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, 
 	if config.Marc21 != nil {
 		return NewMetadataParserMarc(*config.Marc21), nil
 	}
-	return nil, fmt.Errorf("availabilityConfig.metadataFormat only marc supported for now")
+	return nil, fmt.Errorf("holdingsConfig.metadataFormat only marc supported for now")
 }
 
 func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
@@ -53,7 +53,7 @@ func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
 	if config.Marc21plus1 != nil {
 		return NewMarc21Plus1HoldingsParser(), nil
 	}
-	return nil, fmt.Errorf("availabilityConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
+	return nil, fmt.Errorf("holdingsConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
 func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
