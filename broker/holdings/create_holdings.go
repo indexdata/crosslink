@@ -66,7 +66,8 @@ func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
 		if err != nil {
 			return nil, err
 		}
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, nil, "marcxml"), nil
+		metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, metadataParser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {
 		return &MockHoldingsLookupAdapter{}, nil
