@@ -130,7 +130,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	// deal with last resort symbols configured for requester or consortium (if any) - these are added as holdings results to
 	// be processed like normal holdings, but just use bibliographicInfo.SupplierUniqueRecordId for localIdentifier
 	var lenderLastResort []directory.Symbol
-	if configPeer.LenderOfLastResort != nil {
+	if requester.CustomData.LenderOfLastResort != nil {
+		lenderLastResort = *requester.CustomData.LenderOfLastResort
+	} else if configPeer.LenderOfLastResort != nil {
 		lenderLastResort = *configPeer.LenderOfLastResort
 	}
 	if lookupParams.Identifier != "" {
