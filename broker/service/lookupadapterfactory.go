@@ -61,11 +61,11 @@ func (s *LookupAdapterFactory) GetLookupAdapter(ctx common.ExtendedContext, requ
 	if s.availabilityCreator == nil {
 		return nil, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
 	}
-	adapter, err := s.availabilityCreator.GetAdapter(peer)
+	lookupAdapter, err := s.availabilityCreator.GetAdapter(peer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get adapter for peer: %w", err)
 	}
-	return adapter, nil
+	return lookupAdapter, nil
 }
 
 func (s *LookupAdapterFactory) GetConfigEntry(ctx common.ExtendedContext, requester ill_db.Peer) (directory.Entry, error) {

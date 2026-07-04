@@ -151,7 +151,6 @@ func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata,
 		}
 		metadata = parsed
 		return false, nil // get just first record in a search response
-
 	})
 	return metadata, err
 }
