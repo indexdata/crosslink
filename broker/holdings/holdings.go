@@ -1,8 +1,13 @@
 package holdings
 
 type LookupAdapter interface {
-	HoldingsLookup(params LookupParams) ([]Holding, string, error)
-	MetadataLookup(params LookupParams) (Metadata, error)
+	Lookup(params LookupParams) (LookupResult, error)
+}
+
+type LookupResult interface {
+	GetQuery() string
+	GetHoldings() ([]Holding, error)
+	GetMetadata() (Metadata, error)
 }
 
 type LookupParams struct {

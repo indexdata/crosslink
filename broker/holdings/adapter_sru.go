@@ -24,6 +24,13 @@ type SruHoldingsLookupAdapter struct {
 	recordSchema   string
 }
 
+type SruLookupResult struct {
+	params  LookupParams
+	query   string
+	records [][]byte
+	adapter *SruHoldingsLookupAdapter
+}
+
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
 	return &SruHoldingsLookupAdapter{client: client, sruUrl: sruUrl, queryBuilder: queryBuilder, holdingsParser: parser, metadataParser: metadataParser, xTarget: xTarget, recordSchema: recordSchema}
 }
@@ -127,50 +134,55 @@ func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParam
 	return false, queryParams, nil
 }
 
-func (s *SruHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
-	var holdings []Holding
-	logQuery := ""
+func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
+	var result SruLookupResult
+	result.params = params
+	result.adapter = s
+
 	for _, sruUrl := range s.sruUrl {
 		var err error
 		found, query, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
-			h, err := s.holdingsParser.Parse(xmlBuffer, params)
-			if err != nil {
-				return false, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
-			}
-			holdings = append(holdings, h...)
-			return true, nil // get all records in a search response
+			result.records = append(result.records, xmlBuffer)
+			return true, nil
 		})
+		result.query = query
 		if err != nil {
-			return nil, query, err
+			return &result, err
 		}
-		logQuery = query
 		if found {
 			break
 		}
 	}
-	return holdings, logQuery, nil
+	return &result, nil
 }
 
-func (s *SruHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
-	if s.metadataParser == nil {
-		return Metadata{}, fmt.Errorf("metadata parser not configured")
-	}
-	var metadata Metadata
-	for _, sruUrl := range s.sruUrl {
-		found, _, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
-			m, err := s.metadataParser.Parse(xmlBuffer)
-			if err != nil {
-				return false, fmt.Errorf("failed to parse metadata from SRU record: %w", err)
-			}
-			metadata = m
-			return false, nil // get just first record in a search response
-		})
+func (r *SruLookupResult) GetQuery() string {
+	return r.query
+}
+
+func (s *SruLookupResult) GetHoldings() ([]Holding, error) {
+	var avail []Holding
+	for _, record := range s.records {
+		h, err := s.adapter.holdingsParser.Parse(record, s.params)
 		if err != nil {
-			return Metadata{}, fmt.Errorf("failed to get metadata from SRU holdings: %w", err)
+			return nil, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
 		}
-		if found {
-			break
-		}
+		avail = append(avail, h...)
+	}
+	return avail, nil
+}
+
+func (s *SruLookupResult) GetMetadata() (Metadata, error) {
+	var metadata Metadata
+	if s.adapter.metadataParser == nil {
+		return metadata, fmt.Errorf("metadata parser not configured")
+	}
+	if len(s.records) == 0 {
+		return metadata, fmt.Errorf("no records found")
+	}
+	metadata, err := s.adapter.metadataParser.Parse(s.records[0])
+	if err != nil {
+		return metadata, fmt.Errorf("failed to parse metadata from SRU record: %w", err)
 	}
 	return metadata, nil
 }

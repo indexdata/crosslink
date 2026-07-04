@@ -10,22 +10,29 @@ import (
 type MockHoldingsLookupAdapter struct {
 }
 
+type MockHoldingsLookupResult struct {
+	holdings []Holding
+	query    string
+}
+
 // the original mock holdings adapter that we used for shared index testing
-func (m *MockHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
+func (m *MockHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
+	var result MockHoldingsLookupResult
+	result.holdings = []Holding{}
+	result.query = params.Identifier
 	ids := strings.Split(params.Identifier, ";")
 	i := 1
-	var holdings []Holding
 	for _, id := range ids {
 		if id == "error" {
-			return []Holding{}, id, errors.New("there is error")
+			return &result, errors.New("there is error")
 		}
 		if id == "not-found" { // we could also just not append?
-			return []Holding{}, id, nil
+			return &result, nil
 		}
 		if strings.Index(id, "return-") == 0 {
 			val := strings.SplitN(strings.TrimPrefix(id, "return-"), "::", 2)
 			if len(val) < 1 || len(val[0]) < 1 {
-				return nil, id, fmt.Errorf("invalid return- value")
+				return &result, fmt.Errorf("invalid return- value")
 			}
 			var s, l string
 			if len(val) == 1 {
@@ -36,23 +43,31 @@ func (m *MockHoldingsLookupAdapter) HoldingsLookup(params LookupParams) ([]Holdi
 				s = val[0]
 				l = val[1]
 			}
-			holdings = append(holdings, Holding{
+			result.holdings = append(result.holdings, Holding{
 				Symbol:          s,
 				LocalIdentifier: l,
 			})
 		} else {
-			holdings = append(holdings, Holding{
+			result.holdings = append(result.holdings, Holding{
 				Symbol:          "ISIL:SUP" + strconv.Itoa(i),
 				LocalIdentifier: id,
 			})
 		}
 		i++
 	}
-	return holdings, params.Identifier, nil
+	return &result, nil
 }
 
-func (m *MockHoldingsLookupAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
+func (m *MockHoldingsLookupResult) GetMetadata() (Metadata, error) {
 	var metadata Metadata
-	metadata.Identifier = params.Identifier
+	metadata.Identifier = m.query
 	return metadata, nil
+}
+
+func (m *MockHoldingsLookupResult) GetHoldings() ([]Holding, error) {
+	return m.holdings, nil
+}
+
+func (m *MockHoldingsLookupResult) GetQuery() string {
+	return m.query
 }

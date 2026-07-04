@@ -90,11 +90,21 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
 		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
 	}
+
+	var query string
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if lookupResult != nil {
+		query = lookupResult.GetQuery()
+	}
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
+	}
+
 	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
 	if mode != directory.None && requester.Vendor != string(directory.CrossLink) {
-		metadata, err := lookupAdapter.MetadataLookup(lookupParams)
+		metadata, err := lookupResult.GetMetadata()
 		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to lookup metadata for locating suppliers", err)
+			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
 		}
 		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, mode)
 		if err != nil {
@@ -104,13 +114,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
 		}
-		// might have changed bibliographic info, so re-derive lookup params
-		lookupParams = holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 	}
-
-	holdingsResult, query, err := lookupAdapter.HoldingsLookup(lookupParams)
+	holdingsResult, err := lookupResult.GetHoldings()
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
+		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
@@ -342,11 +349,15 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	}
 	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 	lookupParams.Identifier = sup.LocalID.String
-	results, _, err := aa.HoldingsLookup(lookupParams)
+	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}
-	if len(results) == 0 {
+	holdingsResults, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to get holdings for availability lookup", err)
+	}
+	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
 		eventData["skipped"] = true
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg

@@ -13,6 +13,10 @@ type MockAvailabilityAdapter struct {
 	Metadata Metadata
 }
 
+type MockAvailabilityLookupResult struct {
+	parent *MockAvailabilityAdapter
+}
+
 func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
@@ -39,16 +43,21 @@ func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter,
 	return &MockAvailabilityAdapter{}, nil
 }
 
-func (a *MockAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
+func (a *MockAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	if a.Err != nil {
-		return nil, "", a.Err
+		return nil, a.Err
 	}
-	return a.Holdings, "", nil
+	return &MockAvailabilityLookupResult{parent: a}, nil
 }
 
-func (a *MockAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
-	if a.Err != nil {
-		return Metadata{}, a.Err
-	}
-	return a.Metadata, nil
+func (a *MockAvailabilityLookupResult) GetHoldings() ([]Holding, error) {
+	return a.parent.Holdings, nil
+}
+
+func (a *MockAvailabilityLookupResult) GetMetadata() (Metadata, error) {
+	return a.parent.Metadata, nil
+}
+
+func (a *MockAvailabilityLookupResult) GetQuery() string {
+	return ""
 }

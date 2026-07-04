@@ -66,13 +66,17 @@ func TestLookupFoundMarc(t *testing.T) {
 	params := LookupParams{
 		Title: "Computer",
 	}
-	results, pqf, err := aa.HoldingsLookup(params)
+	result, err := aa.Lookup(params)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "@attr 1=1016 \"Computer\"", result.GetQuery())
+
+	results, err := result.GetHoldings()
 	assert.NoError(t, err)
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].Location, "11224466")
-	assert.Equal(t, "@attr 1=1016 \"Computer\"", pqf)
 
-	metadata, err := aa.MetadataLookup(params)
+	metadata, err := result.GetMetadata()
 	assert.NoError(t, err)
 	assert.Contains(t, metadata.Identifier, "11224466")
 	assert.Contains(t, metadata.Title, "How to program a computer")
@@ -106,14 +110,17 @@ func TestLookupFoundOpac(t *testing.T) {
 	params := LookupParams{
 		Title: "Computer",
 	}
-	results, cql, err := aa.HoldingsLookup(params)
+	result, err := aa.Lookup(params)
+	assert.NoError(t, err)
+	assert.Equal(t, "title = \"Computer\"", result.GetQuery())
+	results, err := result.GetHoldings()
 	assert.NoError(t, err)
 	assert.Len(t, results, 42)
 	assert.Contains(t, results[0].ItemId, "test__000000001_")
 	assert.Contains(t, results[1].ItemId, "test__000000002_")
-	assert.Equal(t, "title = \"Computer\"", cql)
+	assert.Equal(t, "title = \"Computer\"", result.GetQuery())
 
-	metadata, err := aa.MetadataLookup(params)
+	metadata, err := result.GetMetadata()
 	assert.NoError(t, err)
 	assert.Contains(t, metadata.Identifier, "11224466")
 	assert.Contains(t, metadata.Title, "How to program a computer")
@@ -140,11 +147,11 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}
-	_, pqf, err := aa.HoldingsLookup(params)
+	result, err := aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search server with PQF")
 	assert.Contains(t, err.Error(), "Record syntax not supported")
-	assert.Equal(t, "@attr 1=12 \"1234\"", pqf)
+	assert.Equal(t, "@attr 1=12 \"1234\"", result.GetQuery())
 }
 
 func TestLookupDiagnosticCql(t *testing.T) {
@@ -171,11 +178,11 @@ func TestLookupDiagnosticCql(t *testing.T) {
 	assert.Equal(t, "danmarc", aa.(*ZoomAvailabilityAdapter).options["preferredRecordSyntax"])
 
 	params := LookupParams{Identifier: "1234"}
-	_, cql, err := aa.HoldingsLookup(params)
+	result, err := aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to search server with CQL")
 	assert.Contains(t, err.Error(), "Record syntax not supported")
-	assert.Equal(t, "rec.id = \"1234\"", cql)
+	assert.Equal(t, "rec.id = \"1234\"", result.GetQuery())
 }
 
 func TestConnectFailure(t *testing.T) {
@@ -193,7 +200,7 @@ func TestConnectFailure(t *testing.T) {
 	)
 	assert.NoError(t, err)
 	params := LookupParams{}
-	_, _, err = aa.HoldingsLookup(params)
+	_, err = aa.Lookup(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to Z39.50 server")
 }

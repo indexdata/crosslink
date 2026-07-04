@@ -343,7 +343,7 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "FailedToLocateHoldings",
 			supReqId:    "error",
 			eventStatus: events.EventStatusError,
-			message:     "failed to locate holdings for query 'error'",
+			message:     "failed to perform lookup for query 'error'",
 		},
 		{
 			name:        "NoHoldingsFound",

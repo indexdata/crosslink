@@ -179,7 +179,7 @@ func TestRequestRequestSruServerFail(t *testing.T) {
 	assert.Equal(t, "Unfilled", illTrans.LastSupplierStatus.String)
 	assert.Equal(t, "Request", illTrans.LastRequesterAction.String)
 	exp := "NOTICE, request-received = SUCCESS\n" +
-		"TASK, locate-suppliers = ERROR, error=failed to locate holdings for query 'rec.id = \"(DE-627)1795329181\"'\n" +
+		"TASK, locate-suppliers = ERROR, error=failed to perform lookup for query 'rec.id = \"(DE-627)1795329181\"'\n" +
 		"TASK, message-requester = SUCCESS\n"
 	apptest.EventsCompareString(appCtx, eventRepo, t, illTrans.ID, exp)
 }

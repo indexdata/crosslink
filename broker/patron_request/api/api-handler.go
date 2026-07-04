@@ -302,9 +302,14 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 		return nil
 	}
 	lookupParams := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
-	metadata, err := lookupAdapter.MetadataLookup(lookupParams)
+
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
 	if err != nil {
-		return fmt.Errorf("failed to lookup metadata: %w", err)
+		return fmt.Errorf("failed to perform lookup for patron request: %w", err)
+	}
+	metadata, err := lookupResult.GetMetadata()
+	if err != nil {
+		return fmt.Errorf("failed to get metadata for patron request: %w", err)
 	}
 	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
 }

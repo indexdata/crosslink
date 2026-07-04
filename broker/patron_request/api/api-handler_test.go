@@ -1257,7 +1257,7 @@ func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
 	err := h.metadataUpdate(ctx, &iso18626.Request{}, peerWithMetadataMode(&mode))
-	assert.ErrorContains(t, err, "failed to lookup metadata")
+	assert.ErrorContains(t, err, "failed to perform lookup for patron request")
 }
 
 func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {

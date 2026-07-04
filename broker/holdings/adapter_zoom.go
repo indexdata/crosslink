@@ -19,6 +19,44 @@ type ZoomAvailabilityAdapter struct {
 	queryBuilder   LookupQueryBuilder
 }
 
+type ZoomLookupResult struct {
+	params  LookupParams
+	query   string
+	records [][]byte
+	adapter *ZoomAvailabilityAdapter
+}
+
+func (r *ZoomLookupResult) GetQuery() string {
+	return r.query
+}
+
+func (r *ZoomLookupResult) GetHoldings() ([]Holding, error) {
+	var avail []Holding
+	for _, record := range r.records {
+		h, err := r.adapter.holdingsParser.Parse(record, r.params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+		}
+		avail = append(avail, h...)
+	}
+	return avail, nil
+}
+
+func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
+	var metadata Metadata
+	if r.adapter.metadataParser == nil {
+		return metadata, fmt.Errorf("metadata parser not configured")
+	}
+	if len(r.records) == 0 {
+		return metadata, fmt.Errorf("no records found")
+	}
+	metadata, err := r.adapter.metadataParser.Parse(r.records[0])
+	if err != nil {
+		return metadata, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
+	}
+	return metadata, nil
+}
+
 func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &ZoomAvailabilityAdapter{
 		// default options, can be overridden by config.Options
@@ -126,31 +164,14 @@ func (a *ZoomAvailabilityAdapter) iterateQueries(
 	return cqlList[0], nil
 }
 
-func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding, string, error) {
-	var avail []Holding
-	usedQuery, err := a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
-		h, err := a.holdingsParser.Parse(xmlBuffer, params)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
-		}
-		avail = append(avail, h...)
+func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
+	var result ZoomLookupResult
+	result.params = params
+	result.adapter = a
+	var err error
+	result.query, err = a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
+		result.records = append(result.records, xmlBuffer)
 		return true, nil // get all records in a search response
 	})
-	return avail, usedQuery, err
-}
-
-func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata, error) {
-	var metadata Metadata
-	if a.metadataParser == nil {
-		return metadata, fmt.Errorf("metadata parser not configured")
-	}
-	_, err := a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
-		parsed, err := a.metadataParser.Parse(xmlBuffer)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
-		}
-		metadata = parsed
-		return false, nil // get just first record in a search response
-	})
-	return metadata, err
+	return &result, err
 }
