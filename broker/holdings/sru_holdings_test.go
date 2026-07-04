@@ -718,20 +718,13 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, query)
 	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
-	assert.Len(t, holdingsList, 6)
+	assert.Len(t, holdingsList, 3)
 	assert.Equal(t, "l1", holdingsList[0].LocalIdentifier)
 	assert.Equal(t, "ISIL:s1", holdingsList[0].Symbol)
 	assert.Equal(t, "l2", holdingsList[1].LocalIdentifier)
 	assert.Equal(t, "ISIL:s2", holdingsList[1].Symbol)
 	assert.Equal(t, "l3", holdingsList[2].LocalIdentifier)
 	assert.Equal(t, "ISIL:s3", holdingsList[2].Symbol)
-
-	assert.Equal(t, "l1", holdingsList[3].LocalIdentifier)
-	assert.Equal(t, "ISIL:s1", holdingsList[3].Symbol)
-	assert.Equal(t, "l2", holdingsList[4].LocalIdentifier)
-	assert.Equal(t, "ISIL:s2", holdingsList[4].Symbol)
-	assert.Equal(t, "l3", holdingsList[5].LocalIdentifier)
-	assert.Equal(t, "ISIL:s3", holdingsList[5].Symbol)
 
 	ad = createSruAdapter(t, false, server.URL)
 	p = LookupParams{

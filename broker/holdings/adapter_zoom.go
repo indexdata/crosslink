@@ -40,20 +40,18 @@ func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder Lookup
 	return a, nil
 }
 
-// searchRetrieve executes a Z39.50 search and iterates over the result records,
-// calling processRecord for each XML buffer. processRecord should return true to
-// continue iterating and false to stop early (e.g. after the first metadata hit).
-func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Query, processRecord func([]byte) (bool, error)) error {
+func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *zoom.Query, processRecord func([]byte) (bool, error)) (bool, error) {
 	set, err := conn.Search(query)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer set.Close()
+	var found bool
 	limit := min(set.Count(), 100) // safety limit to avoid processing too many records
 	for i := 0; i < limit; i++ {
 		rec, err := set.GetRecord(i)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if rec == nil {
 			continue
@@ -65,24 +63,19 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *z
 		}
 		cont, err := processRecord(xmlBuffer)
 		if err != nil {
-			return err
+			return false, err
 		}
+		found = true
 		if !cont {
 			break
 		}
 	}
-	return nil
+	return found, nil
 }
 
-// iterateQueries drives the PQF-then-CQL query loop, calling searchRetrieve for
-// each query with processRecord. After each query it calls shouldContinueQuery; if
-// shouldContinueQuery returns false the loop stops and the current query string is
-// returned. Both HoldingsLookup and MetadataLookup use this to share the iteration
-// logic while differing only in their per-record gathering and stop condition.
 func (a *ZoomAvailabilityAdapter) iterateQueries(
 	params LookupParams,
 	processRecord func([]byte) (bool, error),
-	shouldContinueQuery func() bool,
 ) (string, error) {
 	conn := zoom.NewConnection(a.options)
 	defer conn.Close()
@@ -104,12 +97,12 @@ func (a *ZoomAvailabilityAdapter) iterateQueries(
 		if err != nil {
 			return pqf, fmt.Errorf("failed to create PQF query: %w", err)
 		}
-		err = a.searchRetrieve(conn, query, processRecord)
+		found, err := a.searchRetrieve(conn, query, processRecord)
 		query.Close()
 		if err != nil {
 			return pqf, fmt.Errorf("failed to search server with PQF: %s err %w", pqf, err)
 		}
-		if !shouldContinueQuery() {
+		if found {
 			return pqf, nil
 		}
 	}
@@ -118,12 +111,12 @@ func (a *ZoomAvailabilityAdapter) iterateQueries(
 		if err != nil {
 			return cql, fmt.Errorf("failed to create CQL query: %w", err)
 		}
-		err = a.searchRetrieve(conn, query, processRecord)
+		found, err := a.searchRetrieve(conn, query, processRecord)
 		query.Close()
 		if err != nil {
 			return cql, fmt.Errorf("failed to search server with CQL: %s err %w", cql, err)
 		}
-		if !shouldContinueQuery() {
+		if found {
 			return cql, nil
 		}
 	}
@@ -141,9 +134,7 @@ func (a *ZoomAvailabilityAdapter) HoldingsLookup(params LookupParams) ([]Holding
 			return false, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
 		}
 		avail = append(avail, h...)
-		return true, nil
-	}, func() bool {
-		return len(avail) == 0
+		return true, nil // get all records in a search response
 	})
 	return avail, usedQuery, err
 }
@@ -153,17 +144,14 @@ func (a *ZoomAvailabilityAdapter) MetadataLookup(params LookupParams) (Metadata,
 	if a.metadataParser == nil {
 		return metadata, fmt.Errorf("metadata parser not configured")
 	}
-	found := false
 	_, err := a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
 		parsed, err := a.metadataParser.Parse(xmlBuffer)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
 		}
 		metadata = parsed
-		found = true
-		return false, nil // stop after first record
-	}, func() bool {
-		return !found
+		return false, nil // get just first record in a search response
+
 	})
 	return metadata, err
 }
