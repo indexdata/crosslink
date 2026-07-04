@@ -14,16 +14,27 @@ type MetadataParserMarc struct {
 }
 
 func NewMetadataParserMarc(config directory.MarcMetadataParserConfig) MetadataParser {
-	if config.Identifier == nil && config.Title == nil && config.Isbn == nil && config.Issn == nil && config.Subtitle == nil && config.Author == nil && config.Edition == nil {
+	if config.Identifier == nil {
 		config.Identifier = NewString("001")
+	}
+	if config.Title == nil {
 		config.Title = NewString("245$a$n$p")
+	}
+	if config.Subtitle == nil {
 		config.Subtitle = NewString("245$b")
+	}
+	if config.Isbn == nil {
 		config.Isbn = NewString("020$a")
+	}
+	if config.Issn == nil {
 		config.Issn = NewString("022$a")
+	}
+	if config.Author == nil {
 		config.Author = NewString("100$a/100$?/110$a/110$?/111$a/111$?/245$c")
+	}
+	if config.Edition == nil {
 		config.Edition = NewString("250$a")
 	}
-	// perhaps should check if mainField is specified
 	return &MetadataParserMarc{
 		config: config,
 	}
@@ -61,11 +72,8 @@ func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
 	}
 
 	for _, e := range entries {
-		if e.configField == nil {
+		if e.configField == nil || *e.configField == "" {
 			continue
-		}
-		if *e.configField == "" {
-			return Metadata{}, fmt.Errorf("empty config field for %s", e.name)
 		}
 		altSplit := strings.Split(*e.configField, "/")
 		for _, alt := range altSplit {

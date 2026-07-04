@@ -47,11 +47,12 @@ func TestMetadataParserMarcDefault(t *testing.T) {
 }
 
 func TestMetadataParserMarcOverride(t *testing.T) {
+	empty := ""
 	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{
 		Identifier: NewString("002"),
 		Title:      NewString("245$a$n$p"),
 		Isbn:       NewString("020$a"),
-		Issn:       NewString("022$a"),
+		Issn:       &empty, // so ISSN will not be parsed at all
 		Subtitle:   NewString("245$b"),
 		Author:     NewString("100$a/100$?/245$c/110$a/110$?/111$a/111$?"),
 		Edition:    NewString("250"),
@@ -86,24 +87,11 @@ func TestMetadataParserMarcOverride(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "435", metadata.Identifier)
 	assert.Equal(t, "978-3-16-148410-0", metadata.Isbn)
-	assert.Equal(t, "8732", metadata.Issn)
+	assert.Equal(t, "", metadata.Issn)
 	assert.Equal(t, "The Title", metadata.Title)
 	assert.Equal(t, "John W Doe", metadata.Author)
 	assert.Equal(t, "The Subtitle", metadata.Subtitle)
 	assert.Equal(t, "2nd edition", metadata.Edition)
-}
-
-func TestMetadataParserMarcEmptyConfigField(t *testing.T) {
-	empty := ""
-	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{
-		Identifier: &empty,
-	})
-	marcXML := []byte(`
-	<record xmlns="http://www.loc.gov/MARC21/slim">
-	    <controlfield tag="001">123456789</controlfield>
-	</record>`)
-	_, err := parser.Parse(marcXML)
-	assert.ErrorContains(t, err, "empty config field for Identifier")
 }
 
 func TestMetadataParserBadXml(t *testing.T) {
