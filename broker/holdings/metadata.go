@@ -32,7 +32,17 @@ func fixupString(src string, dst *string, replace bool) {
 	}
 }
 
-func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, mode directory.MetadataUpdateMode) error {
+func MetadataRequestUpdate(illRequest *iso18626.BibliographicInfo, metadata Metadata, params LookupParams, mode directory.MetadataUpdateMode) error {
+	if mode == directory.None {
+		return nil
+	}
+	if mode == directory.Auto {
+		if params.Identifier != "" {
+			mode = directory.Replace
+		} else {
+			mode = directory.Merge
+		}
+	}
 	replace := mode == directory.Replace
 	fixupString(metadata.Title, &illRequest.Title, replace)
 	fixupString(metadata.Subtitle, &illRequest.Subtitle, replace)

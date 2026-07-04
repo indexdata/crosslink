@@ -306,14 +306,7 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 	if err != nil {
 		return fmt.Errorf("failed to lookup metadata: %w", err)
 	}
-	if mode == directory.Auto {
-		if lookupParams.Identifier != "" {
-			mode = directory.Replace
-		} else {
-			mode = directory.Merge
-		}
-	}
-	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, mode)
+	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
 }
 
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
