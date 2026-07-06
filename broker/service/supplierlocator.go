@@ -116,6 +116,8 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
 		}
+		lookupParams = holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
+			illTrans.IllTransactionData.ServiceInfo)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
