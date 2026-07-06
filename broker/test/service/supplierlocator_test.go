@@ -337,13 +337,19 @@ func TestLocateSuppliersErrors(t *testing.T) {
 			name:        "MissingRequestId",
 			supReqId:    "",
 			eventStatus: events.EventStatusProblem,
-			problem:     "ILL transaction missing bibliographic identifiers (SupplierUniqueRecordId/ISBN/ISSN)",
+			problem:     "failed to perform lookup: missing lookup parameter: identifier",
 		},
 		{
-			name:        "FailedToLocateHoldings",
+			name:        "FailedToLookup",
 			supReqId:    "error",
 			eventStatus: events.EventStatusError,
 			message:     "failed to perform lookup for query 'error'",
+		},
+		{
+			name:        "FailedToLookupHoldings",
+			supReqId:    "error-holdings",
+			eventStatus: events.EventStatusError,
+			message:     "failed to get holdings for query 'error-holdings'",
 		},
 		{
 			name:        "NoHoldingsFound",

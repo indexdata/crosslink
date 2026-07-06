@@ -856,7 +856,7 @@ func TestLocateSuppliersMetadataLookupError(t *testing.T) {
 
 	status, _ := locator.locateSuppliers(appCtx, events.Event{IllTransactionID: "ill-1"})
 
-	assert.Equal(t, events.EventStatusError, status)
+	assert.Equal(t, events.EventStatusProblem, status)
 	assert.Empty(t, mockRepo.savedTransactions)
 }
 

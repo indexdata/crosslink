@@ -60,10 +60,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
 	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
-	if lookupParams.Identifier == "" && lookupParams.Isbn == "" && lookupParams.Issn == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
-			"ILL transaction missing bibliographic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
-	}
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
@@ -98,7 +94,11 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
 	}
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
+		if query != "" {
+			return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
+		} else {
+			return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, fmt.Sprintf("failed to perform lookup: %s", err.Error()), nil)
+		}
 	}
 
 	// holdings before metadata, so that transaction is only saved if both holdings and metadata are successfully retrieved and updated
