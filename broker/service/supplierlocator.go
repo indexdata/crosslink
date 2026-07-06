@@ -86,27 +86,34 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to get config entry for requester", err)
 	}
-	mode := directory.None
+
+	metadataUpdateMode := directory.None
 	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
-		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
+		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
 	}
 
 	var query string
 	lookupResult, err := lookupAdapter.Lookup(lookupParams)
 	if lookupResult != nil {
-		query = lookupResult.GetQuery()
+		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
 	}
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
 	}
 
+	// holdings before metadata, so that transaction is only saved if both holdings and metadata are successfully retrieved and updated
+	holdingsResult, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
+	}
+
 	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
-	if mode != directory.None && requester.Vendor != string(directory.CrossLink) {
+	if metadataUpdateMode != directory.None && requester.Vendor != string(directory.CrossLink) {
 		metadata, err := lookupResult.GetMetadata()
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
 		}
-		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, mode)
+		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, metadataUpdateMode)
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to update metadata for locating suppliers", err)
 		}
@@ -114,10 +121,6 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 		if err != nil {
 			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
 		}
-	}
-	holdingsResult, err := lookupResult.GetHoldings()
-	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query

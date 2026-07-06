@@ -178,7 +178,7 @@ func (s *SruLookupResult) GetMetadata() (Metadata, error) {
 		return metadata, fmt.Errorf("metadata parser not configured")
 	}
 	if len(s.records) == 0 {
-		return metadata, fmt.Errorf("no records found")
+		return metadata, nil
 	}
 	metadata, err := s.adapter.metadataParser.Parse(s.records[0])
 	if err != nil {

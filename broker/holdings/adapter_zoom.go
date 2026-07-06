@@ -48,7 +48,7 @@ func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
 		return metadata, fmt.Errorf("metadata parser not configured")
 	}
 	if len(r.records) == 0 {
-		return metadata, fmt.Errorf("no records found")
+		return metadata, nil
 	}
 	metadata, err := r.adapter.metadataParser.Parse(r.records[0])
 	if err != nil {
