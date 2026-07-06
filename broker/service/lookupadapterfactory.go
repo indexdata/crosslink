@@ -50,30 +50,22 @@ func (s *LookupAdapterFactory) resolveConfigPeer(ctx common.ExtendedContext, req
 	return consortiumPeers[0], nil
 }
 
-func (s *LookupAdapterFactory) GetLookupAdapter(ctx common.ExtendedContext, requester ill_db.Peer) (holdings.LookupAdapter, error) {
-	if s.holdingsAdapter != nil {
-		return s.holdingsAdapter, nil
-	}
+func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, requester ill_db.Peer) (holdings.LookupAdapter, directory.Entry, error) {
 	peer, err := s.resolveConfigPeer(ctx, requester)
 	if err != nil {
-		return nil, err
+		return nil, directory.Entry{}, err
+	}
+	if s.holdingsAdapter != nil {
+		return s.holdingsAdapter, peer.CustomData, nil
 	}
 	if s.availabilityCreator == nil {
-		return nil, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
+		return nil, directory.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
 	}
 	lookupAdapter, err := s.availabilityCreator.GetAdapter(peer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get adapter for peer: %w", err)
+		return nil, directory.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
 	}
-	return lookupAdapter, nil
-}
-
-func (s *LookupAdapterFactory) GetConfigEntry(ctx common.ExtendedContext, requester ill_db.Peer) (directory.Entry, error) {
-	peer, err := s.resolveConfigPeer(ctx, requester)
-	if err != nil {
-		return directory.Entry{}, err
-	}
-	return peer.CustomData, nil
+	return lookupAdapter, peer.CustomData, nil
 }
 
 func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, supplier ill_db.Peer) (holdings.LookupAdapter, error) {

@@ -283,17 +283,14 @@ func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, ill
 	if a.lookupAdapterFactory == nil {
 		return nil
 	}
-	lookupAdapter, err := a.lookupAdapterFactory.GetLookupAdapter(ctx, requesterPeer)
+	lookupAdapter, configPeer, err := a.lookupAdapterFactory.GetAdapterRequester(ctx, requesterPeer)
 	if err != nil {
 		return fmt.Errorf("failed to get lookup adapter: %w", err)
 	}
 	if lookupAdapter == nil {
 		return nil
 	}
-	configPeer, err := a.lookupAdapterFactory.GetConfigEntry(ctx, requesterPeer)
-	if err != nil {
-		return fmt.Errorf("failed to get config entry: %w", err)
-	}
+
 	mode := directory.None
 	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
 		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
