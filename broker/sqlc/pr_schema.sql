@@ -61,6 +61,21 @@ CREATE TABLE notification
     acknowledged_at TIMESTAMP
 );
 
+CREATE TABLE template
+(
+    id           VARCHAR PRIMARY KEY,
+    owner        VARCHAR   NOT NULL,
+    title        VARCHAR   NOT NULL,
+    purpose      VARCHAR   NOT NULL,
+    subject      TEXT,
+    body         TEXT      NOT NULL,
+    content_type VARCHAR   NOT NULL,
+    labels       TEXT[]    NOT NULL DEFAULT '{}',
+    audience     VARCHAR,
+    created_at   TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMP
+);
+
 CREATE OR REPLACE FUNCTION immutable_to_timestamp(text)
 RETURNS timestamp
 LANGUAGE sql

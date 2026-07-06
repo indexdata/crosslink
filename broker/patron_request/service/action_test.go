@@ -1906,9 +1906,9 @@ func TestPatronEmail(t *testing.T) {
 	}
 }
 
-func newActionServiceWithEmail(emailSvc *EmailSenderMock) *PatronRequestActionService {
+func newActionServiceWithEmail(prRepo *MockPrRepo, emailSvc *EmailSenderMock) *PatronRequestActionService {
 	return CreatePatronRequestActionService(
-		*new(pr_db.PrRepo),
+		prRepo,
 		new(IllRepoMock),
 		*new(events.EventBus),
 		new(handler.Iso18626Handler),
@@ -1918,40 +1918,64 @@ func newActionServiceWithEmail(emailSvc *EmailSenderMock) *PatronRequestActionSe
 }
 
 func TestCreateAndSendEmail(t *testing.T) {
+	const symbol = "ISIL:TEST"
 	const from = "sender@example.com"
 	recipients := []string{"patron@example.com"}
-	const template = "test-template"
+	const label = "test-label"
+	const audience = proapi.ModelActionParamsSendToPatron
+
+	foundTemplate := pr_db.Template{
+		Body:    "Hello patron",
+		Subject: pgtype.Text{String: "Your request", Valid: true},
+	}
 
 	tests := []struct {
 		name          string
 		from          string
 		recipients    []string
-		template      string
-		setupMock     func(m *EmailSenderMock)
-		assertMock    func(t *testing.T, m *EmailSenderMock)
+		setupPrRepo   func(m *MockPrRepo)
+		setupEmail    func(m *EmailSenderMock)
+		assertEmail   func(t *testing.T, m *EmailSenderMock)
 		wantErrSubstr string
 	}{
 		{
-			name:       "success – email is built and sent",
+			name:       "success – template found, email built and sent",
 			from:       from,
 			recipients: recipients,
-			template:   template,
-			setupMock: func(m *EmailSenderMock) {
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {
 				m.On("SendEmail", from).Return(nil)
 			},
-			assertMock: func(t *testing.T, m *EmailSenderMock) {
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
 				m.AssertCalled(t, "SendEmail", from)
 			},
+		},
+		{
+			name:       "template not found returns error",
+			from:       from,
+			recipients: recipients,
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{}, errors.New("no template found"))
+			},
+			setupEmail: func(m *EmailSenderMock) {},
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
+				m.AssertNotCalled(t, "SendEmail", mock.Anything)
+			},
+			wantErrSubstr: "no template found",
 		},
 		{
 			name:       "SendEmail error is propagated",
 			from:       from,
 			recipients: recipients,
-			template:   template,
-			setupMock: func(m *EmailSenderMock) {
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {
 				m.On("SendEmail", from).Return(errors.New("smtp failure"))
 			},
-			assertMock: func(t *testing.T, m *EmailSenderMock) {
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
 				m.AssertCalled(t, "SendEmail", from)
 			},
 			wantErrSubstr: "smtp failure",
@@ -1960,9 +1984,11 @@ func TestCreateAndSendEmail(t *testing.T) {
 			name:       "header injection in from triggers BuildRawMessage error",
 			from:       "bad\r\nfrom@example.com",
 			recipients: recipients,
-			template:   template,
-			setupMock:  func(m *EmailSenderMock) {},
-			assertMock: func(t *testing.T, m *EmailSenderMock) {
+			setupPrRepo: func(m *MockPrRepo) {
+				m.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
+			},
+			setupEmail: func(m *EmailSenderMock) {},
+			assertEmail: func(t *testing.T, m *EmailSenderMock) {
 				m.AssertNotCalled(t, "SendEmail", mock.Anything)
 			},
 			wantErrSubstr: "header injection",
@@ -1971,18 +1997,20 @@ func TestCreateAndSendEmail(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			mockPrRepo := new(MockPrRepo)
+			tc.setupPrRepo(mockPrRepo)
 			mockEmail := new(EmailSenderMock)
-			tc.setupMock(mockEmail)
-			svc := newActionServiceWithEmail(mockEmail)
+			tc.setupEmail(mockEmail)
+			svc := newActionServiceWithEmail(mockPrRepo, mockEmail)
 
-			err := svc.createAndSendEmail(tc.from, tc.recipients, tc.template)
+			err := svc.createAndSendEmail(appCtx, symbol, tc.from, tc.recipients, label, audience)
 
 			if tc.wantErrSubstr == "" {
 				assert.NoError(t, err)
 			} else {
 				assert.ErrorContains(t, err, tc.wantErrSubstr)
 			}
-			tc.assertMock(t, mockEmail)
+			tc.assertEmail(t, mockEmail)
 		})
 	}
 }
@@ -2037,12 +2065,17 @@ func autoParams(tmpl string, targets ...proapi.ModelActionParamsSendTo) actionPa
 }
 
 func TestSendEmailNotification(t *testing.T) {
+	foundTemplate := pr_db.Template{
+		Body:    "Hello",
+		Subject: pgtype.Text{String: "Subject", Valid: true},
+	}
+
 	tests := []struct {
 		name       string
 		pr         pr_db.PatronRequest
 		params     actionParams
 		symbol     string
-		setupMocks func(illRepo *IllRepoMock, emailSvc *EmailSenderMock)
+		setupMocks func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock)
 		wantStatus events.EventStatus
 		wantNote   string
 		wantErr    string
@@ -2052,7 +2085,7 @@ func TestSendEmailNotification(t *testing.T) {
 			pr:         pr_db.PatronRequest{},
 			params:     actionParams{},
 			symbol:     testSymbol,
-			setupMocks: func(_ *IllRepoMock, _ *EmailSenderMock) {},
+			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
@@ -2060,7 +2093,7 @@ func TestSendEmailNotification(t *testing.T) {
 			pr:         pr_db.PatronRequest{},
 			params:     actionParams{AutoActionParams: &proapi.ModelAction_Params{}},
 			symbol:     testSymbol,
-			setupMocks: func(_ *IllRepoMock, _ *EmailSenderMock) {},
+			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
@@ -2068,7 +2101,7 @@ func TestSendEmailNotification(t *testing.T) {
 			pr:         pr_db.PatronRequest{},
 			params:     actionParams{AutoActionParams: &proapi.ModelAction_Params{SendTo: sendToTargets()}},
 			symbol:     testSymbol,
-			setupMocks: func(_ *IllRepoMock, _ *EmailSenderMock) {},
+			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusSuccess,
 		},
 		{
@@ -2076,9 +2109,9 @@ func TestSendEmailNotification(t *testing.T) {
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
 			params: actionParams{AutoActionParams: &proapi.ModelAction_Params{
-				SendTo: sendToTargets(proapi.Patron),
+				SendTo: sendToTargets(proapi.ModelActionParamsSendToPatron),
 			}},
-			setupMocks: func(_ *IllRepoMock, _ *EmailSenderMock) {},
+			setupMocks: func(_ *MockPrRepo, _ *IllRepoMock, _ *EmailSenderMock) {},
 			wantStatus: events.EventStatusError,
 			wantErr:    "template label is not set",
 		},
@@ -2086,8 +2119,8 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "GetPeerBySymbol error – error result",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Patron),
-			setupMocks: func(illRepo *IllRepoMock, _ *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(ill_db.Peer{}, errors.New("db error"))
 			},
 			wantStatus: events.EventStatusError,
@@ -2097,8 +2130,8 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo patron – no patron email addresses – note set",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Patron),
-			setupMocks: func(illRepo *IllRepoMock, _ *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2108,9 +2141,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo patron – email sent successfully",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Patron),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2120,9 +2154,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo patron – SendEmail fails – error result",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Patron),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithFromEmailOnly(testFrom), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
 			wantStatus: events.EventStatusError,
@@ -2132,9 +2167,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – email sent successfully",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2144,9 +2180,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – multiple semicolon-separated addresses all sent",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "a@example.com; b@example.com"), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2156,9 +2193,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – trailing semicolon is ignored, email sent",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo+";"), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2168,8 +2206,8 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – whitespace-only address yields no recipients",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(_ *MockPrRepo, illRepo *IllRepoMock, _ *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, "  ; ; "), nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2179,9 +2217,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo staff – SendEmail fails – error result",
 			pr:     pr_db.PatronRequest{},
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(errors.New("smtp error"))
 			},
 			wantStatus: events.EventStatusError,
@@ -2191,9 +2230,10 @@ func TestSendEmailNotification(t *testing.T) {
 			name:   "SendTo patron and staff – both emails sent – staff note wins",
 			pr:     prWithPatronEmail(testPatronTo),
 			symbol: testSymbol,
-			params: autoParams(testTemplate, proapi.Patron, proapi.Staff),
-			setupMocks: func(illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
+			params: autoParams(testTemplate, proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff),
+			setupMocks: func(prRepo *MockPrRepo, illRepo *IllRepoMock, emailSvc *EmailSenderMock) {
 				illRepo.On("GetPeerBySymbol", testSymbol).Return(peerWithEmail(testFrom, testStaffTo), nil)
+				prRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(foundTemplate, nil)
 				emailSvc.On("SendEmail", testFrom).Return(nil)
 			},
 			wantStatus: events.EventStatusSuccess,
@@ -2203,12 +2243,13 @@ func TestSendEmailNotification(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			prRepo := new(MockPrRepo)
 			illRepo := new(IllRepoMock)
 			emailSvc := new(EmailSenderMock)
-			tc.setupMocks(illRepo, emailSvc)
+			tc.setupMocks(prRepo, illRepo, emailSvc)
 
 			svc := CreatePatronRequestActionService(
-				*new(pr_db.PrRepo),
+				prRepo,
 				illRepo,
 				*new(events.EventBus),
 				new(handler.Iso18626Handler),
@@ -2253,10 +2294,11 @@ func TestHandleInvokeActionBorrowerActionSendNotification(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: BorrowerStateShipped, Side: SideBorrowing, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:REC1"}}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{Body: "body", Subject: pgtype.Text{String: "subj", Valid: true}}, nil)
 
 	action := BorrowerActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
-		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
+		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("shipped-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
@@ -2280,7 +2322,7 @@ func TestHandleInvokeActionBorrowerActionSendNotification_emailServiceNotReady(t
 
 	action := BorrowerActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
-		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
+		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("shipped-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
@@ -2309,10 +2351,11 @@ func TestHandleInvokeActionLenderActionSendNotification(t *testing.T) {
 	illRequest := iso18626.Request{}
 	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, State: LenderStateValidated, Side: SideLending, SupplierSymbol: pgtype.Text{Valid: true, String: "ISIL:SUP1"}}, nil)
 	mockPrRepo.On("GetItemsByPrId", patronRequestId).Return([]pr_db.Item{{Barcode: "1234"}}, nil)
+	mockPrRepo.On("GetTemplateByPurposeAudienceLabelAndOwner", mock.Anything).Return(pr_db.Template{Body: "body", Subject: pgtype.Text{String: "subj", Valid: true}}, nil)
 
 	action := LenderActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
-		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
+		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("validated-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
@@ -2342,7 +2385,7 @@ func TestHandleInvokeActionLenderActionSendNotification_emailServiceNotReady(t *
 
 	action := LenderActionSendNotification
 	data := map[string]any{"autoActionParams": proapi.ModelAction_Params{
-		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.Patron, proapi.Staff},
+		SendTo:        &[]proapi.ModelActionParamsSendTo{proapi.ModelActionParamsSendToPatron, proapi.ModelActionParamsSendToStaff},
 		TemplateLabel: ptr("validated-template"),
 	}}
 	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &action}, CustomData: data}})
@@ -2586,6 +2629,11 @@ func (r *MockPrRepo) SaveNotification(ctx common.ExtendedContext, params pr_db.S
 func (r *MockPrRepo) GetNotificationById(ctx common.ExtendedContext, id string) (pr_db.Notification, error) {
 	args := r.Called(id)
 	return args.Get(0).(pr_db.Notification), args.Error(1)
+}
+
+func (r *MockPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams) (pr_db.Template, error) {
+	args := r.Called(params)
+	return args.Get(0).(pr_db.Template), args.Error(1)
 }
 
 type MockIso18626Handler struct {

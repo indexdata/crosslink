@@ -162,3 +162,51 @@ WHERE pr_id = sqlc.arg(pr_id)::text
 DELETE
 FROM notification
 WHERE id = $1;
+
+-- name: SaveTemplate :one
+INSERT INTO template (id, owner, title, purpose, subject, body, content_type, labels, audience, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+ON CONFLICT (id) DO UPDATE
+    SET title        = EXCLUDED.title,
+        purpose      = EXCLUDED.purpose,
+        subject      = EXCLUDED.subject,
+        body         = EXCLUDED.body,
+        content_type = EXCLUDED.content_type,
+        labels       = EXCLUDED.labels,
+        audience     = EXCLUDED.audience,
+        updated_at   = now()
+RETURNING sqlc.embed(template);
+
+-- name: GetTemplateByIdAndOwner :one
+SELECT sqlc.embed(template)
+FROM template
+WHERE id = $1 AND owner = $2
+LIMIT 1;
+
+-- name: GetTemplatesByOwner :many
+SELECT sqlc.embed(template), COUNT(*) OVER () as full_count
+FROM template
+WHERE owner = $3
+ORDER BY created_at
+    LIMIT $1 OFFSET $2;
+
+-- name: DeleteTemplateByIdAndOwner :exec
+DELETE
+FROM template
+WHERE id = $1 AND owner = $2;
+
+
+-- name: GetTemplateByPurposeAudienceLabelAndOwner :one
+-- Finds the best-matching template for a given owner, purpose, and label.
+-- Audience is optional: a template with a NULL audience matches any requested audience.
+-- When multiple templates match, prefer one with a specific audience over a NULL audience.
+SELECT sqlc.embed(template)
+FROM template
+WHERE owner = $1
+  AND purpose = $2
+  AND labels @> ARRAY[sqlc.arg(label)::text]
+  AND (audience IS NULL OR audience = sqlc.arg(audience)::text)
+ORDER BY
+    CASE WHEN audience IS NOT NULL THEN 0 ELSE 1 END,
+    created_at
+LIMIT 1;

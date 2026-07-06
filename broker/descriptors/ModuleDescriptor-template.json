@@ -302,6 +302,51 @@
           "permissionsRequired": [
             "broker.batch_actions.item.disable.post"
           ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/templates",
+          "permissionsRequired": [
+            "broker.templates.get"
+          ]
+        },
+        {
+          "methods": [
+            "POST"
+          ],
+          "pathPattern": "/broker/templates",
+          "permissionsRequired": [
+            "broker.templates.post"
+          ]
+        },
+        {
+          "methods": [
+            "GET"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.get"
+          ]
+        },
+        {
+          "methods": [
+            "PUT"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.put"
+          ]
+        },
+        {
+          "methods": [
+            "DELETE"
+          ],
+          "pathPattern": "/broker/templates/{id}",
+          "permissionsRequired": [
+            "broker.templates.item.delete"
+          ]
         }
       ]
     }
@@ -473,6 +518,62 @@
       "permissionName": "broker.batch_actions.item.disable.post"
     },
     {
+      "description": "List templates",
+      "displayName": "Broker - list templates",
+      "permissionName": "broker.templates.get"
+    },
+    {
+      "description": "Create a template",
+      "displayName": "Broker - create template",
+      "permissionName": "broker.templates.post"
+    },
+    {
+      "description": "Read a template",
+      "displayName": "Broker - read template",
+      "permissionName": "broker.templates.item.get"
+    },
+    {
+      "description": "Update a template",
+      "displayName": "Broker - update template",
+      "permissionName": "broker.templates.item.put"
+    },
+    {
+      "description": "Delete a template",
+      "displayName": "Broker - delete template",
+      "permissionName": "broker.templates.item.delete"
+    },
+    {
+      "description": "Read-only access to templates",
+      "displayName": "Broker - templates: read",
+      "permissionName": "broker.templates.read",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.get",
+        "broker.templates.item.get"
+      ]
+    },
+    {
+      "description": "Write access to templates",
+      "displayName": "Broker - templates: write",
+      "permissionName": "broker.templates.write",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.post",
+        "broker.templates.item.put",
+        "broker.templates.item.delete"
+      ]
+    },
+    {
+      "description": "Read and write access to templates",
+      "displayName": "Broker - templates: all",
+      "permissionName": "broker.templates.all",
+      "visible": true,
+      "subPermissions": [
+        "broker.templates.read",
+        "broker.templates.write"
+      ]
+    },
+    {
       "description": "Read-only access to batch actions",
       "displayName": "Broker - batch actions: read",
       "permissionName": "broker.batch_actions.read",
@@ -603,7 +704,12 @@
         "broker.batch_actions.item.put",
         "broker.batch_actions.item.delete",
         "broker.batch_actions.item.enable.post",
-        "broker.batch_actions.item.disable.post"
+        "broker.batch_actions.item.disable.post",
+        "broker.templates.get",
+        "broker.templates.post",
+        "broker.templates.item.get",
+        "broker.templates.item.put",
+        "broker.templates.item.delete"
       ]
     }
   ]
