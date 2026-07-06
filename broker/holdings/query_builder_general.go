@@ -79,13 +79,14 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 	type paramMapping struct {
 		value   string
 		mapping *string
+		name    string
 	}
 
 	paramMappings := []paramMapping{
-		{params.Identifier, s.config.Identifier},
-		{params.Isbn, s.config.Isbn},
-		{params.Issn, s.config.Issn},
-		{params.Title, s.config.Title},
+		{params.Identifier, s.config.Identifier, "identifier"},
+		{params.Isbn, s.config.Isbn, "isbn"},
+		{params.Issn, s.config.Issn, "issn"},
+		{params.Title, s.config.Title, "title"},
 	}
 	var pqfList []string
 	var cqlList []string
@@ -101,7 +102,13 @@ func (s *QueryBuilderGen) Build(params LookupParams) (cql []string, pqf []string
 		}
 	}
 	if len(cqlList) == 0 && len(pqfList) == 0 {
-		return nil, nil, errors.New("no search parameters provided for PQF/CQL query")
+		var allowedLookupIdentifiers []string
+		for _, pm := range paramMappings {
+			if pm.mapping != nil && *pm.mapping != "" {
+				allowedLookupIdentifiers = append(allowedLookupIdentifiers, pm.name)
+			}
+		}
+		return nil, nil, errors.New("missing lookup parameters. Provide at least one of: " + strings.Join(allowedLookupIdentifiers, ", "))
 	}
 	return cqlList, pqfList, nil
 }

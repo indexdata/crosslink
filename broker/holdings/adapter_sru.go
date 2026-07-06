@@ -110,7 +110,7 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, qu
 	return found, query, nil
 }
 
-func (s *SruHoldingsLookupAdapter) getHoldings(sruUrl string, params LookupParams, processRecord func([]byte) (bool, error)) (bool, string, error) {
+func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupParams, processRecord func([]byte) (bool, error)) (bool, string, error) {
 	cqlList, pqfList, err := s.queryBuilder.Build(params)
 	if err != nil {
 		return false, "", err
@@ -141,7 +141,7 @@ func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, er
 
 	for _, sruUrl := range s.sruUrl {
 		var err error
-		found, query, err := s.getHoldings(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
+		found, query, err := s.lookupServer(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
 			result.records = append(result.records, xmlBuffer)
 			return true, nil
 		})

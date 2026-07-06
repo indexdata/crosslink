@@ -64,6 +64,9 @@ func TestNewQueryBuilderGen(t *testing.T) {
 	assert.Len(t, pqf, 0)
 	assert.Equal(t, []string{"id == \"12345\""}, cql)
 
+	cql, pqf, err = qb.Build(LookupParams{Title: "Test Title"})
+	assert.ErrorContains(t, err, "missing lookup parameters. Provide at least one of: identifier, isbn, issn")
+
 	// Test with unsupported type
 	unsupportedType := directory.QueryConfigType("unsupported")
 	qb, err = NewQueryBuilderGen(&directory.QueryConfig{Type: &unsupportedType})
