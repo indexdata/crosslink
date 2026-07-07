@@ -15,10 +15,11 @@
         {
           "name": "validate",
           "desc": "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)",
+          "trigger": "auto",
           "transitions": {
-            "success": "VALIDATED"
-          },
-          "trigger": "auto"
+            "success": "VALIDATED",
+            "review": "NEEDS_REVIEW"
+          }
         }
       ]
     },
@@ -28,6 +29,23 @@
       "desc": "Patron Request is valid",
       "side": "REQUESTER",
       "primaryAction": "send-request",
+      "actions": [
+        {
+          "name": "send-request",
+          "desc": "Send ISO18626 request to the supplier or broker",
+          "transitions": {
+            "success": "SENT"
+          }
+        }
+      ]
+    },
+    {
+      "name": "NEEDS_REVIEW",
+      "display": "Needs review",
+      "desc": "Request is valid but needs staff review before sending",
+      "side": "REQUESTER",
+      "primaryAction": "send-request",
+      "needsAttention": true,
       "actions": [
         {
           "name": "send-request",

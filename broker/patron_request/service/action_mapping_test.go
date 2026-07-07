@@ -16,6 +16,7 @@ func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		BorrowerStateNew:              {{actionName: BorrowerActionValidate, auto: true}},
 		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest}},
+		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
 		BorrowerStateWillSupply:       {{actionName: BorrowerActionCancelRequest}},
@@ -91,6 +92,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))
+	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
@@ -192,9 +194,9 @@ func TestGetActionTransitionConditionPendingSelfTransition(t *testing.T) {
 }
 
 func listCompare(t *testing.T, list1 []pr_db.PatronRequestAction, list2 []pr_db.PatronRequestAction) {
-	assert.Equal(t, len(list1), len(list2))
+	assert.Equal(t, len(list1), len(list2), "list1=%v, list2=%v", list1, list2)
 	for i := range list1 {
-		assert.True(t, slices.Contains(list2, list1[i]))
+		assert.True(t, slices.Contains(list2, list1[i]), "list1=%v, list2=%v", list1, list2)
 	}
 }
 
@@ -205,7 +207,7 @@ func mapCompare(t *testing.T, map1 map[pr_db.PatronRequestState][]PatronRequestA
 		assert.Equal(t, len(listOne), len(listTwo), "State %s has different number of actions in the two maps", stateName)
 		for i := range listOne {
 			assert.Equal(t, listOne[i].actionName, listTwo[i].actionName)
-			assert.Equal(t, listOne[i].auto, listTwo[i].auto)
+			assert.Equal(t, listOne[i].auto, listTwo[i].auto, "State %s has different auto action configuration for action %s", stateName, listOne[i].actionName)
 		}
 	}
 }

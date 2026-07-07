@@ -13,6 +13,7 @@ type MessageEvent string
 const (
 	ActionOutcomeSuccess = "success"
 	ActionOutcomeFailure = "failure"
+	ActionOutcomeReview  = "review"
 )
 
 const (
@@ -23,6 +24,7 @@ const (
 const (
 	BorrowerStateNew              pr_db.PatronRequestState = "NEW"
 	BorrowerStateValidated        pr_db.PatronRequestState = "VALIDATED"
+	BorrowerStateNeedsReview      pr_db.PatronRequestState = "NEEDS_REVIEW"
 	BorrowerStateSent             pr_db.PatronRequestState = "SENT"
 	BorrowerStateSupplierLocated  pr_db.PatronRequestState = "SUPPLIER_LOCATED"
 	BorrowerStateConditionPending pr_db.PatronRequestState = "CONDITION_PENDING"
@@ -104,6 +106,7 @@ func requesterBuiltInStates() []string {
 	return uniqueSorted([]string{
 		string(BorrowerStateNew),
 		string(BorrowerStateValidated),
+		string(BorrowerStateNeedsReview),
 		string(BorrowerStateSent),
 		string(BorrowerStateSupplierLocated),
 		string(BorrowerStateConditionPending),

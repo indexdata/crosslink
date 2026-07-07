@@ -346,7 +346,7 @@ func (a *PatronRequestActionService) handleBorrowingAction(ctx common.ExtendedCo
 	}
 	switch action {
 	case BorrowerActionValidate:
-		return a.validateBorrowingRequest(ctx, pr, lmsAdapter)
+		return a.validateBorrowingRequest(ctx, pr, lmsAdapter, illRequest)
 	case BorrowerActionSendRequest:
 		return a.sendBorrowingRequest(ctx, pr, illRequest)
 	case BorrowerActionReceive:
@@ -433,7 +433,7 @@ func (a *PatronRequestActionService) handleLenderAction(ctx common.ExtendedConte
 	}
 }
 
-func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter) actionExecutionResult {
+func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.ExtendedContext, pr pr_db.PatronRequest, lmsAdapter lms.LmsAdapter, illRequest iso18626.Request) actionExecutionResult {
 	patron := ""
 	if pr.Patron.Valid {
 		patron = pr.Patron.String
@@ -446,7 +446,13 @@ func (a *PatronRequestActionService) validateBorrowingRequest(ctx common.Extende
 	// change patron to canonical user id
 	// perhaps it would be better to have both original and canonical id stored?
 	pr.Patron = pgtype.Text{String: userId, Valid: true}
-	return actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+
+	res := actionExecutionResult{status: events.EventStatusSuccess, pr: pr}
+	if illRequest.BibliographicInfo.SupplierUniqueRecordId == "" {
+		res.result = &events.EventResult{}
+		res.result.ActionResult = &events.ActionResult{Outcome: ActionOutcomeReview}
+	}
+	return res
 }
 
 func deepCopyISO18626Request(request iso18626.Request) (iso18626.Request, error) {
