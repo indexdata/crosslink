@@ -19,8 +19,8 @@ GIT_HEAD_REF_FILE := $(if $(GIT_HEAD_REF),$(shell $(GIT) rev-parse --git-path $(
 GIT_PACKED_REFS_FILE := $(shell $(GIT) rev-parse --git-path packed-refs 2>/dev/null)
 GIT_COMMIT_DEPS = $(GIT_HEAD_FILE) $(wildcard $(GIT_HEAD_REF_FILE)) $(wildcard $(GIT_PACKED_REFS_FILE))
 COVERAGE=coverage.out
-RETURNABLES_JSON=patron_request/service/statemodels/returnables.json
-RETURNABLES_YAML=../misc/returnables.yaml
+STATE_MODELS_JSON=patron_request/service/statemodels/state-models.json
+STATE_MODELS_YAML=../misc/state-models.yaml
 PULLSLIP_TEMPLATE=pullslip/service/pull_slip_template.html
 
 # SQLC
@@ -68,7 +68,7 @@ all: $(BINARY) archive
 docker: generate
 	cd .. && $(DOCKER) build -t indexdata/$(MODULE):latest -f ./$(MODULE)/Dockerfile .
 
-generate: generate-commit-id generate-sqlc generate-api $(RETURNABLES_JSON)
+generate: generate-commit-id generate-sqlc generate-api $(STATE_MODELS_JSON)
 
 generate-commit-id: $(COMMIT_ID)
 
@@ -76,7 +76,7 @@ generate-sqlc: $(SQL_GEN_OUT)
 
 generate-api: $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN)
 
-$(RETURNABLES_JSON): $(RETURNABLES_YAML)
+$(STATE_MODELS_JSON): $(STATE_MODELS_YAML)
 	$(GO) run github.com/mikefarah/yq/v4@v4.52.5 eval -o=json $< > $@.tmp
 	mv -f $@.tmp $@
 
@@ -98,10 +98,10 @@ $(SQL_GEN_OUT): $(SQL_GEN_IN) $(SQLC_CONFIG)
 $(COMMIT_ID): $(GIT_COMMIT_DEPS)
 	commit_id="$$( $(GIT) rev-parse --short HEAD )" && printf '%s' "$$commit_id" > $(COMMIT_ID)
 
-$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+$(BINARY):  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o $(BINARY) ./$(MAIN_PACKAGE)
 
-archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(RETURNABLES_JSON) $(PULLSLIP_TEMPLATE)
+archive:  $(COMMIT_ID) $(SQL_GEN_OUT) $(OAPI_GEN) $(PR_OAPI_GEN) $(PS_OAPI_GEN) $(SCHED_OAPI_GEN) $(BUILD_GOFILES) $(STATE_MODELS_JSON) $(PULLSLIP_TEMPLATE)
 	$(GO) build -v -o archive ./cmd/archive
 
 check: generate
