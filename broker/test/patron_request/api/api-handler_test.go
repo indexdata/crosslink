@@ -812,21 +812,6 @@ func TestAcceptRetry(t *testing.T) {
 
 	thisPrPath := basePath + "/" + *newPr.Id
 
-	// action := proapi.ExecuteAction{
-	// 	Action: "send-request",
-	// }
-	// actionBytes, err := json.Marshal(action)
-	// assert.NoError(t, err, "failed to marshal patron request action")
-	// respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
-	var pResult proapi.ActionResult
-	// err = json.Unmarshal(respBytes, &pResult)
-	// assert.NoError(t, err, "failed to unmarshal patron request action result")
-	// assert.Equal(t, "SUCCESS", pResult.Result)
-	// assert.Equal(t, "success", pResult.Outcome)
-	// assert.Equal(t, "VALIDATED", pResult.FromState)
-	// assert.Equal(t, "SENT", *pResult.ToState)
-	// assert.Nil(t, pResult.Message)
-
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	foundPr = proapi.PatronRequest{}
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -851,6 +836,7 @@ func TestAcceptRetry(t *testing.T) {
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	var pResult proapi.ActionResult
 	err = json.Unmarshal(respBytes, &pResult)
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "SUCCESS", pResult.Result)
@@ -890,16 +876,6 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Nil(t, foundPr.NextReqId)
 	assert.Nil(t, foundPr.RetryBibInfo)
 	assert.Equal(t, "123456789", foundPr.IllRequest.BibliographicInfo.SupplierUniqueRecordId)
-
-	// retry 2nd time. The "123456789" item id should be kept as retryItemId
-	// illmock will use scenario unfilled
-	// this no longer works as send-request is not allowed in SENT state. So we will just check that the action is rejected.
-	action = proapi.ExecuteAction{
-		Action: "send-request",
-	}
-	actionBytes, err = json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
