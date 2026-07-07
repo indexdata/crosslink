@@ -1044,7 +1044,7 @@ func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedConte
 		To:         recipients,
 		Subject:    template.Subject.String,
 		Body:       template.Body,
-		IsHTML:     true,
+		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: false,
 	}
 	raw, messageErr := email.BuildRawMessage(from, emailData, nil)

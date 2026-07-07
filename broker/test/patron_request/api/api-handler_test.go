@@ -1219,7 +1219,7 @@ func TestCRUDTemplate(t *testing.T) {
 	newTemplateBytes, err := json.Marshal(newTemplate)
 	assert.NoError(t, err)
 
-	respBytes := httpRequest(t, "POST", templatePath+queryParams, newTemplateBytes, 200)
+	respBytes := httpRequest(t, "POST", templatePath+queryParams, newTemplateBytes, 201)
 	var createdTemplate proapi.Template
 	err = json.Unmarshal(respBytes, &createdTemplate)
 	assert.NoError(t, err)
