@@ -159,25 +159,6 @@ func TestHandleBorrowingActionMissingRequesterSymbol(t *testing.T) {
 	assert.True(t, mockPrRepo.savedPr.NeedsAttention)
 }
 
-func TestHandleInvokeActionValidateOK(t *testing.T) {
-	mockPrRepo := new(MockPrRepo)
-	lmsCreator := new(MockLmsCreator)
-	mockEventBus := new(MockEventBus)
-
-	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
-	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, new(handler.Iso18626Handler), lmsCreator, new(EmailSenderMock))
-	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "Test ID"}}
-	fakeEventID := "1234"
-	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(pr_db.PatronRequest{IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}, nil)
-	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
-
-	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
-
-	assert.Equal(t, events.EventStatusSuccess, status)
-	assert.NotNil(t, resultData)
-	assert.Equal(t, BorrowerStateValidated, mockPrRepo.savedPr.State)
-}
-
 func TestHandleInvokeActionValidateNeedReview(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)

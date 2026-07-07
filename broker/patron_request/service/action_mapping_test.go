@@ -15,7 +15,7 @@ import (
 func TestNewReturnableActionMapping(t *testing.T) {
 	borrowerStateActionMapping := map[pr_db.PatronRequestState][]PatronRequestAction{
 		BorrowerStateNew:              {{actionName: BorrowerActionValidate, auto: true}},
-		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest}},
+		BorrowerStateValidated:        {{actionName: BorrowerActionSendRequest, auto: true}},
 		BorrowerStateNeedsReview:      {{actionName: BorrowerActionSendRequest}},
 		BorrowerStateSupplierLocated:  {{actionName: BorrowerActionCancelRequest}},
 		BorrowerStateConditionPending: {{actionName: BorrowerActionAcceptCondition}, {actionName: BorrowerActionRejectCondition}},
@@ -93,7 +93,7 @@ func TestGetActionsForPatronRequest(t *testing.T) {
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCompleted}))
 	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateCancelled}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateNeedsReview}))
-	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionSendRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
+	listCompare(t, []pr_db.PatronRequestAction{}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionCancelRequest}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateSupplierLocated}))
 	listCompare(t, []pr_db.PatronRequestAction{BorrowerActionAcceptCondition, BorrowerActionRejectCondition}, mapping.GetActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateConditionPending}))
 
@@ -142,7 +142,7 @@ func TestGetAllowedActionsForPatronRequest1(t *testing.T) {
 			Side: SideBorrowing, State: BorrowerStateNew}, true))
 
 	tt := true
-	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{{Name: string(BorrowerActionSendRequest), Parameters: []string{}, Primary: &tt, Available: false}}},
+	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{}},
 		mapping.GetAllowedActionsForPatronRequest(pr_db.PatronRequest{Side: SideBorrowing, State: BorrowerStateValidated}, false))
 
 	assert.Equal(t, proapi.AllowedActions{Actions: []proapi.AllowedAction{

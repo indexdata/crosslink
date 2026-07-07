@@ -152,7 +152,7 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
@@ -226,7 +226,7 @@ func TestCrud(t *testing.T) {
 	assert.Len(t, foundPrs.Items, 0)
 
 	// GET list with all query params
-	respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DVALIDATED%20and%20"+
+	respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSENT%20and%20"+
 		"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
 		"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20needs_attention%3Dfalse%20and%20"+
 		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
@@ -250,7 +250,7 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
@@ -275,34 +275,13 @@ func TestCrud(t *testing.T) {
 	// GET actions by PR id
 	test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\"send-request\"")
+		return strings.Contains(string(respBytes), "\"name\":\"receive\"")
 	})
 	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"send-request\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
+	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"receive\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
 
-	// POST execute action
-	action := proapi.ExecuteAction{
-		Action: "send-request",
-	}
-	actionBytes, err := json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	var action proapi.ExecuteAction
 	var pResult proapi.ActionResult
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
-	assert.Equal(t, "SUCCESS", pResult.Result)
-	assert.Equal(t, "success", pResult.Outcome)
-	assert.Equal(t, "VALIDATED", pResult.FromState)
-	assert.Equal(t, "SENT", *pResult.ToState)
-	assert.Nil(t, pResult.Message)
-
-	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
-	err = json.Unmarshal(respBytes, &foundPr)
-	assert.NoError(t, err, "failed to unmarshal patron request")
-	assert.Equal(t, *newPr.Id, foundPr.Id)
-	assert.Equal(t, "send-request", *foundPr.LastAction)
-	assert.Equal(t, "success", *foundPr.LastActionOutcome)
-	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
 	// Wait till requester response processed
 	test.WaitForPredicateToBeTrue(func() bool {
@@ -322,7 +301,7 @@ func TestCrud(t *testing.T) {
 	action = proapi.ExecuteAction{
 		Action: "receive",
 	}
-	actionBytes, err = json.Marshal(action)
+	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
@@ -403,18 +382,6 @@ func TestActionsToCompleteState(t *testing.T) {
 		return strings.Contains(string(respBytes), "\"name\":\""+string(prservice.BorrowerActionSendRequest)+"\"")
 	})
 
-	action := proapi.ExecuteAction{
-		Action: string(prservice.BorrowerActionSendRequest),
-	}
-	actionBytes, err := json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", requesterPrPath+"/action"+queryParams, actionBytes, 200)
-	var pResult proapi.ActionResult
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
-	assert.Equal(t, "SUCCESS", pResult.Result)
-	assert.Nil(t, pResult.Message)
-
 	// Find supplier patron request
 	test.WaitForPredicateToBeTrue(func() bool {
 		supPr, _ := prRepo.GetLendingRequestBySupplierSymbolAndRequesterReqId(appCtx, supplierSymbol, foundPr.Id)
@@ -494,12 +461,13 @@ func TestActionsToCompleteState(t *testing.T) {
 	}
 
 	// Ship
-	action = proapi.ExecuteAction{
+	action := proapi.ExecuteAction{
 		Action: string(prservice.LenderActionShip),
 	}
-	actionBytes, err = json.Marshal(action)
+	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", supplierPrPath+"/action"+supQueryParams, actionBytes, 200)
+	var pResult proapi.ActionResult
 	err = json.Unmarshal(respBytes, &pResult)
 	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "SUCCESS", pResult.Result)
@@ -706,7 +674,7 @@ func TestRejectRetry(t *testing.T) {
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
@@ -720,21 +688,7 @@ func TestRejectRetry(t *testing.T) {
 
 	thisPrPath := basePath + "/" + *newPr.Id
 
-	// POST execute action
-	action := proapi.ExecuteAction{
-		Action: "send-request",
-	}
-	actionBytes, err := json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	var pResult proapi.ActionResult
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
-	assert.Equal(t, "SUCCESS", pResult.Result)
-	assert.Equal(t, "success", pResult.Outcome)
-	assert.Equal(t, "VALIDATED", pResult.FromState)
-	assert.Equal(t, "SENT", *pResult.ToState)
-	assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
@@ -753,10 +707,10 @@ func TestRejectRetry(t *testing.T) {
 	assert.Contains(t, string(respBytes), "\"name\":\"reject-retry\"")
 
 	// POST blocking action
-	action = proapi.ExecuteAction{
+	action := proapi.ExecuteAction{
 		Action: "reject-retry",
 	}
-	actionBytes, err = json.Marshal(action)
+	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	err = json.Unmarshal(respBytes, &pResult)
@@ -844,7 +798,7 @@ func TestAcceptRetry(t *testing.T) {
 		assert.Equal(t, id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
@@ -858,21 +812,20 @@ func TestAcceptRetry(t *testing.T) {
 
 	thisPrPath := basePath + "/" + *newPr.Id
 
-	// POST execute action
-	action := proapi.ExecuteAction{
-		Action: "send-request",
-	}
-	actionBytes, err := json.Marshal(action)
-	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	// action := proapi.ExecuteAction{
+	// 	Action: "send-request",
+	// }
+	// actionBytes, err := json.Marshal(action)
+	// assert.NoError(t, err, "failed to marshal patron request action")
+	// respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	var pResult proapi.ActionResult
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
-	assert.Equal(t, "SUCCESS", pResult.Result)
-	assert.Equal(t, "success", pResult.Outcome)
-	assert.Equal(t, "VALIDATED", pResult.FromState)
-	assert.Equal(t, "SENT", *pResult.ToState)
-	assert.Nil(t, pResult.Message)
+	// err = json.Unmarshal(respBytes, &pResult)
+	// assert.NoError(t, err, "failed to unmarshal patron request action result")
+	// assert.Equal(t, "SUCCESS", pResult.Result)
+	// assert.Equal(t, "success", pResult.Outcome)
+	// assert.Equal(t, "VALIDATED", pResult.FromState)
+	// assert.Equal(t, "SENT", *pResult.ToState)
+	// assert.Nil(t, pResult.Message)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	foundPr = proapi.PatronRequest{}
@@ -892,10 +845,10 @@ func TestAcceptRetry(t *testing.T) {
 	assert.Contains(t, string(respBytes), "\"name\":\"accept-retry\"")
 
 	// POST blocking action
-	action = proapi.ExecuteAction{
+	action := proapi.ExecuteAction{
 		Action: "accept-retry",
 	}
-	actionBytes, err = json.Marshal(action)
+	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
 	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 	err = json.Unmarshal(respBytes, &pResult)
@@ -930,7 +883,7 @@ func TestAcceptRetry(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, newId, foundPr.Id)
-	assert.Equal(t, "validate", *foundPr.LastAction)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.Equal(t, id, *foundPr.PrevReqId)
@@ -940,29 +893,13 @@ func TestAcceptRetry(t *testing.T) {
 
 	// retry 2nd time. The "123456789" item id should be kept as retryItemId
 	// illmock will use scenario unfilled
+	// this no longer works as send-request is not allowed in SENT state. So we will just check that the action is rejected.
 	action = proapi.ExecuteAction{
 		Action: "send-request",
 	}
 	actionBytes, err = json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
-	assert.Equal(t, "SUCCESS", pResult.Result)
-	assert.Equal(t, "success", pResult.Outcome)
-	assert.Equal(t, "VALIDATED", pResult.FromState)
-	assert.Equal(t, "SENT", *pResult.ToState)
-	assert.Nil(t, pResult.Message)
-
-	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
-		foundPr = proapi.PatronRequest{}
-		err = json.Unmarshal(respBytes, &foundPr)
-		return err == nil && foundPr.State == "UNFILLED" && foundPr.TerminalState
-	}), "patron request did not reach UNFILLED state in time")
-	assert.NoError(t, err, "failed to unmarshal patron request")
-	assert.Equal(t, "UNFILLED", foundPr.State)
-	assert.True(t, foundPr.TerminalState)
+	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 400)
 }
 
 func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {

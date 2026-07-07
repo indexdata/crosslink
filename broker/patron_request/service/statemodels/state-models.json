@@ -31,14 +31,14 @@
           "desc": "Patron Request is valid",
           "side": "REQUESTER",
           "primaryAction": "send-request",
-          "trigger": "auto",
           "actions": [
             {
               "name": "send-request",
               "desc": "Send ISO18626 request to the supplier or broker",
               "transitions": {
                 "success": "SENT"
-              }
+              },
+              "trigger": "auto"
             }
           ]
         },
