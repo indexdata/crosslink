@@ -684,7 +684,7 @@
       "schedule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=6;BYMINUTE=0;BYSECOND=0",
       "actionParams": {
         "to": [
-          "staff@mail.com"
+          "staff@example.com"
         ],
         "subject": "Scheduled pullslips",
         "body": "<p>This is an automated pull slip summary.</p><p><strong>Query:</strong> {{batchQuery}}<br><strong>Matching requests:</strong> {{actualCount}} (of {{fullCount}} total)</p><p>Please process the attached pull slips at your earliest convenience.</p>",
