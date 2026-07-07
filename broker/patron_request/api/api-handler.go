@@ -971,7 +971,7 @@ func (a *PatronRequestApiHandler) GetTemplates(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var responseItems []proapi.Template
+	responseItems := make([]proapi.Template, 0, len(templates))
 	for _, t := range templates {
 		responseItems = append(responseItems, toApiTemplate(t))
 	}
@@ -1016,7 +1016,9 @@ func (a *PatronRequestApiHandler) PostTemplates(w http.ResponseWriter, r *http.R
 		api.AddInternalError(ctx, w, err)
 		return
 	}
-	api.WriteJsonResponse(w, toApiTemplate(tem))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(toApiTemplate(tem))
 }
 
 func (a *PatronRequestApiHandler) DeleteTemplatesId(w http.ResponseWriter, r *http.Request, id string, params proapi.DeleteTemplatesIdParams) {
