@@ -20,7 +20,7 @@ The broker exposes a JSON API that addresses two use cases:
    See the [Broker API Specification](./oapi/open-api.yaml) for details.
 
 2. The `Patron Request API` is used to create and manage ILL borrowing and lending requests directly in the broker.
-   The lifecycle of a _Patron Request_ is governed by a state model—a specification of allowed states, actions, and transitions, see the [State Model Schema](./../misc/state-model.json) and a specific implementation for handling [returnables](./../misc/returnables.yaml).
+   The lifecycle of a _Patron Request_ is governed by a state model—a specification of allowed states, actions, and transitions, see the [State Model Schema](./../misc/state-model.json) and a specific implementation for handling [returnables](./../misc/state-models.yaml).
    This API supports building multi-tenant management/staff UIs on top of the broker or tightly integrating the broker into existing solutions.
    Internally, the broker creates an ILL transaction to back the execution of a _Patron Request_ so that the detailed monitoring is available through the `ILL Transactions API`.
    See the [Broker API Specification](./oapi/open-api.yaml) for details, where relevant endpoints are tagged with `patron-requests-api`.

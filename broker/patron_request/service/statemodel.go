@@ -1,11 +1,10 @@
 package prservice
 
 import (
-	"embed"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"slices"
 	"strings"
 	"sync"
@@ -13,9 +12,16 @@ import (
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 )
 
+var errNotFound = fmt.Errorf("state model not found")
+
 type StateModelService struct {
 	stateMap map[string]*proapi.StateModel
 	mu       sync.RWMutex
+}
+
+type StateModelsConfig struct {
+	StateModels         map[string]proapi.StateModel `json:"stateModels"`
+	BatchActionDefaults []proapi.CreateBatchAction   `json:"batchActionDefaults"`
 }
 
 func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel, error) {
@@ -43,7 +49,7 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 
 	stateModel, err := LoadStateModelByName(modelName)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, errNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -52,29 +58,39 @@ func (s *StateModelService) GetStateModel(modelName string) (*proapi.StateModel,
 	return stateModel, nil
 }
 
-//go:embed statemodels
-var modelFS embed.FS
+//go:embed statemodels/state-models.json
+var stateModelsFile []byte
+var stateModelsConfig StateModelsConfig
 
+// LoadStateModelByName returns a deep copy of the named state model so that
+// callers (and the validation/caching layer) cannot accidentally mutate the
+// global embedded defaults through shared slice/map backing arrays.
 func LoadStateModelByName(modelName string) (*proapi.StateModel, error) {
-	path := "statemodels/" + modelName + ".json"
-	stateModel, err := loadStateModel(path)
-	if err != nil {
-		return nil, err
+	src, ok := stateModelsConfig.StateModels[modelName]
+	if !ok {
+		return nil, errNotFound
 	}
-	if err = ValidateStateModel(stateModel); err != nil {
-		return nil, err
-	}
-	return stateModel, nil
-}
-
-func loadStateModel(path string) (*proapi.StateModel, error) {
-	data, err := modelFS.ReadFile(path)
+	// Deep-copy via JSON round-trip: marshal the source value then unmarshal
+	// into a fresh struct, ensuring no slice or map is shared with the global
+	// stateModelsConfig.
+	raw, err := json.Marshal(src)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal state model %q: %w", modelName, err)
 	}
 	var stateModel proapi.StateModel
-	err = json.Unmarshal(data, &stateModel)
-	return &stateModel, err
+	if err := json.Unmarshal(raw, &stateModel); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state model %q: %w", modelName, err)
+	}
+	if err := ValidateStateModel(&stateModel); err != nil {
+		return nil, err
+	}
+	return &stateModel, nil
+}
+
+func init() {
+	if err := json.Unmarshal(stateModelsFile, &stateModelsConfig); err != nil {
+		panic("failed to parse state-models.json: " + err.Error())
+	}
 }
 
 func ValidateStateModel(stateModel *proapi.StateModel) error {
@@ -216,4 +232,17 @@ func validateEventTransition(event proapi.ModelEvent, stateName string, allowedT
 func hasTransitionTarget(allowedTransitionTargets map[string]struct{}, name string) bool {
 	_, ok := allowedTransitionTargets[name]
 	return ok
+}
+
+func GetStateModelBatchActionDefaults() []proapi.CreateBatchAction {
+	// Return a defensive deep copy so callers can't mutate embedded defaults.
+	data, err := json.Marshal(stateModelsConfig.BatchActionDefaults)
+	if err != nil {
+		return slices.Clone(stateModelsConfig.BatchActionDefaults)
+	}
+	var out []proapi.CreateBatchAction
+	if err := json.Unmarshal(data, &out); err != nil {
+		return slices.Clone(stateModelsConfig.BatchActionDefaults)
+	}
+	return out
 }
