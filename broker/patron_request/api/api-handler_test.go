@@ -964,6 +964,18 @@ func TestPutPatronRequestsIdNotificationsNotificationIdReceiptFailedToSave(t *te
 	assert.Contains(t, rr.Body.String(), "DB error")
 }
 
+func TestGetStateModelBatchActions(t *testing.T) {
+	handler := NewPrApiHandler(new(PrRepoError), mockEventBus, new(mocks.MockEventRepositoryError), tenant.NewResolver(), nil, 10)
+	req, _ := http.NewRequest("GET", "/", nil)
+	rr := httptest.NewRecorder()
+	handler.GetStateModelBatchActions(rr, req, proapi.GetStateModelBatchActionsParams{})
+	assert.Equal(t, http.StatusOK, rr.Code)
+	var actions []proapi.CreateBatchAction
+	err := json.Unmarshal(rr.Body.Bytes(), &actions)
+	assert.NoError(t, err)
+	assert.Len(t, actions, 4)
+}
+
 type PrRepoError struct {
 	mock.Mock
 	pr_db.PgPrRepo
