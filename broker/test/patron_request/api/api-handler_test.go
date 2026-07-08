@@ -1165,7 +1165,8 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 
 	// get requester_name and supplier_name facets → 1 result, 2 facets
-	respBytes = httpRequest(t, "GET", basePath+"?cql=cql.allRecords%3Dtrue&facets=requester_name,supplier_name", []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqSymbol)+
+		"&facets=requester_name,supplier_name", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
