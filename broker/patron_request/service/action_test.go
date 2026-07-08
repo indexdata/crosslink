@@ -178,6 +178,33 @@ func TestHandleInvokeActionValidateNeedReview(t *testing.T) {
 	assert.Equal(t, BorrowerStateNeedsReview, mockPrRepo.savedPr.State)
 }
 
+func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
+	mockPrRepo := new(MockPrRepo)
+	lmsCreator := new(MockLmsCreator)
+	mockEventBus := new(MockEventBus)
+	mockIso18626Handler := new(MockIso18626Handler)
+
+	lmsCreator.On("GetAdapter", "ISIL:x").Return(createLmsAdapterMockLog(), nil)
+	prAction := CreatePatronRequestActionService(mockPrRepo, new(IllRepoMock), mockEventBus, mockIso18626Handler, lmsCreator, new(EmailSenderMock))
+	illRequest := iso18626.Request{BibliographicInfo: iso18626.BibliographicInfo{SupplierUniqueRecordId: "12312"}}
+	fakeEventID := "1234"
+	initialPR := pr_db.PatronRequest{ID: patronRequestId, IllRequest: illRequest, RequesterSymbol: pgtype.Text{Valid: true, String: "ISIL:x"}, State: BorrowerStateNew, Side: SideBorrowing, Tenant: pgtype.Text{Valid: true, String: "testlib"}}
+	validatedPR := initialPR
+	validatedPR.State = BorrowerStateValidated
+	sentPR := initialPR
+	sentPR.State = BorrowerStateSent
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(initialPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(validatedPR, nil).Once()
+	mockPrRepo.On("GetPatronRequestById", patronRequestId).Return(sentPR, nil).Once()
+	mockEventBus.On("CreateNoticeWithParent", fakeEventID).Return("", nil)
+
+	status, resultData := prAction.handleInvokeAction(appCtx, events.Event{ID: fakeEventID, PatronRequestID: patronRequestId, EventData: events.EventData{CommonEventData: events.CommonEventData{Action: &actionValidate}}})
+
+	assert.Equal(t, events.EventStatusSuccess, status)
+	assert.NotNil(t, resultData)
+	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
+}
+
 func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {
 	mockPrRepo := new(MockPrRepo)
 	lmsCreator := new(MockLmsCreator)
