@@ -1091,6 +1091,80 @@ func TestServerChoice(t *testing.T) {
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 }
 
+func TestRequesterSupplierNameCQL(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqSymbol := "ISIL:REQ-" + uuid.NewString()
+	supSymbol := "ISIL:SUP-" + uuid.NewString()
+
+	// CreatePeer sets peer.Name = symbol and registers the symbol record,
+	// so requester_name / supplier_name will resolve to the symbol value via the view JOIN.
+	apptest.CreatePeer(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL)
+	apptest.CreatePeer(t, illRepo, supSymbol, adapter.MOCK_PEER_URL)
+
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              prId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideBorrowing,
+		RequesterSymbol: pgtype.Text{String: reqSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: supSymbol, Valid: true},
+		State:           prservice.BorrowerStateValidated,
+		Language:        "english",
+		IllRequest:      iso18626.Request{},
+		Items:           []pr_db.PrItem{},
+		TerminalState:   false,
+	})
+	assert.NoError(t, err)
+
+	var foundPrs proapi.PatronRequests
+
+	// requester_name matches → 1 result
+	respBytes := httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqSymbol), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// requester_name no match → 0 results
+	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3DNoSuchLibrary", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+
+	// supplier_name matches → 1 result
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(supSymbol), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// Use WithLikeOps mask → 1 result
+	prefixLen := 10
+	if len(supSymbol) < prefixLen {
+		prefixLen = len(supSymbol)
+	}
+	prefix := supSymbol[:prefixLen] + "*"
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(prefix), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// Use lowercase → 1 result
+	lower := strings.ToLower(supSymbol)
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(lower), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// supplier_name no match → 0 results
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3DNoSuchLibrary", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+}
+
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
