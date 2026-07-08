@@ -96,3 +96,118 @@ func TestHandlePatronRequestsQueryIsbnUsesNormIsxn(t *testing.T) {
 func searchClauseForTest(term, relation string) cql.SearchClause {
 	return cql.SearchClause{Term: term, Relation: cql.Relation(relation)}
 }
+
+func TestFieldPeerNameGenerate(t *testing.T) {
+	f := NewFieldPeerName("requester_symbol")
+
+	tests := []struct {
+		name      string
+		term      string
+		relation  string
+		wantSQL   string
+		wantArg   string
+		wantError bool
+	}{
+		{
+			name:     "exact match uses IN + =",
+			term:     "ISIL:REQ-1",
+			relation: "=",
+			wantSQL:  "requester_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) = lower($3))",
+			wantArg:  "ISIL:REQ-1",
+		},
+		{
+			name:     "lowercase term uses IN + =",
+			term:     "isil:req-1",
+			relation: "=",
+			wantSQL:  "requester_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) = lower($3))",
+			wantArg:  "isil:req-1",
+		},
+		{
+			name:     "prefix wildcard uses IN + LIKE",
+			term:     "ISIL:REQ*",
+			relation: "=",
+			wantSQL:  "requester_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) LIKE lower($3))",
+			wantArg:  "ISIL:REQ%",
+		},
+		{
+			name:     "leading wildcard uses IN + LIKE",
+			term:     "*REQ-1",
+			relation: "=",
+			wantSQL:  "requester_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) LIKE lower($3))",
+			wantArg:  "%REQ-1",
+		},
+		{
+			name:     "ne exact match uses NOT IN + =",
+			term:     "ISIL:REQ-1",
+			relation: "<>",
+			wantSQL:  "requester_symbol NOT IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) = lower($3))",
+			wantArg:  "ISIL:REQ-1",
+		},
+		{
+			name:     "ne wildcard uses NOT IN + LIKE",
+			term:     "ISIL:REQ*",
+			relation: "<>",
+			wantSQL:  "requester_symbol NOT IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) LIKE lower($3))",
+			wantArg:  "ISIL:REQ%",
+		},
+		{
+			name:      "unsupported relation returns error",
+			term:      "foo",
+			relation:  "adj",
+			wantError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sc := searchClauseForTest(tt.term, tt.relation)
+			gotSQL, gotArgs, err := f.Generate(sc, 3)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got sql=%q", gotSQL)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Generate() error = %v", err)
+			}
+			if gotSQL != tt.wantSQL {
+				t.Fatalf("sql:\n  got  %q\n  want %q", gotSQL, tt.wantSQL)
+			}
+			if len(gotArgs) != 1 || gotArgs[0] != tt.wantArg {
+				t.Fatalf("args = %#v, want [%q]", gotArgs, tt.wantArg)
+			}
+		})
+	}
+}
+
+func TestParseRequesterSupplierNameCQL(t *testing.T) {
+	tests := []struct {
+		cql       string
+		wantWhere string
+	}{
+		{
+			cql:       "requester_name = ISIL:REQ-1",
+			wantWhere: "requester_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) = lower($3))",
+		},
+		{
+			cql:       "supplier_name = ISIL:SUP*",
+			wantWhere: "supplier_symbol IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) LIKE lower($3))",
+		},
+		{
+			cql:       "requester_name <> ISIL:REQ-1",
+			wantWhere: "requester_symbol NOT IN (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) = lower($3))",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cql, func(t *testing.T) {
+			q, err := ParsePatronRequestsCql(tt.cql)
+			if err != nil {
+				t.Fatalf("ParsePatronRequestsCql(%q) error = %v", tt.cql, err)
+			}
+			if got := q.GetWhereClause(); got != tt.wantWhere {
+				t.Fatalf("where clause:\n  got  %q\n  want %q", got, tt.wantWhere)
+			}
+		})
+	}
+}

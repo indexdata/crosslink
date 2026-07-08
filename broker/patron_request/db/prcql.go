@@ -76,6 +76,74 @@ func (f *FieldTextArrayContains) Generate(sc cql.SearchClause, queryArgumentInde
 	}
 }
 
+// FieldPeerName generates WHERE-clause fragments for requester_name/supplier_name
+// CQL searches. Instead of filtering on the view's LATERAL-derived name column
+// (which forces a post-join filter on peer.name), it produces an IN-subquery
+// that starts from idx_peer_name_lower so the planner can seek the index:
+//
+//	requester_symbol IN (
+//		SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id
+//		WHERE lower(p.name) = lower($n)
+//	)
+type FieldPeerName struct {
+	symbolColumn string // "requester_symbol" or "supplier_symbol"
+}
+
+func NewFieldPeerName(symbolColumn string) *FieldPeerName {
+	return &FieldPeerName{symbolColumn: symbolColumn}
+}
+
+func (f *FieldPeerName) GetColumn() string  { return f.symbolColumn }
+func (f *FieldPeerName) SetColumn(c string) { f.symbolColumn = c }
+func (f *FieldPeerName) Sort() string       { return "" }
+
+// Generate produces an IN-subquery WHERE fragment. CQL wildcard '*' is converted
+// to the SQL LIKE wildcard '%'; all comparisons are case-insensitive via lower().
+func (f *FieldPeerName) Generate(sc cql.SearchClause, idx int) (string, []any, error) {
+	pgTerm, hasWildcard := peerNameLikeTerm(sc.Term)
+
+	var inOp, nameOp string
+	switch sc.Relation {
+	case cql.EQ, cql.EXACT:
+		inOp = "IN"
+		if hasWildcard {
+			nameOp = "LIKE"
+		} else {
+			nameOp = "="
+		}
+	case cql.NE:
+		// NOT IN + exact equality correctly excludes patron requests whose
+		// peer has that name; using NOT LIKE for wildcard terms.
+		inOp = "NOT IN"
+		if hasWildcard {
+			nameOp = "LIKE"
+		} else {
+			nameOp = "="
+		}
+	default:
+		return "", nil, fmt.Errorf("unsupported relation %q for peer name search", sc.Relation)
+	}
+
+	sql := fmt.Sprintf(
+		"%s %s (SELECT s.symbol_value FROM peer p JOIN symbol s ON s.peer_id = p.id WHERE lower(p.name) %s lower($%d))",
+		f.symbolColumn, inOp, nameOp, idx)
+	return sql, []any{pgTerm}, nil
+}
+
+// peerNameLikeTerm converts CQL wildcards ('*') to SQL LIKE wildcards ('%').
+func peerNameLikeTerm(term string) (pgTerm string, hasWildcard bool) {
+	var b strings.Builder
+	for _, c := range term {
+		if c == '*' {
+			b.WriteRune('%')
+			hasWildcard = true
+		} else {
+			b.WriteRune(c)
+		}
+	}
+	return b.String(), hasWildcard
+}
+
 // ParsePatronRequestsCql parses cqlString into a pgcql.Query whose placeholder
 // numbering starts at $3, matching the two base SQL arguments (limit and offset)
 // used by both ListPatronRequestsCql and GetPatronRequestsFacetsCql.
@@ -167,11 +235,8 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
 
-	f = pgcql.NewFieldString().WithLikeOps().WithLower()
-	def.AddField("requester_name", f)
-
-	f = pgcql.NewFieldString().WithLikeOps().WithLower()
-	def.AddField("supplier_name", f)
+	def.AddField("requester_name", NewFieldPeerName("requester_symbol"))
+	def.AddField("supplier_name", NewFieldPeerName("supplier_symbol"))
 
 	var parser cql.Parser
 	query, err := parser.Parse(cqlString)
