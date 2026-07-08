@@ -225,19 +225,22 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
 
-	// GET list with all query params
-	respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSENT%20and%20"+
-		"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
-		"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20needs_attention%3Dfalse%20and%20"+
-		"has_notification%3Dfalse%20and%20has_cost%3Dfalse%20and%20has_unread_notification%3Dfalse%20and%20"+
-		"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
-		"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
-		"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
-		"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
-	err = json.Unmarshal(respBytes, &foundPrs)
-	assert.NoError(t, err, "failed to unmarshal patron request")
-
-	assert.Equal(t, int64(1), foundPrs.About.Count)
+	// Poll until the PR is in SENT state and the basic CQL filters match.
+	// The full set of CQL filters (has_notification, needs_attention, etc.) cannot be used here
+	// because the mock's Loaned SupplyingAgencyMessage arrives asynchronously and permanently
+	// flips has_notification to true, making those filters unmatchable.
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSENT%20and%20"+
+			"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
+			"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20has_cost%3Dfalse%20and%20"+
+			"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
+			"%20and%20title%3D%22Typed%20request%20round%20trip%22%20and%20patron%3Dp1%20and%20cql.serverChoice%20all%20round%20and%20"+
+			"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
+			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
+		err = json.Unmarshal(respBytes, &foundPrs)
+		assert.NoError(t, err, "failed to unmarshal patron request")
+		return foundPrs.About.Count == 1
+	}), "timed out waiting for patron request to match all CQL query params")
 	assert.Len(t, foundPrs.Items, 1)
 
 	// GET by id with symbol and side
@@ -284,7 +287,7 @@ func TestCrud(t *testing.T) {
 	var pResult proapi.ActionResult
 
 	// Wait till requester response processed
-	test.WaitForPredicateToBeTrue(func() bool {
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 		var allowedActions proapi.AllowedActions
 		err = json.Unmarshal(respBytes, &allowedActions)
@@ -295,19 +298,24 @@ func TestCrud(t *testing.T) {
 			}
 		}
 		return false
-	})
+	}), "timed out waiting for BorrowerActionReceive to become available")
 
 	// POST blocking action
+	// Retry while the send-request invoke-action task is still marked in-progress;
+	// the state transition (LOANED) can become visible before that task is marked complete.
 	action = proapi.ExecuteAction{
 		Action: "receive",
 	}
 	actionBytes, err := json.Marshal(action)
 	assert.NoError(t, err, "failed to marshal patron request action")
-	respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
+		err = json.Unmarshal(respBytes, &pResult)
+		assert.NoError(t, err, "failed to unmarshal patron request action result")
+		return pResult.Message == nil || *pResult.Message != "another invoke-action task in progress"
+	}), "timed out waiting for receive to run without task conflict")
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
 	// We should either update the mock to include items or change the test to not use blocking action.
-	err = json.Unmarshal(respBytes, &pResult)
-	assert.NoError(t, err, "failed to unmarshal patron request action result")
 	assert.Equal(t, "ERROR", pResult.Result)
 	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
 	assert.Equal(t, "failure", pResult.Outcome)
