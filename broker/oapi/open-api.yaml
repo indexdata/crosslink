@@ -97,8 +97,8 @@ components:
       name: facets
       in: query
       description: Comma separated list of facet names to include in the response.
-        Supported values are "requester_symbol" and "supplier_symbol";
-        unsupported facet names result in a 400 response.
+        Supported values are "requester_symbol", "supplier_symbol", "requester_name",
+        and "supplier_name"; unsupported facet names result in a 400 response.
         For example "requester_symbol,supplier_symbol"
       style: form
       explode: false
@@ -109,6 +109,8 @@ components:
           enum:
             - requester_symbol
             - supplier_symbol
+            - requester_name
+            - supplier_name
   schemas:
     Index:
       type: object

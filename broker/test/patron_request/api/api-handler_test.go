@@ -1163,6 +1163,24 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), foundPrs.About.Count)
+
+	// get requester_name and supplier_name facets → 1 result, 2 facets
+	respBytes = httpRequest(t, "GET", basePath+"?cql=cql.allRecords%3Dtrue&facets=requester_name,supplier_name", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 2)
+	assert.Equal(t, "requester_name", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 1)
+	assert.Equal(t, reqSymbol, (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, "supplier_name", (*foundPrs.About.Facets)[1].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 1)
+	assert.Equal(t, supSymbol, (*foundPrs.About.Facets)[1].Values[0].Value)
+	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[1].Values[0].Count)
 }
 
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {

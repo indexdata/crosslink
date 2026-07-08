@@ -122,7 +122,7 @@ func (r *PgPrRepo) GetPatronRequestsFacets(ctx common.ExtendedContext, facetFiel
 	var facets []Facet
 	for _, field := range facetFields {
 		switch field {
-		case "requester_symbol", "supplier_symbol":
+		case "requester_symbol", "supplier_symbol", "requester_name", "supplier_name":
 			rows, err := r.queries.GetPatronRequestsFacetsCql(ctx, r.GetConnOrTx(), field, pgcql)
 			if err != nil {
 				return nil, err
