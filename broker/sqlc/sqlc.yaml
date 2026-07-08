@@ -59,7 +59,9 @@ sql:
               type: "EventStatus"
   - engine: "postgresql"
     queries: "pr_query.sql"
-    schema: "pr_schema.sql"
+    schema:
+      - "ill_schema.sql"
+      - "pr_schema.sql"
     gen:
       go:
         package: "pr_db"
@@ -114,6 +116,14 @@ sql:
               import: "github.com/indexdata/crosslink/iso18626"
               type: "BibliographicInfo"
               pointer: true
+          - column: "patron_request_search_view.requester_name"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
+          - column: "patron_request_search_view.supplier_name"
+            go_type:
+              import: "github.com/jackc/pgx/v5/pgtype"
+              type: "Text"
           - column: "notification.side"
             go_type:
               type: "PatronRequestSide"

@@ -582,6 +582,12 @@ components:
         internalNote:
           type: string
           description: Staff-only internal note, local to this request and never shared with peers
+        requesterName:
+          type: string
+          description: Name of the requester peer
+        supplierName:
+          type: string
+          description: Name of the supplier peer
         nextReqId:
           type: string
           description: ID of the next patron request in the sequence
