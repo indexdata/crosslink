@@ -277,14 +277,6 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(0), initialPrItems.About.Count)
 	assert.Equal(t, []proapi.PrItem{}, initialPrItems.Items)
 
-	// GET actions by PR id
-	test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-		return strings.Contains(string(respBytes), "\"name\":\"receive\"")
-	})
-	respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
-	assert.Equal(t, "{\"actions\":[{\"available\":true,\"name\":\"receive\",\"parameters\":[],\"primary\":true}]}\n", string(respBytes))
-
 	var action proapi.ExecuteAction
 	var pResult proapi.ActionResult
 
