@@ -314,11 +314,11 @@ func TestCrud(t *testing.T) {
 	}), "timed out waiting for receive to run without task conflict")
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
 	// We should either update the mock to include items or change the test to not use blocking action.
-assert.Equal(t, "ERROR", pResult.Result)
-if assert.NotNil(t, pResult.Message) {
-	assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
-}
-assert.Equal(t, "failure", pResult.Outcome)
+	assert.Equal(t, "ERROR", pResult.Result)
+	if assert.NotNil(t, pResult.Message) {
+		assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
+	}
+	assert.Equal(t, "failure", pResult.Outcome)
 
 	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPr)
