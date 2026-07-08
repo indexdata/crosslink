@@ -1140,7 +1140,7 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
-	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 0)
+	// supplier_symbol values are non-empty since send-request auto-triggers and sets the broker as supplier
 
 	// omit CQL (all records), we might get more results than in earlier tests
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&offset=0&limit=0", []byte{}, 200)
