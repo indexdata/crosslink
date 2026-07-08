@@ -714,7 +714,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of express requests",
-      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING) and service_level = Express",
+      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Express",
       "schedule": "FREQ=MINUTELY;INTERVAL=15",
       "actionParams": {
         "interval": "2h"
@@ -723,7 +723,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of rush requests",
-      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING) and service_level = Rush",
+      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Rush",
       "schedule": "FREQ=HOURLY;BYMINUTE=0;BYSECOND=0",
       "actionParams": {
         "interval": "24h"
@@ -732,7 +732,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of all requests",
-      "batchQuery": "state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING",
+      "batchQuery": "state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW",
       "schedule": "FREQ=DAILY;BYHOUR=5;BYMINUTE=0;BYSECOND=0",
       "actionParams": {
         "interval": "72h"
