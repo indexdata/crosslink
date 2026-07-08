@@ -1143,10 +1143,10 @@ func TestFacetsOK(t *testing.T) {
 	if len((*foundPrs.About.Facets)[1].Values) == 1 {
 		assert.Equal(t, "ISIL:BROKER", (*foundPrs.About.Facets)[1].Values[0].Value) // if sent and received by supplier
 	} else {
-		assert.Empty(t, (*foundPrs.About.Facets)[1].Values) // it not received by supplier
+		assert.Empty(t, (*foundPrs.About.Facets)[1].Values) // if not received by supplier yet
 	}
 
-	// supplier_symbol values are non-empty since send-request auto-triggers and sets the broker as supplier
+	// supplier_symbol values may be empty until the supplier-side request has been created/processed
 
 	// omit CQL (all records), we might get more results than in earlier tests
 	respBytes = httpRequest(t, "GET", basePath+"?facets=requester_symbol%2Csupplier_symbol&offset=0&limit=0", []byte{}, 200)
