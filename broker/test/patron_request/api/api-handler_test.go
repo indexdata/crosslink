@@ -238,7 +238,9 @@ func TestCrud(t *testing.T) {
 			"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
 			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
 		err = json.Unmarshal(respBytes, &foundPrs)
-		assert.NoError(t, err, "failed to unmarshal patron request")
+		if err != nil {
+			return false
+		}
 		return foundPrs.About.Count == 1
 	}), "timed out waiting for patron request to match all CQL query params")
 	assert.Len(t, foundPrs.Items, 1)
