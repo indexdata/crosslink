@@ -1,3 +1,6 @@
+-- Fast case-insensitive lookup of peers by name (used by requester_name/supplier_name CQL searches)
+CREATE INDEX IF NOT EXISTS idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
+
 DROP VIEW IF EXISTS patron_request_search_view;
 
 CREATE VIEW patron_request_search_view AS

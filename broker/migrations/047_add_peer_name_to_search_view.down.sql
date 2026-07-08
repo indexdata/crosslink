@@ -1,3 +1,5 @@
+DROP INDEX IF EXISTS idx_peer_name_lower;
+
 DROP VIEW IF EXISTS patron_request_search_view;
 
 CREATE VIEW patron_request_search_view AS
