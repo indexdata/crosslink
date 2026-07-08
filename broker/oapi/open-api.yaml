@@ -697,7 +697,7 @@ components:
           description: Action message
         outcome:
           type: string
-          description: Action outcome ("success", "failure")
+          description: Action outcome ("success", "failure", "review")
         fromState:
           type: string
           description: State before action execution
