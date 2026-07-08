@@ -1140,6 +1140,12 @@ func TestFacetsOK(t *testing.T) {
 	assert.Equal(t, requesterSymbols[1], (*foundPrs.About.Facets)[0].Values[1].Value)
 	assert.Equal(t, int64(3), (*foundPrs.About.Facets)[0].Values[1].Count)
 	assert.Equal(t, "supplier_symbol", (*foundPrs.About.Facets)[1].Name)
+	if len((*foundPrs.About.Facets)[1].Values) == 1 {
+		assert.Equal(t, "ISIL:BROKER", (*foundPrs.About.Facets)[1].Values[0].Value) // if sent and received by supplier
+	} else {
+		assert.Empty(t, (*foundPrs.About.Facets)[1].Values) // it not received by supplier
+	}
+
 	// supplier_symbol values are non-empty since send-request auto-triggers and sets the broker as supplier
 
 	// omit CQL (all records), we might get more results than in earlier tests
