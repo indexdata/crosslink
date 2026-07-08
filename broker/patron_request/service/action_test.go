@@ -176,6 +176,8 @@ func TestHandleInvokeActionValidateNeedReview(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateNeedsReview, mockPrRepo.savedPr.State)
+	assert.Equal(t, ActionOutcomeReview, mockPrRepo.savedPr.LastActionOutcome.String)
+	assert.Equal(t, string(BorrowerStateNeedsReview), *resultData.ActionResult.ToState)
 }
 
 func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
@@ -203,6 +205,8 @@ func TestHandleInvokeActionValidateSendRequest(t *testing.T) {
 	assert.Equal(t, events.EventStatusSuccess, status)
 	assert.NotNil(t, resultData)
 	assert.Equal(t, BorrowerStateSent, mockPrRepo.savedPr.State)
+	assert.Equal(t, string(BorrowerStateValidated), *resultData.ActionResult.ToState)
+	assert.Equal(t, ActionOutcomeSuccess, resultData.ActionResult.Outcome)
 }
 
 func TestHandleInvokeActionValidateGetAdapterFailed(t *testing.T) {

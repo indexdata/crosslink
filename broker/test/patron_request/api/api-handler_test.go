@@ -242,7 +242,7 @@ func TestCrud(t *testing.T) {
 			return false
 		}
 		return foundPrs.About.Count == 1
-	}), "timed out waiting for patron request to match all CQL query params")
+	}), "timed out waiting for patron request to reach SENT and match the basic CQL filters")
 	assert.Len(t, foundPrs.Items, 1)
 
 	// GET by id with symbol and side
