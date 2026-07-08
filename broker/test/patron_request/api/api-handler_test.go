@@ -291,7 +291,9 @@ func TestCrud(t *testing.T) {
 		respBytes = httpRequest(t, "GET", thisPrPath+"/actions"+queryParams, []byte{}, 200)
 		var allowedActions proapi.AllowedActions
 		err = json.Unmarshal(respBytes, &allowedActions)
-		assert.NoError(t, err, "failed to unmarshal allowed actions")
+		if err != nil {
+			return false
+		}
 		for _, a := range allowedActions.Actions {
 			if a.Name == string(prservice.BorrowerActionReceive) && a.Available {
 				return true
@@ -311,7 +313,9 @@ func TestCrud(t *testing.T) {
 	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
 		respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 		err = json.Unmarshal(respBytes, &pResult)
-		assert.NoError(t, err, "failed to unmarshal patron request action result")
+		if err != nil {
+			return false
+		}
 		return pResult.Message == nil || *pResult.Message != "another invoke-action task in progress"
 	}), "timed out waiting for receive to run without task conflict")
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
