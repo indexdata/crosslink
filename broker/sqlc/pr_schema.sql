@@ -121,13 +121,7 @@ LEFT JOIN LATERAL (
     FROM notification n
     WHERE n.pr_id = pr.id and n.acknowledged_at is null
 ) unread ON true
-LEFT JOIN LATERAL (
-    SELECT p.name
-    FROM symbol s JOIN peer p ON p.id = s.peer_id
-    WHERE s.symbol_value = pr.requester_symbol
-) req_peer ON true
-LEFT JOIN LATERAL (
-    SELECT p.name
-    FROM symbol s JOIN peer p ON p.id = s.peer_id
-    WHERE s.symbol_value = pr.supplier_symbol
-) sup_peer ON true;
+LEFT JOIN symbol req_sym ON req_sym.symbol_value = pr.requester_symbol
+LEFT JOIN peer req_peer ON req_peer.id = req_sym.peer_id
+LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
+LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;

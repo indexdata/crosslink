@@ -62,6 +62,9 @@ CREATE TABLE located_supplier
 
 -- Fast case-insensitive lookup of peers by name (used by requester_name/supplier_name CQL searches)
 CREATE INDEX idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
+CREATE INDEX idx_peer_name_lower_eq ON peer (lower(name));
+CREATE INDEX idx_pr_requester_symbol ON patron_request (requester_symbol);
+CREATE INDEX idx_pr_supplier_symbol ON patron_request (supplier_symbol);
 
 CREATE TABLE branch_symbol
 (

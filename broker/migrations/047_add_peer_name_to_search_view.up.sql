@@ -1,5 +1,11 @@
 -- Fast case-insensitive lookup of peers by name (used by requester_name/supplier_name CQL searches)
+-- text_pattern_ops index for LIKE/prefix searches
 CREATE INDEX IF NOT EXISTS idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
+-- plain btree index for equality searches
+CREATE INDEX IF NOT EXISTS idx_peer_name_lower_eq ON peer (lower(name));
+-- indexes to allow efficient name→symbol→patron_request join chain
+CREATE INDEX IF NOT EXISTS idx_pr_requester_symbol ON patron_request (requester_symbol);
+CREATE INDEX IF NOT EXISTS idx_pr_supplier_symbol ON patron_request (supplier_symbol);
 
 DROP VIEW IF EXISTS patron_request_search_view;
 
@@ -30,13 +36,7 @@ LEFT JOIN LATERAL (
     FROM notification n
     WHERE n.pr_id = pr.id and n.acknowledged_at is null
 ) unread ON true
-LEFT JOIN LATERAL (
-    SELECT p.name
-    FROM symbol s JOIN peer p ON p.id = s.peer_id
-    WHERE s.symbol_value = pr.requester_symbol
-) req_peer ON true
-LEFT JOIN LATERAL (
-    SELECT p.name
-    FROM symbol s JOIN peer p ON p.id = s.peer_id
-    WHERE s.symbol_value = pr.supplier_symbol
-) sup_peer ON true;
+LEFT JOIN symbol req_sym ON req_sym.symbol_value = pr.requester_symbol
+LEFT JOIN peer req_peer ON req_peer.id = req_sym.peer_id
+LEFT JOIN symbol sup_sym ON sup_sym.symbol_value = pr.supplier_symbol
+LEFT JOIN peer sup_peer ON sup_peer.id = sup_sym.peer_id;

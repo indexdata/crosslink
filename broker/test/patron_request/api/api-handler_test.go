@@ -45,6 +45,8 @@ func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
 	app.DB_PROVISION = true
+	app.DB_EXPLAIN_ANALYZE = true
+	app.DB_DISABLE_SEQSCAN = true
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
