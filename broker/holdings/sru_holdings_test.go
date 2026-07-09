@@ -317,6 +317,8 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	}
 	_, err = result.GetHoldings()
 	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
+	_, err = result.GetMetadata()
+	assert.ErrorContains(t, err, "failed to parse metadata from SRU record: failed to unmarshal MARC XML")
 }
 
 func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
