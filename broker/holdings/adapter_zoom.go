@@ -35,7 +35,7 @@ func (r *ZoomLookupResult) GetHoldings() ([]Holding, error) {
 	for _, record := range r.records {
 		h, err := r.adapter.holdingsParser.Parse(record, r.params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse holdings from Z39.50 record: %w", err)
+			return nil, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
 		}
 		avail = append(avail, h...)
 	}
@@ -52,7 +52,7 @@ func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
 	}
 	metadata, err := r.adapter.metadataParser.Parse(r.records[0])
 	if err != nil {
-		return metadata, fmt.Errorf("failed to parse metadata from Z39.50 record: %w", err)
+		return metadata, fmt.Errorf("failed to parse metadata from ZOOM record: %w", err)
 	}
 	return metadata, nil
 }
@@ -99,13 +99,12 @@ func (a *ZoomAvailabilityAdapter) searchRetrieve(conn *zoom.Connection, query *z
 		if xmlBuffer == nil {
 			continue
 		}
-		cont, err := processRecord(xmlBuffer)
+		foundRecord, err := processRecord(xmlBuffer)
 		if err != nil {
 			return false, err
 		}
-		found = true
-		if !cont {
-			break
+		if foundRecord {
+			found = true
 		}
 	}
 	return found, nil
@@ -170,8 +169,15 @@ func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, err
 	result.adapter = a
 	var err error
 	result.query, err = a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
+		h, err := a.holdingsParser.Parse(xmlBuffer, params)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
+		}
+		if len(h) == 0 {
+			return false, nil
+		}
 		result.records = append(result.records, xmlBuffer)
-		return true, nil // get all records in a search response
+		return true, nil
 	})
 	return &result, err
 }

@@ -97,13 +97,12 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, qu
 	}
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
-			cont, err := s.parseRecord(&record, processRecord)
+			foundRecord, err := s.parseRecord(&record, processRecord)
 			if err != nil {
-				return false, query, err
+				return false, query, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
 			}
-			found = true
-			if !cont {
-				break
+			if foundRecord {
+				found = true
 			}
 		}
 	}
@@ -142,6 +141,13 @@ func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, er
 	for _, sruUrl := range s.sruUrl {
 		var err error
 		found, query, err := s.lookupServer(sruUrl, params, func(xmlBuffer []byte) (bool, error) {
+			h, err := s.holdingsParser.Parse(xmlBuffer, params)
+			if err != nil {
+				return false, err
+			}
+			if len(h) == 0 {
+				return false, nil
+			}
 			result.records = append(result.records, xmlBuffer)
 			return true, nil
 		})
