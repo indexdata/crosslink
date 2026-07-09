@@ -239,23 +239,31 @@ func TestCrud(t *testing.T) {
 			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
 		err = json.Unmarshal(respBytes, &foundPrs)
 		if err != nil {
-			return false
+			return true
 		}
-		return foundPrs.About.Count == 1
+		return err != nil || len(foundPrs.Items) > 0
 	}), "timed out waiting for patron request to reach SHIPPED and match the basic CQL filters")
+	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Len(t, foundPrs.Items, 1)
 
 	// GET by id with symbol and side
 	thisPrPath := basePath + "/" + *newPr.Id
-	respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
-	err = json.Unmarshal(respBytes, &foundPr)
+
+	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
+		respBytes = httpRequest(t, "GET", thisPrPath+queryParams, []byte{}, 200)
+		err = json.Unmarshal(respBytes, &foundPr)
+		if err != nil {
+			return true
+		}
+		return foundPr.LastAction != nil && *foundPr.LastAction == "send-notification"
+	}), "timed out waiting for patron request to reach send-notification action")
 	assert.NoError(t, err, "failed to unmarshal patron request")
+	assert.Equal(t, "send-notification", *foundPr.LastAction)
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
-	assert.Contains(t, []string{"send-notification", "send-request"}, *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
