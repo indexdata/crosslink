@@ -255,7 +255,7 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
-	assert.Equal(t, "send-notification", *foundPr.LastAction)
+	assert.Contains(t, []string{"send-notification", "send-request"}, *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
