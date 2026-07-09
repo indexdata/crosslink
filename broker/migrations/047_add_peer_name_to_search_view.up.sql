@@ -3,9 +3,6 @@
 CREATE INDEX IF NOT EXISTS idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
 -- plain btree index for equality searches
 CREATE INDEX IF NOT EXISTS idx_peer_name_lower_eq ON peer (lower(name));
--- indexes to allow efficient name→symbol→patron_request join chain
-CREATE INDEX IF NOT EXISTS idx_pr_requester_symbol ON patron_request (requester_symbol);
-CREATE INDEX IF NOT EXISTS idx_pr_supplier_symbol ON patron_request (supplier_symbol);
 
 DROP VIEW IF EXISTS patron_request_search_view;
 

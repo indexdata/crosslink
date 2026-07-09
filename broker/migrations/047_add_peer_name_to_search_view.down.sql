@@ -1,7 +1,5 @@
 DROP INDEX IF EXISTS idx_peer_name_lower;
 DROP INDEX IF EXISTS idx_peer_name_lower_eq;
-DROP INDEX IF EXISTS idx_pr_requester_symbol;
-DROP INDEX IF EXISTS idx_pr_supplier_symbol;
 
 DROP VIEW IF EXISTS patron_request_search_view;
 
