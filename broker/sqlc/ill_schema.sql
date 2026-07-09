@@ -60,10 +60,6 @@ CREATE TABLE located_supplier
     FOREIGN KEY (supplier_id) REFERENCES peer (id)
 );
 
--- Fast case-insensitive lookup of peers by name (used by requester_name/supplier_name CQL searches)
-CREATE INDEX idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
-CREATE INDEX idx_peer_name_lower_eq ON peer (lower(name));
-
 CREATE TABLE branch_symbol
 (
     symbol_value VARCHAR PRIMARY KEY,
