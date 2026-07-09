@@ -143,25 +143,29 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
-	if assert.NotNil(t, foundPr.RequesterSymbol) {
-		assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
+	if !assert.NotNil(t, foundPr.RequesterSymbol) {
+		t.FailNow()
 	}
+	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
 	assert.Nil(t, foundPr.SupplierSymbol)
-	if assert.NotNil(t, foundPr.Patron) {
-		assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	if !assert.NotNil(t, foundPr.Patron) {
+		t.FailNow()
 	}
+	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
-	if assert.NotNil(t, foundPr.LastAction) {
-		assert.Equal(t, "send-request", *foundPr.LastAction)
+	if !assert.NotNil(t, foundPr.LastAction) {
+		t.FailNow()
 	}
-	if assert.NotNil(t, foundPr.LastActionOutcome) {
-		assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	assert.Equal(t, "send-request", *foundPr.LastAction)
+	if !assert.NotNil(t, foundPr.LastActionOutcome) {
+		t.FailNow()
 	}
+	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
