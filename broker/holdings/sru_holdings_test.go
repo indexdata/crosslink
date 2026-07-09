@@ -308,7 +308,15 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	}
 	result, err := ad.Lookup(p)
 	assert.NotEmpty(t, result.GetQuery())
-	assert.ErrorContains(t, err, "decoding marcxml failed: EOF")
+	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
+
+	result = &SruLookupResult{
+		params:  p,
+		adapter: ad.(*SruHoldingsLookupAdapter),
+		records: [][]byte{[]byte("<rec")},
+	}
+	_, err = result.GetHoldings()
+	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
 }
 
 func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {
