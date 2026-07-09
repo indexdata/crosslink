@@ -160,6 +160,10 @@
                         "failure": {
                             "type": "string",
                             "description": "Target state when the action fails."
+                        },
+                        "review": {
+                            "type": "string",
+                            "description": "Target state when the action requires review."
                         }
                     }
                 },

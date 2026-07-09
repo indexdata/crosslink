@@ -226,11 +226,19 @@ func (r *ActionMapping) GetActionTransition(pr pr_db.PatronRequest, action pr_db
 	if actionConfig.Transitions == nil {
 		return "", false
 	}
-	if outcome == ActionOutcomeSuccess && actionConfig.Transitions.Success != nil && *actionConfig.Transitions.Success != "" {
-		return pr_db.PatronRequestState(*actionConfig.Transitions.Success), true
-	}
-	if outcome == ActionOutcomeFailure && actionConfig.Transitions.Failure != nil && *actionConfig.Transitions.Failure != "" {
-		return pr_db.PatronRequestState(*actionConfig.Transitions.Failure), true
+	switch outcome {
+	case ActionOutcomeSuccess:
+		if actionConfig.Transitions.Success != nil && *actionConfig.Transitions.Success != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Success), true
+		}
+	case ActionOutcomeFailure:
+		if actionConfig.Transitions.Failure != nil && *actionConfig.Transitions.Failure != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Failure), true
+		}
+	case ActionOutcomeReview:
+		if actionConfig.Transitions.Review != nil && *actionConfig.Transitions.Review != "" {
+			return pr_db.PatronRequestState(*actionConfig.Transitions.Review), true
+		}
 	}
 	return "", false
 }
