@@ -183,6 +183,11 @@ func triggerHandlers(eventCtx common.ExtendedContext, event Event, handlers []fu
 			wg.Add(1)
 			go func(h func(common.ExtendedContext, Event), e Event) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						eventCtx.Logger().Error("event handler panicked", "panic", r, "eventName", event.EventName, "signal", signal)
+					}
+				}()
 				h(eventCtx.WithArgs(&common.LoggerArgs{TransactionId: event.IllTransactionID, EventId: event.ID}), e)
 			}(handler, event)
 		}
