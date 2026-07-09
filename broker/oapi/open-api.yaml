@@ -697,7 +697,7 @@ components:
           description: Action message
         outcome:
           type: string
-          description: Action outcome ("success", "failure")
+          description: Action outcome ("success", "failure", "review")
         fromState:
           type: string
           description: State before action execution
@@ -900,6 +900,9 @@ components:
             failure:
               type: string
               description: Target state when the action fails.
+            review:
+              type: string
+              description: Target state when the action requires review.
         params:
           type: object
           description: Parameters for the action. The presence of parameters indicates that the action requires additional input to be executed.

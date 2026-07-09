@@ -997,7 +997,7 @@ type PrRepoTerminal struct {
 
 func (r *PrRepoOkapiOwner) GetPatronRequestById(ctx common.ExtendedContext, id string) (pr_db.PatronRequest, error) {
 	if id == "3" {
-		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateValidated, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
+		return pr_db.PatronRequest{ID: id, State: prservice.BorrowerStateNeedsReview, Side: prservice.SideBorrowing, RequesterSymbol: pgtype.Text{String: "ISIL:DK-TENANT1", Valid: true}}, nil
 	}
 	return r.PrRepoError.GetPatronRequestById(ctx, id)
 }
