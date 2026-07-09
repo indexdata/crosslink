@@ -55,7 +55,6 @@ type PgPrRepo struct {
 	repo.PgBaseRepo[PrRepo]
 	queries        Queries
 	explainAnalyze bool
-	disableSeqScan bool
 }
 
 // delegate transaction handling to Base
@@ -63,11 +62,10 @@ func (r *PgPrRepo) WithTxFunc(ctx common.ExtendedContext, fn func(PrRepo) error)
 	return r.PgBaseRepo.WithTxFunc(ctx, r, fn)
 }
 
-func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool, disableSeqScan bool) PrRepo {
+func CreatePrRepo(dbPool *pgxpool.Pool, explainAnalyze bool) PrRepo {
 	prRepo := new(PgPrRepo)
 	prRepo.Pool = dbPool
 	prRepo.explainAnalyze = explainAnalyze
-	prRepo.disableSeqScan = disableSeqScan
 	return prRepo
 }
 
@@ -76,7 +74,6 @@ func (r *PgPrRepo) CreateWithPgBaseRepo(base *repo.PgBaseRepo[PrRepo]) PrRepo {
 	prRepo := new(PgPrRepo)
 	prRepo.PgBaseRepo = *base
 	prRepo.explainAnalyze = r.explainAnalyze
-	prRepo.disableSeqScan = r.disableSeqScan
 	return prRepo
 }
 
@@ -164,26 +161,6 @@ func (r *PgPrRepo) ListPatronRequestsSearchView(ctx common.ExtendedContext, para
 
 func (r *PgPrRepo) listPatronRequestRows(ctx common.ExtendedContext, params ListPatronRequestsParams, pgcql pgcql.Query) ([]ListPatronRequestsRow, int64, error) {
 	db := r.GetConnOrTx()
-	if r.disableSeqScan && r.explainAnalyze {
-		if r.Tx != nil {
-			// Already in a transaction: SET LOCAL is scoped to the tx, no cleanup needed.
-			if _, err := r.Tx.Exec(ctx, "SET LOCAL enable_seqscan = off"); err != nil {
-				return nil, 0, fmt.Errorf("failed to disable seqscan: %w", err)
-			}
-		} else {
-			// Acquire a pinned connection so SET persists across both queries.
-			conn, err := r.Pool.Acquire(ctx)
-			if err != nil {
-				return nil, 0, fmt.Errorf("failed to acquire connection for seqscan disable: %w", err)
-			}
-			defer conn.Release()
-			defer func() { _, _ = conn.Exec(ctx, "RESET enable_seqscan") }()
-			if _, err := conn.Exec(ctx, "SET enable_seqscan = off"); err != nil {
-				return nil, 0, fmt.Errorf("failed to disable seqscan: %w", err)
-			}
-			db = conn
-		}
-	}
 	rows, explainResult, err := r.queries.ListPatronRequestsCql(ctx, db, params, pgcql, r.explainAnalyze)
 	var fullCount int64
 	if err == nil {

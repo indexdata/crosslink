@@ -61,7 +61,6 @@ var DB_PORT = utils.GetEnv("DB_PORT", "25432")
 var DB_DATABASE = utils.GetEnv("DB_DATABASE", "crosslink")
 var DB_SCHEMA = utils.GetEnv("DB_SCHEMA", "crosslink_broker")
 var DB_EXPLAIN_ANALYZE, _ = utils.GetEnvBool("DB_EXPLAIN_ANALYZE", false)
-var DB_DISABLE_SEQSCAN, _ = utils.GetEnvBool("DB_DISABLE_SEQSCAN", false)
 var ConnectionString = dbutil.GetConnectionString(DB_TYPE, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE, DB_SCHEMA)
 var API_PAGE_SIZE int32 = int32(utils.Must(utils.GetEnvInt("API_PAGE_SIZE", int(api.LIMIT_DEFAULT))))
 var MigrationsFolder = "file://migrations"
@@ -180,7 +179,7 @@ func Init(ctx context.Context) (Context, error) {
 	eventRepo := CreateEventRepo(pool)
 	eventBus := CreateEventBus(eventRepo)
 	illRepo := ill_db.CreateIllRepo(pool)
-	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE, DB_DISABLE_SEQSCAN)
+	prRepo := pr_db.CreatePrRepo(pool, DB_EXPLAIN_ANALYZE)
 	psRepo := ps_db.CreatePsRepo(pool)
 
 	var emailSenderService *sched_service.EmailSenderService
