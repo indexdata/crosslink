@@ -143,17 +143,25 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assert.True(t, foundPr.State != "")
 	assert.Equal(t, string(prservice.SideBorrowing), foundPr.Side)
-	assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
+	if assert.NotNil(t, foundPr.RequesterSymbol) {
+		assert.Equal(t, *newPr.RequesterSymbol, *foundPr.RequesterSymbol)
+	}
 	assert.Nil(t, foundPr.SupplierSymbol)
-	assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	if assert.NotNil(t, foundPr.Patron) {
+		assert.Equal(t, *newPr.Patron, *foundPr.Patron)
+	}
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "WILLSUPPLY_LOANED", r.BibliographicInfo.SupplierUniqueRecordId)
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 		assert.False(t, r.Header.Timestamp.IsZero())
 	})
-	assert.Equal(t, "send-request", *foundPr.LastAction)
-	assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	if assert.NotNil(t, foundPr.LastAction) {
+		assert.Equal(t, "send-request", *foundPr.LastAction)
+	}
+	if assert.NotNil(t, foundPr.LastActionOutcome) {
+		assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	}
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 	assert.NotNil(t, foundPr.NotificationsLink)
 	assert.Equal(t, getLocalhostWithPort()+"/patron_requests/"+*newPr.Id+"/notifications?symbol="+url.QueryEscape(*newPr.RequesterSymbol), *foundPr.NotificationsLink)
@@ -238,9 +246,6 @@ func TestCrud(t *testing.T) {
 			"terminal_state%3Dfalse%20and%20title%20%3D%20trip%20and%20author%20%3D%20john%20and%20updated_at%3E2026-03-16%20and%20"+
 			"given_name%20%3D%20john%20and%20surname%20%3D%20wick%20sortby%20created_at%2Fsort.descending", []byte{}, 200)
 		err = json.Unmarshal(respBytes, &foundPrs)
-		if err != nil {
-			return true
-		}
 		return err != nil || len(foundPrs.Items) > 0
 	}), "timed out waiting for patron request to reach SHIPPED and match the basic CQL filters")
 	assert.NoError(t, err, "failed to unmarshal patron request")
@@ -258,14 +263,20 @@ func TestCrud(t *testing.T) {
 		return foundPr.LastAction != nil && *foundPr.LastAction == "send-notification"
 	}), "timed out waiting for patron request to reach send-notification action")
 	assert.NoError(t, err, "failed to unmarshal patron request")
-	assert.Equal(t, "send-notification", *foundPr.LastAction)
+	if assert.NotNil(t, foundPr.LastAction) {
+		assert.Equal(t, "send-notification", *foundPr.LastAction)
+	}
 	assert.Equal(t, *newPr.Id, foundPr.Id)
 	assertPatronRequestIllRequest(t, foundPr.IllRequest, func(r iso18626.Request) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
-	assert.Equal(t, "success", *foundPr.LastActionOutcome)
-	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	if assert.NotNil(t, foundPr.LastActionOutcome) {
+		assert.Equal(t, "success", *foundPr.LastActionOutcome)
+	}
+	if assert.NotNil(t, foundPr.LastActionResult) {
+		assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
+	}
 
 	// GET by id with symbol
 	respBytes = httpRequest(t, "GET", thisPrPath+"?symbol="+*foundPr.RequesterSymbol, []byte{}, 200)
@@ -332,9 +343,15 @@ func TestCrud(t *testing.T) {
 	err = json.Unmarshal(respBytes, &foundPr)
 	assert.NoError(t, err, "failed to unmarshal patron request")
 	assert.Equal(t, *newPr.Id, foundPr.Id)
-	assert.Equal(t, "receive", *foundPr.LastAction)
-	assert.Equal(t, "failure", *foundPr.LastActionOutcome)
-	assert.Equal(t, "ERROR", *foundPr.LastActionResult)
+	if assert.NotNil(t, foundPr.LastAction) {
+		assert.Equal(t, "receive", *foundPr.LastAction)
+	}
+	if assert.NotNil(t, foundPr.LastActionOutcome) {
+		assert.Equal(t, "failure", *foundPr.LastActionOutcome)
+	}
+	if assert.NotNil(t, foundPr.LastActionResult) {
+		assert.Equal(t, "ERROR", *foundPr.LastActionResult)
+	}
 
 	// TODO Do we really want to delete from DB or just add DELETED status ?
 	//// DELETE patron request
