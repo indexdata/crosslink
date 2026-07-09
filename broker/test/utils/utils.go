@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -103,8 +104,14 @@ func StartPGContainer() (context.Context, *postgres.PostgresContainer, string, e
 	return ctx, pgContainer, connStr, nil
 }
 
+// TerminatePGContainer stops a Postgres test container. It silently ignores the
+// "already in progress" error that arises when testcontainers' Ryuk reaper races
+// with the explicit Terminate call as the test process winds down.
 func TerminatePGContainer(ctx context.Context, pgContainer testcontainers.Container) error {
 	if err := pgContainer.Terminate(ctx); err != nil {
+		if strings.Contains(err.Error(), "already in progress") {
+			return nil
+		}
 		return fmt.Errorf("failed to stop db container: %w", err)
 	}
 	return nil
