@@ -225,12 +225,12 @@ func TestCrud(t *testing.T) {
 	assert.Equal(t, int64(1), foundPrs.About.Count)
 	assert.Len(t, foundPrs.Items, 0)
 
-	// Poll until the PR is in WILL_SUPPLY state and the basic CQL filters match.
+	// Poll until the PR is in SHIPPED state and the basic CQL filters match.
 	// The full set of CQL filters (has_notification, needs_attention, etc.) cannot be used here
 	// because the mock's Loaned SupplyingAgencyMessage arrives asynchronously and permanently
 	// flips has_notification to true, making those filters unmatchable.
 	assert.True(t, test.WaitForPredicateToBeTrue(func() bool {
-		respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DWILL_SUPPLY%20and%20"+
+		respBytes = httpRequest(t, "GET", basePath+queryParams+"&cql=state%3DSHIPPED%20and%20"+
 			"side%3Dborrowing%20and%20requester_symbol%3D"+*foundPr.RequesterSymbol+
 			"%20and%20requester_req_id%3D"+*foundPr.RequesterRequestId+"%20and%20has_cost%3Dfalse%20and%20"+
 			"service_type%3DCopy%20and%20service_level%3DCopy%20and%20created_at%3E2026-03-16%20and%20needed_at%3E2026-03-16"+
@@ -242,7 +242,7 @@ func TestCrud(t *testing.T) {
 			return false
 		}
 		return foundPrs.About.Count == 1
-	}), "timed out waiting for patron request to reach WILL_SUPPLY and match the basic CQL filters")
+	}), "timed out waiting for patron request to reach SHIPPED and match the basic CQL filters")
 	assert.Len(t, foundPrs.Items, 1)
 
 	// GET by id with symbol and side
@@ -255,7 +255,7 @@ func TestCrud(t *testing.T) {
 		assert.Equal(t, "Typed request round trip", r.BibliographicInfo.Title)
 		assert.Equal(t, *newPr.Id, r.Header.RequestingAgencyRequestId)
 	})
-	assert.Equal(t, "send-request", *foundPr.LastAction)
+	assert.Equal(t, "send-notification", *foundPr.LastAction)
 	assert.Equal(t, "success", *foundPr.LastActionOutcome)
 	assert.Equal(t, "SUCCESS", *foundPr.LastActionResult)
 
