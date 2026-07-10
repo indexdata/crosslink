@@ -94,7 +94,7 @@ func TestCrud(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -376,7 +376,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 
 	lmsConfig := &directory.LmsConfig{
@@ -386,7 +386,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, supplierSymbol)
 	assert.NotNil(t, supPeer)
 
 	// POST
@@ -663,7 +663,7 @@ func TestRejectRetry(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -779,7 +779,7 @@ func TestAcceptRetry(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -925,7 +925,7 @@ func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 				FromAgency: "from-agency",
 				Address:    ncipMockUrl,
 			},
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 
 	newPr := proapi.CreatePatronRequest{
@@ -1045,12 +1045,14 @@ func TestServerChoice(t *testing.T) {
 func TestRequesterSupplierNameCQL(t *testing.T) {
 	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
 	reqSymbol := "ISIL:REQ-" + uuid.NewString()
+	reqName := strings.Replace(reqSymbol, "ISIL:", "NAME:", 1)
 	supSymbol := "ISIL:SUP-" + uuid.NewString()
+	supName := strings.Replace(supSymbol, "ISIL:", "NAME:", 1)
 
 	// CreatePeer sets peer.Name = symbol and registers the symbol record,
 	// so requester_name / supplier_name will resolve to the symbol value via the view JOIN.
-	apptest.CreatePeer(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL)
-	apptest.CreatePeer(t, illRepo, supSymbol, adapter.MOCK_PEER_URL)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, reqName)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, supName)
 
 	prId := uuid.NewString()
 	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
@@ -1070,7 +1072,7 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	var foundPrs proapi.PatronRequests
 
 	// requester_name matches → 1 result
-	respBytes := httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqSymbol), []byte{}, 200)
+	respBytes := httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqName), []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
@@ -1083,7 +1085,7 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 
 	// supplier_name matches → 1 result
-	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(supSymbol), []byte{}, 200)
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(supName), []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), foundPrs.About.Count)
@@ -1091,10 +1093,10 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 
 	// Use WithLikeOps mask → 1 result
 	prefixLen := 10
-	if len(supSymbol) < prefixLen {
-		prefixLen = len(supSymbol)
+	if len(supName) < prefixLen {
+		prefixLen = len(supName)
 	}
-	prefix := supSymbol[:prefixLen] + "*"
+	prefix := supName[:prefixLen] + "*"
 	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(prefix), []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
@@ -1102,7 +1104,7 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.Equal(t, prId, foundPrs.Items[0].Id)
 
 	// Use lowercase → 1 result
-	lower := strings.ToLower(supSymbol)
+	lower := strings.ToLower(supName)
 	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(lower), []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
@@ -1116,7 +1118,7 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 
 	// get requester_name and supplier_name facets → 1 result, 2 facets
-	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqSymbol)+
+	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqName)+
 		"&facets=requester_name,supplier_name", []byte{}, 200)
 	err = json.Unmarshal(respBytes, &foundPrs)
 	assert.NoError(t, err)
@@ -1127,11 +1129,11 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	assert.Len(t, *foundPrs.About.Facets, 2)
 	assert.Equal(t, "requester_name", (*foundPrs.About.Facets)[0].Name)
 	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 1)
-	assert.Equal(t, reqSymbol, (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, reqName, (*foundPrs.About.Facets)[0].Values[0].Value)
 	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[0].Values[0].Count)
 	assert.Equal(t, "supplier_name", (*foundPrs.About.Facets)[1].Name)
 	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 1)
-	assert.Equal(t, supSymbol, (*foundPrs.About.Facets)[1].Values[0].Value)
+	assert.Equal(t, supName, (*foundPrs.About.Facets)[1].Values[0].Value)
 	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[1].Values[0].Count)
 }
 
@@ -1172,7 +1174,7 @@ func TestFacetsOK(t *testing.T) {
 					FromAgency: "from-agency",
 					Address:    ncipMockUrl,
 				},
-			})
+			}, requesterSymbol)
 		assert.NotNil(t, reqPeer)
 	}
 
@@ -1293,7 +1295,7 @@ func TestFacetsEmptyField(t *testing.T) {
 
 func TestCRUDTemplate(t *testing.T) {
 	symbol := "ISIL:TMPL" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, symbol)
 
 	templatePath := "/templates"
 	queryParams := "?symbol=" + url.QueryEscape(symbol)
@@ -1342,7 +1344,7 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// GET list – template is NOT visible for a different symbol
 	otherSymbol := "ISIL:OTHER" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, otherSymbol)
 	respBytes = httpRequest(t, "GET", templatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 200)
 	var otherTemplates proapi.Templates
 	err = json.Unmarshal(respBytes, &otherTemplates)
