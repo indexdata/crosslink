@@ -1049,8 +1049,8 @@ func TestRequesterSupplierNameCQL(t *testing.T) {
 	supSymbol := "ISIL:SUP-" + uuid.NewString()
 	supName := strings.Replace(supSymbol, "ISIL:", "NAME:", 1)
 
-	// CreatePeer sets peer.Name = symbol and registers the symbol record,
-	// so requester_name / supplier_name will resolve to the symbol value via the view JOIN.
+	// CreatePeerWithModeAndVendor registers the symbol record (reqSymbol/supSymbol) and sets
+	// peer.Name to the provided name, so requester_name / supplier_name resolve via the view JOIN.
 	apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, reqName)
 	apptest.CreatePeerWithModeAndVendor(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, supName)
 
