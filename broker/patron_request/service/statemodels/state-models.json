@@ -18,7 +18,8 @@
               "name": "validate",
               "desc": "Validate the request (e.g. check patron via NCIP LookupUser, if enabled)",
               "transitions": {
-                "success": "VALIDATED"
+                "success": "VALIDATED",
+                "review": "NEEDS_REVIEW"
               },
               "trigger": "auto"
             }
@@ -30,6 +31,24 @@
           "desc": "Patron Request is valid",
           "side": "REQUESTER",
           "primaryAction": "send-request",
+          "actions": [
+            {
+              "name": "send-request",
+              "desc": "Send ISO18626 request to the supplier or broker",
+              "transitions": {
+                "success": "SENT"
+              },
+              "trigger": "auto"
+            }
+          ]
+        },
+        {
+          "name": "NEEDS_REVIEW",
+          "display": "Needs review",
+          "desc": "Request is valid but needs staff review before sending",
+          "side": "REQUESTER",
+          "primaryAction": "send-request",
+          "needsAttention": true,
           "actions": [
             {
               "name": "send-request",
@@ -695,7 +714,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of express requests",
-      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING) and service_level = Express",
+      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Express",
       "schedule": "FREQ=MINUTELY;INTERVAL=15",
       "actionParams": {
         "interval": "2h"
@@ -704,7 +723,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of rush requests",
-      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING) and service_level = Rush",
+      "batchQuery": "(state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW) and service_level = Rush",
       "schedule": "FREQ=HOURLY;BYMINUTE=0;BYSECOND=0",
       "actionParams": {
         "interval": "24h"
@@ -713,7 +732,7 @@
     {
       "actionName": "request-aging",
       "title": "Request aging of all requests",
-      "batchQuery": "state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING",
+      "batchQuery": "state = VALIDATED or state = WILL_SUPPLY or state = CONDITION_PENDING or state = NEEDS_REVIEW",
       "schedule": "FREQ=DAILY;BYHOUR=5;BYMINUTE=0;BYSECOND=0",
       "actionParams": {
         "interval": "72h"
