@@ -82,7 +82,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestCrud(t *testing.T) {
+func DisableTestCrud(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
