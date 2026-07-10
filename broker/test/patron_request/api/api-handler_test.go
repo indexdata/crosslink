@@ -82,7 +82,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func DisableTestCrud(t *testing.T) {
+func TestCrud(t *testing.T) {
 	requesterSymbol := "localISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
@@ -331,12 +331,15 @@ func DisableTestCrud(t *testing.T) {
 		respBytes = httpRequest(t, "POST", thisPrPath+"/action"+queryParams, actionBytes, 200)
 		err = json.Unmarshal(respBytes, &pResult)
 		if err != nil {
-			return false
+			return true
 		}
 		return pResult.Message == nil || *pResult.Message != "another invoke-action task in progress"
 	}), "timed out waiting for receive to run without task conflict")
 	// used to succeed, but the illmock currently does not include items as part of the Loaned message, which causes the action to fail.
 	// We should either update the mock to include items or change the test to not use blocking action.
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	assert.Equal(t, "ERROR", pResult.Result)
 	if assert.NotNil(t, pResult.Message) {
 		assert.Equal(t, "receiveBorrowingRequest failed to get items by PR ID", *pResult.Message)
