@@ -1,5 +1,4 @@
 DROP INDEX IF EXISTS idx_peer_name_lower;
-DROP INDEX IF EXISTS idx_peer_name_lower_eq;
 
 DROP VIEW IF EXISTS patron_request_search_view;
 
