@@ -1,8 +1,6 @@
 -- Fast case-insensitive prefix lookup of peers by name
--- text_pattern_ops index for LIKE/prefix searches
+-- text_pattern_ops index for = / LIKE prefix matches, but not for ILIKE or regex matches
 CREATE INDEX IF NOT EXISTS idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
--- plain btree index for equality searches
-CREATE INDEX IF NOT EXISTS idx_peer_name_lower_eq ON peer (lower(name));
 
 DROP VIEW IF EXISTS patron_request_search_view;
 

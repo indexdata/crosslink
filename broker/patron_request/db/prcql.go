@@ -167,10 +167,10 @@ func ParsePatronRequestsCql(cqlString string) (pgcql.Query, error) {
 	ftv := pgcql.NewFieldTsVector().WithLanguage(LANGUAGE).WithServerChoiceRel(cql.ALL).WithColumn("search")
 	def.AddField("cql.serverChoice", ftv)
 
-	f = pgcql.NewFieldString().WithLikeOps().WithLower()
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
 	def.AddField("requester_name", f)
 
-	f = pgcql.NewFieldString().WithLikeOps().WithLower()
+	f = pgcql.NewFieldString().WithLikeOps().WithPrefixMatchOnly().WithLower()
 	def.AddField("supplier_name", f)
 
 	var parser cql.Parser
