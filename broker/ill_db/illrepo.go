@@ -412,42 +412,46 @@ func (r *PgIllRepo) updateExistingPeer(ctx common.ExtendedContext, peer Peer, di
 	peer.Vendor = string(dirEntry.Vendor)
 	peer.BrokerMode = string(dirEntry.BrokerMode)
 	peer.RefreshTime = GetPgNow()
-	peer, err := r.SavePeer(ctx, SavePeerParams(peer))
-	if err != nil {
-		ctx.Logger().Warn("could not update peer", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
-		return peer, err
-	}
-	err = r.DeleteSymbolByPeerId(ctx, peer.ID)
-	if err != nil {
-		ctx.Logger().Warn("could not delete peer symbols", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
-		return peer, err
-	}
-	for _, s := range dirEntry.Symbols {
-		_, err = r.SaveSymbol(ctx, SaveSymbolParams{
-			SymbolValue: s,
-			PeerID:      peer.ID,
-		})
+	var err error
+	err = r.WithTxFunc(ctx, func(illRepo IllRepo) error {
+		peer, err = illRepo.SavePeer(ctx, SavePeerParams(peer))
 		if err != nil {
-			ctx.Logger().Warn("could not save peer symbol", "peerId", peer.ID, "symbol", s, "error", err)
-			return peer, err
+			ctx.Logger().Warn("could not update peer", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
+			return err
 		}
-	}
-	err = r.DeleteBranchSymbolByPeerId(ctx, peer.ID)
-	if err != nil {
-		ctx.Logger().Warn("could not delete peer branch symbols", "peerId", peer.ID, "symbols", dirEntry.BranchSymbols, "error", err)
-		return peer, err
-	}
-	for _, s := range dirEntry.BranchSymbols {
-		_, err = r.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
-			SymbolValue: s,
-			PeerID:      peer.ID,
-		})
+		err = illRepo.DeleteSymbolByPeerId(ctx, peer.ID)
 		if err != nil {
-			ctx.Logger().Warn("could not save peer branch symbol", "peerId", peer.ID, "symbol", s, "error", err)
-			return peer, err
+			ctx.Logger().Warn("could not delete peer symbols", "peerId", peer.ID, "symbols", dirEntry.Symbols, "error", err)
+			return err
 		}
-	}
-	return peer, nil
+		for _, s := range dirEntry.Symbols {
+			_, err = illRepo.SaveSymbol(ctx, SaveSymbolParams{
+				SymbolValue: s,
+				PeerID:      peer.ID,
+			})
+			if err != nil {
+				ctx.Logger().Warn("could not save peer symbol", "peerId", peer.ID, "symbol", s, "error", err)
+				return err
+			}
+		}
+		err = illRepo.DeleteBranchSymbolByPeerId(ctx, peer.ID)
+		if err != nil {
+			ctx.Logger().Warn("could not delete peer branch symbols", "peerId", peer.ID, "symbols", dirEntry.BranchSymbols, "error", err)
+			return err
+		}
+		for _, s := range dirEntry.BranchSymbols {
+			_, err = illRepo.SaveBranchSymbol(ctx, SaveBranchSymbolParams{
+				SymbolValue: s,
+				PeerID:      peer.ID,
+			})
+			if err != nil {
+				ctx.Logger().Warn("could not save peer branch symbol", "peerId", peer.ID, "symbol", s, "error", err)
+				return err
+			}
+		}
+		return nil
+	})
+	return peer, err
 }
 
 func (r *PgIllRepo) mapSymbolsAndFilterStale(ctx common.ExtendedContext, symbols []string) (map[string]Peer, []string) {
