@@ -1,4 +1,4 @@
--- Fast case-insensitive lookup of peers by name (used by requester_name/supplier_name CQL searches)
+-- Fast case-insensitive prefix lookup of peers by name
 -- text_pattern_ops index for LIKE/prefix searches
 CREATE INDEX IF NOT EXISTS idx_peer_name_lower ON peer (lower(name) text_pattern_ops);
 -- plain btree index for equality searches
