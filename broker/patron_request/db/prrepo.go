@@ -37,6 +37,12 @@ type PrRepo interface {
 	MarkConditionNotificationsReceipt(ctx common.ExtendedContext, params MarkConditionNotificationsReceiptParams) error
 	DeleteNotificationById(ctx common.ExtendedContext, id string) error
 	DeleteItemById(ctx common.ExtendedContext, id string) error
+
+	SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error)
+	GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error)
+	GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error)
+	GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error)
+	DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error
 }
 
 var ErrUnsupportedFacet = errors.New("unsupported facet field")
@@ -306,4 +312,40 @@ func (r *PgPrRepo) DeleteNotificationById(ctx common.ExtendedContext, id string)
 
 func (r *PgPrRepo) DeleteItemById(ctx common.ExtendedContext, id string) error {
 	return r.queries.DeleteItemById(ctx, r.GetConnOrTx(), id)
+}
+
+func (r *PgPrRepo) SaveTemplate(ctx common.ExtendedContext, params SaveTemplateParams) (Template, error) {
+	row, err := r.queries.SaveTemplate(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) (Template, error) {
+	row, err := r.queries.GetTemplateByIdAndOwner(ctx, r.GetConnOrTx(), GetTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
+	return row.Template, err
+}
+
+func (r *PgPrRepo) GetTemplatesByOwner(ctx common.ExtendedContext, params GetTemplatesByOwnerParams) ([]Template, int64, error) {
+	rows, err := r.queries.GetTemplatesByOwner(ctx, r.GetConnOrTx(), params)
+	var list []Template
+	var fullCount int64
+	for _, row := range rows {
+		fullCount = row.FullCount
+		list = append(list, row.Template)
+	}
+	return list, fullCount, err
+}
+
+func (r *PgPrRepo) GetTemplateByPurposeAudienceLabelAndOwner(ctx common.ExtendedContext, params GetTemplateByPurposeAudienceLabelAndOwnerParams) (Template, error) {
+	row, err := r.queries.GetTemplateByPurposeAudienceLabelAndOwner(ctx, r.GetConnOrTx(), params)
+	return row.Template, err
+}
+
+func (r *PgPrRepo) DeleteTemplateByIdAndOwner(ctx common.ExtendedContext, id string, owner string) error {
+	return r.queries.DeleteTemplateByIdAndOwner(ctx, r.GetConnOrTx(), DeleteTemplateByIdAndOwnerParams{
+		ID:    id,
+		Owner: owner,
+	})
 }

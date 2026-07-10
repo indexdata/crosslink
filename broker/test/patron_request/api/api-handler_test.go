@@ -1290,3 +1290,120 @@ func TestFacetsEmptyField(t *testing.T) {
 	respBytes := httpRequest(t, "GET", basePath+"?facets=", []byte{}, 400)
 	assert.Contains(t, string(respBytes), "parameter \\\"facets\\\" in query")
 }
+
+func TestCRUDTemplate(t *testing.T) {
+	symbol := "ISIL:TMPL" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+
+	templatePath := "/templates"
+	queryParams := "?symbol=" + url.QueryEscape(symbol)
+
+	// POST – create a template
+	audience := proapi.TemplateAudiencePatron
+	subject := "Your ILL request {{title}} is ready"
+	newTemplate := proapi.CreateTemplate{
+		Title:       "Ready notification",
+		Purpose:     proapi.Email,
+		ContentType: proapi.Text,
+		Audience:    &audience,
+		Subject:     &subject,
+		Labels:      []string{"borrower-loaned"},
+		Body:        "Dear {{patronName}}, your item {{title}} has arrived.",
+	}
+	newTemplateBytes, err := json.Marshal(newTemplate)
+	assert.NoError(t, err)
+
+	respBytes := httpRequest(t, "POST", templatePath+queryParams, newTemplateBytes, 201)
+	var createdTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &createdTemplate)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, createdTemplate.Id)
+	assert.Equal(t, newTemplate.Title, createdTemplate.Title)
+	assert.Equal(t, newTemplate.Purpose, createdTemplate.Purpose)
+	assert.Equal(t, newTemplate.ContentType, createdTemplate.ContentType)
+	assert.Equal(t, audience, *createdTemplate.Audience)
+	assert.Equal(t, subject, *createdTemplate.Subject)
+	assert.Equal(t, newTemplate.Labels, createdTemplate.Labels)
+	assert.Equal(t, newTemplate.Body, createdTemplate.Body)
+	assert.False(t, createdTemplate.CreatedAt.IsZero())
+	assert.Nil(t, createdTemplate.UpdatedAt)
+
+	templateId := createdTemplate.Id
+	thisTemplatePath := templatePath + "/" + templateId
+
+	// GET list – template appears in list for correct symbol
+	respBytes = httpRequest(t, "GET", templatePath+queryParams, []byte{}, 200)
+	var templates proapi.Templates
+	err = json.Unmarshal(respBytes, &templates)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), templates.About.Count)
+	assert.Len(t, templates.Items, 1)
+	assert.Equal(t, templateId, templates.Items[0].Id)
+
+	// GET list – template is NOT visible for a different symbol
+	otherSymbol := "ISIL:OTHER" + uuid.NewString()
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	respBytes = httpRequest(t, "GET", templatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 200)
+	var otherTemplates proapi.Templates
+	err = json.Unmarshal(respBytes, &otherTemplates)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), otherTemplates.About.Count)
+	assert.Len(t, otherTemplates.Items, 0)
+
+	// GET by id
+	respBytes = httpRequest(t, "GET", thisTemplatePath+queryParams, []byte{}, 200)
+	var foundTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &foundTemplate)
+	assert.NoError(t, err)
+	assert.Equal(t, templateId, foundTemplate.Id)
+	assert.Equal(t, newTemplate.Title, foundTemplate.Title)
+
+	// GET by id – 404 for wrong owner
+	httpRequest(t, "GET", thisTemplatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 404)
+
+	// PUT – update the template
+	updatedAudience := proapi.TemplateAudienceStaff
+	updatedSubject := "Staff: ILL item {{title}} ready for {{patronName}}"
+	updateTemplate := proapi.UpdateTemplate{
+		Title:       "Ready notification – updated",
+		ContentType: proapi.Html,
+		Audience:    &updatedAudience,
+		Subject:     &updatedSubject,
+		Labels:      []string{"borrower-loaned", "staff"},
+		Body:        "<p>Dear {{patronName}}, your item is ready.</p>",
+	}
+	updateBytes, err := json.Marshal(updateTemplate)
+	assert.NoError(t, err)
+
+	respBytes = httpRequest(t, "PUT", thisTemplatePath+queryParams, updateBytes, 200)
+	var updatedTemplate proapi.Template
+	err = json.Unmarshal(respBytes, &updatedTemplate)
+	assert.NoError(t, err)
+	assert.Equal(t, templateId, updatedTemplate.Id)
+	assert.Equal(t, updateTemplate.Title, updatedTemplate.Title)
+	assert.Equal(t, proapi.Html, updatedTemplate.ContentType)
+	assert.Equal(t, updatedAudience, *updatedTemplate.Audience)
+	assert.Equal(t, updatedSubject, *updatedTemplate.Subject)
+	assert.Equal(t, updateTemplate.Labels, updatedTemplate.Labels)
+	assert.Equal(t, updateTemplate.Body, updatedTemplate.Body)
+	assert.NotNil(t, updatedTemplate.UpdatedAt)
+
+	// PUT – 404 for wrong owner
+	httpRequest(t, "PUT", thisTemplatePath+"?symbol="+url.QueryEscape(otherSymbol), updateBytes, 404)
+
+	// DELETE – 404 for wrong owner
+	httpRequest(t, "DELETE", thisTemplatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 404)
+
+	// DELETE
+	httpRequest(t, "DELETE", thisTemplatePath+queryParams, []byte{}, 204)
+
+	// GET by id after delete – 404
+	httpRequest(t, "GET", thisTemplatePath+queryParams, []byte{}, 404)
+
+	// GET list after delete – empty
+	respBytes = httpRequest(t, "GET", templatePath+queryParams, []byte{}, 200)
+	err = json.Unmarshal(respBytes, &templates)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), templates.About.Count)
+	assert.Len(t, templates.Items, 0)
+}
