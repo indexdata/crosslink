@@ -990,23 +990,23 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 		if params.AutoActionParams.TemplateLabel == nil {
 			return logErrorAndReturnActionExecutionResult(ctx, pr, "template label is not set", nil)
 		}
-		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.Staff))
+		from, to, err := a.getDirectoryEmailData(ctx, symbol, slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff))
 		if err != nil {
 			return logErrorAndReturnActionExecutionResult(ctx, pr, "error getting directory email data", err)
 		}
-		if slices.Contains(*params.AutoActionParams.SendTo, proapi.Patron) {
+		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToPatron) {
 			recipients := patronEmail(pr)
 			if len(recipients) == 0 {
 				result.Note = "no recipients found for patron"
 			} else {
-				sendErr := a.createAndSendEmail(from, recipients, *params.AutoActionParams.TemplateLabel)
+				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToPatron)
 				if sendErr != nil {
 					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to patron", sendErr)
 				}
 				result.Note = "patron email sent successfully"
 			}
 		}
-		if slices.Contains(*params.AutoActionParams.SendTo, proapi.Staff) {
+		if slices.Contains(*params.AutoActionParams.SendTo, proapi.ModelActionParamsSendToStaff) {
 			var recipients []string
 			for _, r := range strings.Split(*to, ";") {
 				if trimmed := strings.TrimSpace(r); trimmed != "" {
@@ -1019,7 +1019,7 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 				}
 				result.Note += "no recipients found for staff"
 			} else {
-				sendErr := a.createAndSendEmail(from, recipients, *params.AutoActionParams.TemplateLabel)
+				sendErr := a.createAndSendEmail(ctx, symbol, from, recipients, *params.AutoActionParams.TemplateLabel, proapi.ModelActionParamsSendToStaff)
 				if sendErr != nil {
 					return logErrorAndReturnActionExecutionResult(ctx, pr, "error sending email to staff", sendErr)
 				}
@@ -1030,12 +1030,21 @@ func (a *PatronRequestActionService) sendEmailNotification(ctx common.ExtendedCo
 	return actionExecutionResult{status: events.EventStatusSuccess, result: &result, pr: pr}
 }
 
-func (a *PatronRequestActionService) createAndSendEmail(from string, recipients []string, template string) error {
+func (a *PatronRequestActionService) createAndSendEmail(ctx common.ExtendedContext, symbol string, from string, recipients []string, label string, audience proapi.ModelActionParamsSendTo) error {
+	template, err := a.prRepo.GetTemplateByPurposeAudienceLabelAndOwner(ctx, pr_db.GetTemplateByPurposeAudienceLabelAndOwnerParams{
+		Purpose:  string(proapi.Email),
+		Owner:    symbol,
+		Label:    label,
+		Audience: string(audience),
+	})
+	if err != nil {
+		return err
+	}
 	emailData := email.EmailData{
 		To:         recipients,
-		Subject:    "Request changed state, ILLDEV-354-" + template,
-		Body:       "Request changed state, ILLDEV-354-" + template,
-		IsHTML:     true,
+		Subject:    template.Subject.String,
+		Body:       template.Body,
+		IsHTML:     template.ContentType == string(proapi.Html),
 		IncludePdf: false,
 	}
 	raw, messageErr := email.BuildRawMessage(from, emailData, nil)
