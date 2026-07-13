@@ -1242,7 +1242,7 @@ func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
+func TestMetadataUpdateNoCatalogConfig(t *testing.T) {
 	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
