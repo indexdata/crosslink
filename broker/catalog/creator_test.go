@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"testing"
@@ -31,15 +31,15 @@ func TestParserNil(t *testing.T) {
 }
 
 func TestParserMissing(t *testing.T) {
-	parserConfig := &directory.ParserConfig{}
+	parserConfig := &directory.HoldingsParserConfig{}
 	_, err := getHoldingsParser(parserConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
 
 func TestParserMarc(t *testing.T) {
-	parserConfig := &directory.ParserConfig{
-		Marc: &directory.MarcParserConfig{},
+	parserConfig := &directory.HoldingsParserConfig{
+		Marc: &directory.MarcHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -47,8 +47,8 @@ func TestParserMarc(t *testing.T) {
 }
 
 func TestParserOpac(t *testing.T) {
-	parserConfig := &directory.ParserConfig{
-		Opac: &directory.OpacParserConfig{},
+	parserConfig := &directory.HoldingsParserConfig{
+		Opac: &directory.OpacHoldingsParserConfig{},
 	}
 	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
@@ -59,11 +59,11 @@ func TestGetAdapterBadParser(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
-				ParserConfig: &directory.ParserConfig{},
+				HoldingsFormat: &directory.HoldingsParserConfig{},
 			},
 		},
 	}
@@ -76,7 +76,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 	creator := NewAvailabilityCreator("other", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -92,7 +92,7 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 	creator := NewAvailabilityCreator("zoom", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{},
+			CatalogConfig: &directory.CatalogConfig{},
 		},
 	}
 	_, err := creator.GetAdapter(peer)
@@ -103,7 +103,7 @@ func TestGetAdapterMissingProperties(t *testing.T) {
 func TestGetAdapterMock(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -119,7 +119,7 @@ func TestGetAdapterMock(t *testing.T) {
 func TestGetAdapterZoom(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -134,14 +134,14 @@ func TestGetAdapterZoom(t *testing.T) {
 		assert.Nil(t, aa)
 	} else {
 		assert.NoError(t, err)
-		assert.IsType(t, &ZoomAvailabilityAdapter{}, aa)
+		assert.IsType(t, &ZoomLookupAdapter{}, aa)
 	}
 }
 
 func TestGetAdapterMetaproxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -151,13 +151,13 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &MetaproxyAvailabilityAdapter{}, aa)
+	assert.IsType(t, &MetaproxyLookupAdapter{}, aa)
 }
 
 func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: "a",
 				},
@@ -173,7 +173,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 func TestGetAdapterSRU(t *testing.T) {
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Sru: &directory.SruConfig{
 					Address: "a",
 				},
@@ -183,5 +183,5 @@ func TestGetAdapterSRU(t *testing.T) {
 	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &SruHoldingsLookupAdapter{}, aa)
+	assert.IsType(t, &SruLookupAdapter{}, aa)
 }

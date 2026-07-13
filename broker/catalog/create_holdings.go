@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"fmt"
@@ -26,15 +26,15 @@ func getParserFormat(format string) (HoldingsParser, error) {
 	case HoldingsFormatMarc21Plus1:
 		return NewMarc21Plus1HoldingsParser(), nil
 	case HoldingsFormatMarc:
-		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil
+		return NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{}), nil
 	case HoldingsFormatOpac:
-		return NewOpacHoldingsParser(directory.OpacParserConfig{}), nil
+		return NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{}), nil
 	default:
 		return nil, fmt.Errorf("bad value for %s: %s", HoldingsFormat, format)
 	}
 }
 
-func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
+func CreateLookupAdapterFromEnv(cfg map[string]any) (LookupAdapter, error) {
 	holdingsAdapterVal, ok := cfg[HoldingsAdapter].(string)
 	if !ok {
 		return nil, fmt.Errorf("missing value for %s", HoldingsAdapter)
@@ -67,10 +67,10 @@ func CreateHoldingsLookupShared(cfg map[string]any) (LookupAdapter, error) {
 			return nil, err
 		}
 		metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-		return CreateSruHoldingsLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, metadataParser, "marcxml"), nil
+		return CreateSruLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, metadataParser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {
-		return &MockHoldingsLookupAdapter{}, nil
+		return &MockLookupAdapter{}, nil
 	}
 	return nil, fmt.Errorf("bad value for %s", HoldingsAdapter)
 }

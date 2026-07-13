@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"encoding/xml"
@@ -17,7 +17,7 @@ func createSruAdapter(t *testing.T, isxn bool, url ...string) LookupAdapter {
 	parser := &ReservoirHoldingsParser{}
 	queryBuilder := NewQueryBuilderIsxn(isxn)
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	ad := CreateSruHoldingsLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, metadataParser, "marcxml")
+	ad := CreateSruLookupAdapter(http.DefaultClient, url, "", queryBuilder, parser, metadataParser, "marcxml")
 	assert.NotNil(t, ad)
 	return ad
 }

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/email"
-	"github.com/indexdata/crosslink/broker/holdings"
 	prapi "github.com/indexdata/crosslink/broker/patron_request/api"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -142,11 +142,11 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := holdings.CreateHoldingsLookupShared(map[string]any{
-		holdings.HoldingsAdapter:    HOLDINGS_ADAPTER,
-		holdings.HoldingsSruURL:     HOLDINGS_SRU_URL,
-		holdings.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
-		holdings.HoldingsFormat:     HOLDINGS_FORMAT,
+	holdingsAdapter, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
+		catalog.HoldingsAdapter:    HOLDINGS_ADAPTER,
+		catalog.HoldingsSruURL:     HOLDINGS_SRU_URL,
+		catalog.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
+		catalog.HoldingsFormat:     HOLDINGS_FORMAT,
 	})
 	if err != nil {
 		return Context{}, err
@@ -188,7 +188,7 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := holdings.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	availabilityCreator := catalog.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService())
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)

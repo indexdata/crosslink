@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"github.com/indexdata/crosslink/directory"

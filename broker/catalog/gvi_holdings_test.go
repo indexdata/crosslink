@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"net/http"
@@ -397,7 +397,7 @@ func TestGviHoldings(t *testing.T) {
 	qtype := directory.Cql
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
-			HoldingsConfig: &directory.HoldingsConfig{
+			CatalogConfig: &directory.CatalogConfig{
 				Zoom: &directory.ZoomConfig{
 					Address: server.URL,
 					Options: &map[string]string{
@@ -409,7 +409,7 @@ func TestGviHoldings(t *testing.T) {
 					Type:       &qtype,
 					Identifier: NewString("rec.id = {term}"),
 				},
-				ParserConfig: &directory.ParserConfig{
+				HoldingsFormat: &directory.HoldingsParserConfig{
 					Marc21plus1: &map[string]interface{}{},
 				},
 			},

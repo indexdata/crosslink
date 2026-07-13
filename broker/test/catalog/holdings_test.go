@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"bytes"
@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/indexdata/crosslink/broker/app"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	apptest "github.com/indexdata/crosslink/broker/test/apputils"
 	test "github.com/indexdata/crosslink/broker/test/utils"
@@ -95,7 +95,7 @@ func TestMain(m *testing.M) {
 
 	// patch consortium peer with SRU server URL for zoom
 	entry := &directoryEntries[0]
-	entry.HoldingsConfig.Zoom.Address = sruServer.URL
+	entry.CatalogConfig.Zoom.Address = sruServer.URL
 
 	// MOCK_PEER_URL is only for DIRECTORY_ADAPTER=mock, so we have to patch all peers here
 	for _, entry := range directoryEntries {
@@ -108,7 +108,7 @@ func TestMain(m *testing.M) {
 
 	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", brokerUrl), "failed to set peer URL")
-	app.AVAILABILITY_ADAPTER = holdings.AvailabilityAdapterZoom
+	app.AVAILABILITY_ADAPTER = catalog.AvailabilityAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
 	app.HOLDINGS_ADAPTER = "consortium"

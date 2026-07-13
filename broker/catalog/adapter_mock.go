@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ type MockAvailabilityLookupResult struct {
 	parent *MockAvailabilityAdapter
 }
 
-func NewMockAvailabilityAdapter(config directory.HoldingsConfig) (LookupAdapter, error) {
+func NewMockAvailabilityAdapter(config directory.CatalogConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response

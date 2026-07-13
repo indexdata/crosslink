@@ -15,10 +15,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/pgcql"
+	"github.com/indexdata/crosslink/broker/catalog"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
-	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
@@ -1190,28 +1190,28 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 
 // mockAvailabilityCreator controls what GetLookupAdapter returns when no holdingsAdapter is pre-set.
 type mockAvailabilityCreator struct {
-	adapter holdings.LookupAdapter
+	adapter catalog.LookupAdapter
 	err     error
 }
 
-func (m *mockAvailabilityCreator) GetAdapter(peer ill_db.Peer) (holdings.LookupAdapter, error) {
+func (m *mockAvailabilityCreator) GetAdapter(peer ill_db.Peer) (catalog.LookupAdapter, error) {
 	return m.adapter, m.err
 }
 
 // peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
-// Pass nil to leave HoldingsConfig absent entirely.
+// Pass nil to leave CatalogConfig absent entirely.
 func peerWithMetadataMode(mode *directory.MetadataUpdateMode) ill_db.Peer {
-	var hc *directory.HoldingsConfig
+	var cc *directory.CatalogConfig
 	if mode != nil {
-		hc = &directory.HoldingsConfig{MetadataUpdateMode: mode}
+		cc = &directory.CatalogConfig{MetadataUpdateMode: mode}
 	}
 	return ill_db.Peer{
-		CustomData: directory.Entry{Name: "test-peer", HoldingsConfig: hc},
+		CustomData: directory.Entry{Name: "test-peer", CatalogConfig: cc},
 	}
 }
 
 // lookupFactoryWithAdapter creates a LookupAdapterFactory that returns the given adapter directly.
-func lookupFactoryWithAdapter(adapter holdings.LookupAdapter) *service.LookupAdapterFactory {
+func lookupFactoryWithAdapter(adapter catalog.LookupAdapter) *service.LookupAdapterFactory {
 	return service.NewLookupAdapterFactory(nil, nil, "", adapter, nil)
 }
 
@@ -1243,7 +1243,7 @@ func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 }
 
 func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{})
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1254,7 +1254,7 @@ func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
 
 func TestMetadataUpdateModeNone(t *testing.T) {
 	mode := directory.None
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{})
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1264,7 +1264,7 @@ func TestMetadataUpdateModeNone(t *testing.T) {
 
 func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 	mode := directory.Merge
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Err: errors.New("lookup failed")})
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Err: errors.New("lookup failed")})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1274,8 +1274,8 @@ func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 
 func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 	mode := directory.Merge
-	meta := holdings.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	meta := catalog.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1288,8 +1288,8 @@ func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 
 func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
 	mode := directory.Merge
-	meta := holdings.Metadata{Title: "Catalog Title"}
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	meta := catalog.Metadata{Title: "Catalog Title"}
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1303,8 +1303,8 @@ func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
 
 func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
 	mode := directory.Auto
-	meta := holdings.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1330,8 +1330,8 @@ func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
 
 func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
 	mode := directory.Auto
-	meta := holdings.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
-	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
+	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})

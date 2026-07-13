@@ -1,4 +1,4 @@
-package holdings
+package catalog
 
 import (
 	"fmt"
@@ -37,9 +37,9 @@ func getMetadataParser(config *directory.MetadataParserConfig) (MetadataParser, 
 	return nil, fmt.Errorf("holdingsConfig.metadataFormat must set marc21 (only marc21 is supported for now)")
 }
 
-func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
+func getHoldingsParser(config *directory.HoldingsParserConfig) (HoldingsParser, error) {
 	if config == nil {
-		return NewMarcHoldingsParser(directory.MarcParserConfig{}), nil // default to marc parser
+		return NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{}), nil // default to marc parser
 	}
 	if config.Marc != nil {
 		return NewMarcHoldingsParser(*config.Marc), nil
@@ -53,19 +53,19 @@ func getHoldingsParser(config *directory.ParserConfig) (HoldingsParser, error) {
 	if config.Marc21plus1 != nil {
 		return NewMarc21Plus1HoldingsParser(), nil
 	}
-	return nil, fmt.Errorf("holdingsConfig.parserConfig must set marc, opac, reservoir, or marc21plus1 properties")
+	return nil, fmt.Errorf("holdingsConfig.holdingsFormat must set marc, opac, reservoir, or marc21plus1 properties")
 }
 
 func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, error) {
 	entry := peer.CustomData
-	config := entry.HoldingsConfig
+	config := entry.CatalogConfig
 	if config == nil {
 		return nil, nil // No holdings adapter for this peer
 	}
 	if c.mode == AvailabilityAdapterMock {
 		return NewMockAvailabilityAdapter(*config)
 	}
-	holdingsParser, err := getHoldingsParser(config.ParserConfig)
+	holdingsParser, err := getHoldingsParser(config.HoldingsFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 		return nil, err
 	}
 	if config.Sru != nil {
-		return NewSruAvailabilityAdapter(*config.Sru, queryBuilder, holdingsParser, metadataParser)
+		return NewSruLookupAdapter(*config.Sru, queryBuilder, holdingsParser, metadataParser)
 	}
 	if config.Zoom != nil {
 		switch c.mode {
@@ -86,7 +86,7 @@ func (c *AvailabilityCreatorImpl) GetAdapter(peer ill_db.Peer) (LookupAdapter, e
 			if c.metaproxyUrl == "" {
 				return nil, fmt.Errorf("when using %s holdings adapter, %s environment variable must be set", AvailabilityAdapterMetaproxy, "METAPROXY_URL")
 			}
-			return NewMetaproxyAvailabilityAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser, metadataParser)
+			return NewMetaproxyLookupAdapter(*config.Zoom, c.metaproxyUrl, queryBuilder, holdingsParser, metadataParser)
 		case AvailabilityAdapterZoom:
 			return NewZoomAvailabilityAdapter(*config.Zoom, queryBuilder, holdingsParser, metadataParser)
 		default:
