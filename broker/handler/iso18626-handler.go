@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/service"
+	"github.com/indexdata/crosslink/broker/holdings"
 	"github.com/indexdata/crosslink/broker/shim"
 
 	"github.com/indexdata/crosslink/broker/adapter"
@@ -198,7 +198,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 
 		illTrans.LastRequesterAction = createPgText("Request")
 
-		oldParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		oldParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 
 		illTransactionData := ill_db.IllTransactionData{
 			BibliographicInfo:     request.BibliographicInfo,
@@ -212,7 +212,7 @@ func handleRetryRequest(ctx common.ExtendedContext, request *iso18626.Request, r
 		}
 		illTrans.IllTransactionData = illTransactionData
 
-		newParams := service.CreateHoldingsParams(illTrans.IllTransactionData)
+		newParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 		retryLookupChanged = oldParams != newParams
 
 		timestamp := pgtype.Timestamp{

@@ -18,11 +18,15 @@ import (
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/holdings"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
 	"github.com/indexdata/crosslink/broker/test/mocks"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -1180,4 +1184,174 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 			},
 		},
 	}, nil
+}
+
+// --- metadataUpdate tests ---
+
+// mockAvailabilityCreator controls what GetLookupAdapter returns when no holdingsAdapter is pre-set.
+type mockAvailabilityCreator struct {
+	adapter holdings.LookupAdapter
+	err     error
+}
+
+func (m *mockAvailabilityCreator) GetAdapter(peer ill_db.Peer) (holdings.LookupAdapter, error) {
+	return m.adapter, m.err
+}
+
+// peerWithMetadataMode builds a Peer whose CustomData carries the given MetadataUpdateMode.
+// Pass nil to leave HoldingsConfig absent entirely.
+func peerWithMetadataMode(mode *directory.MetadataUpdateMode) ill_db.Peer {
+	var hc *directory.HoldingsConfig
+	if mode != nil {
+		hc = &directory.HoldingsConfig{MetadataUpdateMode: mode}
+	}
+	return ill_db.Peer{
+		CustomData: directory.Entry{Name: "test-peer", HoldingsConfig: hc},
+	}
+}
+
+// lookupFactoryWithAdapter creates a LookupAdapterFactory that returns the given adapter directly.
+func lookupFactoryWithAdapter(adapter holdings.LookupAdapter) *service.LookupAdapterFactory {
+	return service.NewLookupAdapterFactory(nil, nil, "", adapter, nil)
+}
+
+func TestMetadataUpdateNoFactory(t *testing.T) {
+	h := PatronRequestApiHandler{}
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
+	assert.NoError(t, err)
+}
+
+func TestMetadataUpdateAdapterInitError(t *testing.T) {
+	creator := &mockAvailabilityCreator{err: errors.New("adapter init failed")}
+	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
+	assert.ErrorContains(t, err, "failed to get lookup adapter")
+}
+
+func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
+	creator := &mockAvailabilityCreator{} // returns nil adapter, nil error
+	factory := service.NewLookupAdapterFactory(nil, nil, "", nil, creator)
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, ill_db.Peer{})
+	assert.NoError(t, err)
+}
+
+func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	peer := peerWithMetadataMode(nil) // HoldingsConfig absent → mode stays None
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, peer)
+	assert.NoError(t, err)
+}
+
+func TestMetadataUpdateModeNone(t *testing.T) {
+	mode := directory.None
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, peerWithMetadataMode(&mode))
+	assert.NoError(t, err)
+}
+
+func TestMetadataUpdateMetadataLookupError(t *testing.T) {
+	mode := directory.Merge
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Err: errors.New("lookup failed")})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	err := h.metadataUpdate(ctx, &iso18626.Request{}, peerWithMetadataMode(&mode))
+	assert.ErrorContains(t, err, "failed to perform lookup for patron request")
+}
+
+func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
+	mode := directory.Merge
+	meta := holdings.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	req := &iso18626.Request{} // empty bib info
+	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
+	assert.NoError(t, err)
+	assert.Equal(t, "Catalog Title", req.BibliographicInfo.Title)
+	assert.Equal(t, "Jane Doe", req.BibliographicInfo.Author)
+}
+
+func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
+	mode := directory.Merge
+	meta := holdings.Metadata{Title: "Catalog Title"}
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	req := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{Title: "Existing Title"},
+	}
+	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
+	assert.NoError(t, err)
+	assert.Equal(t, "Existing Title", req.BibliographicInfo.Title) // not overwritten
+}
+
+func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
+	mode := directory.Auto
+	meta := holdings.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	req := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title:                  "Old Title",
+			SupplierUniqueRecordId: "record-123", // non-empty → Auto resolves to Replace
+			BibliographicItemId: []iso18626.BibliographicItemId{
+				{
+					BibliographicItemIdentifier:     "0987654321",
+					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+				},
+			},
+		},
+	}
+	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
+	assert.NoError(t, err)
+	assert.Equal(t, "Catalog Title", req.BibliographicInfo.Title)                                              // replaced
+	assert.Equal(t, "Catalog Author", req.BibliographicInfo.Author)                                            // replaced
+	assert.Equal(t, "1234567890", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)    // replaced
+	assert.Equal(t, "ISBN", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text) // replaced
+}
+
+func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
+	mode := directory.Auto
+	meta := holdings.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
+	factory := lookupFactoryWithAdapter(&holdings.MockAvailabilityAdapter{Metadata: meta})
+	h := PatronRequestApiHandler{}
+	h.SetLookupAdapterFactory(factory)
+	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
+	req := &iso18626.Request{
+		BibliographicInfo: iso18626.BibliographicInfo{
+			Title: "Patron Title", // no SupplierUniqueRecordId → Auto resolves to Merge
+			BibliographicItemId: []iso18626.BibliographicItemId{
+				{
+					BibliographicItemIdentifier:     "0987654321",
+					BibliographicItemIdentifierCode: iso18626.TypeSchemeValuePair{Text: "ISBN"},
+				},
+			},
+		},
+	}
+	err := h.metadataUpdate(ctx, req, peerWithMetadataMode(&mode))
+	assert.NoError(t, err)
+	assert.Equal(t, "Patron Title", req.BibliographicInfo.Title)                                               // preserved (Merge)
+	assert.Equal(t, "Catalog Author", req.BibliographicInfo.Author)                                            // filled in (was empty)
+	assert.Equal(t, "0987654321", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifier)    // kept
+	assert.Equal(t, "ISBN", req.BibliographicInfo.BibliographicItemId[0].BibliographicItemIdentifierCode.Text) // kept
+	assert.Equal(t, "4321-4321", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifier)     // added (not present)
+	assert.Equal(t, "ISSN", req.BibliographicInfo.BibliographicItemId[1].BibliographicItemIdentifierCode.Text) // added (not present)
 }

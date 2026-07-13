@@ -25,14 +25,14 @@ func TestGetAdapterOtherNoConfig(t *testing.T) {
 }
 
 func TestParserNil(t *testing.T) {
-	parser, err := getParser(nil)
+	parser, err := getHoldingsParser(nil)
 	assert.NoError(t, err)
 	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
 
 func TestParserMissing(t *testing.T) {
 	parserConfig := &directory.ParserConfig{}
-	_, err := getParser(parserConfig)
+	_, err := getHoldingsParser(parserConfig)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "must set marc")
 }
@@ -41,7 +41,7 @@ func TestParserMarc(t *testing.T) {
 	parserConfig := &directory.ParserConfig{
 		Marc: &directory.MarcParserConfig{},
 	}
-	parser, err := getParser(parserConfig)
+	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
 	assert.IsType(t, &MarcHoldingsParser{}, parser)
 }
@@ -50,7 +50,7 @@ func TestParserOpac(t *testing.T) {
 	parserConfig := &directory.ParserConfig{
 		Opac: &directory.OpacParserConfig{},
 	}
-	parser, err := getParser(parserConfig)
+	parser, err := getHoldingsParser(parserConfig)
 	assert.NoError(t, err)
 	assert.IsType(t, &OpacHoldingsParser{}, parser)
 }

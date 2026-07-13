@@ -425,12 +425,13 @@ func TestGviHoldings(t *testing.T) {
 			ServiceType: "Loan",
 			Identifier:  "(DE-627)1795329181",
 		}
-		holdingsList, _, err := aa.Lookup(params)
+		result, err := aa.Lookup(params)
 		assert.NoError(t, err)
-		assert.NotNil(t, holdingsList)
+		assert.NotNil(t, result)
+		holdingsList, err := result.GetHoldings()
+		assert.NoError(t, err)
 		assert.Len(t, holdingsList, 1)
 	} else {
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cgo is not enabled")
+		assert.ErrorContains(t, err, "cgo is not enabled")
 	}
 }

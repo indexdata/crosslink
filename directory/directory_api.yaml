@@ -278,7 +278,20 @@ components:
           $ref: '#/components/schemas/QueryConfig'
         parserConfig:
           $ref: '#/components/schemas/ParserConfig'
+        metadataUpdateMode:
+          $ref: '#/components/schemas/MetadataUpdateMode'
+        metadataFormat:
+          $ref: '#/components/schemas/MetadataParserConfig'
       additionalProperties: false
+
+    MetadataUpdateMode:
+      type: string
+      description: Determines how lookup metadata updates the outgoing ILL request metadata.
+      enum:
+        - replace
+        - merge
+        - none
+        - auto
 
     SruConfig:
       type: object
@@ -331,6 +344,39 @@ components:
         identifier:
           type: string
           description: PQF/CQL format string for identifier search. Default is "@attr 1=12 {term}"
+      additionalProperties: false
+
+    MetadataParserConfig:
+      type: object
+      properties:
+        marc21:
+          $ref: '#/components/schemas/MarcMetadataParserConfig'
+      additionalProperties: false
+
+    MarcMetadataParserConfig:
+      type: object
+      properties:
+        identifier:
+          type: string
+          description: identifier (for example, "001") to use for metadata parsing
+        isbn:
+          type: string
+          description: Subfield code to use for ISBN (for example, "020$a")
+        issn:
+          type: string
+          description: Subfield code to use for ISSN (for example, "022$a")
+        title:
+          type: string
+          description: Subfield code to use for title (for example, "245$a$n$p")
+        subtitle:
+          type: string
+          description: Subfield code to use for subtitle (for example, "245$b")
+        author:
+          type: string
+          description: Subfield code to use for author (for example, "100$a/100$?/110$a/110$?/111$a/111$?/245$c")
+        edition:
+          type: string
+          description: Subfield code to use for edition (for example, "250$a")
       additionalProperties: false
 
     ParserConfig:

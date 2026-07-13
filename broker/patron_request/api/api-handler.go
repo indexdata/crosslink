@@ -13,15 +13,20 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/indexdata/cql-go/cqlbuilder"
+	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/api"
 	"github.com/indexdata/crosslink/broker/common"
 	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/handler"
+	"github.com/indexdata/crosslink/broker/holdings"
+	"github.com/indexdata/crosslink/broker/ill_db"
 	"github.com/indexdata/crosslink/broker/oapi"
 	pr_db "github.com/indexdata/crosslink/broker/patron_request/db"
 	"github.com/indexdata/crosslink/broker/patron_request/proapi"
 	prservice "github.com/indexdata/crosslink/broker/patron_request/service"
+	"github.com/indexdata/crosslink/broker/service"
 	"github.com/indexdata/crosslink/broker/tenant"
+	"github.com/indexdata/crosslink/directory"
 	"github.com/indexdata/crosslink/iso18626"
 	"github.com/indexdata/go-utils/utils"
 	"github.com/jackc/pgerrcode"
@@ -39,15 +44,18 @@ var brokerSymbol = utils.GetEnv("BROKER_SYMBOL", "ISIL:BROKER")
 var errInvalidPatronRequest = errors.New("invalid patron request")
 
 type PatronRequestApiHandler struct {
-	limitDefault         int32
-	prRepo               pr_db.PrRepo
-	eventBus             events.EventBus
-	eventRepo            events.EventRepo
-	actionMappingService prservice.ActionMappingService
-	autoActionRunner     prservice.AutoActionRunner
-	actionTaskProcessor  ActionTaskProcessor
-	tenantResolver       *tenant.TenantResolver
-	notificationSender   prservice.PatronRequestNotificationService
+	limitDefault           int32
+	prRepo                 pr_db.PrRepo
+	eventBus               events.EventBus
+	eventRepo              events.EventRepo
+	actionMappingService   prservice.ActionMappingService
+	autoActionRunner       prservice.AutoActionRunner
+	actionTaskProcessor    ActionTaskProcessor
+	tenantResolver         *tenant.TenantResolver
+	notificationSender     prservice.PatronRequestNotificationService
+	lookupAdapterFactory   *service.LookupAdapterFactory
+	illRepo                ill_db.IllRepo
+	directoryLookupAdapter adapter.DirectoryLookupAdapter
 }
 
 func NewPrApiHandler(prRepo pr_db.PrRepo, eventBus events.EventBus,
@@ -69,6 +77,18 @@ func (a *PatronRequestApiHandler) SetAutoActionRunner(autoActionRunner prservice
 
 func (a *PatronRequestApiHandler) SetActionTaskProcessor(actionTaskProcessor ActionTaskProcessor) {
 	a.actionTaskProcessor = actionTaskProcessor
+}
+
+func (a *PatronRequestApiHandler) SetLookupAdapterFactory(lookupAdapterFactory *service.LookupAdapterFactory) {
+	a.lookupAdapterFactory = lookupAdapterFactory
+}
+
+func (a *PatronRequestApiHandler) SetIllRepo(illRepo ill_db.IllRepo) {
+	a.illRepo = illRepo
+}
+
+func (a *PatronRequestApiHandler) SetDirectoryLookupAdapter(directoryLookupAdapter adapter.DirectoryLookupAdapter) {
+	a.directoryLookupAdapter = directoryLookupAdapter
 }
 
 func decodeRequiredBody[T any](r *http.Request, dst *T) error {
@@ -263,6 +283,38 @@ func AddOwnerRestriction(queryBuilder *cqlbuilder.QueryBuilder, symbol string, s
 	return queryBuilder, err
 }
 
+func (a *PatronRequestApiHandler) metadataUpdate(ctx common.ExtendedContext, illRequest *iso18626.Request, requesterPeer ill_db.Peer) error {
+	if a.lookupAdapterFactory == nil {
+		return nil
+	}
+	lookupAdapter, configPeer, err := a.lookupAdapterFactory.GetAdapterRequester(ctx, requesterPeer)
+	if err != nil {
+		return fmt.Errorf("failed to get lookup adapter: %w", err)
+	}
+	if lookupAdapter == nil {
+		return nil
+	}
+
+	mode := directory.None
+	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
+		mode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	}
+	if mode == directory.None {
+		return nil
+	}
+	lookupParams := holdings.LookupParamsFromBibliographicInfo(illRequest.BibliographicInfo, illRequest.ServiceInfo)
+
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if err != nil {
+		return fmt.Errorf("failed to perform lookup for patron request: %w", err)
+	}
+	metadata, err := lookupResult.GetMetadata()
+	if err != nil {
+		return fmt.Errorf("failed to get metadata for patron request: %w", err)
+	}
+	return holdings.MetadataRequestUpdate(&illRequest.BibliographicInfo, metadata, lookupParams, mode)
+}
+
 func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *http.Request, params proapi.PostPatronRequestsParams) {
 	logParams := map[string]string{"method": "PostPatronRequests"}
 	ctx := common.CreateExtCtxWithArgs(r.Context(), &common.LoggerArgs{Other: logParams})
@@ -309,6 +361,30 @@ func (a *PatronRequestApiHandler) PostPatronRequests(w http.ResponseWriter, r *h
 		api.AddInternalError(ctx, w, fmt.Errorf("no initial state defined for borrower side"))
 		return
 	}
+
+	if a.illRepo != nil && a.directoryLookupAdapter != nil {
+		peers, _, peerErr := a.illRepo.GetCachedPeersBySymbols(ctx, []string{symbol}, a.directoryLookupAdapter)
+		if peerErr != nil {
+			api.AddInternalError(ctx, w, peerErr)
+			return
+		}
+		if len(peers) == 0 {
+			api.AddInternalError(ctx, w, fmt.Errorf("no peer found for requester symbol %q", symbol))
+			return
+		}
+		if len(peers) > 1 {
+			ctx.Logger().Warn("multiple peers found for requester symbol, using first peer", "symbol", symbol, "peerCount", len(peers))
+		}
+		requesterPeer := peers[0]
+		if requesterPeer.Vendor == string(directory.CrossLink) {
+			err := a.metadataUpdate(ctx, &illRequest, requesterPeer)
+			if err != nil {
+				api.AddInternalError(ctx, w, err)
+				return
+			}
+		}
+	}
+
 	dbreq := buildDbPatronRequest(&newPr, params.XOkapiTenant, creationTime, requesterReqId, illRequest, borrowerInitialState)
 	pr, err := a.prRepo.CreatePatronRequest(ctx, pr_db.CreatePatronRequestParams(dbreq))
 	if err != nil {

@@ -10,13 +10,13 @@ type MetaproxyAvailabilityAdapter struct {
 	holdingsLookupAdapter LookupAdapter
 }
 
-func NewMetaproxyAvailabilityAdapter(config directory.ZoomConfig, metaproxyUrl string, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser) (LookupAdapter, error) {
+func NewMetaproxyAvailabilityAdapter(config directory.ZoomConfig, metaproxyUrl string, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &MetaproxyAvailabilityAdapter{
-		holdingsLookupAdapter: CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser, "marcxml"),
+		holdingsLookupAdapter: CreateSruHoldingsLookupAdapter(http.DefaultClient, []string{metaproxyUrl}, config.Address, queryBuilder, holdingsParser, metadataParser, "marcxml"),
 	}
 	return a, nil
 }
 
-func (a *MetaproxyAvailabilityAdapter) Lookup(params LookupParams) ([]Holding, string, error) {
+func (a *MetaproxyAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	return a.holdingsLookupAdapter.Lookup(params)
 }

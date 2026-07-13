@@ -24,22 +24,18 @@ const ROTA_INFO_KEY = "rotaInfo"
 const DATE_LAYOUT = "2006-01-02"
 
 type SupplierLocator struct {
-	eventBus            events.EventBus
-	illRepo             ill_db.IllRepo
-	dirAdapter          adapter.DirectoryLookupAdapter
-	holdingsAdapter     holdings.LookupAdapter
-	availabilityCreator holdings.AvailabilityCreator
-	consortiumSymbol    string
+	eventBus             events.EventBus
+	illRepo              ill_db.IllRepo
+	dirAdapter           adapter.DirectoryLookupAdapter
+	lookupAdapterFactory *LookupAdapterFactory
 }
 
-func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, holdingsAdapter holdings.LookupAdapter, availabilityCreator holdings.AvailabilityCreator, consortiumSymbol string) SupplierLocator {
+func CreateSupplierLocator(eventBus events.EventBus, illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, lookupAdapterFactory *LookupAdapterFactory) SupplierLocator {
 	return SupplierLocator{
-		eventBus:            eventBus,
-		illRepo:             illRepo,
-		dirAdapter:          dirAdapter,
-		holdingsAdapter:     holdingsAdapter,
-		availabilityCreator: availabilityCreator,
-		consortiumSymbol:    consortiumSymbol,
+		eventBus:             eventBus,
+		illRepo:              illRepo,
+		dirAdapter:           dirAdapter,
+		lookupAdapterFactory: lookupAdapterFactory,
 	}
 }
 
@@ -58,82 +54,70 @@ func (s *SupplierLocator) CheckAvailability(ctx common.ExtendedContext, event ev
 	_, _ = s.eventBus.ProcessTask(ctx, event, events.SignalConsumers, s.checkAvailability)
 }
 
-func CreateHoldingsParams(illTransactionData ill_db.IllTransactionData) holdings.LookupParams {
-	var holdingsParams holdings.LookupParams
-	bibliographicInfo := illTransactionData.BibliographicInfo
-	holdingsParams.Identifier = bibliographicInfo.SupplierUniqueRecordId
-	holdingsParams.Title = bibliographicInfo.Title
-	for _, id := range bibliographicInfo.BibliographicItemId {
-		code := id.BibliographicItemIdentifierCode.Text
-		switch code {
-		case "ISBN":
-			holdingsParams.Isbn = id.BibliographicItemIdentifier
-		case "ISSN":
-			holdingsParams.Issn = id.BibliographicItemIdentifier
-		}
-	}
-	if illTransactionData.ServiceInfo != nil {
-		holdingsParams.ServiceType = string(illTransactionData.ServiceInfo.ServiceType)
-	}
-	return holdingsParams
-}
-
-// 3 cases to consider for getting the adapter:
-// 1. If holdingsAdapter is set from the start (for example for testing), use it directly
-// 2. If consortiumPeers are present, lookup the peer for the consortium and use its holdings adapter
-// 3. Otherwise, use the holdings adapter for the requesting peer
-func (s *SupplierLocator) getConsortialAdapter(requestPeer ill_db.Peer, consortiumPeers []ill_db.Peer) (holdings.LookupAdapter, error) {
-	lookupAdapter := s.holdingsAdapter
-	if lookupAdapter != nil {
-		return lookupAdapter, nil
-	}
-	if len(consortiumPeers) > 0 {
-		return s.availabilityCreator.GetAdapter(consortiumPeers[0])
-	}
-	return s.availabilityCreator.GetAdapter(requestPeer)
-}
-
 func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event events.Event) (events.EventStatus, *events.EventResult) {
 	illTrans, err := s.illRepo.GetIllTransactionById(ctx, event.IllTransactionID)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
-	if holdingsParams.Identifier == "" && holdingsParams.Isbn == "" && holdingsParams.Issn == "" {
-		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM,
-			"ILL transaction missing bibliograhpic identifiers (SupplierUniqueRecordId/ISBN/ISSN)", nil)
-	}
+	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
 
 	requester, err := s.illRepo.GetPeerById(ctx, illTrans.RequesterID.String)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read requester peer", err)
 	}
 
-	// get consortium peer if configured
-	var consortiumPeers []ill_db.Peer
-	if s.consortiumSymbol != "" {
-		consortiumPeers, _, err = s.illRepo.GetCachedPeersBySymbols(ctx, []string{s.consortiumSymbol}, s.dirAdapter) // trigger caching of consortium peer
-		if err != nil {
-			return events.LogErrorAndReturnResult(ctx, "failed to lookup consortium peer", err)
-		}
-		if len(consortiumPeers) == 0 {
-			return events.LogErrorAndReturnResult(ctx, "no peer found for consortium symbol", fmt.Errorf("no peer found for consortium symbol '%s'", s.consortiumSymbol))
-		}
-		if len(consortiumPeers) > 1 {
-			ctx.Logger().Warn("multiple peers found for consortium symbol, using first peer", "consortiumSymbol", s.consortiumSymbol, "peerCount", len(consortiumPeers))
-		}
+	if s.lookupAdapterFactory == nil {
+		return events.LogErrorAndReturnResult(ctx, "lookup adapter factory not configured", fmt.Errorf("lookup adapter factory is nil"))
 	}
 
-	lookupAdapter, err := s.getConsortialAdapter(requester, consortiumPeers)
+	lookupAdapter, configPeer, err := s.lookupAdapterFactory.GetAdapterRequester(ctx, requester)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to get holdings adapter for locating suppliers", err)
 	}
 	if lookupAdapter == nil {
 		return events.LogErrorAndReturnResult(ctx, "no holdings adapter available for locating suppliers", fmt.Errorf("no adapter found"))
 	}
-	holdingsResult, query, err := lookupAdapter.Lookup(holdingsParams)
+
+	metadataUpdateMode := directory.None
+	if configPeer.HoldingsConfig != nil && configPeer.HoldingsConfig.MetadataUpdateMode != nil {
+		metadataUpdateMode = *configPeer.HoldingsConfig.MetadataUpdateMode
+	}
+
+	var query string
+	lookupResult, err := lookupAdapter.Lookup(lookupParams)
+	if lookupResult != nil {
+		query = lookupResult.GetQuery() // get the query even if there was an error, for logging purposes
+	}
 	if err != nil {
-		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to locate holdings for query '%s'", query), err)
+		if query != "" {
+			return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to perform lookup for query '%s'", query), err)
+		} else {
+			return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, fmt.Sprintf("failed to perform lookup: %s", err.Error()), nil)
+		}
+	}
+
+	// holdings before metadata, so that transaction is only saved if both holdings and metadata are successfully retrieved and updated
+	holdingsResult, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, fmt.Sprintf("failed to get holdings for query '%s'", query), err)
+	}
+
+	// only want metadata lookup for non-Crosslink vendors, because Crosslink is dealt with in post of patron requests.
+	if metadataUpdateMode != directory.None && requester.Vendor != string(directory.CrossLink) {
+		metadata, err := lookupResult.GetMetadata()
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to get metadata for locating suppliers", err)
+		}
+		err = holdings.MetadataRequestUpdate(&illTrans.IllTransactionData.BibliographicInfo, metadata, lookupParams, metadataUpdateMode)
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to update metadata for locating suppliers", err)
+		}
+		_, err = s.illRepo.SaveIllTransaction(ctx, ill_db.SaveIllTransactionParams(illTrans))
+		if err != nil {
+			return events.LogErrorAndReturnResult(ctx, "failed to save updated ILL transaction metadata", err)
+		}
+		lookupParams = holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo,
+			illTrans.IllTransactionData.ServiceInfo)
 	}
 	var holdingsLog = map[string]any{}
 	holdingsLog["lookupQuery"] = query
@@ -152,10 +136,10 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 	var lenderLastResort []directory.Symbol
 	if requester.CustomData.LenderOfLastResort != nil {
 		lenderLastResort = *requester.CustomData.LenderOfLastResort
-	} else if len(consortiumPeers) > 0 && consortiumPeers[0].CustomData.LenderOfLastResort != nil {
-		lenderLastResort = *consortiumPeers[0].CustomData.LenderOfLastResort
+	} else if configPeer.LenderOfLastResort != nil {
+		lenderLastResort = *configPeer.LenderOfLastResort
 	}
-	if holdingsParams.Identifier != "" {
+	if lookupParams.Identifier != "" {
 		for _, sym := range lenderLastResort {
 			var fullSymbol string
 			if sym.Authority != "" {
@@ -165,13 +149,13 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 			}
 			holdingsResult = append(holdingsResult, holdings.Holding{
 				Symbol:          fullSymbol,
-				LocalIdentifier: holdingsParams.Identifier,
+				LocalIdentifier: lookupParams.Identifier,
 			})
 		}
 	}
 	if len(holdingsResult) == 0 {
 		return events.LogProblemAndReturnResult(ctx, SUP_PROBLEM, "no holdings located",
-			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": holdingsParams.Identifier})
+			map[string]any{"holdings": holdingsLog, "supplierUniqueRecordId": lookupParams.Identifier})
 	}
 	holdingsLog["entries"] = holdingsResult
 
@@ -185,9 +169,9 @@ func (s *SupplierLocator) locateSuppliers(ctx common.ExtendedContext, event even
 				ctx.Logger().Warn("Multiple holdings for supplier, only first holding will be used",
 					"symbol", holding.Symbol,
 					"localIdentifier", holding.LocalIdentifier,
-					"supplierUniqueRecordId", holdingsParams.Identifier,
-					"isbn", holdingsParams.Isbn,
-					"issn", holdingsParams.Issn,
+					"supplierUniqueRecordId", lookupParams.Identifier,
+					"isbn", lookupParams.Isbn,
+					"issn", lookupParams.Issn,
 				)
 			}
 			continue
@@ -350,7 +334,7 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not get peer", err)
 	}
-	aa, err := s.availabilityCreator.GetAdapter(peer)
+	aa, err := s.lookupAdapterFactory.GetAdapterSupplier(ctx, peer)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "could not create availability adapter", err)
 	}
@@ -363,13 +347,17 @@ func (s *SupplierLocator) checkAvailability(ctx common.ExtendedContext, event ev
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to read ILL transaction", err)
 	}
-	holdingsParams := CreateHoldingsParams(illTrans.IllTransactionData)
-	holdingsParams.Identifier = sup.LocalID.String
-	results, _, err := aa.Lookup(holdingsParams)
+	lookupParams := holdings.LookupParamsFromBibliographicInfo(illTrans.IllTransactionData.BibliographicInfo, illTrans.IllTransactionData.ServiceInfo)
+	lookupParams.Identifier = sup.LocalID.String
+	lookupResult, err := aa.Lookup(lookupParams)
 	if err != nil {
 		return events.LogErrorAndReturnResult(ctx, "failed to perform availability lookup", err)
 	}
-	if len(results) == 0 {
+	holdingsResults, err := lookupResult.GetHoldings()
+	if err != nil {
+		return events.LogErrorAndReturnResult(ctx, "failed to get holdings for availability lookup", err)
+	}
+	if len(holdingsResults) == 0 {
 		ctx.Logger().Debug("availability lookup returned no results for supplier, skipping", "supplierSymbol", sup.SupplierSymbol)
 		eventData["skipped"] = true
 		sup.SupplierStatus = ill_db.SupplierStateSkippedPg
