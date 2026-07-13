@@ -65,7 +65,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	test.Expect(pgContainer.Terminate(ctx), "failed to stop db container")
+	test.Expect(test.TerminatePGContainer(ctx, pgContainer), "failed to stop db container")
 	os.Exit(code)
 }
 
@@ -74,7 +74,7 @@ func TestMultipleEventHandlers(t *testing.T) {
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
 	var normalCreated atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 		assert.NoError(t, err, "failed to init db pool")
@@ -92,6 +92,9 @@ func TestMultipleEventHandlers(t *testing.T) {
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
@@ -135,7 +138,7 @@ func TestBroadcastEventHandlers(t *testing.T) {
 	noEvents := 2
 	receivedAr := make([][]events.Event, noPools)
 	var normalCreated atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
 		assert.NoError(t, err, "failed to init db pool")
@@ -153,6 +156,9 @@ func TestBroadcastEventHandlers(t *testing.T) {
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	var requestReceived1 []events.Event
 	eventBus.HandleEventCreated(events.EventNameConfirmRequesterMsg, events.HandlerRoleObserver, func(ctx common.ExtendedContext, event events.Event) {
@@ -202,7 +208,7 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 	var coreCompleted atomic.Int32
 	var broadcastStarted atomic.Int32
 	var broadcastCompleted atomic.Int32
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	for i := 0; i < noPools; i++ {
 		dbPool, err := dbutil.InitDbPool(app.ConnectionString)
@@ -227,6 +233,9 @@ func TestBroadcastTaskLifecycleHandlersDoNotDuplicateCoreHandlers(t *testing.T) 
 		err = app.StartEventBus(ctx, eventBus)
 		assert.NoError(t, err, "failed to start event bus")
 	}
+	// Registered after the pool defers so it runs first (LIFO), cancelling the
+	// event bus goroutines before their pools are closed.
+	defer func() { cancel(); time.Sleep(50 * time.Millisecond) }()
 
 	eventBus.HandleTaskStarted(events.EventNameRequestReceived, events.HandlerRoleConsumer, func(ctx common.ExtendedContext, event events.Event) {
 		coreStarted.Add(1)
