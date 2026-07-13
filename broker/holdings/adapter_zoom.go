@@ -20,41 +20,9 @@ type ZoomAvailabilityAdapter struct {
 }
 
 type ZoomLookupResult struct {
-	params  LookupParams
-	query   string
-	records [][]byte
-	adapter *ZoomAvailabilityAdapter
-}
-
-func (r *ZoomLookupResult) GetQuery() string {
-	return r.query
-}
-
-func (r *ZoomLookupResult) GetHoldings() ([]Holding, error) {
-	var avail []Holding
-	for _, record := range r.records {
-		h, err := r.adapter.holdingsParser.Parse(record, r.params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
-		}
-		avail = append(avail, h...)
-	}
-	return avail, nil
-}
-
-func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
-	var metadata Metadata
-	if r.adapter.metadataParser == nil {
-		return metadata, fmt.Errorf("metadata parser not configured")
-	}
-	if len(r.records) == 0 {
-		return metadata, nil
-	}
-	metadata, err := r.adapter.metadataParser.Parse(r.records[0])
-	if err != nil {
-		return metadata, fmt.Errorf("failed to parse metadata from ZOOM record: %w", err)
-	}
-	return metadata, nil
+	query    string
+	holdings []Holding
+	metadata *Metadata
 }
 
 func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
@@ -165,19 +133,39 @@ func (a *ZoomAvailabilityAdapter) iterateQueries(
 
 func (a *ZoomAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	var result ZoomLookupResult
-	result.params = params
-	result.adapter = a
 	var err error
 	result.query, err = a.iterateQueries(params, func(xmlBuffer []byte) (bool, error) {
 		h, err := a.holdingsParser.Parse(xmlBuffer, params)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse holdings from ZOOM record: %w", err)
 		}
+		if result.metadata == nil && a.metadataParser != nil {
+			newMetadata, err := a.metadataParser.Parse(xmlBuffer)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse metadata from ZOOM record: %w", err)
+			}
+			result.metadata = &newMetadata
+		}
 		if len(h) == 0 {
 			return false, nil
 		}
-		result.records = append(result.records, xmlBuffer)
+		result.holdings = append(result.holdings, h...)
 		return true, nil
 	})
 	return &result, err
+}
+
+func (r *ZoomLookupResult) GetQuery() string {
+	return r.query
+}
+
+func (r *ZoomLookupResult) GetHoldings() ([]Holding, error) {
+	return r.holdings, nil
+}
+
+func (r *ZoomLookupResult) GetMetadata() (Metadata, error) {
+	if r.metadata == nil {
+		return Metadata{}, nil
+	}
+	return *r.metadata, nil
 }

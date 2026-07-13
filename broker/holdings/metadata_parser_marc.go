@@ -41,21 +41,24 @@ func NewMetadataParserMarc(config directory.MarcMetadataParserConfig) MetadataPa
 }
 
 func (p *MetadataParserMarc) Parse(record []byte) (Metadata, error) {
+	// First, check if the record is an OPAC record and extract the MARC record from it
+	var opacRecord marcxml.OpacRecord
+	err := xml.Unmarshal(record, &opacRecord)
+	if err == nil {
+		record = opacRecord.BibliographicRecord.XMLContent
+	}
+	// Now parse the MARC record, try with the MARC21 slim namespace first, then without it if that fails
 	var marcRecord marcxml.Record
-	err := xml.Unmarshal(record, &marcRecord)
+	err = xml.Unmarshal(record, &marcRecord)
 	if err != nil {
-		var opacRecord marcxml.OpacRecord
-		opacErr := xml.Unmarshal(record, &opacRecord)
-		if opacErr != nil {
+		// GVI marc does not have the MARC21 slim namespace, so we try again without it
+		var noNamespaceRecord marcxml.RecordType
+		err = xml.Unmarshal(record, &noNamespaceRecord)
+		if err != nil {
 			return Metadata{}, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
 		}
-		content := opacRecord.BibliographicRecord.XMLContent
-		err := xml.Unmarshal([]byte(content), &marcRecord)
-		if err != nil {
-			return Metadata{}, fmt.Errorf("failed to unmarshal MARC XML embedded in OPAC record: %w", err)
-		}
+		marcRecord.RecordType = noNamespaceRecord
 	}
-
 	var metadata Metadata
 	entries := []struct {
 		name        string

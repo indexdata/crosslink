@@ -309,16 +309,6 @@ func TestSruMarcxmlBadMarc(t *testing.T) {
 	result, err := ad.Lookup(p)
 	assert.NotEmpty(t, result.GetQuery())
 	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
-
-	result = &SruLookupResult{
-		params:  p,
-		adapter: ad.(*SruHoldingsLookupAdapter),
-		records: [][]byte{[]byte("<rec")},
-	}
-	_, err = result.GetHoldings()
-	assert.ErrorContains(t, err, "failed to parse holdings from SRU record: decoding")
-	_, err = result.GetMetadata()
-	assert.ErrorContains(t, err, "failed to parse metadata from SRU record: failed to unmarshal MARC XML")
 }
 
 func TestSruMarcxmlWithFallbackHoldings(t *testing.T) {

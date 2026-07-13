@@ -29,11 +29,17 @@ func NewMarcHoldingsParser(config directory.MarcParserConfig) HoldingsParser {
 }
 
 func (p *MarcHoldingsParser) Parse(record []byte, params LookupParams) ([]Holding, error) {
+	// Now parse the MARC record, try with the MARC21 slim namespace first, then without it if that fails
 	var marcRecord marcxml.Record
 	err := xml.Unmarshal(record, &marcRecord)
-	// TODO : consider OPAC record as well
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
+		// GVI marc does not have the MARC21 slim namespace, so we try again without it
+		var noNamespaceRecord marcxml.RecordType
+		err = xml.Unmarshal(record, &noNamespaceRecord)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal MARC XML: %w", err)
+		}
+		marcRecord.RecordType = noNamespaceRecord
 	}
 	var holdings []Holding
 	for _, field := range marcRecord.Datafield {

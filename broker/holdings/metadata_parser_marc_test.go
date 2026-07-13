@@ -94,6 +94,30 @@ func TestMetadataParserMarcOverride(t *testing.T) {
 	assert.Equal(t, "2nd edition", metadata.Edition)
 }
 
+func TestMetadataParserMarcNoNamespace(t *testing.T) {
+	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
+
+	marcXML := []byte(`
+	<record>
+	    <controlfield tag="001">123456789</controlfield>
+	    <controlfield tag="002">435</controlfield>
+	    <datafield tag="020" ind1=" " ind2=" ">
+	        <subfield code="a">978-3-16-148410-0</subfield>
+	        <subfield code="z">xxxxx</subfield>
+		</datafield>
+	</record>`)
+
+	metadata, err := parser.Parse(marcXML)
+	assert.NoError(t, err)
+	assert.Equal(t, "123456789", metadata.Identifier)
+	assert.Equal(t, "978-3-16-148410-0", metadata.Isbn)
+	assert.Equal(t, "", metadata.Issn)
+	assert.Equal(t, "", metadata.Title)
+	assert.Equal(t, "", metadata.Subtitle)
+	assert.Equal(t, "", metadata.Author)
+	assert.Equal(t, "", metadata.Edition)
+}
+
 func TestMetadataParserBadXml(t *testing.T) {
 	parser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
 	marcXML := []byte(`<xrecord`)

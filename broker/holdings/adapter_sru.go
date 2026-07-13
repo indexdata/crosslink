@@ -25,10 +25,9 @@ type SruHoldingsLookupAdapter struct {
 }
 
 type SruLookupResult struct {
-	params  LookupParams
-	query   string
-	records [][]byte
-	adapter *SruHoldingsLookupAdapter
+	query    string
+	holdings []Holding
+	metadata *Metadata
 }
 
 func CreateSruHoldingsLookupAdapter(client *http.Client, sruUrl []string, xTarget string, queryBuilder LookupQueryBuilder, parser HoldingsParser, metadataParser MetadataParser, recordSchema string) LookupAdapter {
@@ -137,8 +136,6 @@ func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupPara
 
 func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	var result SruLookupResult
-	result.params = params
-	result.adapter = s
 
 	for _, sruUrl := range s.sruUrl {
 		var err error
@@ -147,10 +144,17 @@ func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, er
 			if err != nil {
 				return false, err
 			}
+			if result.metadata == nil && s.metadataParser != nil {
+				metadata, err := s.metadataParser.Parse(xmlBuffer)
+				if err != nil {
+					return false, fmt.Errorf("failed to parse metadata from SRU record: %w", err)
+				}
+				result.metadata = &metadata
+			}
 			if len(h) == 0 {
 				return false, nil
 			}
-			result.records = append(result.records, xmlBuffer)
+			result.holdings = append(result.holdings, h...)
 			return true, nil
 		})
 		result.query = query
@@ -169,28 +173,12 @@ func (r *SruLookupResult) GetQuery() string {
 }
 
 func (s *SruLookupResult) GetHoldings() ([]Holding, error) {
-	var avail []Holding
-	for _, record := range s.records {
-		h, err := s.adapter.holdingsParser.Parse(record, s.params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
-		}
-		avail = append(avail, h...)
-	}
-	return avail, nil
+	return s.holdings, nil
 }
 
 func (s *SruLookupResult) GetMetadata() (Metadata, error) {
-	var metadata Metadata
-	if s.adapter.metadataParser == nil {
-		return metadata, fmt.Errorf("metadata parser not configured")
+	if s.metadata == nil {
+		return Metadata{}, nil
 	}
-	if len(s.records) == 0 {
-		return metadata, nil
-	}
-	metadata, err := s.adapter.metadataParser.Parse(s.records[0])
-	if err != nil {
-		return metadata, fmt.Errorf("failed to parse metadata from SRU record: %w", err)
-	}
-	return metadata, nil
+	return *s.metadata, nil
 }
