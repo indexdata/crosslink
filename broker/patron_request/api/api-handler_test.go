@@ -1188,7 +1188,7 @@ func (m *MockActionTaskProcessorExclusiveError) ProcessInvokeActionTask(ctx comm
 
 // --- metadataUpdate tests ---
 
-// mockAvailabilityCreator controls what GetLookupAdapter returns when no holdingsAdapter is pre-set.
+// mockAvailabilityCreator controls what GetAdapter returns when no globalLookupAdapter is pre-set.
 type mockAvailabilityCreator struct {
 	adapter catalog.LookupAdapter
 	err     error
