@@ -1171,6 +1171,8 @@ func toApiPatronRequest(r *http.Request, request pr_db.PatronRequestSearchView) 
 		EventsLink:               eventsLink,
 		TerminalState:            request.TerminalState,
 		InternalNote:             toString(request.InternalNote),
+		RequesterName:            toString(request.RequesterName),
+		SupplierName:             toString(request.SupplierName),
 		NextReqId:                toString(request.NextReqID),
 		PrevReqId:                toString(request.PrevReqID),
 		RetryBibInfo:             request.RetryBibInfo,

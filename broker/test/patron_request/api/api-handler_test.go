@@ -45,6 +45,7 @@ func TestMain(m *testing.M) {
 	app.TENANT_TO_SYMBOL = ""
 	ctx := context.Background()
 	app.DB_PROVISION = true
+	app.DB_EXPLAIN_ANALYZE = false
 
 	pgContainer, err := postgres.Run(ctx, "postgres",
 		postgres.WithDatabase("crosslink"),
@@ -93,7 +94,7 @@ func TestCrud(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -375,7 +376,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	requesterSymbol := "ISIL:REQ" + uuid.NewString()
 	supplierSymbol := "ISIL:SUP" + uuid.NewString()
 
-	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 
 	lmsConfig := &directory.LmsConfig{
@@ -385,7 +386,7 @@ func TestActionsToCompleteState(t *testing.T) {
 	supPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, supplierSymbol)
 	assert.NotNil(t, supPeer)
 
 	// POST
@@ -662,7 +663,7 @@ func TestRejectRetry(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -778,7 +779,7 @@ func TestAcceptRetry(t *testing.T) {
 	reqPeer := apptest.CreatePeerWithModeAndVendor(t, illRepo, requesterSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink,
 		directory.Entry{
 			LmsConfig: lmsConfig,
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 	supPeer := apptest.CreatePeer(t, illRepo, supplierSymbol, adapter.MOCK_PEER_URL)
 	assert.NotNil(t, supPeer)
@@ -924,7 +925,7 @@ func TestPostPatronRequestRejectsInvalidIllRequest(t *testing.T) {
 				FromAgency: "from-agency",
 				Address:    ncipMockUrl,
 			},
-		})
+		}, requesterSymbol)
 	assert.NotNil(t, reqPeer)
 
 	newPr := proapi.CreatePatronRequest{
@@ -1041,6 +1042,101 @@ func TestServerChoice(t *testing.T) {
 	assert.Equal(t, int64(0), foundPrs.About.Count)
 }
 
+func TestRequesterSupplierNameCQL(t *testing.T) {
+	appCtx := common.CreateExtCtxWithArgs(context.Background(), nil)
+	reqSymbol := "ISIL:REQ-" + uuid.NewString()
+	reqName := strings.Replace(reqSymbol, "ISIL:", "NAME:", 1)
+	supSymbol := "ISIL:SUP-" + uuid.NewString()
+	supName := strings.Replace(supSymbol, "ISIL:", "NAME:", 1)
+
+	// CreatePeerWithModeAndVendor registers the symbol record (reqSymbol/supSymbol) and sets
+	// peer.Name to the provided name, so requester_name / supplier_name resolve via the view JOIN.
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, reqSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, reqName)
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, supSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.ReShare, directory.Entry{}, supName)
+
+	prId := uuid.NewString()
+	_, err := prRepo.CreatePatronRequest(appCtx, pr_db.CreatePatronRequestParams{
+		ID:              prId,
+		CreatedAt:       pgtype.Timestamp{Time: time.Now(), Valid: true},
+		Side:            prservice.SideBorrowing,
+		RequesterSymbol: pgtype.Text{String: reqSymbol, Valid: true},
+		SupplierSymbol:  pgtype.Text{String: supSymbol, Valid: true},
+		State:           prservice.BorrowerStateValidated,
+		Language:        "english",
+		IllRequest:      iso18626.Request{},
+		Items:           []pr_db.PrItem{},
+		TerminalState:   false,
+	})
+	assert.NoError(t, err)
+
+	var foundPrs proapi.PatronRequests
+
+	// requester_name matches → 1 result
+	respBytes := httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqName), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// requester_name no match → 0 results
+	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3DNoSuchLibrary", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+
+	// supplier_name matches → 1 result
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(supName), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// Use WithLikeOps mask → 1 result
+	prefixLen := 10
+	if len(supName) < prefixLen {
+		prefixLen = len(supName)
+	}
+	prefix := supName[:prefixLen] + "*"
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(prefix), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// Use lowercase → 1 result
+	lower := strings.ToLower(supName)
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3D"+url.QueryEscape(lower), []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	// supplier_name no match → 0 results
+	respBytes = httpRequest(t, "GET", basePath+"?cql=supplier_name%3DNoSuchLibrary", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), foundPrs.About.Count)
+
+	// get requester_name and supplier_name facets → 1 result, 2 facets
+	respBytes = httpRequest(t, "GET", basePath+"?cql=requester_name%3D"+url.QueryEscape(reqName)+
+		"&facets=requester_name,supplier_name", []byte{}, 200)
+	err = json.Unmarshal(respBytes, &foundPrs)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), foundPrs.About.Count)
+	assert.Equal(t, prId, foundPrs.Items[0].Id)
+
+	assert.NotNil(t, foundPrs.About.Facets)
+	assert.Len(t, *foundPrs.About.Facets, 2)
+	assert.Equal(t, "requester_name", (*foundPrs.About.Facets)[0].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[0].Values, 1)
+	assert.Equal(t, reqName, (*foundPrs.About.Facets)[0].Values[0].Value)
+	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[0].Values[0].Count)
+	assert.Equal(t, "supplier_name", (*foundPrs.About.Facets)[1].Name)
+	assert.Len(t, (*foundPrs.About.Facets)[1].Values, 1)
+	assert.Equal(t, supName, (*foundPrs.About.Facets)[1].Values[0].Value)
+	assert.Equal(t, int64(1), (*foundPrs.About.Facets)[1].Values[0].Count)
+}
+
 func httpRequest2(t *testing.T, method string, uriPath string, reqbytes []byte, expectStatus int) (*http.Response, []byte) {
 	client := http.DefaultClient
 	hreq, err := http.NewRequest(method, getLocalhostWithPort()+uriPath, bytes.NewBuffer(reqbytes))
@@ -1078,7 +1174,7 @@ func TestFacetsOK(t *testing.T) {
 					FromAgency: "from-agency",
 					Address:    ncipMockUrl,
 				},
-			})
+			}, requesterSymbol)
 		assert.NotNil(t, reqPeer)
 	}
 
@@ -1199,7 +1295,7 @@ func TestFacetsEmptyField(t *testing.T) {
 
 func TestCRUDTemplate(t *testing.T) {
 	symbol := "ISIL:TMPL" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, symbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, symbol)
 
 	templatePath := "/templates"
 	queryParams := "?symbol=" + url.QueryEscape(symbol)
@@ -1248,7 +1344,7 @@ func TestCRUDTemplate(t *testing.T) {
 
 	// GET list – template is NOT visible for a different symbol
 	otherSymbol := "ISIL:OTHER" + uuid.NewString()
-	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{})
+	apptest.CreatePeerWithModeAndVendor(t, illRepo, otherSymbol, adapter.MOCK_PEER_URL, app.BROKER_MODE, directory.CrossLink, directory.Entry{}, otherSymbol)
 	respBytes = httpRequest(t, "GET", templatePath+"?symbol="+url.QueryEscape(otherSymbol), []byte{}, 200)
 	var otherTemplates proapi.Templates
 	err = json.Unmarshal(respBytes, &otherTemplates)
