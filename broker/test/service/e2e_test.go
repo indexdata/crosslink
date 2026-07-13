@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/indexdata/crosslink/broker/events"
 	"github.com/indexdata/crosslink/broker/catalog"
+	"github.com/indexdata/crosslink/broker/events"
 
 	"github.com/indexdata/crosslink/broker/adapter"
 	"github.com/indexdata/crosslink/broker/app"
