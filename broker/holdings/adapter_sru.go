@@ -76,7 +76,7 @@ func encodeCqlSearchClause(field string, value string) (string, error) {
 	return cqlQuery.String(), nil
 }
 
-func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, query string, processRecord func([]byte) (bool, error)) (bool, string, error) {
+func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, query string, processRecord func([]byte) (bool, error)) (bool, error) {
 	var sruResponse sru.SearchRetrieveResponse
 	query = "?maximumRecords=1000&recordSchema=" + url.QueryEscape(s.recordSchema) + "&" + query
 	if s.xTarget != "" {
@@ -86,27 +86,27 @@ func (s *SruHoldingsLookupAdapter) search(sruUrl string, params LookupParams, qu
 	err := httpclient.NewClient().GetXml(s.client, sruUrl+query, &sruResponse)
 	// notice: returning query even in case of error, to allow logging the query that caused the error
 	if err != nil {
-		return false, query, err
+		return false, err
 	}
 	if sruResponse.Diagnostics != nil {
 		// non-surrogate diagnostics
 		diags := sruResponse.Diagnostics.Diagnostic
 		if len(diags) > 0 {
-			return false, query, errors.New(diags[0].Message + ": " + diags[0].Details)
+			return false, errors.New(diags[0].Message + ": " + diags[0].Details)
 		}
 	}
 	if sruResponse.Records != nil {
 		for _, record := range sruResponse.Records.Record {
 			foundRecord, err := s.parseRecord(&record, processRecord)
 			if err != nil {
-				return false, query, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
+				return false, fmt.Errorf("failed to parse holdings from SRU record: %w", err)
 			}
 			if foundRecord {
 				found = true
 			}
 		}
 	}
-	return found, query, nil
+	return found, nil
 }
 
 func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupParams, processRecord func([]byte) (bool, error)) (bool, string, error) {
@@ -114,23 +114,25 @@ func (s *SruHoldingsLookupAdapter) lookupServer(sruUrl string, params LookupPara
 	if err != nil {
 		return false, "", err
 	}
-	var queryParams string
+	var query string
 	var found bool
 	for _, cql := range cqlList {
+		query = cql
 		sruQuery := "query=" + url.QueryEscape(cql)
-		found, queryParams, err = s.search(sruUrl, params, sruQuery, processRecord)
+		found, err = s.search(sruUrl, params, sruQuery, processRecord)
 		if err != nil || found {
-			return found, queryParams, err
+			return found, query, err
 		}
 	}
 	for _, pqf := range pqfList {
+		query = pqf
 		sruQuery := "x-pquery=" + url.QueryEscape(pqf)
-		found, queryParams, err = s.search(sruUrl, params, sruQuery, processRecord)
+		found, err = s.search(sruUrl, params, sruQuery, processRecord)
 		if err != nil || found {
-			return found, queryParams, err
+			return found, query, err
 		}
 	}
-	return false, queryParams, nil
+	return false, query, nil
 }
 
 func (s *SruHoldingsLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {

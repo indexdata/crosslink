@@ -718,7 +718,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	}
 	result, err := ad.Lookup(p)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, result.GetQuery())
+	assert.Equal(t, "rec.id = 123", result.GetQuery())
 	assert.Equal(t, "rec.id = 123", receivedQuery)
 	holdingsList, err := result.GetHoldings()
 	assert.NoError(t, err)
@@ -738,7 +738,7 @@ func TestSruMarcxmlWithHoldings(t *testing.T) {
 	}
 	result, err = ad.Lookup(p)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, result.GetQuery())
+	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", result.GetQuery())
 	assert.Equal(t, "rec.id = 123 or isbn = 99-222 or issn = 99-333", receivedQuery)
 	holdingsList, err = result.GetHoldings()
 	assert.NoError(t, err)
