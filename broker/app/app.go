@@ -142,7 +142,7 @@ func configLog() slog.Handler {
 
 func Init(ctx context.Context) (Context, error) {
 	appCtx.Logger().Info("starting " + vcs.GetSignature())
-	holdingsAdapter, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
+	lookupAdapterEnv, err := catalog.CreateLookupAdapterFromEnv(map[string]any{
 		catalog.HoldingsAdapter:    HOLDINGS_ADAPTER,
 		catalog.HoldingsSruURL:     HOLDINGS_SRU_URL,
 		catalog.HoldingsIsxnLookup: HOLDINGS_ISXN_LOOKUP,
@@ -188,11 +188,11 @@ func Init(ctx context.Context) (Context, error) {
 	prMessageHandler := prservice.CreatePatronRequestMessageHandler(prRepo, eventRepo, illRepo, eventBus)
 	iso18626Handler := handler.CreateIso18626Handler(eventBus, eventRepo, illRepo, dirAdapter)
 	lmsCreator := lms.NewLmsCreator(illRepo, dirAdapter)
-	availabilityCreator := catalog.NewAvailabilityCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
+	lookupAdapterCreator := catalog.NewLookupAdapterCreator(AVAILABILITY_ADAPTER, METAPROXY_URL)
 	prActionService := prservice.CreatePatronRequestActionService(prRepo, illRepo, eventBus, &iso18626Handler, lmsCreator, email.NewEmailService())
 	prMessageHandler.SetAutoActionRunner(prActionService)
 	iso18626Client := client.CreateIso18626Client(eventBus, illRepo, prMessageHandler, MAX_MESSAGE_SIZE, delay)
-	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, holdingsAdapter, availabilityCreator)
+	lookupAdapterFactory := service.NewLookupAdapterFactory(illRepo, dirAdapter, CONSORTIUM_SYMBOL, lookupAdapterEnv, lookupAdapterCreator)
 	supplierLocator := service.CreateSupplierLocator(eventBus, illRepo, dirAdapter, lookupAdapterFactory)
 	workflowManager := service.CreateWorkflowManager(eventBus, illRepo, service.WorkflowConfig{})
 	tenantResolver := tenant.NewResolver().WithIllRepo(illRepo).WithLookupAdapter(dirAdapter).WithTenantToSymbol(TENANT_TO_SYMBOL)

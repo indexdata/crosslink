@@ -108,7 +108,7 @@ func TestMain(m *testing.M) {
 
 	test.Expect(os.Setenv("MOCK_DIRECTORY_ENTRIES", string(directoryBytes)), "failed to set mock directory entries")
 	test.Expect(os.Setenv("PEER_URL", brokerUrl), "failed to set peer URL")
-	app.AVAILABILITY_ADAPTER = catalog.AvailabilityAdapterZoom
+	app.AVAILABILITY_ADAPTER = catalog.LookupAdapterZoom
 	app.DIRECTORY_ADAPTER = "api"
 	app.DIRECTORY_API_URL = "http://localhost:" + strconv.Itoa(mockPort) + "/directory/entries"
 	app.HOLDINGS_ADAPTER = "consortium"

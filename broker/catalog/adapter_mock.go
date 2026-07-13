@@ -7,17 +7,17 @@ import (
 	"github.com/indexdata/crosslink/directory"
 )
 
-type MockAvailabilityAdapter struct {
+type MockLookupAdapter struct {
 	Err      error
 	Holdings []Holding
 	Metadata Metadata
 }
 
-type MockAvailabilityLookupResult struct {
-	parent *MockAvailabilityAdapter
+type MockLookupResult struct {
+	parent *MockLookupAdapter
 }
 
-func NewMockAvailabilityAdapter(config directory.CatalogConfig) (LookupAdapter, error) {
+func NewMockLookupAdapter(config directory.CatalogConfig) (LookupAdapter, error) {
 	if config.Zoom != nil && config.Zoom.Options != nil {
 		options := *config.Zoom.Options
 		// For testing purposes, we can use the presence of "adapter-error" in options to trigger an error response
@@ -26,12 +26,12 @@ func NewMockAvailabilityAdapter(config directory.CatalogConfig) (LookupAdapter, 
 		}
 		// For testing purposes, we can use the presence of "lookup-error" in options to trigger an error response
 		if val, ok := options["lookup-error"]; ok && strings.ToLower(val) == "true" {
-			return &MockAvailabilityAdapter{
+			return &MockLookupAdapter{
 				Err: fmt.Errorf("mock error triggered by config"),
 			}, nil
 		}
 		if val, ok := options["location"]; ok {
-			return &MockAvailabilityAdapter{
+			return &MockLookupAdapter{
 				Holdings: []Holding{
 					{
 						Location: val,
@@ -40,24 +40,24 @@ func NewMockAvailabilityAdapter(config directory.CatalogConfig) (LookupAdapter, 
 			}, nil
 		}
 	}
-	return &MockAvailabilityAdapter{}, nil
+	return &MockLookupAdapter{}, nil
 }
 
-func (a *MockAvailabilityAdapter) Lookup(params LookupParams) (LookupResult, error) {
+func (a *MockLookupAdapter) Lookup(params LookupParams) (LookupResult, error) {
 	if a.Err != nil {
 		return nil, a.Err
 	}
-	return &MockAvailabilityLookupResult{parent: a}, nil
+	return &MockLookupResult{parent: a}, nil
 }
 
-func (a *MockAvailabilityLookupResult) GetHoldings() ([]Holding, error) {
+func (a *MockLookupResult) GetHoldings() ([]Holding, error) {
 	return a.parent.Holdings, nil
 }
 
-func (a *MockAvailabilityLookupResult) GetMetadata() (Metadata, error) {
+func (a *MockLookupResult) GetMetadata() (Metadata, error) {
 	return a.parent.Metadata, nil
 }
 
-func (a *MockAvailabilityLookupResult) GetQuery() string {
+func (a *MockLookupResult) GetQuery() string {
 	return ""
 }

@@ -25,7 +25,7 @@ type ZoomLookupResult struct {
 	metadata *Metadata
 }
 
-func NewZoomAvailabilityAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
+func NewZoomLookupAdapter(config directory.ZoomConfig, queryBuilder LookupQueryBuilder, holdingsParser HoldingsParser, metadataParser MetadataParser) (LookupAdapter, error) {
 	a := &ZoomLookupAdapter{
 		// default options, can be overridden by config.Options
 		options: zoom.Options{

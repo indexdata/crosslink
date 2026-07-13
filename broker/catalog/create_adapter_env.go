@@ -70,7 +70,7 @@ func CreateLookupAdapterFromEnv(cfg map[string]any) (LookupAdapter, error) {
 		return CreateSruLookupAdapter(http.DefaultClient, strings.Split(sruURLVal, ","), "", &queryBuilder, parser, metadataParser, "marcxml"), nil
 	}
 	if holdingsAdapterVal == "mock" {
-		return &MockLookupAdapter{}, nil
+		return &MockLookupShared{}, nil
 	}
 	return nil, fmt.Errorf("bad value for %s", HoldingsAdapter)
 }

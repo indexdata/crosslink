@@ -1243,7 +1243,7 @@ func TestMetadataUpdateNilLookupAdapter(t *testing.T) {
 }
 
 func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1254,7 +1254,7 @@ func TestMetadataUpdateNoHoldingsConfig(t *testing.T) {
 
 func TestMetadataUpdateModeNone(t *testing.T) {
 	mode := directory.None
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1264,7 +1264,7 @@ func TestMetadataUpdateModeNone(t *testing.T) {
 
 func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 	mode := directory.Merge
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Err: errors.New("lookup failed")})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Err: errors.New("lookup failed")})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1275,7 +1275,7 @@ func TestMetadataUpdateMetadataLookupError(t *testing.T) {
 func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 	mode := directory.Merge
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Jane Doe"}
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1289,7 +1289,7 @@ func TestMetadataUpdateMergePopulatesEmptyFields(t *testing.T) {
 func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
 	mode := directory.Merge
 	meta := catalog.Metadata{Title: "Catalog Title"}
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1304,7 +1304,7 @@ func TestMetadataUpdateMergePreservesExistingFields(t *testing.T) {
 func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
 	mode := directory.Auto
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890"}
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})
@@ -1331,7 +1331,7 @@ func TestMetadataUpdateAutoModeWithIdentifierReplaces(t *testing.T) {
 func TestMetadataUpdateAutoModeWithoutIdentifierMerges(t *testing.T) {
 	mode := directory.Auto
 	meta := catalog.Metadata{Title: "Catalog Title", Author: "Catalog Author", Isbn: "1234567890", Issn: "4321-4321"}
-	factory := lookupFactoryWithAdapter(&catalog.MockAvailabilityAdapter{Metadata: meta})
+	factory := lookupFactoryWithAdapter(&catalog.MockLookupAdapter{Metadata: meta})
 	h := PatronRequestApiHandler{}
 	h.SetLookupAdapterFactory(factory)
 	ctx := common.CreateExtCtxWithArgs(context.Background(), &common.LoggerArgs{})

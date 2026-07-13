@@ -47,7 +47,7 @@ func TestLookupFoundMarc(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(config)
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -92,7 +92,7 @@ func TestLookupFoundOpac(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewOpacHoldingsParser(directory.OpacHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -131,7 +131,7 @@ func TestLookupDiagnosticPQF(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -162,7 +162,7 @@ func TestLookupDiagnosticCql(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: containerHost + ":" + mappedPort + "/marc",
 			Options: &map[string]string{
@@ -190,7 +190,7 @@ func TestConnectFailure(t *testing.T) {
 	assert.NoError(t, err)
 	holdingsParser := NewMarcHoldingsParser(directory.MarcHoldingsParserConfig{})
 	metadataParser := NewMetadataParserMarc(directory.MarcMetadataParserConfig{})
-	aa, err := NewZoomAvailabilityAdapter(
+	aa, err := NewZoomLookupAdapter(
 		directory.ZoomConfig{
 			Address: "",
 		},

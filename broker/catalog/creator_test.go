@@ -9,7 +9,7 @@ import (
 )
 
 func TestGetAdapterEmpty(t *testing.T) {
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
@@ -17,7 +17,7 @@ func TestGetAdapterEmpty(t *testing.T) {
 }
 
 func TestGetAdapterOtherNoConfig(t *testing.T) {
-	creator := NewAvailabilityCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{}
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
@@ -56,7 +56,7 @@ func TestParserOpac(t *testing.T) {
 }
 
 func TestGetAdapterBadParser(t *testing.T) {
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			CatalogConfig: &directory.CatalogConfig{
@@ -73,7 +73,7 @@ func TestGetAdapterBadParser(t *testing.T) {
 }
 
 func TestGetAdapterOtherWithConfig(t *testing.T) {
-	creator := NewAvailabilityCreator("other", "")
+	creator := NewLookupAdapterCreator("other", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			CatalogConfig: &directory.CatalogConfig{
@@ -89,7 +89,7 @@ func TestGetAdapterOtherWithConfig(t *testing.T) {
 }
 
 func TestGetAdapterMissingProperties(t *testing.T) {
-	creator := NewAvailabilityCreator("zoom", "")
+	creator := NewLookupAdapterCreator("zoom", "")
 	peer := ill_db.Peer{
 		CustomData: directory.Entry{
 			CatalogConfig: &directory.CatalogConfig{},
@@ -110,10 +110,10 @@ func TestGetAdapterMock(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMock, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMock, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
-	assert.IsType(t, &MockAvailabilityAdapter{}, aa)
+	assert.IsType(t, &MockLookupAdapter{}, aa)
 }
 
 func TestGetAdapterZoom(t *testing.T) {
@@ -126,7 +126,7 @@ func TestGetAdapterZoom(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	if !cgoEnabled() {
 		assert.Error(t, err)
@@ -148,7 +148,7 @@ func TestGetAdapterMetaproxy(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "http://metaproxy.indexdata.com")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "http://metaproxy.indexdata.com")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &MetaproxyLookupAdapter{}, aa)
@@ -164,7 +164,7 @@ func TestGetAdapterMetaproxyMissingProxy(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterMetaproxy, "")
+	creator := NewLookupAdapterCreator(LookupAdapterMetaproxy, "")
 	_, err := creator.GetAdapter(peer)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "METAPROXY_URL")
@@ -180,7 +180,7 @@ func TestGetAdapterSRU(t *testing.T) {
 			},
 		},
 	}
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 	aa, err := creator.GetAdapter(peer)
 	assert.NoError(t, err)
 	assert.IsType(t, &SruLookupAdapter{}, aa)

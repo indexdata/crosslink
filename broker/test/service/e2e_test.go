@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	mockPort := utils.Must(test.GetFreePort())
 	app.HTTP_PORT = utils.Must(test.GetFreePort())
 	test.Expect(os.Setenv("PEER_URL", "http://localhost:"+strconv.Itoa(app.HTTP_PORT)+"/iso18626"), "failed to set peer URL")
-	app.AVAILABILITY_ADAPTER = catalog.AvailabilityAdapterMock
+	app.AVAILABILITY_ADAPTER = catalog.LookupAdapterMock
 
 	apptest.StartMockApp(mockPort)
 	app.ConnectionString = connStr

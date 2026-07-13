@@ -392,7 +392,7 @@ func TestGviHoldings(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	creator := NewAvailabilityCreator(AvailabilityAdapterZoom, "")
+	creator := NewLookupAdapterCreator(LookupAdapterZoom, "")
 
 	qtype := directory.Cql
 	peer := ill_db.Peer{

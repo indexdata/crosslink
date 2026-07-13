@@ -11,20 +11,20 @@ import (
 )
 
 type LookupAdapterFactory struct {
-	illRepo             ill_db.IllRepo
-	dirAdapter          adapter.DirectoryLookupAdapter
-	consortiumSymbol    string
-	holdingsAdapter     catalog.LookupAdapter
-	availabilityCreator catalog.AvailabilityCreator
+	illRepo              ill_db.IllRepo
+	dirAdapter           adapter.DirectoryLookupAdapter
+	consortiumSymbol     string
+	globalLookupAdapter  catalog.LookupAdapter
+	lookupAdapterCreator catalog.LookupAdapterCreator
 }
 
-func NewLookupAdapterFactory(illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, consortiumSymbol string, holdingsAdapter catalog.LookupAdapter, availabilityCreator catalog.AvailabilityCreator) *LookupAdapterFactory {
+func NewLookupAdapterFactory(illRepo ill_db.IllRepo, dirAdapter adapter.DirectoryLookupAdapter, consortiumSymbol string, globalLookupAdapter catalog.LookupAdapter, lookupAdapterCreator catalog.LookupAdapterCreator) *LookupAdapterFactory {
 	return &LookupAdapterFactory{
-		illRepo:             illRepo,
-		dirAdapter:          dirAdapter,
-		consortiumSymbol:    consortiumSymbol,
-		holdingsAdapter:     holdingsAdapter,
-		availabilityCreator: availabilityCreator,
+		illRepo:              illRepo,
+		dirAdapter:           dirAdapter,
+		consortiumSymbol:     consortiumSymbol,
+		globalLookupAdapter:  globalLookupAdapter,
+		lookupAdapterCreator: lookupAdapterCreator,
 	}
 }
 
@@ -55,13 +55,13 @@ func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, r
 	if err != nil {
 		return nil, directory.Entry{}, err
 	}
-	if s.holdingsAdapter != nil {
-		return s.holdingsAdapter, peer.CustomData, nil
+	if s.globalLookupAdapter != nil {
+		return s.globalLookupAdapter, peer.CustomData, nil
 	}
-	if s.availabilityCreator == nil {
-		return nil, directory.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
+	if s.lookupAdapterCreator == nil {
+		return nil, directory.Entry{}, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
 	}
-	lookupAdapter, err := s.availabilityCreator.GetAdapter(peer)
+	lookupAdapter, err := s.lookupAdapterCreator.GetAdapter(peer)
 	if err != nil {
 		return nil, directory.Entry{}, fmt.Errorf("failed to get adapter for peer: %w", err)
 	}
@@ -69,8 +69,8 @@ func (s *LookupAdapterFactory) GetAdapterRequester(ctx common.ExtendedContext, r
 }
 
 func (s *LookupAdapterFactory) GetAdapterSupplier(ctx common.ExtendedContext, supplier ill_db.Peer) (catalog.LookupAdapter, error) {
-	if s.availabilityCreator == nil {
-		return nil, fmt.Errorf("lookup adapter factory misconfigured: availabilityCreator is nil")
+	if s.lookupAdapterCreator == nil {
+		return nil, fmt.Errorf("lookup adapter factory misconfigured: lookupAdapterCreator is nil")
 	}
-	return s.availabilityCreator.GetAdapter(supplier)
+	return s.lookupAdapterCreator.GetAdapter(supplier)
 }
