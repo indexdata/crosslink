@@ -673,7 +673,7 @@ func TestLocateSuppliersMetadataModeNoneSkipsUpdate(t *testing.T) {
 			},
 		},
 	}
-	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no HoldingsConfig → mode=None
+	mockRepo := metadataTestRepo(illTrans, metadataTestRequester(nil)) // no CatalogConfig → mode=None
 	holdingsAdapter := &catalog.MockLookupAdapter{
 		Holdings: []catalog.Holding{{Symbol: "ISIL:SUP1"}},
 	}
