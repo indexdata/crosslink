@@ -649,8 +649,8 @@ func metadataTestRepo(illTrans ill_db.IllTransaction, requester ill_db.Peer) *Mo
 	}
 }
 
-// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its HoldingsConfig.
-// Pass nil to leave HoldingsConfig absent (mode defaults to None).
+// metadataTestRequester returns a peer carrying the given MetadataUpdateMode in its CatalogConfig.
+// Pass nil to leave CatalogConfig absent (mode defaults to None).
 func metadataTestRequester(mode *directory.MetadataUpdateMode) ill_db.Peer {
 	var cc *directory.CatalogConfig
 	if mode != nil {
